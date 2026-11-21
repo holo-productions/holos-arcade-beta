@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Sky Climber</title>
+<style>
+  :root{
+    --bg:#eaf6ff; --bg2:#fff7e6; --card:#ffffff; --ink:#16202e; --muted:#5b6b7f;
+    --line:#d7e6f2; --accent:#ff7a1a; --accent2:#0ea5a4; --gold:#f5b301;
+    --green:#3ecf6e; --blue:#3b9eff; --brown:#b07a45; --pink:#ff6b9d;
+    --shadow:0 10px 30px rgba(22,32,46,.12);
+    --radius:18px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0e1a28; --bg2:#162233; --card:#182a40; --ink:#eef6ff; --muted:#a9bdd1; --line:#2a415c; --shadow:0 10px 30px rgba(0,0,0,.35); }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:linear-gradient(180deg,var(--bg) 0%,var(--bg2) 100%); color:var(--ink); min-height:100dvh;}
+  button,[role="button"],select,summary,input,textarea{font:inherit}
+  button,select{ min-height:44px; }
+  a{color:var(--accent2)}
+  .wrap{max-width:520px;margin:0 auto;padding:14px 14px 28px}
+  /* header */
+  .top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+  .brand{display:flex;align-items:center;gap:10px}
+  .blobIcon{width:44px;height:44px;border-radius:50%;background:radial-gradient(circle at 35% 30%, #ffe08a, var(--gold) 55%, #e89b00);display:grid;place-items:center;font-size:22px;box-shadow:inset 0 -6px 0 rgba(0,0,0,.08);border:2px solid rgba(0,0,0,.06)}
+  .brand h1{font-size:26px;line-height:1;margin:0;letter-spacing:-.02em}
+  .brand p{margin:2px 0 0;color:var(--muted);font-size:13px;font-weight:600}
+  .bestPill{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:800;font-size:13px;white-space:nowrap;box-shadow:var(--shadow)}
+  .bestPill span{color:var(--gold)}
+  /* cards */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
+  /* controls row */
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+  @media(max-width:420px){.controls{grid-template-columns:1fr}}
+  label.lbl{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:6px}
+  .seg{display:flex;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px}
+  .seg button{flex:1;border:0;background:transparent;border-radius:999px;font-weight:800;padding:8px 4px;cursor:pointer;color:var(--muted);min-height:40px}
+  .seg button.active{background:var(--ink);color:#fff}
+  @media (prefers-color-scheme: dark){ .seg button.active{background:#fff;color:#16202e} }
+  .toggleRow{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:8px 10px;min-height:52px}
+  .toggleRow b{font-size:14px}
+  .toggleRow small{display:block;color:var(--muted);font-weight:600}
+  .switchBtn{position:relative;width:56px;height:36px;flex:0 0 auto;border:0;border-radius:999px;background:#cbd5e1;cursor:pointer;padding:0;min-height:36px}
+  .switchBtn:after{content:"";position:absolute;top:4px;left:4px;width:28px;height:28px;background:#fff;border-radius:50%;transition:.2s;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+  .switchBtn[aria-pressed="true"]{background:var(--accent2)}
+  .switchBtn[aria-pressed="true"]:after{left:24px}
+  .touchBtns[hidden]{display:none !important}
+  /* HUD */
+  .hud{display:flex;gap:8px;margin:10px 0}
+  .hud .stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 10px;text-align:center}
+  .hud .stat b{display:block;font-size:20px;line-height:1}
+  .hud .stat span{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  /* game area */
+  .gameShell{position:relative;border-radius:20px;overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow);background:#87ceeb}
+  canvas{display:block;width:100%;height:min(62dvh,560px);min-height:420px;touch-action:none;background:linear-gradient(180deg,#6ec6ff 0%,#aee3ff 55%,#e6f7ff 100%)}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;background:rgba(10,25,40,.55);backdrop-filter:blur(3px);color:#fff}
+  .overlay[hidden]{display:none}
+  .overlay h2{font-size:32px;margin:0 0 6px;letter-spacing:-.02em}
+  .overlay p{margin:0 0 14px;opacity:.92;font-weight:600;max-width:32ch}
+  .bigScore{font-size:44px;font-weight:900;line-height:1}
+  .btn{border:0;border-radius:999px;padding:12px 20px;font-weight:900;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px}
+  .btn-primary{background:var(--accent);color:#fff;box-shadow:0 8px 20px rgba(255,122,26,.35)}
+  .btn-white{background:#fff;color:#16202e}
+  .btn-ghost{background:transparent;border:1.5px solid var(--line);color:var(--ink)}
+  .btn-teal{background:var(--accent2);color:#fff}
+  .touchBtns{position:absolute;left:10px;right:10px;bottom:10px;display:flex;justify-content:space-between;pointer-events:none}
+  .touchBtns button{pointer-events:auto;width:64px;height:64px;border-radius:50%;border:2px solid rgba(255,255,255,.7);background:rgba(255,255,255,.88);font-size:26px;display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 16px rgba(0,0,0,.18);color:#16202e}
+  .touchBtns button:active{transform:scale(.94);background:#fff}
+  .hint{font-size:12.5px;color:var(--muted);text-align:center;margin-top:8px;font-weight:600}
+  /* nav buttons */
+  .navGrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:12px}
+  .navGrid button{min-height:48px}
+  /* views */
+  .view[hidden]{display:none}
+  .view h2{font-size:24px;margin:4px 0 8px;letter-spacing:-.02em}
+  .view h3{margin:18px 0 6px;font-size:16px}
+  .view p,.view li{line-height:1.55;color:var(--ink)}
+  .view ul{padding-left:20px;margin:6px 0}
+  .legend{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
+  @media(max-width:420px){.legend{grid-template-columns:1fr}}
+  .legend div{border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;gap:10px;align-items:center;background:var(--bg)}
+  .swatch{width:44px;height:14px;border-radius:999px;flex:0 0 auto;border:1px solid rgba(0,0,0,.08)}
+  .starsRow{display:flex;gap:6px;margin:8px 0}
+  .starsRow button{width:48px;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--bg);font-size:24px;cursor:pointer;color:#cbd5e1}
+  .starsRow button.on{color:var(--gold);background:#fff8d6;border-color:#f5d76e}
+  textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg);color:var(--ink);min-height:90px;resize:vertical}
+  .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:#16202e;color:#fff;padding:10px 16px;border-radius:999px;font-weight:800;font-size:14px;box-shadow:0 10px 24px rgba(0,0,0,.25);z-index:50}
+  .toast[hidden]{display:none}
+  @media (prefers-color-scheme: dark){ .toast{background:#fff;color:#16202e} }
+  footer{margin-top:18px;text-align:center;color:var(--muted);font-size:13.5px;line-height:1.5;padding:0 8px}
+  footer a{font-weight:800;text-decoration:none}
+  footer a:hover{text-decoration:underline}
+  .backRow{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+  kbd{background:var(--bg);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 6px;font-family:inherit;font-weight:800;font-size:12px}
+  .overlay kbd{background:rgba(255,255,255,.92);color:#16202e;border-color:rgba(255,255,255,.4)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="blobIcon" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 26 26"><circle cx="9" cy="11" r="2" fill="#16202e"/><circle cx="17" cy="11" r="2" fill="#16202e"/><path d="M8 16 Q13 20 18 16" stroke="#16202e" stroke-width="2" fill="none" stroke-linecap="round"/></svg></div>
+      <div>
+        <h1>Sky Climber</h1>
+        <p>Bounce higher. Grab stars. Don’t fall!</p>
+      </div>
+    </div>
+    <div class="bestPill">★ Best <span id="bestLabel">0 m</span></div>
+  </header>
+
+  <!-- MAIN VIEW -->
+  <main id="view-game">
+    <div class="controls">
+      <div>
+        <label class="lbl" id="diffLabel">Difficulty</label>
+        <div class="seg" role="group" aria-labelledby="diffLabel" id="diffSeg">
+          <button type="button" data-diff="easy">Easy</button>
+          <button type="button" data-diff="normal" class="active">Normal</button>
+          <button type="button" data-diff="hard">Hard</button>
+        </div>
+      </div>
+      <div>
+        <label class="lbl">Mode</label>
+        <div class="toggleRow">
+          <div><b>Practice mode</b><small>Safety net · no score saved</small></div>
+          <button type="button" class="switchBtn" id="practiceToggle" aria-pressed="false" aria-label="Practice mode"></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud" aria-live="polite">
+      <div class="stat"><b id="hudHeight">0 m</b><span>Height</span></div>
+      <div class="stat"><b id="hudStars">0 ★</b><span>Stars</span></div>
+      <div class="stat"><b id="hudScore">0</b><span>Score</span></div>
+    </div>
+
+    <div class="gameShell" id="gameShell">
+      <canvas id="game" width="480" height="560" aria-label="Sky Climber game canvas. Use left and right arrow keys or on-screen buttons to steer."></canvas>
+
+      <div class="overlay" id="startOverlay">
+        <div aria-hidden="true"><svg width="64" height="64" viewBox="0 0 64 64"><defs><radialGradient id="blobG" cx="35%" cy="30%" r="80%"><stop offset="0%" stop-color="#ffe89a"/><stop offset="60%" stop-color="#ffc61a"/><stop offset="100%" stop-color="#f0a500"/></radialGradient></defs><ellipse cx="32" cy="34" rx="26" ry="24" fill="url(#blobG)"/><ellipse cx="20" cy="40" rx="5" ry="3.4" fill="rgba(255,110,140,.5)"/><ellipse cx="44" cy="40" rx="5" ry="3.4" fill="rgba(255,110,140,.5)"/><ellipse cx="25" cy="30" rx="3.4" ry="4.6" fill="#16202e"/><ellipse cx="39" cy="30" rx="3.4" ry="4.6" fill="#16202e"/><path d="M26 40 Q32 46 38 40" stroke="#16202e" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg></div>
+        <h2>Ready to climb?</h2>
+        <p>Your blob bounces on its own — you just steer left &amp; right. Land on platforms, ride springs, grab stars!</p>
+        <button class="btn btn-primary" id="startBtn" type="button">▶ Start climbing</button>
+        <p style="margin-top:12px;font-size:13px;opacity:.85"><kbd>←</kbd> <kbd>→</kbd> or <kbd>A</kbd> <kbd>D</kbd> · or tap left / right side</p>
+      </div>
+
+      <div class="overlay" id="overOverlay" hidden>
+        <p style="margin:0;font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-size:12px;opacity:.9">You fell!</p>
+        <div class="bigScore" id="finalScore">0</div>
+        <p id="finalDetail">Height 0 m · 0 stars</p>
+        <p id="newBest" style="color:#ffd84d;font-weight:900" hidden>★ New best height!</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+          <button class="btn btn-primary" id="againBtn" type="button">↻ Climb again</button>
+          <button class="btn btn-white" id="menuBtn" type="button">Change settings</button>
+        </div>
+      </div>
+
+      <div class="touchBtns" id="touchBtns" hidden>
+        <button type="button" id="leftBtn" aria-label="Move left">◀</button>
+        <button type="button" id="rightBtn" aria-label="Move right">▶</button>
+      </div>
+    </div>
+    <p class="hint">Tip: You wrap around the edges — go off one side, pop out the other. Springs give a super bounce!</p>
+
+    <div class="navGrid">
+      <button class="btn btn-ghost" type="button" data-nav="tutorial">How to play</button>
+      <button class="btn btn-ghost" type="button" data-nav="rules">Rules</button>
+      <button class="btn btn-ghost" type="button" data-nav="feedback">Feedback</button>
+    </div>
+  </main>
+
+  <!-- TUTORIAL VIEW -->
+  <section class="view card" id="view-tutorial" hidden>
+    <div class="backRow"><button class="btn btn-ghost" type="button" data-nav="game">← Back to game</button></div>
+    <h2>How to play</h2>
+    <p>Meet <strong>Bloop</strong>, your round little climber. Bloop never stops bouncing — your job is just to steer.</p>
+    <h3>1. Steer Bloop</h3>
+    <ul>
+      <li><strong>Keyboard:</strong> <kbd>←</kbd> / <kbd>→</kbd> or <kbd>A</kbd> / <kbd>D</kbd></li>
+      <li><strong>Touch:</strong> hold the left or right half of the sky, or use the big ◀ ▶ buttons</li>
+      <li>Go off one edge and you’ll wrap around to the other side.</li>
+    </ul>
+    <h3>2. Land on platforms</h3>
+    <p>Only land while falling down onto a platform. You’ll bounce straight back up automatically.</p>
+    <div class="legend">
+      <div><span class="swatch" style="background:#3ecf6e"></span><span><b>Normal</b> — safe bounce</span></div>
+      <div><span class="swatch" style="background:#3b9eff"></span><span><b>Moving</b> — slides side to side</span></div>
+      <div><span class="swatch" style="background:#b07a45"></span><span><b>Breakable</b> — cracks! No bounce</span></div>
+      <div><span class="swatch" style="background:#3ecf6e;position:relative"></span><span><b>Spring</b> — land on the spring for a huge bounce 🚀</span></div>
+    </div>
+    <h3>3. Grab stars &amp; climb</h3>
+    <ul>
+      <li>Each <strong>★ star = +50 points</strong>.</li>
+      <li>Your <strong>height in metres is your score</strong> — plus star bonuses.</li>
+      <li>The higher you go, the faster it gets and the bigger the gaps.</li>
+      <li>Fall below the bottom of the screen and the run ends — unless you’re in Practice mode, where a safety net catches you.</li>
+    </ul>
+    <button class="btn btn-primary" type="button" id="tutorialStart">Got it — let’s climb!</button>
+  </section>
+
+  <!-- RULES VIEW -->
+  <section class="view card" id="view-rules" hidden>
+    <div class="backRow"><button class="btn btn-ghost" type="button" data-nav="game">← Back to game</button></div>
+    <h2>Rules</h2>
+    <h3>Goal</h3>
+    <p>Climb as high as you can. There’s no finish line — it’s endless. Score = height climbed (in metres) + 50 points per star.</p>
+    <h3>Scoring &amp; bests</h3>
+    <ul>
+      <li>Your best height is saved on this device and shown at the top.</li>
+      <li><strong>Practice mode</strong> never saves a score — it’s just for learning, with a safety net at the bottom.</li>
+    </ul>
+    <h3>Difficulty</h3>
+    <ul>
+      <li><strong>Easy:</strong> wider platforms, smaller gaps, fewer breakable platforms.</li>
+      <li><strong>Normal:</strong> the classic climb.</li>
+      <li><strong>Hard:</strong> narrower platforms, bigger gaps, faster moving platforms.</li>
+      <li>Your difficulty choice is remembered for next time.</li>
+    </ul>
+    <h3>Platforms</h3>
+    <ul>
+      <li>Normal platforms always bounce you.</li>
+      <li>Moving platforms slide left and right — time your landing.</li>
+      <li>Breakable (brown) platforms crack when touched and don’t bounce you. Don’t rely on them!</li>
+      <li>Some platforms have a spring. Land on the spring itself for a super bounce.</li>
+    </ul>
+    <h3>Fair play</h3>
+    <p>One run, one score. Pausing, switching difficulty, or turning Practice on starts a fresh run so scores stay honest.</p>
+  </section>
+
+  <!-- FEEDBACK VIEW -->
+  <section class="view card" id="view-feedback" hidden>
+    <div class="backRow"><button class="btn btn-ghost" type="button" data-nav="game">← Back to game</button></div>
+    <h2>Feedback</h2>
+    <p>Tell us what you think of Sky Climber. Your rating and comment are saved on this device only.</p>
+    <label class="lbl">Your rating</label>
+    <div class="starsRow" id="starsRow" role="radiogroup" aria-label="Rating">
+      <button type="button" data-star="1" aria-label="1 star">★</button>
+      <button type="button" data-star="2" aria-label="2 stars">★</button>
+      <button type="button" data-star="3" aria-label="3 stars">★</button>
+      <button type="button" data-star="4" aria-label="4 stars">★</button>
+      <button type="button" data-star="5" aria-label="5 stars">★</button>
+    </div>
+    <label class="lbl" for="fbText">Comment</label>
+    <textarea id="fbText" placeholder="What did you love? What should we change?"></textarea>
+    <p style="font-size:12.5px;color:var(--muted);margin:12px 0 0">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-teal" type="button" id="fbSave">Save feedback</button>
+      <button class="btn btn-ghost" type="button" data-nav="game">Cancel</button>
+    </div>
+    <p id="fbSaved" style="font-weight:700;color:var(--accent2)" hidden>Thanks! Your last feedback was saved on <span id="fbDate"></span>.</p>
+  </section>
+
+  <footer>
+    More ridiculous health &amp; fitness fun: <a href="https://instagram.com/ridiculouslyfitandfed" target="_blank" rel="noopener">Ridiculously Fit and Fed</a> on Instagram
+  </footer>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+  "use strict";
+  // ---------- storage ----------
+  var LS_DIFF="skyClimber_difficulty", LS_BEST="skyClimber_best", LS_FB="skyClimber_feedback";
+  function lsGet(k,d){ try{ var v=localStorage.getItem(k); return v===null?d:JSON.parse(v);}catch(e){return d;} }
+  function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+
+  // ---------- views ----------
+  var views={game:document.getElementById('view-game'),tutorial:document.getElementById('view-tutorial'),rules:document.getElementById('view-rules'),feedback:document.getElementById('view-feedback')};
+  function showView(name){
+    Object.keys(views).forEach(function(k){ views[k].hidden = k!==name; });
+    if(name!=='game'){ stopGame(false); document.getElementById('startOverlay').hidden=false; document.getElementById('overOverlay').hidden=true; }
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  document.querySelectorAll('[data-nav]').forEach(function(b){ b.addEventListener('click',function(){ showView(b.getAttribute('data-nav')); }); });
+  document.getElementById('tutorialStart').addEventListener('click',function(){ showView('game'); startGame(); });
+
+  // ---------- toast ----------
+  var toastEl=document.getElementById('toast'), toastT=null;
+  function toast(msg){ toastEl.textContent=msg; toastEl.hidden=false; clearTimeout(toastT); toastT=setTimeout(function(){toastEl.hidden=true;},2600); }
+
+  // ---------- difficulty ----------
+  var DIFFS={
+    easy:  {gapMin:62, gapMax:84,  platW:88, moveChance:.18, breakChance:.06, springChance:.10, moveSpeed:.7, label:'Easy'},
+    normal:{gapMin:78, gapMax:104, platW:72, moveChance:.28, breakChance:.13, springChance:.09, moveSpeed:1.1, label:'Normal'},
+    hard:  {gapMin:94, gapMax:126, platW:58, moveChance:.38, breakChance:.20, springChance:.08, moveSpeed:1.6, label:'Hard'}
+  };
+  var difficulty = lsGet(LS_DIFF,'normal'); if(!DIFFS[difficulty]) difficulty='normal';
+  var diffSeg=document.getElementById('diffSeg');
+  function paintDiff(){ diffSeg.querySelectorAll('button').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-diff')===difficulty); }); }
+  diffSeg.querySelectorAll('button').forEach(function(b){ b.addEventListener('click',function(){ difficulty=b.getAttribute('data-diff'); lsSet(LS_DIFF,difficulty); paintDiff(); toast('Difficulty: '+DIFFS[difficulty].label+' — starts next run'); if(running) resetRun(); }); });
+  paintDiff();
+
+  var practice=false;
+  document.getElementById('practiceToggle').addEventListener('click',function(e){ practice=!practice; e.currentTarget.setAttribute('aria-pressed', practice?'true':'false'); toast(practice?'Practice mode on — safety net active, no score saved':'Practice mode off'); if(running) resetRun(); });
+
+  // ---------- best ----------
+  var best = lsGet(LS_BEST,0); if(typeof best!=='number') best=0;
+  var bestLabel=document.getElementById('bestLabel');
+  function paintBest(){ bestLabel.textContent = best+' m'; }
+  paintBest();
+
+  // ---------- feedback ----------
+  var rating=0;
+  var starsRow=document.getElementById('starsRow');
+  function paintStars(){ starsRow.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', +b.getAttribute('data-star')<=rating); }); }
+  starsRow.querySelectorAll('button').forEach(function(b){ b.addEventListener('click',function(){ rating=+b.getAttribute('data-star'); paintStars(); }); });
+  var savedFb=lsGet(LS_FB,null);
+  if(savedFb){ rating=savedFb.rating||0; document.getElementById('fbText').value=savedFb.comment||''; paintStars(); if(savedFb.date){ document.getElementById('fbSaved').hidden=false; document.getElementById('fbDate').textContent=new Date(savedFb.date).toLocaleDateString(); } }
+  document.getElementById('fbSave').addEventListener('click',function(){
+    if(!rating){ toast('Pick a star rating first ★'); return; }
+    lsSet(LS_FB,{rating:rating, comment:document.getElementById('fbText').value.trim(), date:new Date().toISOString()});
+    /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+    try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "sky-climber", rating: rating||0, text: document.getElementById('fbText').value.trim(), tag: "", mode: "real", level: "", difficulty: "", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+    document.getElementById('fbSaved').hidden=false; document.getElementById('fbDate').textContent=new Date().toLocaleDateString();
+    toast('Thanks! Feedback saved 💛');
+  });
+
+  // ---------- game ----------
+  var canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+  var W=480,H=560, DPR=1;
+  function fitCanvas(){
+    var rect=canvas.getBoundingClientRect();
+    DPR=Math.min(window.devicePixelRatio||1,2);
+    W=Math.max(300, Math.round(rect.width)); H=Math.round(rect.height)||560;
+    canvas.width=W*DPR; canvas.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize',function(){ fitCanvas(); });
+
+  var GRAV=0.32, BOUNCE=-11.2, SPRING_BOUNCE=-19, MOVE=4.6;
+  var player, platforms, stars, clouds, camY, maxHeight, starCount, running=false, raf=null, keys={left:false,right:false}, touchDir=0, frame=0;
+  var hudHeight=document.getElementById('hudHeight'), hudStars=document.getElementById('hudStars'), hudScore=document.getElementById('hudScore');
+
+  function rand(a,b){ return a+Math.random()*(b-a); }
+  function scoreNow(){ return Math.floor(maxHeight) + starCount*50; }
+  function paintHUD(){ hudHeight.textContent=Math.floor(maxHeight)+' m'; hudStars.textContent=starCount+' ★'; hudScore.textContent=scoreNow(); }
+
+  function makePlatform(x,y,forceType){
+    var d=DIFFS[difficulty];
+    var r=Math.random(), type='normal';
+    if(forceType) type=forceType;
+    else if(r<d.breakChance) type='breakable';
+    else if(r<d.breakChance+d.moveChance) type='moving';
+    var w=d.platW*rand(.9,1.1);
+    x=Math.max(4, Math.min(W-w-4, x));
+    return {x:x,y:y,w:w,h:14,type:type,dir:Math.random()<.5?-1:1, speed:d.moveSpeed*rand(.7,1.3), broken:false, breakAnim:0,
+            hasSpring: type==='normal' && Math.random()<d.springChance, springX:0 };
+  }
+  function finalizeSpring(p){ p.springX = p.x + p.w/2 - 9; }
+
+  function resetRun(){
+    fitCanvas();
+    player={x:W/2-16,y:H-140,r:17,vx:0,vy:BOUNCE,squash:0,face:1};
+    platforms=[]; stars=[]; clouds=[];
+    for(var i=0;i<14;i++) clouds.push({x:rand(0,W),y:rand(-H,H),s:rand(.6,1.4),v:rand(.08,.25)});
+    camY=0; maxHeight=0; starCount=0; frame=0;
+    // base platform
+    var base=makePlatform(W/2-50,H-90,'normal'); base.hasSpring=false; platforms.push(base);
+    var y=H-90;
+    while(y>-H){
+      var d=DIFFS[difficulty];
+      var extra=Math.min(22, maxHeight/60);
+      y-= rand(d.gapMin, d.gapMax)+extra*0; // initial fill uses base gaps
+      var p=makePlatform(rand(0,W), y); finalizeSpring(p); platforms.push(p);
+      if(Math.random()<.38) stars.push({x:p.x+p.w/2-10, y:p.y-34, taken:false, bob:rand(0,6.28)});
+    }
+    paintHUD();
+    draw();
+  }
+
+  function spawnAbove(){
+    var d=DIFFS[difficulty];
+    var topY=Math.min.apply(null, platforms.map(function(p){return p.y;}));
+    var climbBonus=Math.min(26, maxHeight/90); // gaps grow as you climb
+    var y=topY - (rand(d.gapMin,d.gapMax)+climbBonus);
+    var p=makePlatform(rand(0,W), y); finalizeSpring(p); platforms.push(p);
+    if(Math.random()<.38) stars.push({x:p.x+p.w/2-10, y:p.y-34, taken:false, bob:rand(0,6.28)});
+  }
+
+  function startGame(){
+    document.getElementById('startOverlay').hidden=true;
+    document.getElementById('overOverlay').hidden=true;
+    document.getElementById('touchBtns').hidden=false;
+    resetRun(); running=true;
+    if(raf) cancelAnimationFrame(raf);
+    raf=requestAnimationFrame(loop);
+  }
+  function stopGame(hideTouch){
+    running=false; if(raf) cancelAnimationFrame(raf); raf=null;
+    if(hideTouch!==false) document.getElementById('touchBtns').hidden=true;
+  }
+  function gameOver(){
+    stopGame();
+    var h=Math.floor(maxHeight), sc=scoreNow(), isBest=false;
+    if(!practice && h>best){ best=h; lsSet(LS_BEST,best); paintBest(); isBest=true; }
+    document.getElementById('finalScore').textContent = practice ? (sc+' (practice)') : sc;
+    document.getElementById('finalDetail').textContent = 'Height '+h+' m · '+starCount+' stars'+(practice?' · Practice — not saved':'');
+    document.getElementById('newBest').hidden=!isBest;
+    document.getElementById('overOverlay').hidden=false;
+  }
+
+  document.getElementById('startBtn').addEventListener('click',startGame);
+  document.getElementById('againBtn').addEventListener('click',startGame);
+  document.getElementById('menuBtn').addEventListener('click',function(){ document.getElementById('overOverlay').hidden=true; document.getElementById('startOverlay').hidden=false; document.getElementById('touchBtns').hidden=true; });
+
+  // input
+  window.addEventListener('keydown',function(e){
+    if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') keys.left=true;
+    if(e.key==='ArrowRight'||e.key==='d'||e.key==='D') keys.right=true;
+    if(['ArrowLeft','ArrowRight',' '].indexOf(e.key)>=0) e.preventDefault();
+  });
+  window.addEventListener('keyup',function(e){
+    if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') keys.left=false;
+    if(e.key==='ArrowRight'||e.key==='d'||e.key==='D') keys.right=false;
+  });
+  function bindHold(el,dir){
+    function on(e){ e.preventDefault(); touchDir=dir; }
+    function off(e){ if(e) e.preventDefault(); if(touchDir===dir) touchDir=0; }
+    el.addEventListener('pointerdown',on); el.addEventListener('pointerup',off); el.addEventListener('pointerleave',off); el.addEventListener('pointercancel',off);
+  }
+  bindHold(document.getElementById('leftBtn'),-1);
+  bindHold(document.getElementById('rightBtn'),1);
+  canvas.addEventListener('pointerdown',function(e){
+    if(!running) return;
+    var r=canvas.getBoundingClientRect();
+    touchDir = (e.clientX-r.left) < r.width/2 ? -1 : 1;
+  });
+  window.addEventListener('pointerup',function(){ touchDir=0; });
+  window.addEventListener('pointercancel',function(){ touchDir=0; });
+
+  function loop(){
+    if(!running) return;
+    update(); draw();
+    raf=requestAnimationFrame(loop);
+  }
+
+  function update(){
+    frame++;
+    // steering
+    var dir=0; if(keys.left) dir-=1; if(keys.right) dir+=1; if(touchDir) dir=touchDir;
+    player.vx = dir*MOVE;
+    if(dir!==0) player.face=dir;
+    player.x += player.vx;
+    // wrap
+    if(player.x + player.r < 0) player.x = W + player.r - 2;
+    if(player.x - player.r > W) player.x = -player.r + 2;
+
+    player.vy += GRAV;
+    player.y += player.vy;
+    if(player.squash>0) player.squash-=0.06;
+
+    // camera follows upward only
+    var screenY = player.y - camY;
+    if(screenY < H*0.42){
+      var shift = H*0.42 - screenY;
+      camY -= shift;
+      maxHeight = Math.max(maxHeight, -camY/10);
+    }
+
+    // moving platforms
+    platforms.forEach(function(p){
+      if(p.type==='moving' && !p.broken){
+        p.x += p.dir*p.speed;
+        if(p.x<=2){p.x=2;p.dir=1;} if(p.x+p.w>=W-2){p.x=W-2-p.w;p.dir=-1;}
+        p.springX = p.x + p.w/2 - 9;
+      }
+    });
+
+    // collisions (only falling)
+    if(player.vy>0){
+      var feetPrev = player.y + player.r - player.vy;
+      var feet = player.y + player.r;
+      for(var i=0;i<platforms.length;i++){
+        var p=platforms[i];
+        if(p.broken) continue;
+        if(player.x+player.r*0.75 > p.x && player.x-player.r*0.75 < p.x+p.w){
+          if(feetPrev <= p.y+6 && feet >= p.y){
+            if(p.type==='breakable'){ p.broken=true; p.breakAnim=1; continue; }
+            // spring check
+            if(p.hasSpring && player.x > p.springX-6 && player.x < p.springX+24){
+              player.vy=SPRING_BOUNCE; player.squash=1;
+              burst(p.springX+9, p.y-4, '#ff7a1a');
+            } else {
+              player.vy=BOUNCE; player.squash=0.7;
+            }
+            player.y = p.y - player.r;
+            break;
+          }
+        }
+      }
+    }
+
+    // stars
+    stars.forEach(function(s){
+      if(s.taken) return;
+      var dx=(s.x+10)-player.x, dy=(s.y+10)-player.y;
+      if(dx*dx+dy*dy < 30*30){ s.taken=true; starCount++; burst(s.x+10,s.y+10,'#f5b301'); paintHUD(); }
+    });
+
+    // particles update
+    particles = particles.filter(function(pt){ pt.life-=0.03; pt.x+=pt.vx; pt.y+=pt.vy; pt.vy+=0.05; return pt.life>0; });
+
+    // cleanup + spawn
+    platforms = platforms.filter(function(p){ return p.y - camY < H+60 && !(p.broken && (p.breakAnim+=0.08)>1.6); });
+    stars = stars.filter(function(s){ return !s.taken && s.y - camY < H+60; });
+    var topY = platforms.length? Math.min.apply(null, platforms.map(function(p){return p.y;})) : camY;
+    while(topY > camY - 80){ spawnAbove(); topY = Math.min.apply(null, platforms.map(function(p){return p.y;})); }
+
+    // clouds drift
+    clouds.forEach(function(c){ c.y += c.v; if(c.y-camY*0 > H+40){} });
+    
+    // fall check
+    if(player.y - camY > H + 30){
+      if(practice){
+        // safety net bounce
+        player.y = camY + H - 40; player.vy = BOUNCE*1.05; player.squash=1;
+        toast('Safety net caught you! 🥅');
+      } else {
+        paintHUD(); gameOver(); return;
+      }
+    }
+    paintHUD();
+  }
+
+  var particles=[];
+  function burst(x,y,color){ for(var i=0;i<8;i++) particles.push({x:x,y:y,vx:rand(-2,2),vy:rand(-2.5,0.5),life:1,color:color}); }
+
+  function drawStar(cx,cy,r,color){
+    ctx.save(); ctx.translate(cx,cy); ctx.beginPath();
+    for(var i=0;i<10;i++){ var ang=-Math.PI/2 + i*Math.PI/5; var rad=i%2===0?r:r*0.45; var px=Math.cos(ang)*rad, py=Math.sin(ang)*rad; i===0?ctx.moveTo(px,py):ctx.lineTo(px,py); }
+    ctx.closePath(); ctx.fillStyle=color; ctx.fill(); ctx.strokeStyle='rgba(0,0,0,.12)'; ctx.stroke(); ctx.restore();
+  }
+  function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+  function draw(){
+    // sky
+    var g=ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#5db9f5'); g.addColorStop(.55,'#a5dcff'); g.addColorStop(1,'#e8f8ff');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    // clouds (parallax vs camY)
+    ctx.fillStyle='rgba(255,255,255,.85)';
+    clouds.forEach(function(c){
+      var cy = ((c.y - camY*0.35) % (H+80) + (H+80)) % (H+80) - 40;
+      ctx.beginPath();
+      ctx.ellipse(c.x,cy,26*c.s,13*c.s,0,0,6.29); ctx.ellipse(c.x+18*c.s,cy+2,18*c.s,10*c.s,0,0,6.29); ctx.ellipse(c.x-18*c.s,cy+3,16*c.s,9*c.s,0,0,6.29);
+      ctx.fill();
+    });
+    // height markers every 50m
+    ctx.fillStyle='rgba(22,32,46,.35)'; ctx.font='700 11px system-ui'; ctx.textAlign='left';
+    var startM=Math.ceil((-camY/10)/50)*50;
+    for(var m=startM;m<startM+600;m+=50){ var my = -m*10 - camY; if(my>-10&&my<H+10){ ctx.fillText(m+' m',8,my); ctx.fillRect(34,my-3,10,1.5);} }
+
+    // stars
+    stars.forEach(function(s){ if(s.taken) return; var sy=s.y-camY + Math.sin(frame*0.06+s.bob)*3; drawStar(s.x+10, sy+10, 11, '#ffc61a'); });
+
+    // platforms
+    platforms.forEach(function(p){
+      var y=p.y-camY; if(y<-30||y>H+30) return;
+      var color = p.type==='moving' ? '#2f8fe8' : p.type==='breakable' ? '#b07a45' : '#2fbf5a';
+      if(p.broken){ ctx.globalAlpha=Math.max(0,1-p.breakAnim*0.5); }
+      ctx.fillStyle=color; roundRect(p.x,y,p.w,p.h,7); ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.28)'; roundRect(p.x,y,p.w,5,3); ctx.fill();
+      if(p.type==='breakable' && !p.broken){ ctx.strokeStyle='rgba(0,0,0,.25)'; ctx.beginPath(); ctx.moveTo(p.x+p.w*0.3,y+2); ctx.lineTo(p.x+p.w*0.45,y+p.h-2); ctx.moveTo(p.x+p.w*0.6,y+2); ctx.lineTo(p.x+p.w*0.7,y+p.h-3); ctx.stroke(); }
+      if(p.broken){ // falling shards
+        ctx.fillStyle='#8a5a2e'; ctx.fillRect(p.x+6,y+p.breakAnim*22,10,5); ctx.fillRect(p.x+p.w-18,y+p.breakAnim*28,10,5);
+      }
+      ctx.globalAlpha=1;
+      // spring
+      if(p.hasSpring && !p.broken){
+        var sx=p.springX;
+        ctx.fillStyle='#e63946'; roundRect(sx,y-10,18,10,3); ctx.fill();
+        ctx.strokeStyle='#7a1f28'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(sx+3,y-2); ctx.lineTo(sx+15,y-6); ctx.lineTo(sx+3,y-10); ctx.stroke(); ctx.lineWidth=1;
+        ctx.fillStyle='#ffd166'; ctx.fillRect(sx-2,y-13,22,4);
+      }
+    });
+
+    // practice safety net
+    if(practice){
+      var ny=H-18;
+      ctx.fillStyle='#0ea5a4'; roundRect(0,ny,W,10,5); ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,.7)'; ctx.beginPath();
+      for(var nx=8;nx<W;nx+=18){ ctx.moveTo(nx,ny); ctx.lineTo(nx+9,ny+10); ctx.lineTo(nx+18,ny); }
+      ctx.stroke();
+      ctx.fillStyle='#0b6e6d'; ctx.font='800 11px system-ui'; ctx.textAlign='center'; ctx.fillText('PRACTICE SAFETY NET', W/2, ny-6);
+    }
+
+    // particles
+    particles.forEach(function(pt){ ctx.globalAlpha=Math.max(0,pt.life); ctx.fillStyle=pt.color; ctx.beginPath(); ctx.arc(pt.x, pt.y-camY, 3.5,0,6.29); ctx.fill(); });
+    ctx.globalAlpha=1;
+
+    // player blob
+    if(player){
+      var px=player.x, py=player.y-camY;
+      var sq=player.squash||0;
+      var rx=player.r*(1+sq*0.25), ry=player.r*(1-sq*0.22);
+      // shadow-less body
+      var bg=ctx.createRadialGradient(px-rx*0.35,py-ry*0.4,4,px,py,rx*1.25);
+      bg.addColorStop(0,'#ffe89a'); bg.addColorStop(.6,'#ffc61a'); bg.addColorStop(1,'#f0a500');
+      ctx.fillStyle=bg; ctx.beginPath(); ctx.ellipse(px,py,rx,ry,0,0,6.29); ctx.fill();
+      ctx.strokeStyle='rgba(120,70,0,.25)'; ctx.stroke();
+      // cheeks
+      ctx.fillStyle='rgba(255,110,140,.5)'; ctx.beginPath(); ctx.ellipse(px-rx*0.55,py+2,4.5,3,0,0,6.29); ctx.ellipse(px+rx*0.55,py+2,4.5,3,0,0,6.29); ctx.fill();
+      // eyes (look toward movement)
+      var ex=player.face*3;
+      ctx.fillStyle='#16202e';
+      ctx.beginPath(); ctx.ellipse(px-6+ex,py-3,3,4.2,0,0,6.29); ctx.ellipse(px+6+ex,py-3,3,4.2,0,0,6.29); ctx.fill();
+      ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(px-7+ex,py-4.5,1.2,0,6.29); ctx.arc(px+5+ex,py-4.5,1.2,0,6.29); ctx.fill();
+      // mouth
+      ctx.strokeStyle='#16202e'; ctx.lineWidth=1.8; ctx.beginPath();
+      if(player.vy<0) ctx.arc(px+ex,py+3,4,0.15*Math.PI,0.85*Math.PI); else ctx.arc(px+ex,py+7,3.5,1.15*Math.PI,1.85*Math.PI);
+      ctx.stroke(); ctx.lineWidth=1;
+      // little feet
+      ctx.fillStyle='#e07b00'; ctx.beginPath(); ctx.ellipse(px-8,py+ry-1,5,3,0,0,6.29); ctx.ellipse(px+8,py+ry-1,5,3,0,0,6.29); ctx.fill();
+    }
+  }
+
+  // initial render
+  fitCanvas(); resetRun(); draw();
+})();
+</script>
+</body>
+</html>

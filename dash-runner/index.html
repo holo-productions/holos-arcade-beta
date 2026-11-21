@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Dash Runner — Holo's Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#e9efec; --bg-accent:#d7e5dd; --surface:#ffffff; --ink:#15211b; --ink-soft:#54655c;
+    --line:#c9d4cd; --accent:#e4572e; --accent-dark:#c7431f; --accent-ink:#ffffff;
+    --teal:#0e7c66; --gold:#e9a13b; --miss:#d93a2b; --shadow:0 18px 40px rgba(21,33,27,.16);
+    --track:#2e4238;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0c1410; --bg-accent:#122019; --surface:#17231c; --ink:#edf5ef; --ink-soft:#a7bab0;
+      --line:#2c3d33; --accent:#ff7a4d; --accent-dark:#ff7a4d; --accent-ink:#1c1008;
+      --teal:#3ec9a7; --gold:#f5bc5c; --miss:#f87171; --shadow:0 18px 40px rgba(0,0,0,.55);
+      --track:#0a0f0c;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Barlow",system-ui,sans-serif;
+    background:radial-gradient(1000px 480px at 90% -10%,var(--bg-accent),transparent 60%),var(--bg);
+    color:var(--ink); min-height:100vh;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:18px 16px 40px}
+  h1{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:2.6rem;letter-spacing:.01em;text-transform:uppercase;margin:0;line-height:.95}
+  .kicker{font-weight:800;letter-spacing:.1em;text-transform:uppercase;font-size:.72rem;color:var(--teal);margin:0 0 4px}
+  .sub{color:var(--ink-soft);margin:6px 0 0;font-size:.98rem;max-width:56ch}
+  .topbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0}
+  .topbar .spacer{flex:1}
+  .btn{
+    font:inherit;font-weight:700;font-size:.92rem;border:1.5px solid var(--line);background:var(--surface);
+    color:var(--ink);border-radius:10px;padding:8px 16px;cursor:pointer;min-height:44px;
+    display:inline-flex;align-items:center;gap:6px;text-decoration:none;
+  }
+  .btn:hover{border-color:var(--ink-soft)}
+  .btn:focus-visible,.seg button:focus-visible,.ctl:focus-visible{outline:3px solid var(--teal);outline-offset:2px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .btn.primary:hover{background:var(--accent-dark)}
+  .btn.big{font-size:1.05rem;padding:12px 26px;min-height:52px}
+  .seg{display:flex;gap:6px;flex-wrap:wrap}
+  .seg button{
+    font:inherit;font-weight:700;font-size:.92rem;border:1.5px solid var(--line);background:var(--surface);
+    color:var(--ink);border-radius:10px;padding:8px 16px;cursor:pointer;min-height:44px;
+  }
+  .seg button.active{background:var(--teal);border-color:var(--teal);color:#fff}
+  @media (prefers-color-scheme: dark){ .seg button.active{color:#0c1410} }
+  .card{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+  .stat{background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:8px 6px;text-align:center}
+  .stat .num{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:1.5rem;line-height:1.05;display:block}
+  .stat .lbl{font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)}
+  .stage{padding:10px}
+  .hud{display:flex;align-items:center;gap:10px;padding:2px 4px 8px;min-height:32px}
+  .hearts{font-size:1.05rem;letter-spacing:2px;color:var(--miss);min-width:76px}
+  .hearts .lost{opacity:.22;filter:grayscale(1)}
+  .hud .msg{flex:1;text-align:center;font-weight:700;color:var(--ink-soft);font-size:.92rem}
+  .hud .speed{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:1rem;color:var(--teal);min-width:64px;text-align:right}
+  canvas#game{display:block;width:100%;height:300px;border-radius:8px;background:#8ec9e8;touch-action:none;user-select:none;-webkit-user-select:none}
+  @media (max-width:560px){ canvas#game{height:250px} h1{font-size:2.1rem} }
+  .controls{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;margin-top:10px;align-items:stretch}
+  .ctl{
+    font:inherit;font-weight:800;font-size:1rem;border-radius:12px;cursor:pointer;min-height:60px;
+    border:2px solid var(--line);background:var(--surface);color:var(--ink);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;touch-action:none;user-select:none;-webkit-user-select:none;text-align:center;
+  }
+  .ctl small{font-weight:600;color:var(--ink-soft);font-size:.72rem;display:block}
+  .ctl.jump{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .ctl.jump small{color:inherit;opacity:.85}
+  .ctl:active{transform:scale(.97)}
+  .ctl:disabled{opacity:.45;cursor:default;transform:none}
+  .mid-controls{display:flex;flex-direction:column;gap:8px}
+  .mid-controls .btn{justify-content:center;min-height:44px;padding:6px 14px}
+  .hidden{display:none !important}
+  .overlay{position:fixed;inset:0;z-index:9990;display:none;align-items:flex-start;justify-content:center;background:rgba(0,0,0,.55);padding:16px;overflow-y:auto}
+  .overlay.open{display:flex}
+  .sheet{background:var(--surface);color:var(--ink);border-radius:14px;max-width:540px;width:100%;padding:20px;box-shadow:var(--shadow);margin:auto 0}
+  .sheet h2{margin:0 0 10px;font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:1.6rem;text-transform:uppercase}
+  .sheet h3{margin:16px 0 6px}
+  .sheet p,.sheet li{line-height:1.55;font-size:.95rem}
+  .sheet table{border-collapse:collapse;width:100%;margin:8px 0;font-size:.9rem}
+  .sheet th,.sheet td{border:1px solid var(--line);padding:6px 8px;text-align:left}
+  .sheet th{background:var(--bg-accent)}
+  .results-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:12px 0}
+  @media (min-width:520px){ .results-grid{grid-template-columns:repeat(4,1fr)} }
+  .newbest{display:inline-block;background:var(--gold);color:#231600;font-weight:800;font-size:.8rem;border-radius:999px;padding:3px 12px;margin-left:8px;vertical-align:middle}
+  footer{margin-top:34px;border-top:2px solid var(--line);padding-top:16px;color:var(--ink-soft);font-weight:600;font-size:.88rem;line-height:1.6}
+  footer strong{color:var(--ink)}
+  footer a{color:var(--teal);font-weight:800;text-decoration:underline;text-underline-offset:2px}
+  footer .rff-line{margin:10px 0 0}
+  /* Feedback (standard) */
+  .fb-btn{display:inline-block;margin:8px 8px 0 0;padding:10px 18px;min-height:44px;font:inherit;font-size:15px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+  .fb-overlay{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:16px;box-sizing:border-box}
+  .fb-overlay.open{display:flex}
+  .fb-card{background:#fff;color:#111;border-radius:14px;max-width:420px;width:100%;padding:18px;box-sizing:border-box;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+  .fb-card h2{margin:0 0 10px;font-size:18px}
+  .fb-stars{display:flex;gap:6px;margin:6px 0 12px}
+  .fb-star{font-size:28px;line-height:1;background:none;border:none;cursor:pointer;padding:6px;min-width:44px;min-height:44px;color:#bbb}
+  .fb-star.on{color:#f5a623}
+  .fb-card textarea{width:100%;box-sizing:border-box;min-height:90px;font:inherit;padding:10px;border:1px solid #ccc;border-radius:8px;resize:vertical}
+  .fb-card select{width:100%;box-sizing:border-box;font:inherit;padding:10px;margin-top:10px;border:1px solid #ccc;border-radius:8px;background:#fff}
+  .fb-row{display:flex;gap:10px;margin-top:14px}
+  .fb-save,.fb-cancel{flex:1;padding:12px;min-height:44px;font:inherit;font-size:15px;border-radius:10px;cursor:pointer}
+  .fb-save{background:#2e7d32;color:#fff;border:none}
+  .fb-cancel{background:transparent;border:1px solid #ccc;color:#111}
+  .fb-thanks{display:none;text-align:center;font-size:17px;padding:14px 0 4px}
+  .fb-note{font-size:.8rem;color:#666;margin:10px 0 0;line-height:1.45}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Holo's Arcade · Endless Runner</p>
+  <h1>Dash Runner</h1>
+  <p class="sub">Sprint, leap the crates and spikes, duck the drones, and grab every star you can. The track never ends — how far can you dash?</p>
+
+  <div class="topbar">
+    <div class="seg" id="diffSeg" role="group" aria-label="Difficulty">
+      <button type="button" data-diff="easy">😌 Easy</button>
+      <button type="button" data-diff="normal">🎯 Normal</button>
+      <button type="button" data-diff="hard">🔥 Hard</button>
+    </div>
+    <span class="spacer"></span>
+    <button type="button" class="btn" id="howBtn">❓ How to play</button>
+    <button type="button" class="btn" id="rulesBtn">📜 Rules</button>
+    <button type="button" class="btn" id="soundBtn" aria-label="Toggle sound">🔊 Sound</button>
+  </div>
+
+  <div class="stats" aria-live="polite">
+    <div class="stat"><span class="num" id="stScore">0</span><span class="lbl">Score</span></div>
+    <div class="stat"><span class="num" id="stDist">0 m</span><span class="lbl">Distance</span></div>
+    <div class="stat"><span class="num" id="stStars">0</span><span class="lbl">Stars</span></div>
+    <div class="stat"><span class="num" id="stBest">0</span><span class="lbl">Best</span></div>
+  </div>
+
+  <section class="card stage">
+    <div class="hud">
+      <span class="hearts" id="hearts" aria-label="Hearts remaining"></span>
+      <span class="msg" id="msgLine">Pick a difficulty, then press Start Run — or warm up with a Practice round.</span>
+      <span class="speed" id="speedLine"></span>
+    </div>
+    <canvas id="game" width="680" height="300" aria-label="Dash Runner game track"></canvas>
+    <div class="controls">
+      <button type="button" class="ctl" id="duckBtn" disabled>⬇ Duck<small>hold · slam in air</small></button>
+      <div class="mid-controls">
+        <button type="button" class="btn primary big" id="startBtn">▶ Start Run</button>
+        <button type="button" class="btn" id="practiceBtn">🧪 Practice round</button>
+        <button type="button" class="btn hidden" id="pauseBtn">⏸ Pause</button>
+        <button type="button" class="btn hidden" id="endBtn">⏹ End practice</button>
+      </div>
+      <button type="button" class="ctl jump" id="jumpBtn" disabled>⬆ Jump<small>tap twice = double jump</small></button>
+    </div>
+  </section>
+
+  <section class="card hidden" id="resultsCard" style="margin-top:14px">
+    <h2 style="margin:0;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.5rem;text-transform:uppercase" id="resultsTitle">Run over!</h2>
+    <div class="results-grid">
+      <div class="stat"><span class="num" id="resScore">0</span><span class="lbl">Score</span></div>
+      <div class="stat"><span class="num" id="resDist">0 m</span><span class="lbl">Distance</span></div>
+      <div class="stat"><span class="num" id="resStars">0</span><span class="lbl">Stars</span></div>
+      <div class="stat"><span class="num" id="resBest">0</span><span class="lbl">Best (this difficulty)</span></div>
+    </div>
+    <p id="resNote" style="margin:6px 0 12px"></p>
+    <button type="button" class="btn primary big" id="againBtn">↻ Run again</button>
+  </section>
+
+  <footer>
+    <strong>Dash Runner</strong> is a Holo's Arcade game — an original endless runner drawn and animated live in your browser. No copyrighted characters, art, or music.
+    <p class="rff-line">A <a href="../games-hub/">Ridiculously Fit and Fed</a> game · <a href="../games-hub/">Back to the Games Hub</a><br>
+    More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener noreferrer">Ridiculously Fit and Fed</a></p>
+  </footer>
+</div>
+
+<!-- How to play (opt-in tutorial — opens only from the button) -->
+<div class="overlay" id="howOverlay" role="dialog" aria-modal="true" aria-label="How to play">
+  <div class="sheet">
+    <h2>❓ How to play</h2>
+    <ol>
+      <li>Pick a difficulty: <strong>Easy</strong>, <strong>Normal</strong>, or <strong>Hard</strong>. Your choice is remembered.</li>
+      <li>Press <strong>▶ Start Run</strong>. Your runner takes off automatically — you just steer the jumps and ducks.</li>
+      <li><strong>Jump</strong> over crates, spike strips, and crate stacks: tap the <strong>⬆ Jump</strong> button, tap the track, or press <strong>Space / ↑</strong>. Tap jump again mid-air for a <strong>double jump</strong>.</li>
+      <li><strong>Duck</strong> under the flying drones: hold the <strong>⬇ Duck</strong> button or the <strong>↓</strong> key. Ducking mid-air slams you back down fast.</li>
+      <li>Run through <strong>gold stars</strong> to collect them — each one is worth 25 points.</li>
+      <li>Hitting an obstacle costs a <strong>heart</strong>. Run out of hearts and the run ends. The track speeds up the longer you survive — beat your best score!</li>
+      <li>New to the game? Press <strong>🧪 Practice round</strong> to warm up first: the speed stays steady, hits don't cost hearts or end the run, and nothing counts toward your best score. Press <strong>⏹ End practice</strong> whenever you're ready for a real run.</li>
+    </ol>
+    <p>Tip: drones fly at standing head height. If you jump into one, it still counts as a hit — stay low and duck instead.</p>
+    <button type="button" class="btn primary" data-close="howOverlay">Got it!</button>
+  </div>
+</div>
+
+<!-- Rules (separate page) -->
+<div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-label="Rules">
+  <div class="sheet">
+    <h2>📜 Rules &amp; scoring</h2>
+    <h3>Goal</h3>
+    <p>Run as far as you can on an endless track. Dodge every obstacle and collect stars. The run ends when you lose your last heart.</p>
+    <h3>Difficulty</h3>
+    <table>
+      <tr><th>Difficulty</th><th>Start speed</th><th>Hearts</th><th>Obstacle spacing</th></tr>
+      <tr><td>😌 Easy</td><td>Slow</td><td>3</td><td>Wide</td></tr>
+      <tr><td>🎯 Normal</td><td>Medium</td><td>2</td><td>Medium</td></tr>
+      <tr><td>🔥 Hard</td><td>Fast</td><td>1</td><td>Tight</td></tr>
+    </table>
+    <p>On every difficulty the track keeps speeding up the longer you run, up to a top-speed cap. Obstacles appear in a random order — no two runs are the same.</p>
+    <h3>Practice round</h3>
+    <p>A practice round uses your chosen difficulty's starting speed, but the track never speeds up. Hitting an obstacle doesn't cost a heart and never ends the run — hits are just counted so you can see how you're improving. Practice scores and stars are shown at the end but are <strong>never</strong> saved as a best score. End the round any time with the ⏹ End practice button.</p>
+    <h3>Obstacles</h3>
+    <table>
+      <tr><th>Obstacle</th><th>How to clear it</th></tr>
+      <tr><td>Crate</td><td>Jump</td></tr>
+      <tr><td>Spike strip</td><td>Jump</td></tr>
+      <tr><td>Crate stack (tall)</td><td>Jump — or double jump</td></tr>
+      <tr><td>Drone (flying)</td><td>Duck — jumping into it is a hit</td></tr>
+    </table>
+    <h3>Scoring</h3>
+    <table>
+      <tr><th>Action</th><th>Points</th></tr>
+      <tr><td>Each metre run</td><td>1</td></tr>
+      <tr><td>Gold star collected</td><td>25</td></tr>
+      <tr><td>Obstacle hit</td><td>−1 heart (no points lost)</td></tr>
+    </table>
+    <p>After a hit you flash and are briefly untouchable (about a second) so one mistake can't chain into another. Your best score is saved separately for each difficulty.</p>
+    <h3>Controls</h3>
+    <table>
+      <tr><th>Action</th><th>Touch / mouse</th><th>Keyboard</th></tr>
+      <tr><td>Jump / double jump</td><td>⬆ Jump button, or tap the track</td><td>Space, ↑, or W</td></tr>
+      <tr><td>Duck / slam down</td><td>Hold ⬇ Duck button</td><td>Hold ↓ or S</td></tr>
+      <tr><td>Pause</td><td>⏸ Pause button</td><td>P</td></tr>
+    </table>
+    <p>Difficulty, best scores, and sound setting are saved on this device (localStorage).</p>
+    <button type="button" class="btn primary" data-close="rulesOverlay">Close</button>
+  </div>
+</div>
+
+<!-- Feedback (Holo's Arcade standard) -->
+<div class="fb-overlay" id="fbOverlay" role="dialog" aria-modal="true" aria-label="Send feedback">
+  <div class="fb-card">
+    <h2>Feedback</h2>
+    <div id="fbForm">
+      <div class="fb-stars" id="fbStars" role="radiogroup" aria-label="Rating">
+        <button type="button" class="fb-star" data-v="1" aria-label="1 star">★</button>
+        <button type="button" class="fb-star" data-v="2" aria-label="2 stars">★</button>
+        <button type="button" class="fb-star" data-v="3" aria-label="3 stars">★</button>
+        <button type="button" class="fb-star" data-v="4" aria-label="4 stars">★</button>
+        <button type="button" class="fb-star" data-v="5" aria-label="5 stars">★</button>
+      </div>
+      <textarea id="fbText" placeholder="Tell us what you think…" aria-label="Your feedback"></textarea>
+      <select id="fbTag" aria-label="Feedback type">
+        <option value="">Tag (optional)</option>
+        <option value="Bug">Bug</option>
+        <option value="Suggestion">Suggestion</option>
+        <option value="Other">Other</option>
+      </select>
+      <p class="fb-note">Feedback follows the same Terms as the games: no personal info needed, keep it clean, and feedback may be used to improve the games. Saved on this device only.</p>
+      <div class="fb-row">
+        <button type="button" class="fb-cancel" id="fbCancel">Cancel</button>
+        <button type="button" class="fb-save" id="fbSave">Save</button>
+      </div>
+    </div>
+    <div class="fb-thanks" id="fbThanks">Thanks! 💜</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================= Dash Runner =================
+   Original 2D endless runner. All art drawn with canvas shapes;
+   all sounds synthesized with WebAudio. No external assets. */
+var GAME_SLUG = "dash-runner";
+var LS_DIFF = "dash-runner:difficulty";
+var LS_BEST = "dash-runner:best";       // JSON {easy:n, normal:n, hard:n}
+var LS_MUTED = "dash-runner:muted";
+var LS_FEEDBACK = "holos-arcade-feedback";
+
+var DIFFS = {
+  easy:   { label: "Easy",   base: 250, accel: 3.0, maxAdd: 180, hearts: 3, minGap: 370, maxGap: 590 },
+  normal: { label: "Normal", base: 330, accel: 5.0, maxAdd: 240, hearts: 2, minGap: 320, maxGap: 520 },
+  hard:   { label: "Hard",   base: 425, accel: 7.5, maxAdd: 300, hearts: 1, minGap: 275, maxGap: 455 }
+};
+var GRAVITY = 2500, JUMP_VEL = 920, STAR_POINTS = 25, PX_PER_METER = 50;
+
+function lsGet(k, d){ try { var v = localStorage.getItem(k); return v === null ? d : v; } catch(e){ return d; } }
+function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+function getBest(){ try { var b = JSON.parse(lsGet(LS_BEST, "{}")); return (b && typeof b === "object") ? b : {}; } catch(e){ return {}; } }
+function rand(a, b){ return a + Math.random() * (b - a); }
+
+var diffKey = lsGet(LS_DIFF, "normal");
+if (!DIFFS[diffKey]) diffKey = "normal";
+var muted = lsGet(LS_MUTED, "0") === "1";
+
+var $ = function(id){ return document.getElementById(id); };
+var canvas = $("game"), ctx = canvas.getContext("2d");
+var el = {
+  score: $("stScore"), dist: $("stDist"), stars: $("stStars"), best: $("stBest"),
+  hearts: $("hearts"), msg: $("msgLine"), speed: $("speedLine"),
+  start: $("startBtn"), practice: $("practiceBtn"), end: $("endBtn"), pause: $("pauseBtn"), again: $("againBtn"),
+  jump: $("jumpBtn"), duck: $("duckBtn"), results: $("resultsCard")
+};
+
+/* ---------- Canvas sizing ---------- */
+var W = 680, H = 300, GROUND_H = 52, groundY = H - GROUND_H;
+function resize(){
+  var r = canvas.getBoundingClientRect();
+  var dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = Math.max(300, r.width); H = Math.max(200, r.height);
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  groundY = H - GROUND_H;
+  if (!G.running) draw(0);
+}
+window.addEventListener("resize", resize);
+
+/* ---------- Audio (all synthesized) ---------- */
+var actx = null, master = null;
+function ensureAudio(){
+  if (actx) { if (actx.state === "suspended") actx.resume(); return; }
+  var AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  actx = new AC();
+  master = actx.createGain(); master.gain.value = 0.5; master.connect(actx.destination);
+}
+function tone(freqA, freqB, dur, vol, type){
+  if (!actx || muted) return;
+  var t = actx.currentTime;
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type || "sine";
+  o.frequency.setValueAtTime(freqA, t);
+  if (freqB) o.frequency.exponentialRampToValueAtTime(freqB, t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
+}
+function sndJump(){ tone(300, 620, 0.14, 0.18, "square"); }
+function sndStar(){ tone(880, 880, 0.07, 0.16, "triangle"); setTimeout(function(){ tone(1318, 1318, 0.1, 0.16, "triangle"); }, 55); }
+function sndHit(){ tone(160, 60, 0.25, 0.3, "sawtooth"); }
+function sndOver(){ tone(520, 520, 0.12, 0.2, "triangle"); setTimeout(function(){ tone(390, 390, 0.12, 0.2, "triangle"); }, 130); setTimeout(function(){ tone(262, 262, 0.22, 0.2, "triangle"); }, 260); }
+
+/* ---------- Game state ---------- */
+var G = {
+  running: false, paused: false, over: false, practice: false, hits: 0,
+  speed: 0, distPx: 0, starsGot: 0, hearts: 0,
+  spawnIn: 0, starIn: 0, invT: 0, time: 0, lastTs: 0, raf: null,
+  obstacles: [], stars: [], parts: [],
+  worldX: 0
+};
+var P = { x: 72, w: 36, standH: 54, duckH: 32, y: 0, vy: 0, jumps: 0, ducking: false, duckHeld: false, phase: 0.9 };
+
+function curH(){ return P.ducking && P.y === 0 ? P.duckH : P.standH; }
+function scoreNow(){ return Math.floor(G.distPx / PX_PER_METER) + G.starsGot * STAR_POINTS; }
+
+function syncDiffUI(){
+  document.querySelectorAll("[data-diff]").forEach(function(b){
+    b.classList.toggle("active", b.getAttribute("data-diff") === diffKey);
+  });
+  el.best.textContent = getBest()[diffKey] || 0;
+  renderHearts();
+}
+function renderHearts(){
+  if (G.practice && (G.running || G.over)) { el.hearts.innerHTML = "🧪 ∞"; return; }
+  var total = DIFFS[diffKey].hearts;
+  var cur = G.running || G.over ? G.hearts : total;
+  var s = "";
+  for (var i = 0; i < total; i++) s += (i < cur) ? "❤️" : '<span class="lost">❤️</span>';
+  el.hearts.innerHTML = s;
+}
+document.querySelectorAll("[data-diff]").forEach(function(b){
+  b.addEventListener("click", function(){
+    if (G.running) return;
+    diffKey = b.getAttribute("data-diff");
+    lsSet(LS_DIFF, diffKey);
+    syncDiffUI();
+  });
+});
+
+/* ---------- Spawning ---------- */
+var OB_TYPES = ["crate", "spikes", "crate", "drone", "spikes", "stack", "drone"];
+function spawnObstacle(){
+  var type = OB_TYPES[Math.floor(Math.random() * OB_TYPES.length)];
+  var o = { type: type, x: W + 60, hit: false };
+  if (type === "crate"){ o.w = 42; o.h = 38; }
+  else if (type === "spikes"){ o.w = 48; o.h = 26; }
+  else if (type === "stack"){ o.w = 42; o.h = 74; }
+  else { o.w = 50; o.h = 24; o.baseY = rand(-4, 4); } // drone
+  G.obstacles.push(o);
+  var d = DIFFS[diffKey];
+  G.spawnIn = rand(d.minGap, d.maxGap) * (G.speed / d.base) * 0.9 + rand(0, 60);
+}
+function spawnStars(){
+  var heights = [26, 74, 118];
+  var hgt = heights[Math.floor(Math.random() * heights.length)];
+  var n = 3;
+  for (var i = 0; i < n; i++) G.stars.push({ x: W + 60 + i * 38, h: hgt, r: 11, taken: false, spin: rand(0, 6) });
+  G.starIn = rand(500, 1100);
+}
+
+/* ---------- Actions ---------- */
+function doJump(){
+  if (!G.running || G.paused) return;
+  if (P.y === 0) { P.vy = JUMP_VEL; P.jumps = 1; P.ducking = false; sndJump(); }
+  else if (P.jumps < 2) { P.vy = JUMP_VEL * 0.92; P.jumps = 2; burst(P.x + P.w / 2, groundY - P.y, 5, "#ffffff"); sndJump(); }
+}
+function setDuck(held){
+  P.duckHeld = held;
+  if (!G.running) return;
+  if (held && P.y > 0) P.vy = Math.min(P.vy, -1500); // slam down
+}
+function burst(x, y, n, color){
+  for (var i = 0; i < n; i++) G.parts.push({ x: x, y: y, vx: rand(-70, 70), vy: rand(-140, -20), life: rand(.3, .6), color: color, r: rand(2, 4) });
+}
+
+/* ---------- Run control ---------- */
+function startGame(practice){
+  ensureAudio();
+  var d = DIFFS[diffKey];
+  G.running = true; G.paused = false; G.over = false;
+  G.practice = !!practice; G.hits = 0;
+  G.speed = d.base; G.distPx = 0; G.starsGot = 0; G.hearts = d.hearts;
+  G.obstacles = []; G.stars = []; G.parts = [];
+  G.spawnIn = 420; G.starIn = 650; G.invT = 0; G.time = 0; G.worldX = 0;
+  P.y = 0; P.vy = 0; P.jumps = 0; P.ducking = false; P.duckHeld = false;
+  el.results.classList.add("hidden");
+  el.start.classList.add("hidden");
+  el.practice.classList.add("hidden");
+  el.pause.classList.remove("hidden");
+  el.end.classList.toggle("hidden", !G.practice);
+  el.pause.textContent = "⏸ Pause";
+  el.jump.disabled = false; el.duck.disabled = false;
+  el.msg.textContent = G.practice
+    ? "Practice round — steady speed, no hearts, no pressure. Hits don't end the run!"
+    : "Go! Jump the crates, duck the drones.";
+  renderHearts(); updateStats();
+  if (G.raf) cancelAnimationFrame(G.raf);
+  G.lastTs = performance.now();
+  G.raf = requestAnimationFrame(frame);
+}
+function endPractice(){
+  G.running = false; G.over = true;
+  sndOver();
+  el.pause.classList.add("hidden");
+  el.end.classList.add("hidden");
+  el.start.classList.remove("hidden");
+  el.practice.classList.remove("hidden");
+  el.jump.disabled = true; el.duck.disabled = true;
+  var sc = scoreNow();
+  $("resultsTitle").textContent = "Practice round over";
+  $("resScore").textContent = sc;
+  $("resDist").textContent = Math.floor(G.distPx / PX_PER_METER) + " m";
+  $("resStars").textContent = G.starsGot;
+  $("resBest").textContent = getBest()[diffKey] || 0;
+  $("resNote").textContent = "Practice doesn't count toward your best score. You clipped " + G.hits + (G.hits === 1 ? " obstacle" : " obstacles") + " — that's exactly what practice is for. Ready for a real run?";
+  $("againBtn").textContent = "↻ Practice again";
+  el.msg.textContent = "Practice done — press Start Run when you're ready for the real thing.";
+  el.speed.textContent = "";
+  el.results.classList.remove("hidden");
+  el.results.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  draw(0);
+}
+function endGame(){
+  G.running = false; G.over = true;
+  sndHit(); sndOver();
+  el.pause.classList.add("hidden");
+  el.end.classList.add("hidden");
+  el.start.classList.remove("hidden");
+  el.practice.classList.remove("hidden");
+  el.start.textContent = "▶ Start Run";
+  el.jump.disabled = true; el.duck.disabled = true;
+  var sc = scoreNow();
+  var best = getBest();
+  var prev = best[diffKey] || 0;
+  var isNew = sc > prev;
+  if (isNew) { best[diffKey] = sc; lsSet(LS_BEST, JSON.stringify(best)); }
+  syncDiffUI(); renderHearts();
+  $("resultsTitle").innerHTML = "Run over!" + (isNew ? '<span class="newbest">🏆 New best!</span>' : "");
+  $("resScore").textContent = sc;
+  $("resDist").textContent = Math.floor(G.distPx / PX_PER_METER) + " m";
+  $("resStars").textContent = G.starsGot;
+  $("resBest").textContent = best[diffKey] || 0;
+  $("againBtn").textContent = "↻ Run again";
+  $("resNote").textContent = isNew
+    ? "New best on " + DIFFS[diffKey].label + " — saved! Think you can beat " + sc + "?"
+    : "Score " + sc + " on " + DIFFS[diffKey].label + ". Best on this difficulty: " + prev + ".";
+  el.msg.textContent = "Run over — press Run again to have another go.";
+  el.speed.textContent = "";
+  el.results.classList.remove("hidden");
+  el.results.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  draw(0);
+}
+function togglePause(){
+  if (!G.running) return;
+  G.paused = !G.paused;
+  el.pause.textContent = G.paused ? "▶ Resume" : "⏸ Pause";
+  el.msg.textContent = G.paused ? "Paused." : (G.practice ? "Practice round — steady speed, no hearts, no pressure." : "Go! Jump the crates, duck the drones.");
+  if (!G.paused) { G.lastTs = performance.now(); }
+  draw(0);
+}
+document.addEventListener("visibilitychange", function(){
+  if (document.hidden && G.running && !G.paused) togglePause();
+});
+
+/* ---------- Update ---------- */
+function updateStats(){
+  el.score.textContent = scoreNow();
+  el.dist.textContent = Math.floor(G.distPx / PX_PER_METER) + " m";
+  el.stars.textContent = G.starsGot;
+  el.speed.textContent = G.running ? Math.round(G.speed / PX_PER_METER * 3.6) + " km/h" : "";
+}
+function hitObstacle(o){
+  o.hit = true;
+  if (G.practice) {
+    G.hits++;
+    G.invT = 1.1;
+    sndHit();
+    burst(P.x + P.w / 2, groundY - P.y - 26, 12, "#e4572e");
+    el.msg.textContent = "Hit #" + G.hits + " — no penalty in practice. Keep going!";
+    return;
+  }
+  G.hearts--;
+  G.invT = 1.1;
+  renderHearts();
+  burst(P.x + P.w / 2, groundY - P.y - 26, 12, "#e4572e");
+  if (G.hearts <= 0) { endGame(); }
+  else { sndHit(); el.msg.textContent = "Ouch! " + G.hearts + (G.hearts === 1 ? " heart" : " hearts") + " left — keep going!"; }
+}
+function frame(ts){
+  if (!G.running) return;
+  var dt = Math.min(0.033, (ts - G.lastTs) / 1000 || 0.016);
+  G.lastTs = ts;
+  if (!G.paused) {
+    var d = DIFFS[diffKey];
+    G.time += dt;
+    G.speed = G.practice ? d.base : Math.min(d.base + d.maxAdd, G.speed + d.accel * dt);
+    var move = G.speed * dt;
+    G.distPx += move; G.worldX += move;
+    if (G.invT > 0) G.invT -= dt;
+
+    /* Player physics */
+    P.ducking = P.duckHeld && P.y === 0;
+    if (P.y > 0 || P.vy > 0) {
+      P.vy -= GRAVITY * dt;
+      P.y += P.vy * dt;
+      if (P.y <= 0) { P.y = 0; P.vy = 0; P.jumps = 0; }
+    }
+    P.phase += dt * (P.y === 0 ? G.speed / 26 : 2);
+
+    /* Spawning */
+    G.spawnIn -= move;
+    if (G.spawnIn <= 0) spawnObstacle();
+    G.starIn -= move;
+    if (G.starIn <= 0) spawnStars();
+
+    /* Obstacles */
+    var pBox = { l: P.x + 6, r: P.x + P.w - 6, t: groundY - P.y - curH() + 4, b: groundY - P.y - 2 };
+    for (var i = G.obstacles.length - 1; i >= 0; i--) {
+      var o = G.obstacles[i];
+      o.x -= move;
+      if (o.x + o.w < -20) { G.obstacles.splice(i, 1); continue; }
+      if (o.hit) continue;
+      var oBox;
+      if (o.type === "drone") {
+        var dy = groundY - 72 + Math.sin(G.time * 6 + o.baseY) * 3;
+        oBox = { l: o.x + 5, r: o.x + o.w - 5, t: dy, b: dy + o.h };
+        o.drawY = dy;
+      } else {
+        oBox = { l: o.x + 5, r: o.x + o.w - 5, t: groundY - o.h + 3, b: groundY };
+      }
+      if (G.invT <= 0 && pBox.l < oBox.r && pBox.r > oBox.l && pBox.t < oBox.b && pBox.b > oBox.t) {
+        hitObstacle(o);
+        if (!G.running) return; // game just ended
+      }
+    }
+    /* Stars */
+    for (var j = G.stars.length - 1; j >= 0; j--) {
+      var s = G.stars[j];
+      s.x -= move; s.spin += dt * 3;
+      if (s.x < -20) { G.stars.splice(j, 1); continue; }
+      var cy = groundY - s.h;
+      var cx = s.x;
+      if (!s.taken && cx > pBox.l - 8 && cx < pBox.r + 8 && cy > pBox.t - 12 && cy < pBox.b + 12) {
+        s.taken = true; G.starsGot++;
+        burst(cx, cy, 7, "#e9a13b");
+        sndStar();
+        G.stars.splice(j, 1);
+      }
+    }
+    /* Particles */
+    for (var k = G.parts.length - 1; k >= 0; k--) {
+      var pt = G.parts[k];
+      pt.life -= dt; pt.x += pt.vx * dt; pt.y += pt.vy * dt; pt.vy += 500 * dt;
+      if (pt.life <= 0) G.parts.splice(k, 1);
+    }
+    updateStats();
+    draw(dt);
+  }
+  G.raf = requestAnimationFrame(frame);
+}
+
+/* ---------- Drawing ---------- */
+function darkMode(){ return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches; }
+function rr(x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawStar(cx, cy, r, rot){
+  ctx.beginPath();
+  for (var i = 0; i < 10; i++) {
+    var rad = i % 2 === 0 ? r : r * 0.45;
+    var a = rot + i * Math.PI / 5 - Math.PI / 2;
+    var px = cx + Math.cos(a) * rad, py = cy + Math.sin(a) * rad;
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+function draw(dt){
+  var dark = darkMode();
+  /* Sky */
+  var sky = ctx.createLinearGradient(0, 0, 0, H);
+  if (dark) { sky.addColorStop(0, "#0d2136"); sky.addColorStop(1, "#274b5c"); }
+  else { sky.addColorStop(0, "#79bfe6"); sky.addColorStop(1, "#d8f0f7"); }
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  /* Sun / moon */
+  ctx.fillStyle = dark ? "#e8eef2" : "#ffd94d";
+  ctx.beginPath(); ctx.arc(W - 64, 46, dark ? 17 : 24, 0, Math.PI * 2); ctx.fill();
+  /* Clouds (slow parallax) */
+  ctx.fillStyle = dark ? "rgba(255,255,255,.14)" : "rgba(255,255,255,.85)";
+  var coff = (G.worldX * 0.15) % (W + 240);
+  for (var c = 0; c < 4; c++) {
+    var cx = ((c * 260 + 60 - coff) % (W + 240) + W + 240) % (W + 240) - 120;
+    var cy = 30 + (c % 2) * 26;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 16, 0, Math.PI * 2); ctx.arc(cx + 18, cy + 3, 12, 0, Math.PI * 2); ctx.arc(cx - 18, cy + 4, 11, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  /* Skyline (mid parallax) */
+  ctx.fillStyle = dark ? "#16303c" : "#9dc8b8";
+  var boff = (G.worldX * 0.4) % 92;
+  for (var bx = -boff; bx < W; bx += 92) {
+    var bh = 54 + ((Math.floor((bx + G.worldX * 0.4) / 92) * 37) % 40);
+    ctx.fillRect(bx, groundY - bh, 62, bh);
+  }
+  /* Ground / track */
+  ctx.fillStyle = dark ? "#1d2b23" : "#3f6b4f";
+  ctx.fillRect(0, groundY, W, GROUND_H);
+  ctx.fillStyle = dark ? "#31473a" : "#548a68";
+  ctx.fillRect(0, groundY, W, 8);
+  /* Lane dashes */
+  ctx.fillStyle = "rgba(255,255,255,.55)";
+  var doff = G.worldX % 46;
+  for (var dx = -doff; dx < W; dx += 46) ctx.fillRect(dx, groundY + 30, 24, 5);
+
+  /* Stars */
+  G.stars.forEach(function(s){
+    ctx.save();
+    ctx.shadowColor = "rgba(233,161,59,.8)"; ctx.shadowBlur = 10;
+    ctx.fillStyle = "#f7b733";
+    drawStar(s.x, groundY - s.h, s.r, s.spin);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  /* Obstacles */
+  G.obstacles.forEach(function(o){
+    if (o.type === "crate" || o.type === "stack") {
+      var rows = o.type === "stack" ? 2 : 1;
+      for (var rI = 0; rI < rows; rI++) {
+        var by = groundY - (rI + 1) * 37 + (o.type === "stack" ? 0 : -1);
+        ctx.fillStyle = "#b5793b"; ctx.fillRect(o.x, by, o.w, 37);
+        ctx.strokeStyle = "#7d5225"; ctx.lineWidth = 3; ctx.strokeRect(o.x + 1.5, by + 1.5, o.w - 3, 34);
+        ctx.beginPath(); ctx.moveTo(o.x + 3, by + 3); ctx.lineTo(o.x + o.w - 3, by + 34); ctx.moveTo(o.x + o.w - 3, by + 3); ctx.lineTo(o.x + 3, by + 34); ctx.stroke();
+      }
+    } else if (o.type === "spikes") {
+      ctx.fillStyle = "#5b6670";
+      ctx.fillRect(o.x, groundY - 6, o.w, 6);
+      ctx.fillStyle = "#8d99a3";
+      for (var sI = 0; sI < 4; sI++) {
+        var sx = o.x + sI * 12;
+        ctx.beginPath(); ctx.moveTo(sx, groundY - 6); ctx.lineTo(sx + 6, groundY - o.h); ctx.lineTo(sx + 12, groundY - 6); ctx.closePath(); ctx.fill();
+      }
+    } else if (o.type === "drone") {
+      var dy2 = (o.drawY !== undefined) ? o.drawY : groundY - 72;
+      ctx.fillStyle = "#33414e";
+      rr(o.x, dy2, o.w, o.h, 8); ctx.fill();
+      ctx.fillStyle = "#ff5252";
+      ctx.beginPath(); ctx.arc(o.x + o.w / 2, dy2 + o.h / 2, 4.5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = dark ? "#cfe3ec" : "#33414e"; ctx.lineWidth = 2.5;
+      var rot = Math.sin(performance.now() / 30) * 6;
+      ctx.beginPath(); ctx.moveTo(o.x - 4 - rot, dy2 - 5); ctx.lineTo(o.x + 14, dy2 - 5); ctx.moveTo(o.x + o.w - 14, dy2 - 5); ctx.lineTo(o.x + o.w + 4 + rot, dy2 - 5); ctx.stroke();
+      /* guide dashed line so players can read its height */
+      ctx.strokeStyle = "rgba(255,82,82,.35)"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]);
+      ctx.beginPath(); ctx.moveTo(o.x + o.w / 2, dy2 + o.h); ctx.lineTo(o.x + o.w / 2, groundY); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  });
+
+  /* Player */
+  var blink = G.invT > 0 && Math.floor(G.time * 14) % 2 === 0;
+  if (!blink) drawPlayer();
+  /* Particles */
+  G.parts.forEach(function(pt){
+    ctx.globalAlpha = Math.max(0, pt.life * 1.8);
+    ctx.fillStyle = pt.color;
+    ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+  if (G.paused) {
+    ctx.fillStyle = "rgba(0,0,0,.45)"; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#fff"; ctx.font = "700 30px 'Barlow Condensed',sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("PAUSED", W / 2, H / 2);
+    ctx.textAlign = "left";
+  }
+}
+function drawPlayer(){
+  var h = curH();
+  var bottom = groundY - P.y;
+  var top = bottom - h;
+  var x = P.x;
+  var dark = darkMode();
+  ctx.save();
+  /* shadow */
+  ctx.fillStyle = "rgba(0,0,0,.22)";
+  ctx.beginPath(); ctx.ellipse(x + P.w / 2, groundY + 8, P.w * 0.55 * (1 - Math.min(0.5, P.y / 260)), 5, 0, 0, Math.PI * 2); ctx.fill();
+  if (P.ducking && P.y === 0) {
+    /* ducking pose: low, leaning forward */
+    ctx.fillStyle = "#e4572e"; rr(x - 2, top + 8, P.w + 8, h - 8, 9); ctx.fill();      // body
+    ctx.fillStyle = "#f6c89f"; ctx.beginPath(); ctx.arc(x + P.w + 2, top + 12, 10, 0, Math.PI * 2); ctx.fill(); // head
+    ctx.fillStyle = "#0e7c66"; ctx.beginPath(); ctx.arc(x + P.w + 2, top + 9, 10, Math.PI, Math.PI * 2); ctx.fill(); // cap
+    ctx.fillStyle = "#22303a"; ctx.fillRect(x + 2, bottom - 6, 15, 6); ctx.fillRect(x + 20, bottom - 6, 15, 6); // shoes
+  } else {
+    var airborne = P.y > 0;
+    var sw = airborne ? 0.55 : Math.sin(P.phase) * 0.75;
+    /* legs */
+    ctx.strokeStyle = "#22303a"; ctx.lineWidth = 6; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x + P.w / 2, top + h * 0.62); ctx.lineTo(x + P.w / 2 + sw * 13, bottom - 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + P.w / 2, top + h * 0.62); ctx.lineTo(x + P.w / 2 - sw * 13, bottom - 2); ctx.stroke();
+    /* body (hoodie) */
+    ctx.fillStyle = "#e4572e"; rr(x + 4, top + 14, P.w - 6, h - 26, 8); ctx.fill();
+    /* arm */
+    ctx.strokeStyle = "#e4572e"; ctx.lineWidth = 5.5;
+    ctx.beginPath(); ctx.moveTo(x + P.w / 2 + 3, top + 22); ctx.lineTo(x + P.w / 2 + 3 - sw * 11, top + 36); ctx.stroke();
+    /* head + cap */
+    ctx.fillStyle = "#f6c89f"; ctx.beginPath(); ctx.arc(x + P.w / 2 + 3, top + 9, 10.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#0e7c66";
+    ctx.beginPath(); ctx.arc(x + P.w / 2 + 3, top + 8, 10.5, Math.PI, Math.PI * 2); ctx.fill();
+    ctx.fillRect(x + P.w / 2 + 3, top + 6, 15, 4); // cap brim
+  }
+  ctx.restore();
+}
+
+/* ---------- Controls wiring ---------- */
+el.start.addEventListener("click", function(){ startGame(false); });
+el.practice.addEventListener("click", function(){ startGame(true); });
+el.end.addEventListener("click", function(){ if (G.running && G.practice) endPractice(); });
+el.again.addEventListener("click", function(){ startGame(G.practice); });
+el.pause.addEventListener("click", togglePause);
+el.jump.addEventListener("pointerdown", function(e){ e.preventDefault(); ensureAudio(); doJump(); });
+el.duck.addEventListener("pointerdown", function(e){ e.preventDefault(); ensureAudio(); setDuck(true); });
+["pointerup", "pointerleave", "pointercancel"].forEach(function(ev){
+  el.duck.addEventListener(ev, function(){ setDuck(false); });
+});
+canvas.addEventListener("pointerdown", function(e){ e.preventDefault(); ensureAudio(); doJump(); });
+document.addEventListener("keydown", function(e){
+  var tag = (e.target && e.target.tagName) || "";
+  if (tag === "TEXTAREA" || tag === "INPUT" || tag === "SELECT") return;
+  if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
+    if (!e.repeat) { e.preventDefault(); ensureAudio(); doJump(); }
+  } else if (e.code === "ArrowDown" || e.code === "KeyS") {
+    e.preventDefault(); setDuck(true);
+  } else if (e.code === "KeyP") { togglePause(); }
+  else if (e.code === "Enter" && !G.running) { startGame(); }
+});
+document.addEventListener("keyup", function(e){
+  if (e.code === "ArrowDown" || e.code === "KeyS") setDuck(false);
+});
+
+/* ---------- Sound toggle (saved) ---------- */
+function syncSoundBtn(){ $("soundBtn").textContent = muted ? "🔇 Muted" : "🔊 Sound"; }
+$("soundBtn").addEventListener("click", function(){
+  muted = !muted;
+  lsSet(LS_MUTED, muted ? "1" : "0");
+  syncSoundBtn();
+  if (!muted) { ensureAudio(); tone(660, 660, 0.08, 0.15, "triangle"); }
+});
+syncSoundBtn();
+
+/* ---------- Overlays: How to play / Rules (opt-in only) ---------- */
+function openOverlay(id){ $(id).classList.add("open"); }
+function closeOverlay(id){ $(id).classList.remove("open"); }
+$("howBtn").addEventListener("click", function(){ openOverlay("howOverlay"); });
+$("rulesBtn").addEventListener("click", function(){ openOverlay("rulesOverlay"); });
+document.querySelectorAll("[data-close]").forEach(function(b){
+  b.addEventListener("click", function(){ closeOverlay(b.getAttribute("data-close")); });
+});
+["howOverlay", "rulesOverlay"].forEach(function(id){
+  $(id).addEventListener("click", function(e){ if (e.target === $(id)) closeOverlay(id); });
+});
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape") { closeOverlay("howOverlay"); closeOverlay("rulesOverlay"); }
+});
+
+/* ---------- Feedback (Holo's Arcade standard) ---------- */
+(function(){
+  var btn = document.createElement("button");
+  btn.type = "button"; btn.className = "fb-btn"; btn.id = "fbBtn"; btn.textContent = "💬 Feedback";
+  var foot = document.querySelector("footer");
+  if (foot) foot.appendChild(btn); else document.body.appendChild(btn);
+  var overlay = $("fbOverlay");
+  var rating = 0;
+  var stars = overlay.querySelectorAll(".fb-star");
+  function paint(){ stars.forEach(function(s){ s.classList.toggle("on", Number(s.getAttribute("data-v")) <= rating); }); }
+  stars.forEach(function(s){ s.addEventListener("click", function(){ rating = Number(s.getAttribute("data-v")); paint(); }); });
+  function open(){ $("fbForm").style.display = ""; $("fbThanks").style.display = "none"; overlay.classList.add("open"); }
+  function close(){ overlay.classList.remove("open"); }
+  btn.addEventListener("click", open);
+  $("fbCancel").addEventListener("click", close);
+  overlay.addEventListener("click", function(e){ if (e.target === overlay) close(); });
+  $("fbSave").addEventListener("click", function(){
+    var rec = { game: GAME_SLUG, rating: rating, text: $("fbText").value.trim(), tag: $("fbTag").value, timestamp: new Date().toISOString() };
+    try {
+      var arr = [];
+      try { arr = JSON.parse(localStorage.getItem(LS_FEEDBACK) || "[]"); if (!Array.isArray(arr)) arr = []; } catch(e){ arr = []; }
+      arr.push(rec);
+      localStorage.setItem(LS_FEEDBACK, JSON.stringify(arr));
+    } catch(e){}
+    $("fbForm").style.display = "none";
+    $("fbThanks").style.display = "block";
+    rating = 0; paint();
+    $("fbText").value = ""; $("fbTag").value = "";
+    setTimeout(close, 1200);
+  });
+})();
+
+syncDiffUI();
+resize();
+draw(0);
+</script>
+</body>
+</html>

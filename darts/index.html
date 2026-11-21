@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Darts — 501 Countdown vs AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]), textarea { min-height: 2.25rem; }
+      * { box-sizing: border-box; }
+      :root{
+        --bg:#f4efe4; --bg2:#ece4d2; --surface:#fffdf7; --surface2:#f8f2e3;
+        --ink:#211a13; --ink-soft:#5c5344; --line:#d8cbb0;
+        --green:#175c36; --green-deep:#0f3d24; --red:#b3341f; --gold:#c9971c; --gold-soft:#f3e3b3;
+        --board-cream:#efe3c8; --board-black:#23201c;
+        --shadow:0 10px 28px rgba(60,45,15,.16);
+        --radius:14px;
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --bg:#171310; --bg2:#100d0a; --surface:#221c16; --surface2:#2a231b;
+          --ink:#f0e7d6; --ink-soft:#bcae94; --line:#453a2c;
+          --green:#2e8b57; --green-deep:#175c36; --red:#d4573b; --gold:#d9a92e; --gold-soft:#3d3417;
+          --shadow:0 10px 28px rgba(0,0,0,.5);
+        }
+      }
+      html{ -webkit-text-size-adjust:100%; }
+      body{
+        margin:0; font-family:"Barlow",system-ui,sans-serif; color:var(--ink);
+        background: radial-gradient(1200px 500px at 50% -80px, var(--bg2), var(--bg)) fixed, var(--bg);
+        line-height:1.45;
+      }
+      .wrap{ max-width:1060px; margin:0 auto; padding:16px 16px 8px; }
+      h1,h2,h3,.cond{ font-family:"Barlow Condensed","Barlow",sans-serif; letter-spacing:.02em; }
+      /* ---------- top bar ---------- */
+      .topbar{ display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; justify-content:space-between; margin-bottom:12px; }
+      .title-block h1{ margin:0; font-size:clamp(2rem,6vw,3rem); font-weight:700; line-height:.95; text-transform:uppercase; }
+      .title-block h1 .accent{ color:var(--red); }
+      .title-block p{ margin:4px 0 0; color:var(--ink-soft); font-size:.95rem; }
+      .controls{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+      .btn{
+        appearance:none; border:1.5px solid var(--line); background:var(--surface); color:var(--ink);
+        font:600 .92rem "Barlow",sans-serif; padding:8px 14px; border-radius:999px; cursor:pointer;
+        display:inline-flex; align-items:center; gap:6px; min-height:2.5rem;
+      }
+      .btn:hover{ border-color:var(--gold); }
+      .btn.primary{ background:var(--green); border-color:var(--green); color:#fff; }
+      .btn.primary:hover{ background:var(--green-deep); }
+      .btn.gold{ background:var(--gold); border-color:var(--gold); color:#241a02; }
+      .btn:disabled{ opacity:.45; cursor:not-allowed; }
+      .diff-wrap{ display:flex; align-items:center; gap:6px; background:var(--surface); border:1.5px solid var(--line); border-radius:999px; padding:4px 6px 4px 12px; }
+      .diff-wrap label{ font:600 .8rem "Barlow",sans-serif; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); }
+      .diff-wrap select{ border:none; background:transparent; color:var(--ink); font:700 .95rem "Barlow",sans-serif; padding:4px 2px; cursor:pointer; }
+      .diff-wrap select option{ color:#211a13; }
+      /* ---------- scoreboard ---------- */
+      .scoreboard{ display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:stretch; margin-bottom:12px; }
+      .player-card{
+        background:var(--surface); border:1.5px solid var(--line); border-radius:var(--radius);
+        padding:12px 16px; box-shadow:var(--shadow); position:relative; overflow:hidden;
+      }
+      .player-card.active{ border-color:var(--gold); box-shadow:0 0 0 2px var(--gold-soft), var(--shadow); }
+      .player-card .who{ display:flex; align-items:center; gap:8px; font:600 .82rem "Barlow",sans-serif; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-soft); }
+      .turn-dot{ width:9px; height:9px; border-radius:50%; background:var(--line); flex:none; }
+      .player-card.active .turn-dot{ background:var(--gold); box-shadow:0 0 0 4px var(--gold-soft); }
+      .remaining{ font-family:"Barlow Condensed",sans-serif; font-size:clamp(2.6rem,9vw,4rem); font-weight:700; line-height:1; margin:2px 0; font-variant-numeric:tabular-nums; }
+      .sub-stats{ display:flex; flex-wrap:wrap; gap:4px 14px; font-size:.85rem; color:var(--ink-soft); font-variant-numeric:tabular-nums; }
+      .sub-stats b{ color:var(--ink); }
+      .vs-badge{ align-self:center; font-family:"Barlow Condensed",sans-serif; font-weight:700; font-size:1.1rem; color:var(--ink-soft); border:1.5px dashed var(--line); border-radius:50%; width:44px; height:44px; display:grid; place-items:center; background:var(--surface); }
+      .legs-line{ font-size:.85rem; color:var(--ink-soft); margin-top:2px; }
+      .legs-line b{ color:var(--gold); letter-spacing:.15em; }
+      /* ---------- layout ---------- */
+      .game-grid{ display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:14px; align-items:start; }
+      @media (max-width:760px){ .game-grid{ grid-template-columns:1fr; } .scoreboard{ grid-template-columns:1fr auto 1fr; } }
+      .board-card{ background:linear-gradient(160deg,var(--green-deep),var(--green) 70%); border-radius:20px; padding:14px; box-shadow:var(--shadow); }
+      .board-frame{ background:#2b2119; border-radius:50%; padding:10px; max-width:520px; margin:0 auto; box-shadow:inset 0 0 0 3px #4a3826, 0 14px 30px rgba(0,0,0,.35); }
+      .board-holder{ position:relative; border-radius:50%; overflow:hidden; touch-action:manipulation; cursor:crosshair; }
+      .board-holder svg{ display:block; width:100%; height:auto; }
+      #aimDot{
+        position:absolute; width:26px; height:26px; margin:-13px 0 0 -13px; border:2px solid #fff;
+        border-radius:50%; box-shadow:0 0 0 2px rgba(0,0,0,.45), inset 0 0 0 6px rgba(255,255,255,.15);
+        pointer-events:none; left:50%; top:38%; z-index:5;
+      }
+      #aimDot::after{ content:""; position:absolute; left:50%; top:50%; width:4px; height:4px; margin:-2px; background:#fff; border-radius:50%; box-shadow:0 0 0 1px rgba(0,0,0,.5); }
+      .dart-marker{ position:absolute; width:14px; height:14px; margin:-7px 0 0 -7px; z-index:4; pointer-events:none; }
+      .dart-marker::before{ content:""; position:absolute; inset:3px; background:#ffd94d; border:2px solid #7a2d12; border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.6); }
+      .dart-marker.ai::before{ background:#7ec8ff; border-color:#123a5c; }
+      .board-hint{ text-align:center; color:#e9dfc6; font-size:.88rem; margin:10px 4px 2px; }
+      /* ---------- side panel ---------- */
+      .panel{ display:flex; flex-direction:column; gap:12px; }
+      .card{ background:var(--surface); border:1.5px solid var(--line); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow); }
+      .card h2{ margin:0 0 8px; font-size:1.25rem; font-weight:700; text-transform:uppercase; }
+      .turn-darts{ display:flex; gap:8px; margin-bottom:8px; }
+      .dart-slot{
+        flex:1; text-align:center; border:1.5px dashed var(--line); border-radius:10px; padding:8px 4px;
+        font-family:"Barlow Condensed",sans-serif; font-size:1.3rem; font-weight:700; min-height:3.2rem;
+        display:flex; flex-direction:column; justify-content:center; font-variant-numeric:tabular-nums;
+      }
+      .dart-slot small{ font-family:"Barlow",sans-serif; font-size:.68rem; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); }
+      .dart-slot.filled{ border-style:solid; border-color:var(--gold); background:var(--gold-soft); }
+      .dart-slot.bust{ border-color:var(--red); color:var(--red); background:transparent; }
+      .turn-total{ font-size:.95rem; color:var(--ink-soft); }
+      .turn-total b{ color:var(--ink); font-size:1.05rem; }
+      #statusMsg{ font-weight:600; font-size:1.02rem; min-height:1.5em; margin:0 0 8px; }
+      #checkoutHint{ background:var(--surface2); border:1px solid var(--line); border-radius:10px; padding:8px 12px; font-size:.92rem; margin:0 0 10px; display:none; }
+      #checkoutHint.show{ display:block; }
+      #checkoutHint b{ color:var(--red); }
+      .throw-row{ display:flex; gap:8px; flex-wrap:wrap; }
+      .throw-row .btn{ flex:1; justify-content:center; font-size:1rem; padding:12px; }
+      .log{ list-style:none; margin:0; padding:0; max-height:220px; overflow:auto; font-size:.92rem; }
+      .log li{ padding:6px 2px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:10px; font-variant-numeric:tabular-nums; }
+      .log li:last-child{ border-bottom:none; }
+      .log .tag{ font:700 .72rem "Barlow",sans-serif; text-transform:uppercase; letter-spacing:.08em; padding:2px 8px; border-radius:999px; align-self:center; flex:none; }
+      .tag.you{ background:var(--gold-soft); color:var(--ink); }
+      .tag.ai{ background:var(--surface2); color:var(--ink-soft); border:1px solid var(--line); }
+      .log .bust-txt{ color:var(--red); font-weight:700; }
+      .log .win-txt{ color:var(--green); font-weight:700; }
+      .bests-grid{ display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; font-size:.93rem; font-variant-numeric:tabular-nums; }
+      .bests-grid div{ display:flex; justify-content:space-between; border-bottom:1px dotted var(--line); padding:3px 0; }
+      .bests-grid span{ color:var(--ink-soft); }
+      .bests-grid b{ font-weight:700; }
+      /* ---------- banner ---------- */
+      #winBanner{ display:none; text-align:center; padding:18px; border-radius:var(--radius); margin-bottom:12px; border:2px solid var(--gold); background:var(--gold-soft); }
+      #winBanner.show{ display:block; }
+      #winBanner h2{ margin:0 0 4px; font-size:2rem; text-transform:uppercase; }
+      #winBanner p{ margin:0 0 12px; }
+      /* ---------- practice bar ---------- */
+      #practiceBar{ display:none; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:10px 14px; border-radius:var(--radius); margin-bottom:12px; border:1.5px dashed var(--gold); background:var(--surface); }
+      #practiceBar.show{ display:flex; }
+      #practiceBar p{ margin:0; font-size:.95rem; }
+      /* ---------- rules view ---------- */
+      #rulesView{ display:none; }
+      #rulesView.show{ display:block; }
+      .rules-card{ background:var(--surface); border:1.5px solid var(--line); border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow); margin-bottom:14px; }
+      .rules-card h2{ margin-top:0; font-size:1.6rem; text-transform:uppercase; }
+      .rules-card h3{ margin:18px 0 6px; font-size:1.2rem; text-transform:uppercase; color:var(--green); }
+      @media (prefers-color-scheme: dark){ .rules-card h3{ color:var(--gold); } }
+      .rules-card ul, .rules-card ol{ margin:6px 0; padding-left:22px; }
+      .rules-card li{ margin:4px 0; }
+      .score-table{ width:100%; border-collapse:collapse; font-size:.95rem; margin:8px 0; }
+      .score-table th, .score-table td{ text-align:left; padding:7px 10px; border-bottom:1px solid var(--line); }
+      .score-table th{ font-family:"Barlow Condensed",sans-serif; text-transform:uppercase; letter-spacing:.05em; }
+      /* ---------- modal ---------- */
+      .modal-backdrop{ position:fixed; inset:0; background:rgba(15,10,4,.62); display:none; align-items:center; justify-content:center; padding:16px; z-index:50; }
+      .modal-backdrop.show{ display:flex; }
+      .modal{ background:var(--surface); color:var(--ink); border-radius:18px; max-width:520px; width:100%; max-height:88vh; overflow:auto; padding:22px; box-shadow:0 24px 60px rgba(0,0,0,.4); }
+      .modal h2{ margin:0 0 6px; font-size:1.7rem; text-transform:uppercase; }
+      .modal .close-row{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; }
+      .icon-btn{ border:1.5px solid var(--line); background:var(--surface2); border-radius:50%; width:40px; height:40px; font-size:1.1rem; cursor:pointer; flex:none; color:var(--ink); }
+      .tut-step{ display:flex; gap:12px; margin:14px 0; }
+      .tut-num{ flex:none; width:34px; height:34px; border-radius:50%; background:var(--green); color:#fff; display:grid; place-items:center; font:700 1rem "Barlow Condensed",sans-serif; }
+      .tut-step p{ margin:3px 0 0; }
+      .tut-step b{ display:block; font-size:1rem; }
+      .stars{ display:flex; gap:6px; margin:8px 0 4px; }
+      .star{ font-size:2rem; line-height:1; background:none; border:none; cursor:pointer; color:var(--line); padding:4px; min-height:2.75rem; min-width:2.75rem; }
+      .star.on{ color:var(--gold); }
+      textarea{ width:100%; border:1.5px solid var(--line); border-radius:10px; padding:10px; font:inherit; background:var(--surface2); color:var(--ink); resize:vertical; }
+      .saved-note{ font-size:.9rem; color:var(--green); font-weight:600; min-height:1.3em; }
+      @media (prefers-color-scheme: dark){ .saved-note{ color:#7ed491; } }
+      footer{ text-align:center; padding:22px 16px 30px; color:var(--ink-soft); font-size:.92rem; }
+      footer .brandline{ font-family:"Barlow Condensed",sans-serif; font-size:1.05rem; letter-spacing:.03em; }
+      @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <!-- ================= GAME VIEW ================= -->
+      <div id="gameView">
+        <div class="topbar">
+          <div class="title-block">
+            <h1>Darts <span class="accent">501</span></h1>
+            <p>Countdown from 501 against the AI. Finish on a double.</p>
+          </div>
+          <div class="controls">
+            <div class="diff-wrap">
+              <label for="difficultySel">AI level</label>
+              <select id="difficultySel" aria-label="AI difficulty">
+                <option value="easy">Easy</option>
+                <option value="normal" selected>Normal</option>
+                <option value="hard">Hard</option>
+              </select>
+            </div>
+            <button class="btn" id="tutorialBtn" type="button">🎯 Tutorial</button>
+            <button class="btn" id="rulesBtn" type="button">📖 Rules</button>
+            <button class="btn" id="feedbackBtn" type="button">⭐ Feedback</button>
+            <button class="btn" id="newGameBtn" type="button">↻ New game</button>
+            <button class="btn" id="practiceBtn" type="button">🎯 Practice round</button>
+          </div>
+        </div>
+
+        <div id="practiceBar" role="status">
+          <p><b>Practice round</b> — no score kept, the AI sits out, and hints stay on. Throw as long as you like.</p>
+          <button class="btn" id="exitPracticeBtn" type="button">Exit practice</button>
+        </div>
+
+        <div id="winBanner" role="status">
+          <h2 id="winTitle">You win the leg!</h2>
+          <p id="winDetail"></p>
+          <button class="btn gold" id="playAgainBtn" type="button">Play next leg</button>
+        </div>
+
+        <div class="scoreboard" aria-label="Scoreboard">
+          <div class="player-card" id="cardYou">
+            <div class="who"><span class="turn-dot"></span> You</div>
+            <div class="remaining" id="scoreYou">501</div>
+            <div class="sub-stats">
+              <span>Darts: <b id="dartsYou">0</b></span>
+              <span>3-dart avg: <b id="avgYou">0.0</b></span>
+              <span>Last: <b id="lastYou">—</b></span>
+            </div>
+            <div class="legs-line">Legs won <b id="legsYou">●○○</b></div>
+          </div>
+          <div class="vs-badge" aria-hidden="true">VS</div>
+          <div class="player-card" id="cardAI">
+            <div class="who"><span class="turn-dot"></span> AI · <span id="aiLevelName">Normal</span></div>
+            <div class="remaining" id="scoreAI">501</div>
+            <div class="sub-stats">
+              <span>Darts: <b id="dartsAI">0</b></span>
+              <span>3-dart avg: <b id="avgAI">0.0</b></span>
+              <span>Last: <b id="lastAI">—</b></span>
+            </div>
+            <div class="legs-line">Legs won <b id="legsAI">○○○</b></div>
+          </div>
+        </div>
+
+        <div class="game-grid">
+          <div class="board-card">
+            <div class="board-frame">
+              <div class="board-holder" id="boardHolder" aria-label="Dartboard. Move to aim, tap or click to throw.">
+                <div id="boardSvgWrap"></div>
+                <div id="aimDot" aria-hidden="true"></div>
+              </div>
+            </div>
+            <p class="board-hint">Move your finger or mouse to aim — the ring drifts a little, just like a real hand. Tap the board (or press Throw) to loose each dart.</p>
+          </div>
+
+          <div class="panel">
+            <div class="card">
+              <h2 id="turnHeading">Your throw</h2>
+              <p id="statusMsg">Your turn — 3 darts. Good darts!</p>
+              <p id="checkoutHint"></p>
+              <div class="turn-darts" aria-label="Darts this turn">
+                <div class="dart-slot" id="slot0"><small>Dart 1</small><span>—</span></div>
+                <div class="dart-slot" id="slot1"><small>Dart 2</small><span>—</span></div>
+                <div class="dart-slot" id="slot2"><small>Dart 3</small><span>—</span></div>
+              </div>
+              <p class="turn-total">Turn total: <b id="turnTotal">0</b> &nbsp;·&nbsp; Match: first to 3 legs</p>
+              <div class="throw-row">
+                <button class="btn primary" id="throwBtn" type="button">🎯 Throw dart</button>
+                <button class="btn" id="clearDartsBtn" type="button">Clear board</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <h2>Turn log</h2>
+              <ul class="log" id="turnLog">
+                <li><span>No darts thrown yet.</span><span class="tag you">You</span></li>
+              </ul>
+            </div>
+
+            <div class="card">
+              <h2>Your bests</h2>
+              <div class="bests-grid">
+                <div><span>Legs won</span><b id="bestLegsWon">0</b></div>
+                <div><span>Matches won</span><b id="bestMatchesWon">0</b></div>
+                <div><span>Fewest darts (leg)</span><b id="bestFewest">—</b></div>
+                <div><span>Highest checkout</span><b id="bestCheckout">—</b></div>
+                <div><span>Best 3-dart average</span><b id="bestAvg">—</b></div>
+                <div><span>180s hit</span><b id="best180s">0</b></div>
+              </div>
+              <p style="margin:10px 0 0; font-size:.85rem; color:var(--ink-soft);">Bests and your AI level are saved on this device.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= RULES VIEW ================= -->
+      <div id="rulesView" aria-label="Rules">
+        <div class="topbar">
+          <div class="title-block">
+            <h1>Darts <span class="accent">Rules</span></h1>
+            <p>Everything you need to play 501.</p>
+          </div>
+          <div class="controls">
+            <button class="btn primary" id="backToGameBtn" type="button">← Back to game</button>
+          </div>
+        </div>
+
+        <div class="rules-card">
+          <h2>How 501 works</h2>
+          <p>You and the AI both start on <b>501 points</b>. Every dart you throw subtracts its score from your total. The first player to reach <b>exactly zero</b> wins the leg — and the final dart must land in a <b>double</b> (the thin outer ring) or the <b>inner bull</b>. First to win <b>3 legs</b> takes the match.</p>
+
+          <h3>Taking a turn</h3>
+          <ul>
+            <li>Each turn is <b>3 darts</b>. Turns alternate between you and the AI.</li>
+            <li>Aim by moving over the board. Your aim ring drifts slightly — time your throw for when it sits where you want it.</li>
+            <li>Tap the board or press <b>Throw dart</b> to throw. Darts stay on the board until the turn ends.</li>
+          </ul>
+
+          <h3>Scoring</h3>
+          <table class="score-table">
+            <tr><th>Where it lands</th><th>Score</th></tr>
+            <tr><td>Single segment (the big areas)</td><td>The segment number (1–20)</td></tr>
+            <tr><td>Double ring (thin outer ring)</td><td>2 × the segment number</td></tr>
+            <tr><td>Treble ring (thin middle ring)</td><td>3 × the segment number</td></tr>
+            <tr><td>Outer bull (green ring)</td><td>25</td></tr>
+            <tr><td>Inner bull (red centre)</td><td>50 — counts as a double</td></tr>
+            <tr><td>Off the board / outside the double ring</td><td>0 — a miss</td></tr>
+          </table>
+          <p>The highest possible turn is <b>180</b>: three treble 20s.</p>
+
+          <h3>Bust!</h3>
+          <ul>
+            <li>If a dart takes your score <b>below zero</b>, leaves you on <b>exactly 1</b>, or reaches zero <b>without a double</b>, your turn is a <b>bust</b>.</li>
+            <li>A bust ends your turn immediately and your score goes back to what it was at the start of the turn.</li>
+          </ul>
+
+          <h3>Checking out</h3>
+          <ul>
+            <li>When your score is 170 or less, a checkout may be possible — the game shows a suggested finish above the dart slots.</li>
+            <li>Examples: 40 left → double 20. 32 left → double 16. 50 left → the bull. 100 left → treble 20, then double 20.</li>
+            <li>Plan ahead: leaving yourself an even number under 40 gives you a one-dart finish.</li>
+          </ul>
+
+          <h3>Practice round</h3>
+          <ul>
+            <li>Press <b>Practice round</b> any time for a no-pressure leg: the AI sits out, you throw turn after turn, and hints stay on.</li>
+            <li>Practice doesn't count — no legs, no bests, nothing saved. Checking out just starts you a fresh practice leg.</li>
+            <li>Exit practice (or press New game) to jump back into a real match.</li>
+          </ul>
+
+          <h3>The AI &amp; difficulty</h3>
+          <ul>
+            <li><b>Easy</b> — the AI wanders. Great for learning the board.</li>
+            <li><b>Normal</b> — the AI hits its targets most of the time and will punish a slow leg.</li>
+            <li><b>Hard</b> — the AI clusters tightly around treble 20 and checks out ruthlessly.</li>
+            <li>Your AI level is saved, so it's set the way you left it next visit.</li>
+          </ul>
+
+          <h3>Board layout</h3>
+          <p>The 20 sits at the top, with numbers arranged so big scores sit next to small ones — 20 is flanked by 1 and 5, which is why a stray dart hurts. The order around the board is: 20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5.</p>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      <div class="brandline">More ridiculous health &amp; fitness fun: Ridiculously Fit and Fed</div>
+    </footer>
+
+    <!-- ================= TUTORIAL MODAL ================= -->
+    <div class="modal-backdrop" id="tutorialModal" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+      <div class="modal">
+        <div class="close-row">
+          <h2 id="tutTitle">How to play</h2>
+          <button class="icon-btn" data-close="tutorialModal" type="button" aria-label="Close tutorial">✕</button>
+        </div>
+        <p style="margin-top:0; color:var(--ink-soft);">A 30-second walkthrough. Open it any time from the Tutorial button — it never pops up on its own.</p>
+        <div class="tut-step"><div class="tut-num">1</div><div><b>Aim</b><p>Move your mouse or finger over the dartboard. The white ring is your aim — it drifts a little, like a real throwing hand.</p></div></div>
+        <div class="tut-step"><div class="tut-num">2</div><div><b>Throw</b><p>Tap the board or press <b>Throw dart</b>. You get 3 darts per turn, and each one knocks its score off your 501.</p></div></div>
+        <div class="tut-step"><div class="tut-num">3</div><div><b>Know the rings</b><p>Thin outer ring = double, thin middle ring = treble, red centre (bull) = 50. Treble 20 (60 points) is the most valuable spot on the board.</p></div></div>
+        <div class="tut-step"><div class="tut-num">4</div><div><b>Finish on a double</b><p>You must land exactly on zero with a double or the bull. Overshoot, land on 1, or finish on a single and the whole turn is a bust — your score resets to the start of the turn.</p></div></div>
+        <div class="tut-step"><div class="tut-num">5</div><div><b>Beat the AI</b><p>After your 3 darts, the AI throws. First to 3 legs wins the match. If the AI feels too soft or too sharp, change the AI level at the top — it's saved for next time.</p></div></div>
+        <button class="btn primary" data-close="tutorialModal" type="button" style="width:100%; justify-content:center;">Got it — let's play</button>
+      </div>
+    </div>
+
+    <!-- ================= FEEDBACK MODAL ================= -->
+    <div class="modal-backdrop" id="feedbackModal" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+      <div class="modal">
+        <div class="close-row">
+          <h2 id="fbTitle">Feedback</h2>
+          <button class="icon-btn" data-close="feedbackModal" type="button" aria-label="Close feedback">✕</button>
+        </div>
+        <p style="margin-top:0; color:var(--ink-soft);">How's the game? Your rating and comment are saved on this device.</p>
+        <div class="stars" id="starRow" role="radiogroup" aria-label="Star rating">
+          <button class="star" type="button" data-star="1" aria-label="1 star">★</button>
+          <button class="star" type="button" data-star="2" aria-label="2 stars">★</button>
+          <button class="star" type="button" data-star="3" aria-label="3 stars">★</button>
+          <button class="star" type="button" data-star="4" aria-label="4 stars">★</button>
+          <button class="star" type="button" data-star="5" aria-label="5 stars">★</button>
+        </div>
+        <label for="feedbackText" style="font-weight:600; display:block; margin-bottom:6px;">Your comment</label>
+        <textarea id="feedbackText" rows="4" placeholder="What did you like? What should change?"></textarea>
+        <p style="font-size:.85rem; color:var(--ink-soft); margin:8px 0 4px;">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+        <p class="saved-note" id="feedbackSaved"></p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button class="btn primary" id="saveFeedbackBtn" type="button" style="flex:1; justify-content:center;">Save feedback</button>
+          <button class="btn" data-close="feedbackModal" type="button">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    (function(){
+      "use strict";
+      // ============ storage ============
+      var LS = {
+        get: function(k, fb){ try{ var v = localStorage.getItem(k); return v === null ? fb : JSON.parse(v); }catch(e){ return fb; } },
+        set: function(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+      };
+      var DIFF_KEY = "darts501.difficulty";
+      var BESTS_KEY = "darts501.bests";
+      var FEEDBACK_KEY = "darts501.feedback";
+
+      var DIFFS = {
+        easy:   { name:"Easy",   sigma: 30, checkoutSigma: 30 },
+        normal: { name:"Normal", sigma: 17, checkoutSigma: 18 },
+        hard:   { name:"Hard",   sigma: 9,  checkoutSigma: 10 }
+      };
+      var difficulty = LS.get(DIFF_KEY, "normal");
+      if(!DIFFS[difficulty]) difficulty = "normal";
+
+      var bests = LS.get(BESTS_KEY, null) || { legsWon:0, matchesWon:0, fewestDarts:null, highestCheckout:null, bestAvg:null, oneEighties:0 };
+
+      // ============ board geometry ============
+      var ORDER = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+      var C = 200; // centre in a 400 viewBox
+      var R = { dblOut:170, dblIn:162, trbOut:107, trbIn:99, bullOut:15.9, bullIn:6.35, wire:190 };
+
+      function polar(r, deg){ var a = (deg - 90) * Math.PI / 180; return [C + r * Math.cos(a), C + r * Math.sin(a)]; }
+      function segPath(r1, r2, startDeg, endDeg){
+        var p1 = polar(r2, startDeg), p2 = polar(r2, endDeg), p3 = polar(r1, endDeg), p4 = polar(r1, startDeg);
+        var large = (endDeg - startDeg) > 180 ? 1 : 0;
+        return "M" + p1[0].toFixed(2) + " " + p1[1].toFixed(2) +
+               " A" + r2 + " " + r2 + " 0 " + large + " 1 " + p2[0].toFixed(2) + " " + p2[1].toFixed(2) +
+               " L" + p3[0].toFixed(2) + " " + p3[1].toFixed(2) +
+               " A" + r1 + " " + r1 + " 0 " + large + " 0 " + p4[0].toFixed(2) + " " + p4[1].toFixed(2) + " Z";
+      }
+      function buildBoard(){
+        var s = '<svg viewBox="0 0 400 400" role="img" aria-label="Dartboard">';
+        s += '<circle cx="200" cy="200" r="198" fill="#17140f"/>';
+        for(var i = 0; i < 20; i++){
+          var start = i * 18 - 9, end = i * 18 + 9;
+          var dark = (i % 2 === 0);
+          var singleOuter = dark ? "#23201c" : "#efe3c8";
+          var singleInner = dark ? "#23201c" : "#efe3c8";
+          var ringCol = dark ? "#b3341f" : "#175c36";
+          // outer single (between double and treble)
+          s += '<path d="' + segPath(R.trbOut, R.dblIn, start, end) + '" fill="' + singleOuter + '"/>';
+          // inner single (between bull and treble)
+          s += '<path d="' + segPath(R.bullOut, R.trbIn, start, end) + '" fill="' + singleInner + '"/>';
+          // double ring
+          s += '<path d="' + segPath(R.dblIn, R.dblOut, start, end) + '" fill="' + ringCol + '"/>';
+          // treble ring
+          s += '<path d="' + segPath(R.trbIn, R.trbOut, start, end) + '" fill="' + ringCol + '"/>';
+        }
+        s += '<circle cx="200" cy="200" r="' + R.bullOut + '" fill="#175c36"/>';
+        s += '<circle cx="200" cy="200" r="' + R.bullIn + '" fill="#b3341f"/>';
+        // numbers
+        for(var j = 0; j < 20; j++){
+          var p = polar(182, j * 18);
+          s += '<text x="' + p[0].toFixed(1) + '" y="' + (p[1] + 6).toFixed(1) + '" text-anchor="middle" font-family="Barlow Condensed, sans-serif" font-weight="700" font-size="19" fill="#f4efe4">' + ORDER[j] + '</text>';
+        }
+        s += '<circle cx="200" cy="200" r="' + R.dblOut + '" fill="none" stroke="#8f8a7d" stroke-width="1"/>';
+        s += '</svg>';
+        return s;
+      }
+      document.getElementById("boardSvgWrap").innerHTML = buildBoard();
+
+      // Score a landing point given in board units relative to centre (dx, dy), y down.
+      function scoreAt(dx, dy){
+        var r = Math.sqrt(dx * dx + dy * dy);
+        if(r <= R.bullIn) return { score:50, label:"Bull", short:"BULL", isDouble:true, mult:2, num:25 };
+        if(r <= R.bullOut) return { score:25, label:"Outer bull", short:"25", isDouble:false, mult:1, num:25 };
+        if(r > R.dblOut) return { score:0, label:"Miss", short:"MISS", isDouble:false, mult:0, num:0 };
+        var ang = Math.atan2(dx, -dy) * 180 / Math.PI; // 0 at top, clockwise
+        if(ang < 0) ang += 360;
+        var idx = Math.floor((ang + 9) / 18) % 20;
+        var num = ORDER[idx];
+        if(r >= R.dblIn) return { score:num * 2, label:"Double " + num, short:"D" + num, isDouble:true, mult:2, num:num };
+        if(r >= R.trbIn && r <= R.trbOut) return { score:num * 3, label:"Treble " + num, short:"T" + num, isDouble:false, mult:3, num:num };
+        return { score:num, label:"Single " + num, short:"" + num, isDouble:false, mult:1, num:num };
+      }
+      // Board coords (relative centre) of the centre of a target: num + mult (mult 2=double,3=treble,1=single), bull special num=25.
+      function targetPoint(num, mult){
+        if(num === 25) return [0, 0];
+        var idx = ORDER.indexOf(num);
+        var deg = idx * 18;
+        var r = mult === 2 ? (R.dblIn + R.dblOut) / 2 : mult === 3 ? (R.trbIn + R.trbOut) / 2 : (R.bullOut + R.trbIn) / 2 + 18;
+        var a = (deg - 90) * Math.PI / 180;
+        return [r * Math.cos(a), r * Math.sin(a)];
+      }
+      function gauss(){
+        var u = 0, v = 0;
+        while(u === 0) u = Math.random();
+        while(v === 0) v = Math.random();
+        return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+      }
+
+      // ============ checkout suggestions ============
+      var FINISH = {170:"T20 T20 Bull",167:"T20 T19 Bull",164:"T20 T18 Bull",161:"T20 T17 Bull",160:"T20 T20 D20",
+        158:"T20 T20 D19",157:"T20 T19 D20",156:"T20 T20 D18",155:"T20 T19 D19",154:"T20 T18 D18",
+        153:"T20 T19 D18",152:"T20 T20 D16",151:"T20 T17 D20",150:"T20 T18 D18",149:"T20 T19 D16",
+        148:"T20 T16 D20",147:"T20 T17 D18",146:"T20 T18 D16",145:"T20 T15 D20",144:"T20 T20 D12",
+        143:"T20 T17 D16",142:"T20 T14 D20",141:"T20 T19 D12",140:"T20 T20 D10",139:"T20 T13 D20",
+        138:"T20 T18 D12",137:"T20 T19 D10",136:"T20 T20 D8",135:"Bull T15 D20",134:"T20 T14 D16",
+        133:"T20 T19 D8",132:"T20 T16 D18",131:"T20 T13 D16",130:"T20 T20 D5",129:"T19 T16 D12",
+        128:"T18 T14 D16",127:"T20 T17 D8",126:"T19 T19 D6",125:"Bull T19 D10",124:"T20 T16 D8",
+        123:"T20 T19 D6",122:"T18 T18 D7",121:"T20 T11 D14",120:"T20 20 D20",119:"T19 T12 D13",
+        118:"T20 18 D20",117:"T20 17 D20",116:"T20 16 D20",115:"T20 15 D20",114:"T20 14 D20",
+        113:"T20 13 D20",112:"T20 T12 D8",111:"T20 11 D20",110:"T20 10 D20",109:"T20 19 D15",
+        108:"T20 16 D16",107:"T19 10 D20",106:"T20 6 D20",105:"T20 5 D20",104:"T18 18 D16",
+        103:"T19 6 D20",102:"T20 10 D16",101:"T17 10 D20",100:"T20 D20",99:"T19 10 D16",
+        98:"T20 D19",97:"T19 D20",96:"T20 D18",95:"T19 D19",94:"T18 D20",93:"T19 D18",
+        92:"T20 D16",91:"T17 D20",90:"T20 D15",89:"T19 D16",88:"T16 D20",87:"T17 D18",
+        86:"T18 D16",85:"T15 D20",84:"T20 D12",83:"T17 D16",82:"Bull D16",81:"T19 D12",
+        80:"T20 D10",79:"T19 D11",78:"T18 D12",77:"T19 D10",76:"T20 D8",75:"T17 D12",
+        74:"T14 D16",73:"T19 D8",72:"T16 D12",71:"T13 D16",70:"T18 D8",69:"T19 D6",
+        68:"T20 D4",67:"T17 D8",66:"T10 D18",65:"T19 D4",64:"T16 D8",63:"T13 D12",
+        62:"T10 D16",61:"T15 D8",60:"20 D20",59:"19 D20",58:"18 D20",57:"17 D20",
+        56:"16 D20",55:"15 D20",54:"14 D20",53:"13 D20",52:"12 D20",51:"11 D20",
+        50:"Bull",49:"9 D20",48:"16 D16",47:"7 D20",46:"6 D20",45:"5 D20",44:"4 D20",
+        43:"3 D20",42:"10 D16",41:"9 D16",40:"D20",39:"7 D16",38:"D19",37:"5 D16",
+        36:"D18",35:"3 D16",34:"D17",33:"1 D16",32:"D16",31:"15 D8",30:"D15",29:"13 D8",
+        28:"D14",27:"11 D8",26:"D13",25:"9 D8",24:"D12",23:"7 D8",22:"D11",21:"5 D8",
+        20:"D10",19:"3 D8",18:"D9",17:"1 D8",16:"D8",15:"7 D4",14:"D7",13:"5 D4",
+        12:"D6",11:"3 D4",10:"D5",9:"1 D4",8:"D4",7:"3 D2",6:"D3",5:"1 D2",4:"D2",3:"1 D1",2:"D1"};
+      function checkoutHintFor(rem){
+        if(rem > 170 || rem < 2) return null;
+        if(FINISH[rem]) return FINISH[rem];
+        return null;
+      }
+      function parseFirstDart(route){
+        var first = route.split(" ")[0];
+        if(first === "Bull") return { num:25, mult:2 };
+        if(first.charAt(0) === "T") return { num:parseInt(first.slice(1), 10), mult:3 };
+        if(first.charAt(0) === "D") return { num:parseInt(first.slice(1), 10), mult:2 };
+        return { num:parseInt(first, 10), mult:1 };
+      }
+
+      // ============ game state ============
+      var state;
+      function freshPlayer(){ return { score:501, darts:0, points:0, last: null }; }
+      function newLeg(){
+        state = {
+          you: freshPlayer(), ai: freshPlayer(),
+          turn: "you", turnStart: 501, turnDarts: [], turnPoints: 0,
+          over: false, busy: false
+        };
+        clearMarkers();
+        render();
+        setStatus("Your turn — 3 darts. Good darts!");
+        logTurn("New leg — first to 3 legs wins the match.", "you", true);
+      }
+      var legsYou = 0, legsAI = 0;
+      var practice = false;
+      var logEl = document.getElementById("turnLog");
+      var firstLog = true;
+      function logTurn(text, who, replace){
+        if(replace || firstLog){ logEl.innerHTML = ""; firstLog = false; }
+        var li = document.createElement("li");
+        var span = document.createElement("span");
+        span.innerHTML = text;
+        var tag = document.createElement("span");
+        tag.className = "tag " + (who === "ai" ? "ai" : "you");
+        tag.textContent = who === "ai" ? "AI" : "You";
+        li.appendChild(span); li.appendChild(tag);
+        logEl.insertBefore(li, logEl.firstChild);
+        while(logEl.children.length > 14) logEl.removeChild(logEl.lastChild);
+      }
+
+      // ============ aiming ============
+      var holder = document.getElementById("boardHolder");
+      var aimDot = document.getElementById("aimDot");
+      var aim = { x: 0, y: -55 }; // board units rel centre; start near 20
+      var pointerOnBoard = false;
+      var wobbleT = Math.random() * 1000;
+      function holderPos(evt){
+        var rect = holder.getBoundingClientRect();
+        var cx = (evt.clientX !== undefined ? evt.clientX : (evt.touches && evt.touches[0] ? evt.touches[0].clientX : rect.left + rect.width / 2));
+        var cy = (evt.clientY !== undefined ? evt.clientY : (evt.touches && evt.touches[0] ? evt.touches[0].clientY : rect.top + rect.height / 2));
+        return { px: (cx - rect.left) / rect.width, py: (cy - rect.top) / rect.height };
+      }
+      holder.addEventListener("pointermove", function(e){
+        var p = holderPos(e);
+        aim.x = (p.px - 0.5) * 400;
+        aim.y = (p.py - 0.5) * 400;
+        pointerOnBoard = true;
+      });
+      holder.addEventListener("pointerdown", function(e){
+        var p = holderPos(e);
+        aim.x = (p.px - 0.5) * 400;
+        aim.y = (p.py - 0.5) * 400;
+        pointerOnBoard = true;
+        throwDart();
+      });
+      // Wobble animation: the visible ring drifts around the aim point.
+      var wobble = { x: 0, y: 0 };
+      function tick(){
+        wobbleT += 0.016;
+        wobble.x = Math.sin(wobbleT * 1.7) * 7 + Math.sin(wobbleT * 4.3) * 2.5;
+        wobble.y = Math.cos(wobbleT * 1.3) * 7 + Math.cos(wobbleT * 3.7) * 2.5;
+        var rect = holder.getBoundingClientRect();
+        if(rect.width > 0){
+          var lx = ((aim.x + wobble.x) / 400 + 0.5) * 100;
+          var ly = ((aim.y + wobble.y) / 400 + 0.5) * 100;
+          aimDot.style.left = lx + "%";
+          aimDot.style.top = ly + "%";
+        }
+        requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+
+      // ============ markers ============
+      function addMarker(bx, by, who){
+        var m = document.createElement("div");
+        m.className = "dart-marker" + (who === "ai" ? " ai" : "");
+        m.style.left = ((bx / 400) + 0.5) * 100 + "%";
+        m.style.top = ((by / 400) + 0.5) * 100 + "%";
+        holder.appendChild(m);
+      }
+      function clearMarkers(){
+        var ms = holder.querySelectorAll(".dart-marker");
+        for(var i = 0; i < ms.length; i++) ms[i].remove();
+      }
+
+      // ============ sound (tiny thock) ============
+      var audioCtx = null;
+      function thock(){
+        try{
+          if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          if(audioCtx.state === "suspended") audioCtx.resume();
+          var t = audioCtx.currentTime;
+          var osc = audioCtx.createOscillator();
+          var gain = audioCtx.createGain();
+          osc.type = "triangle"; osc.frequency.setValueAtTime(160, t);
+          osc.frequency.exponentialRampToValueAtTime(60, t + 0.07);
+          gain.gain.setValueAtTime(0.18, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
+          osc.connect(gain); gain.connect(audioCtx.destination);
+          osc.start(t); osc.stop(t + 0.1);
+        }catch(e){}
+      }
+
+      // ============ throwing ============
+      function applyDart(who, res, bx, by){
+        var p = state[who];
+        var before = p.score;
+        var after = before - res.score;
+        p.darts += 1;
+        state.turnDarts.push(res);
+        state.turnPoints += res.score;
+        addMarker(bx, by, who);
+        thock();
+
+        var bust = false, won = false;
+        if(after < 0 || after === 1) bust = true;
+        else if(after === 0){ if(res.isDouble) won = true; else bust = true; }
+
+        if(bust){
+          p.score = state.turnStart;
+          p.points -= (state.turnPoints - res.score); // undo points from earlier darts of the busted turn
+          p.last = 0;
+          renderSlots(true);
+          logTurn("<b>" + state.turnDarts.map(function(d){return d.short;}).join(", ") + "</b> — <span class='bust-txt'>BUST</span>, back to " + state.turnStart, who);
+          setStatus(who === "you" ? "Bust! No score — the turn is over." : "AI busts! Its score resets to " + state.turnStart + ".");
+          endTurn(who, false);
+          return;
+        }
+        p.score = after;
+        p.points += res.score;
+        if(won){
+          p.last = state.turnPoints;
+          render();
+          logTurn("<b>" + state.turnDarts.map(function(d){return d.short;}).join(", ") + "</b> — <span class='win-txt'>checks out on " + state.turnStart + "!</span>", who);
+          endLeg(who);
+          return;
+        }
+        render();
+        if(state.turnDarts.length >= 3){
+          p.last = state.turnPoints;
+          var total = state.turnPoints;
+          var txt = "<b>" + state.turnDarts.map(function(d){return d.short;}).join(", ") + "</b> — scored " + total;
+          if(total === 180) txt += " 🎉 <b>ONE HUNDRED AND EIGHTY!</b>";
+          logTurn(txt, who);
+          if(who === "you" && total === 180 && !practice){ bests.oneEighties += 1; saveBests(); }
+          endTurn(who, false);
+        }
+      }
+
+      function throwDart(){
+        if(!state || state.over || state.busy || state.turn !== "you") return;
+        var bx = aim.x + wobble.x + gauss() * 3.5;
+        var by = aim.y + wobble.y + gauss() * 3.5;
+        var res = scoreAt(bx, by);
+        applyDart("you", res, bx, by);
+      }
+
+      function endTurn(who, silent){
+        state.busy = true;
+        render();
+        setTimeout(function(){
+          clearMarkers();
+          state.turnDarts = [];
+          state.turnPoints = 0;
+          state.turn = (who === "you" && !practice) ? "ai" : "you";
+          state.turnStart = state[state.turn].score;
+          state.busy = false;
+          render();
+          if(state.over) return;
+          if(state.turn === "ai"){
+            setStatus("AI is throwing…");
+            setTimeout(aiTurn, 650);
+          } else {
+            setStatus(practice ? "Your throw again — practice round, no rush." : "Your turn — 3 darts.");
+          }
+        }, silent ? 60 : 950);
+      }
+
+      // ============ AI ============
+      function aiChooseTarget(){
+        var rem = state.ai.score - state.turnPoints; // score if turn ended now; actual remaining:
+        var remaining = state.ai.score; // score already subtracts per dart in applyDart
+        var diff = DIFFS[difficulty];
+        // Checkout attempt
+        var route = checkoutHintFor(remaining);
+        if(route && remaining <= 170){
+          var first = parseFirstDart(route);
+          // Only go for multi-dart routes sensibly; single-dart finishes always.
+          return { pt: targetPoint(first.num, first.mult), sigma: diff.checkoutSigma };
+        }
+        if(remaining <= 40 && remaining % 2 === 0 && remaining >= 2){
+          return { pt: targetPoint(remaining / 2, 2), sigma: diff.checkoutSigma };
+        }
+        // Set up: leave a good finish
+        if(remaining > 170 || remaining % 2 === 1 && remaining > 60){
+          return { pt: targetPoint(20, 3), sigma: diff.sigma };
+        }
+        if(remaining <= 60 && remaining > 40){
+          // aim a single to leave an even double-friendly number
+          var leave = remaining - 20 <= 40 && (remaining - 20) % 2 === 0 ? 20 : (remaining % 2 === 1 ? 1 : 20);
+          return { pt: targetPoint(leave, 1), sigma: diff.sigma };
+        }
+        return { pt: targetPoint(20, 3), sigma: diff.sigma };
+      }
+      function aiTurn(){
+        if(state.over) return;
+        var thrown = 0;
+        function step(){
+          if(state.over || state.busy || state.turn !== "ai") return;
+          if(thrown >= 3 || state.turnDarts.length >= 3) return;
+          var t = aiChooseTarget();
+          var bx = t.pt[0] + gauss() * t.sigma;
+          var by = t.pt[1] + gauss() * t.sigma;
+          var res = scoreAt(bx, by);
+          thrown++;
+          var turnEndedBefore = state.turn;
+          applyDart("ai", res, bx, by);
+          if(!state.over && state.turn === "ai" && state.turnDarts.length < 3 && thrown < 3){
+            setTimeout(step, 720);
+          }
+        }
+        step();
+      }
+
+      function endLeg(winner){
+        state.over = true;
+        var isYou = winner === "you";
+        if(practice){
+          render();
+          document.getElementById("winTitle").textContent = "🎯 Practice checkout!";
+          document.getElementById("winDetail").textContent = "You finished 501 in " + state.you.darts + " darts. Practice doesn't count toward your legs or bests — nice throwing!";
+          document.getElementById("playAgainBtn").textContent = "Practice again";
+          document.getElementById("winBanner").classList.add("show");
+          setStatus("Practice leg complete.");
+          return;
+        }
+        if(isYou){
+          legsYou++;
+          bests.legsWon++;
+          var dartsUsed = state.you.darts;
+          if(bests.fewestDarts === null || dartsUsed < bests.fewestDarts) bests.fewestDarts = dartsUsed;
+          var co = state.turnStart; // checkout amount = score at start of winning turn? Use winning turn start minus... checkout = remaining before final dart sequence; approximate with turnStart of final turn is wrong for multi-turn; use score before winning turn's darts:
+          // The checkout value is the remaining score at the moment the winning dart was thrown plus its score — simpler: it's the score the player had before the final dart. We stored turn flow per dart; use last dart:
+          var lastDart = state.turnDarts[state.turnDarts.length - 1];
+          var checkoutValue = lastDart.score + 0; // final dart value isn't the checkout total for multi-dart finishes; compute below
+          // Proper checkout: remaining before the final dart = lastDart.score (since it brought score to 0). For 1-dart finishes that's the checkout. For multi-dart, the checkout is the turnStart of the winning turn only if all 3 darts were in the same turn — which they were (winning turn). turnStart is score at start of winning turn.
+          checkoutValue = state.turnStart;
+          if(bests.highestCheckout === null || checkoutValue > bests.highestCheckout) bests.highestCheckout = checkoutValue;
+          var avg = state.you.darts > 0 ? (state.you.points / state.you.darts) * 3 : 0;
+          if(bests.bestAvg === null || avg > bests.bestAvg) bests.bestAvg = Math.round(avg * 10) / 10;
+          saveBests();
+        } else {
+          legsAI++;
+        }
+        render();
+        var banner = document.getElementById("winBanner");
+        var matchWon = legsYou >= 3 || legsAI >= 3;
+        document.getElementById("winTitle").textContent = isYou ? "🎉 You win the leg!" : "AI takes the leg";
+        var detail = isYou
+          ? "You checked out in " + state.you.darts + " darts. Legs: You " + legsYou + " — " + legsAI + " AI."
+          : "The AI checked out in " + state.ai.darts + " darts. Legs: You " + legsYou + " — " + legsAI + " AI.";
+        if(matchWon){
+          detail += isYou ? " 🏆 That's the match — first to 3 legs!" : " That's the match to the AI. Run it back!";
+          if(isYou){ bests.matchesWon++; saveBests(); }
+        }
+        document.getElementById("winDetail").textContent = detail;
+        document.getElementById("playAgainBtn").textContent = matchWon ? "Start a new match" : "Play next leg";
+        banner.classList.add("show");
+        setStatus(isYou ? "Leg to you! 🏆" : "Leg to the AI.");
+      }
+
+      function saveBests(){ LS.set(BESTS_KEY, bests); renderBests(); }
+      function renderBests(){
+        document.getElementById("bestLegsWon").textContent = bests.legsWon;
+        document.getElementById("bestMatchesWon").textContent = bests.matchesWon;
+        document.getElementById("bestFewest").textContent = bests.fewestDarts === null ? "—" : bests.fewestDarts;
+        document.getElementById("bestCheckout").textContent = bests.highestCheckout === null ? "—" : bests.highestCheckout;
+        document.getElementById("bestAvg").textContent = bests.bestAvg === null ? "—" : bests.bestAvg.toFixed(1);
+        document.getElementById("best180s").textContent = bests.oneEighties;
+      }
+
+      // ============ rendering ============
+      function legsPips(n){
+        var s = "";
+        for(var i = 0; i < 3; i++) s += i < n ? "●" : "○";
+        return s;
+      }
+      function avgOf(p){ return p.darts > 0 ? ((p.points / p.darts) * 3).toFixed(1) : "0.0"; }
+      function renderSlots(bust){
+        for(var i = 0; i < 3; i++){
+          var slot = document.getElementById("slot" + i);
+          var d = state.turnDarts[i];
+          slot.classList.toggle("filled", !!d);
+          slot.classList.toggle("bust", !!bust && !!d);
+          slot.querySelector("span").textContent = d ? d.short : "—";
+        }
+        document.getElementById("turnTotal").textContent = state.turnPoints;
+      }
+      function render(){
+        if(!state) return;
+        document.getElementById("scoreYou").textContent = state.you.score;
+        document.getElementById("scoreAI").textContent = state.ai.score;
+        document.getElementById("dartsYou").textContent = state.you.darts;
+        document.getElementById("dartsAI").textContent = state.ai.darts;
+        document.getElementById("avgYou").textContent = avgOf(state.you);
+        document.getElementById("avgAI").textContent = avgOf(state.ai);
+        document.getElementById("lastYou").textContent = state.you.last === null ? "—" : state.you.last;
+        document.getElementById("lastAI").textContent = state.ai.last === null ? "—" : state.ai.last;
+        document.getElementById("legsYou").textContent = legsPips(legsYou);
+        document.getElementById("legsAI").textContent = legsPips(legsAI);
+        document.getElementById("cardYou").classList.toggle("active", state.turn === "you" && !state.over);
+        document.getElementById("cardAI").classList.toggle("active", state.turn === "ai" && !state.over);
+        document.getElementById("turnHeading").textContent = state.turn === "you" ? "Your throw" : "AI throwing";
+        document.getElementById("throwBtn").disabled = state.turn !== "you" || state.over || state.busy;
+        renderSlots(false);
+        // checkout hint for player to move
+        var hint = document.getElementById("checkoutHint");
+        var route = state.turn === "you" && !state.over ? checkoutHintFor(state.you.score) : null;
+        if(route){
+          hint.innerHTML = "🏁 <b>Checkout:</b> " + state.you.score + " can finish — go <b>" + route + "</b>";
+          hint.classList.add("show");
+        } else if(practice && state.turn === "you" && !state.over){
+          hint.innerHTML = "🎯 <b>Practice tip:</b> aim for <b>Treble 20</b> (60) — the highest-value spot on the board. A checkout hint appears here once you reach 170 or less.";
+          hint.classList.add("show");
+        } else {
+          hint.classList.remove("show");
+        }
+      }
+      function setStatus(msg){ document.getElementById("statusMsg").textContent = msg; }
+
+      // ============ controls ============
+      var diffSel = document.getElementById("difficultySel");
+      diffSel.value = difficulty;
+      document.getElementById("aiLevelName").textContent = DIFFS[difficulty].name;
+      diffSel.addEventListener("change", function(){
+        difficulty = diffSel.value;
+        LS.set(DIFF_KEY, difficulty);
+        document.getElementById("aiLevelName").textContent = DIFFS[difficulty].name;
+        setStatus("AI level set to " + DIFFS[difficulty].name + " — saved for next time.");
+      });
+      document.getElementById("throwBtn").addEventListener("click", throwDart);
+      document.getElementById("clearDartsBtn").addEventListener("click", function(){ clearMarkers(); });
+      function startMatch(){
+        practice = false;
+        document.getElementById("practiceBar").classList.remove("show");
+        document.getElementById("practiceBtn").textContent = "🎯 Practice round";
+        legsYou = 0; legsAI = 0;
+        document.getElementById("winBanner").classList.remove("show");
+        firstLog = true;
+        newLeg();
+      }
+      function enterPractice(){
+        practice = true;
+        document.getElementById("winBanner").classList.remove("show");
+        document.getElementById("practiceBar").classList.add("show");
+        document.getElementById("practiceBtn").textContent = "✕ Exit practice";
+        firstLog = true;
+        newLeg();
+        setStatus("Practice round — the AI sits this one out. Hints are on and nothing counts.");
+      }
+      document.getElementById("newGameBtn").addEventListener("click", startMatch);
+      document.getElementById("practiceBtn").addEventListener("click", function(){
+        if(practice) startMatch(); else enterPractice();
+      });
+      document.getElementById("exitPracticeBtn").addEventListener("click", startMatch);
+      document.getElementById("playAgainBtn").addEventListener("click", function(){
+        document.getElementById("winBanner").classList.remove("show");
+        if(practice){
+          newLeg();
+          setStatus("Practice round — the AI sits this one out. Hints are on and nothing counts.");
+          return;
+        }
+        if(legsYou >= 3 || legsAI >= 3){ legsYou = 0; legsAI = 0; }
+        newLeg();
+      });
+
+      // ============ views & modals ============
+      var gameView = document.getElementById("gameView");
+      var rulesView = document.getElementById("rulesView");
+      document.getElementById("rulesBtn").addEventListener("click", function(){
+        gameView.style.display = "none"; rulesView.classList.add("show");
+        window.scrollTo({ top: 0 });
+      });
+      document.getElementById("backToGameBtn").addEventListener("click", function(){
+        rulesView.classList.remove("show"); gameView.style.display = "";
+        window.scrollTo({ top: 0 });
+      });
+      function openModal(id){ document.getElementById(id).classList.add("show"); }
+      function closeModal(id){ document.getElementById(id).classList.remove("show"); }
+      document.getElementById("tutorialBtn").addEventListener("click", function(){ openModal("tutorialModal"); });
+      document.getElementById("feedbackBtn").addEventListener("click", function(){ loadFeedback(); openModal("feedbackModal"); });
+      var closers = document.querySelectorAll("[data-close]");
+      for(var ci = 0; ci < closers.length; ci++){
+        closers[ci].addEventListener("click", function(){ closeModal(this.getAttribute("data-close")); });
+      }
+      var backdrops = document.querySelectorAll(".modal-backdrop");
+      for(var bi = 0; bi < backdrops.length; bi++){
+        backdrops[bi].addEventListener("click", function(e){ if(e.target === this) this.classList.remove("show"); });
+      }
+      document.addEventListener("keydown", function(e){
+        if(e.key === "Escape"){ closeModal("tutorialModal"); closeModal("feedbackModal"); }
+        if(e.key === " " && rulesView.classList.contains("show") === false && !document.getElementById("feedbackModal").classList.contains("show") && !document.getElementById("tutorialModal").classList.contains("show")){
+          // space throws when game visible; avoid when focus is a button/select
+          var tag = (document.activeElement && document.activeElement.tagName) || "";
+          if(tag !== "BUTTON" && tag !== "SELECT" && tag !== "TEXTAREA" && tag !== "INPUT"){ e.preventDefault(); throwDart(); }
+        }
+      });
+
+      // ============ feedback ============
+      var fbRating = 0;
+      var stars = document.querySelectorAll("#starRow .star");
+      function paintStars(){
+        for(var i = 0; i < stars.length; i++) stars[i].classList.toggle("on", i < fbRating);
+      }
+      for(var si = 0; si < stars.length; si++){
+        stars[si].addEventListener("click", function(){
+          fbRating = parseInt(this.getAttribute("data-star"), 10);
+          paintStars();
+        });
+      }
+      function loadFeedback(){
+        var fb = LS.get(FEEDBACK_KEY, null);
+        fbRating = fb && fb.rating ? fb.rating : 0;
+        document.getElementById("feedbackText").value = fb && fb.comment ? fb.comment : "";
+        document.getElementById("feedbackSaved").textContent = fb ? "You previously rated this " + fb.rating + "★ — saving again updates it." : "";
+        paintStars();
+      }
+      document.getElementById("saveFeedbackBtn").addEventListener("click", function(){
+        var comment = document.getElementById("feedbackText").value.trim();
+        if(fbRating === 0 && comment === ""){
+          document.getElementById("feedbackSaved").textContent = "Pick a star rating or write a comment first.";
+          return;
+        }
+        LS.set(FEEDBACK_KEY, { rating: fbRating, comment: comment, at: new Date().toISOString() });
+        /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+        try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "darts", rating: fbRating||0, text: comment||"", tag: "", mode: "real", level: "", difficulty: "", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+        document.getElementById("feedbackSaved").textContent = "Thanks! Feedback saved on this device. ✅";
+        setTimeout(function(){ closeModal("feedbackModal"); }, 900);
+      });
+
+      // ============ go ============
+      renderBests();
+      startMatch();
+    })();
+    </script>
+  </body>
+</html>

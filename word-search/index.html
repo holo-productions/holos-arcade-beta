@@ -1,0 +1,866 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Word Search</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#fdf6ec; --panel:#ffffff; --panel2:#fffaf1; --ink:#2d2a32; --muted:#6f6a7a;
+    --plum:#5a4a7a; --plum-ink:#ffffff; --line:#e7ddcf;
+    --pink:#f9c5d5; --purple:#cdb4db; --blue:#a2d2ff; --mint:#b9fbc0; --peach:#ffdab9;
+    --select:#5a4a7a; --select-ink:#fff;
+    --ai:#e76f51; --player:#2a9d8f;
+    --shadow:0 10px 28px rgba(90,74,122,.14);
+    --radius:16px;
+    --cell-bg:#ffffff; --cell-border:#eee4d3;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#17141f; --panel:#221e2e; --panel2:#1d1929; --ink:#f2eef7; --muted:#b8b0c6;
+      --plum:#cdb4db; --plum-ink:#241d33; --line:#3a334d;
+      --cell-bg:#2a2438; --cell-border:#3a334d;
+      --shadow:0 10px 28px rgba(0,0,0,.45);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:Nunito,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);-webkit-tap-highlight-color:transparent}
+  button,select,input,textarea{font:inherit}
+  button,select{min-height:44px;cursor:pointer}
+  button:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--purple);outline-offset:2px}
+  .wrap{max-width:1060px;margin:0 auto;padding:14px 14px 30px}
+
+  .topbar{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;justify-content:space-between;margin-bottom:6px}
+  h1.title{font-family:"Baloo 2",Nunito,sans-serif;font-size:2.1rem;line-height:1;margin:0;letter-spacing:.01em}
+  h1.title .w1{color:#c65d7a} h1.title .w2{color:#5a7d9a} h1.title .w3{color:#3d7a5e}
+  @media (prefers-color-scheme: dark){ h1.title .w1{color:#f9c5d5} h1.title .w2{color:#a2d2ff} h1.title .w3{color:#b9fbc0} }
+  .subtitle{margin:4px 0 0;color:var(--muted);font-weight:700;font-size:.95rem}
+  .pills{display:flex;gap:8px;flex-wrap:wrap}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:800;font-size:.95rem;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+  .pill span{color:var(--muted);font-weight:700;margin-right:6px;font-size:.75rem;text-transform:uppercase;letter-spacing:.06em}
+
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+  .controls label{font-weight:800;font-size:.82rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);display:flex;flex-direction:column;gap:4px}
+  .controls select{border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:0 10px;font-weight:700;min-height:44px}
+  .btn{border:none;border-radius:11px;padding:0 18px;font-weight:800;background:var(--plum);color:var(--plum-ink);min-height:44px}
+  .btn.secondary{background:var(--panel);color:var(--ink);border:1px solid var(--line)}
+  .btn.peach{background:#f4a261;color:#2d1a05}
+  .btn.mint{background:#2a9d8f;color:#fff}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn:active{transform:scale(.97)}
+
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+  @media (max-width:820px){ .layout{grid-template-columns:1fr} }
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
+  .card h2{font-family:"Baloo 2",sans-serif;font-size:1.1rem;margin:0 0 10px}
+  .card h3{font-size:.95rem;margin:14px 0 6px}
+
+  /* Grid */
+  .grid-wrap{display:flex;justify-content:center}
+  .grid{
+    display:grid;gap:3px;width:100%;max-width:560px;user-select:none;-webkit-user-select:none;touch-action:none;
+  }
+  .cell{
+    aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;
+    background:var(--cell-bg);border:1.5px solid var(--cell-border);border-radius:7px;
+    font-weight:900;text-transform:uppercase;line-height:1;cursor:pointer;
+    font-size:clamp(13px,3.4vw,22px);color:var(--ink);position:relative;padding:0;min-height:0;
+  }
+  .cell.sel{background:var(--select);color:var(--select-ink);border-color:var(--select)}
+  .cell.hintflash{animation:hintflash 1s ease 3}
+  @keyframes hintflash{0%,100%{background:var(--cell-bg)}50%{background:#ffe066;color:#2d2a32}}
+  .cell.found-0{background:#f9c5d5;color:#4a1030;border-color:#e79fb8}
+  .cell.found-1{background:#b9fbc0;color:#123d1e;border-color:#8fe89b}
+  .cell.found-2{background:#a2d2ff;color:#0f2f4a;border-color:#7db9f0}
+  .cell.found-3{background:#ffdab9;color:#4a2a08;border-color:#f4b183}
+  .cell.found-4{background:#cdb4db;color:#2e1a4a;border-color:#a98bc4}
+  .cell.found-5{background:#fefae0;color:#4a3d08;border-color:#e6d98a}
+  .cell.found-ai{background:#3a334d;color:#ffb4a2;border-color:#e76f51;text-decoration:line-through}
+  @media (prefers-color-scheme: dark){
+    .cell.found-0{background:#5a2a3d;color:#ffd6e3} .cell.found-1{background:#20402a;color:#c8f5d0}
+    .cell.found-2{background:#1e3a52;color:#cde9ff} .cell.found-3{background:#52331a;color:#ffe3c2}
+    .cell.found-4{background:#3d2a52;color:#e6d6ff} .cell.found-5{background:#4a421a;color:#fff6bf}
+  }
+  .msg{text-align:center;font-weight:800;font-size:1.05rem;min-height:1.5em;margin:12px 4px 2px}
+  .msg.small{font-size:.92rem;color:var(--muted);font-weight:700}
+  .shake{animation:shake .3s ease}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+  /* Word list */
+  .wordlist{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:7px}
+  .wordlist li{border-radius:999px;padding:7px 13px;font-weight:900;letter-spacing:.06em;font-size:.88rem;border:2px solid var(--line);background:var(--panel2)}
+  .wordlist li.found{text-decoration:line-through;opacity:.85}
+  .wordlist li.found-0{background:#f9c5d5;border-color:#e79fb8;color:#4a1030}
+  .wordlist li.found-1{background:#b9fbc0;border-color:#8fe89b;color:#123d1e}
+  .wordlist li.found-2{background:#a2d2ff;border-color:#7db9f0;color:#0f2f4a}
+  .wordlist li.found-3{background:#ffdab9;border-color:#f4b183;color:#4a2a08}
+  .wordlist li.found-4{background:#cdb4db;border-color:#a98bc4;color:#2e1a4a}
+  .wordlist li.found-5{background:#fefae0;border-color:#e6d98a;color:#4a3d08}
+  .wordlist li.ai{ background:#ffe5dd;border-color:#e76f51;color:#6b2110;text-decoration:line-through}
+  @media (prefers-color-scheme: dark){
+    .wordlist li.found-0,.wordlist li.found-1,.wordlist li.found-2,.wordlist li.found-3,.wordlist li.found-4,.wordlist li.found-5{color:#17141f}
+    .wordlist li.ai{color:#3d1308}
+  }
+  .progress-track{height:12px;border-radius:999px;background:var(--line);overflow:hidden;display:flex;margin:8px 0 4px}
+  .progress-you{background:#2a9d8f;height:100%;transition:width .3s}
+  .progress-ai{background:#e76f51;height:100%;transition:width .3s}
+  .race-head{display:flex;align-items:center;gap:10px}
+  .avatar{width:44px;height:44px;border-radius:50%;background:#e76f51;color:#fff;display:flex;align-items:center;justify-content:center;font-family:"Baloo 2";font-weight:800;font-size:1.2rem;flex:none}
+  .avatar.you{background:#2a9d8f}
+  .race-names{display:flex;justify-content:space-between;font-weight:800;font-size:.88rem}
+  textarea{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--panel2);color:var(--ink);padding:10px;font-weight:600;min-height:74px;resize:vertical}
+  .row-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .note{font-size:.86rem;color:var(--muted);line-height:1.5;font-weight:600}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px}
+  @media (max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;text-align:center}
+  .stat b{display:block;font-size:1.2rem}
+  .stat span{font-size:.7rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:800}
+
+  .overlay{position:fixed;inset:0;background:rgba(15,12,22,.62);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+  .overlay[hidden]{display:none}
+  .sheet{background:var(--panel);color:var(--ink);width:100%;max-width:680px;max-height:88vh;border-radius:20px 20px 0 0;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+  .sheet-head{padding:20px 20px 4px;flex:none}
+  .sheet-body{overflow:auto;padding:0 20px;flex:1 1 auto}
+  .sheet-foot{flex:none;padding:12px 20px 18px;border-top:1px solid var(--line);background:var(--panel)}
+  @media (min-width:640px){.overlay{align-items:center;padding:20px}.sheet{border-radius:20px}}
+  .sheet h2{font-family:"Baloo 2";margin:0 0 6px;font-size:1.5rem}
+  .sheet h3{margin:16px 0 6px;font-size:1rem}
+  .sheet p,.sheet li{line-height:1.55;font-size:.95rem}
+  .sheet ul{padding-left:20px;margin:6px 0}
+  .tour-highlight{position:fixed;border:3px solid #f4a261;border-radius:14px;z-index:60;pointer-events:none;box-shadow:0 0 0 9999px rgba(15,12,22,.45);transition:all .25s ease}
+  .tour-card{position:fixed;left:12px;right:12px;bottom:12px;z-index:61;background:var(--panel);color:var(--ink);border-radius:16px;box-shadow:var(--shadow);padding:16px;max-width:560px;margin:0 auto;border:1px solid var(--line)}
+  .tour-card h3{margin:0 0 6px;font-family:"Baloo 2"}
+  .tour-card p{margin:0 0 12px;line-height:1.5;font-size:.95rem}
+  .tour-card .row-btns{justify-content:space-between;align-items:center;margin-top:0}
+  .tour-count{font-size:.82rem;color:var(--muted);font-weight:800}
+  .newhint{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff3d6;border:1px solid #ecd28a;color:#4a3a08;border-radius:12px;padding:9px 14px;font-weight:700;font-size:.92rem;margin:0 0 12px}
+  @media (prefers-color-scheme: dark){.newhint{background:#3a3418;color:#ffe9a8;border-color:#6b5e22}}
+  .newhint[hidden]{display:none}
+  .newhint button{min-height:36px}
+  .newhint .dismiss{margin-left:auto;background:transparent;border:1px solid currentColor;color:inherit;border-radius:9px;padding:0 12px;font-weight:800}
+  .sheet table{border-collapse:collapse;width:100%;font-size:.92rem;margin:6px 0}
+  .sheet th,.sheet td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:left;vertical-align:top}
+  .winbanner{background:#b9fbc0;color:#123d1e;border-radius:12px;padding:12px 14px;font-weight:900;text-align:center;margin-top:10px}
+  .winbanner.lose{background:#ffe5dd;color:#6b2110}
+  .winbanner[hidden]{display:none}
+  @media (prefers-color-scheme: dark){.winbanner{color:#123d1e}.winbanner.lose{color:#6b2110}}
+  footer{margin-top:22px;text-align:center;color:var(--muted);font-size:.88rem;line-height:1.6}
+  footer a{color:inherit;font-weight:800;display:inline-block;padding:8px 4px;min-height:36px}
+  .feedback-stars{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
+  .feedback-stars button{min-width:52px;min-height:52px;border-radius:12px;border:1.5px solid var(--line);background:var(--panel2);font-size:1.55rem;line-height:1;padding:0;color:#b8a13a}
+  .feedback-stars button[aria-pressed="true"]{background:#ffe066;border-color:#e6c93d;color:#7a5b00;box-shadow:0 2px 10px rgba(0,0,0,.12)}
+  .feedback-tags{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px}
+  .feedback-tags button{border-radius:999px;border:1.5px solid var(--line);background:var(--panel2);color:var(--ink);padding:0 16px;font-weight:800;min-height:44px}
+  .feedback-tags button[aria-pressed="true"]{background:var(--plum);color:var(--plum-ink);border-color:var(--plum)}
+  .feedback-thanks{background:#b9fbc0;color:#123d1e;border-radius:12px;padding:14px;font-weight:900;text-align:center;margin-top:12px}
+  .feedback-thanks[hidden]{display:none}
+  .practice-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#d3f9d8;border:1.5px solid #2a9d8f;color:#123d2e;border-radius:12px;padding:10px 14px;font-weight:800;font-size:.95rem;margin:0 0 12px}
+  .practice-banner[hidden]{display:none}
+  .practice-banner .practice-tag{background:#2a9d8f;color:#fff;border-radius:999px;padding:3px 10px;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase}
+  .practice-banner button{margin-left:auto;background:var(--panel);border:1px solid #2a9d8f;color:#123d2e;border-radius:9px;padding:0 12px;font-weight:800;min-height:36px}
+  .btn.practice-on{outline:3px solid #2a9d8f;outline-offset:2px}
+  @media (prefers-color-scheme: dark){.practice-banner{background:#173d2e;color:#c8f5d0;border-color:#2a9d8f}.practice-banner button{color:#123d2e}}
+  @media (prefers-color-scheme: dark){.feedback-thanks{color:#123d1e}.feedback-stars button[aria-pressed="true"]{color:#4a3d08}}
+  @media (prefers-reduced-motion: reduce){ .cell.hintflash,.shake{animation:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <h1 class="title"><span class="w1">Word</span> <span class="w2">Search</span> <span aria-hidden="true">🔎</span></h1>
+      <p class="subtitle">Find every hidden word — or race Lexi the AI to find them first.</p>
+    </div>
+    <div class="pills" aria-label="Game status">
+      <div class="pill"><span>Time</span><span id="timer" style="color:inherit;font-size:.95rem;letter-spacing:0;text-transform:none;margin:0">0:00</span></div>
+      <div class="pill"><span>Found</span><span id="foundCount" style="color:inherit;font-size:.95rem;letter-spacing:0;text-transform:none;margin:0">0 / 0</span></div>
+      <div class="pill"><span>Hints</span><span id="hintCount" style="color:inherit;font-size:.95rem;letter-spacing:0;text-transform:none;margin:0">3</span></div>
+    </div>
+  </div>
+
+  <div class="controls" id="controlsBar">
+    <label>Theme
+      <select id="themeSel" aria-label="Puzzle theme">
+        <option value="animals">Animals</option>
+        <option value="food">Food &amp; Kitchen</option>
+        <option value="space">Space</option>
+        <option value="ocean">Ocean</option>
+        <option value="fitness">Fitness &amp; Fuel</option>
+        <option value="house">Around the House</option>
+        <option value="travel">Travel</option>
+        <option value="mixed">Mixed Bag</option>
+      </select>
+    </label>
+    <label>Size
+      <select id="diffSel" aria-label="Difficulty">
+        <option value="easy">Easy · 10 × 10</option>
+        <option value="medium" selected>Medium · 12 × 12</option>
+        <option value="hard">Hard · 15 × 15</option>
+      </select>
+    </label>
+    <label>Mode
+      <select id="modeSel" aria-label="Game mode">
+        <option value="solo" selected>Solo — beat the clock</option>
+        <option value="race">Race vs AI — vs Lexi</option>
+      </select>
+    </label>
+    <button class="btn" id="newBtn" type="button" style="align-self:flex-end">New puzzle</button>
+    <button class="btn peach" id="practiceBtn" type="button" style="align-self:flex-end" aria-pressed="false">Practice round</button>
+    <button class="btn secondary" id="hintBtn" type="button" style="align-self:flex-end">Hint</button>
+    <button class="btn secondary" id="howBtn" type="button" style="align-self:flex-end">How to play</button>
+    <button class="btn secondary" id="tourBtn" type="button" style="align-self:flex-end">Tutorial tour</button>
+    <button class="btn secondary" id="rulesBtn" type="button" style="align-self:flex-end">Rules</button>
+  </div>
+
+  <div class="practice-banner" id="practiceBanner" hidden role="status">
+    <span class="practice-tag">Practice</span>
+    <span>Practice round — untimed, unlimited hints, no Lexi race, and nothing is saved to your records. Learn the controls at your own pace.</span>
+    <button id="exitPracticeBtn" type="button">Exit practice</button>
+  </div>
+
+  <div class="newhint" id="newHint" hidden>
+    <span>New here? The short tutorial is optional — tap <strong>How to play</strong> or <strong>Tutorial tour</strong> whenever you want it. Full scoring and win rules are under <strong>Rules</strong>.</span>
+    <button class="dismiss" id="newHintDismiss" type="button">Got it, hide this</button>
+  </div>
+
+  <div class="layout">
+    <section class="card" aria-label="Puzzle grid">
+      <div class="grid-wrap"><div class="grid" id="grid" role="grid" aria-label="Word search grid"></div></div>
+      <p class="msg" id="message" aria-live="polite">Drag across a word to find it.</p>
+      <p class="msg small" id="subMessage" aria-live="polite"></p>
+      <div class="winbanner" id="winBanner" hidden></div>
+      <div class="row-btns" style="justify-content:center">
+        <button class="btn mint" id="againBtn" type="button" hidden>Play again</button>
+        <button class="btn secondary" id="downloadBtn" type="button">Download puzzle (.txt)</button>
+      </div>
+    </section>
+
+    <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+      <section class="card" id="raceCard" hidden aria-label="Race against the AI">
+        <h2>Race vs Lexi</h2>
+        <div class="race-head">
+          <div class="avatar" aria-hidden="true">L</div>
+          <div style="flex:1">
+            <div class="race-names"><span>You · <span id="youScore">0</span></span><span>Lexi · <span id="aiScore">0</span></span></div>
+            <div class="progress-track" aria-hidden="true"><div class="progress-you" id="youBar" style="width:0%"></div><div class="progress-ai" id="aiBar" style="width:0%"></div></div>
+          </div>
+          <div class="avatar you" aria-hidden="true">You</div>
+        </div>
+        <p class="note" id="raceNote" style="margin:8px 0 0">First to claim a word locks it in. Lexi finds a word every few seconds — keep up!</p>
+      </section>
+
+      <section class="card" id="wordsCard" aria-label="Words to find">
+        <h2>Words to find</h2>
+        <ul class="wordlist" id="wordList"></ul>
+        <p class="note" id="dirNote" style="margin:10px 0 0"></p>
+      </section>
+
+      <section class="card" id="genCard" aria-label="Puzzle generator">
+        <h2>Make your own puzzle</h2>
+        <p class="note" style="margin-top:0">Type your own words and the generator builds a fresh grid around them. Great for spelling lists, party games, or a puzzle book page.</p>
+        <label for="customWords" style="font-weight:800;font-size:.85rem">Your words (comma or space separated, 3–15 letters each)</label>
+        <textarea id="customWords" placeholder="e.g. Gizmo, pompom, adventure, ridiculous" style="margin-top:6px"></textarea>
+        <div class="row-btns">
+          <button class="btn peach" id="customBtn" type="button">Generate my puzzle</button>
+          <button class="btn secondary" id="copyBtn" type="button">Copy word list</button>
+        </div>
+        <p class="note" id="customMsg" aria-live="polite" style="margin:8px 0 0"></p>
+      </section>
+    </div>
+  </div>
+
+  <div class="stats" id="statsBar" aria-label="Your records">
+    <div class="stat"><b id="stSolved">0</b><span>Puzzles solved</span></div>
+    <div class="stat"><b id="stBest">—</b><span>Best time (this size)</span></div>
+    <div class="stat"><b id="stRaces">0 / 0</b><span>Races won / played</span></div>
+    <div class="stat"><b id="stFound">0</b><span>Total words found</span></div>
+  </div>
+  <div class="row-btns" style="justify-content:center"><button class="btn secondary" id="resetBtn" type="button">Reset my records</button><button class="btn secondary" id="feedbackBtn" type="button">Feedback</button></div>
+
+  <footer>
+    <p>A <a href="../games-hub/">Ridiculously Fit and Fed</a> game · <a href="../games-hub/">Back to the Games Hub</a></p>
+  </footer>
+</div>
+
+<!-- How to play — short tutorial (opt-in only, opened from the How to play button) -->
+<div class="overlay" id="howOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+    <div class="sheet-head"><h2 id="howTitle">How to play Word Search</h2>
+      <p>The 30-second version. For scoring, win conditions, and every special rule, open <strong>Rules</strong>.</p></div>
+    <div class="sheet-body">
+      <h3>The basics</h3>
+      <ul>
+        <li><strong>Drag</strong> (mouse or finger) from a word's first letter to its last letter, then let go. Or tap the first letter, then tap the last letter.</li>
+        <li>Words hide in straight lines. A correct word lights up in colour and is crossed off the list. A wrong drag costs nothing — try again.</li>
+        <li>The clock starts on your first drag, so take your time reading the list first.</li>
+      </ul>
+      <h3>Ways to play</h3>
+      <ul>
+        <li><strong>Solo:</strong> find every word on the list. That's it.</li>
+        <li><strong>Race vs AI:</strong> Lexi hunts the same grid and claims words as she goes — claim more than her.</li>
+        <li><strong>Practice round:</strong> tap <strong>Practice round</strong> for a no-pressure grid — no clock, unlimited hints, no Lexi, and nothing is saved to your records. Perfect for learning the controls. Tap <strong>Exit practice</strong> in the green banner to go back to playing for real.</li>
+      </ul>
+      <h3>Stuck?</h3>
+      <ul>
+        <li>Tap <strong>Hint</strong> — it flashes one unfound word's letters. You get 3 per puzzle (unlimited in a practice round).</li>
+        <li>Want your own words? Use <strong>Make your own puzzle</strong> in the side panel, then download the result as a text file.</li>
+      </ul>
+    </div>
+    <div class="sheet-foot"><div class="row-btns" style="margin-top:0">
+      <button class="btn" id="howClose" type="button">Got it — let's play</button>
+      <button class="btn secondary" id="howTour" type="button">Start the tutorial tour</button>
+      <button class="btn secondary" id="howRules" type="button">Read the full rules</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- Rules — full game rules (separate from the tutorial, opt-in only) -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <div class="sheet-head"><h2 id="rulesTitle">Word Search — Full Rules</h2>
+      <p>Everything that decides a game: how words are placed, how scoring works, and exactly what counts as a win.</p></div>
+    <div class="sheet-body">
+      <h3>1 · The puzzle</h3>
+      <ul>
+        <li>Every puzzle is generated fresh: words from the chosen theme (or your own custom words) are placed in straight lines on the grid, and every remaining square is filled with a random letter.</li>
+        <li>Words may cross and share letters where the letters match. A word that cannot be placed after repeated tries is left out, so a custom list can occasionally come back one word short.</li>
+        <li>Only words on the list count. The same letters appearing somewhere else by chance do not score — a claim must match a listed word, in its placed line, at its full length.</li>
+      </ul>
+      <h3>2 · Directions by size</h3>
+      <table>
+        <tr><th>Size</th><th>Grid</th><th>Words</th><th>Allowed directions</th></tr>
+        <tr><td>Easy</td><td>10 × 10</td><td>8</td><td>Across (left→right) and down only</td></tr>
+        <tr><td>Medium</td><td>12 × 12</td><td>11</td><td>Across, down, and both diagonals (forwards)</td></tr>
+        <tr><td>Hard</td><td>15 × 15</td><td>14</td><td>All 8 directions, including backwards and straight up</td></tr>
+      </table>
+      <ul>
+        <li>A claim can be dragged in either direction along the word's line — dragging last-letter-to-first also counts, on every size.</li>
+        <li>Selections must be one straight line (horizontal, vertical, or 45° diagonal). Bent or L-shaped drags snap to the nearest straight line and normally won't match.</li>
+      </ul>
+      <h3>3 · Claiming a word</h3>
+      <ul>
+        <li>Drag from the first letter to the last and release, or tap the first letter and then the last letter. Minimum claim length is 3 letters.</li>
+        <li>A correct claim colours the word's letters, crosses it off the list, and adds 1 to your Found count and to your lifetime Total words found.</li>
+        <li>An incorrect claim scores nothing and carries no penalty: no time added, no hint lost, no streak broken (there are no streaks).</li>
+        <li>A word can only be claimed once. A word already claimed — by you or by Lexi — cannot be claimed again.</li>
+      </ul>
+      <h3>4 · The clock &amp; scoring (Solo)</h3>
+      <ul>
+        <li>The clock starts on your first drag or tap on the grid (or your first Hint), not when the puzzle loads. Opening How to play, the Tutorial tour, or these Rules pauses the clock; it resumes on your next drag.</li>
+        <li>Solo has no points — your score is your finishing time. A puzzle is complete only when every listed word has been found.</li>
+        <li>Your best (fastest) finishing time is kept separately for each grid size (Easy / Medium / Hard) and shown under “Best time (this size)”.</li>
+        <li>Custom-word puzzles count toward Puzzles solved and Total words found, and their time can set the best time for that grid size.</li>
+        <li>Starting a New puzzle, changing theme/size/mode, or generating a custom puzzle abandons the current puzzle with no score recorded.</li>
+      </ul>
+      <h3>5 · Race vs AI — special rules</h3>
+      <ul>
+        <li>You and Lexi hunt the <em>same</em> grid and the <em>same</em> word list. First to claim a word owns it; the other player can no longer score it. Your words turn colour, Lexi's turn dark with an orange outline and are crossed off in orange.</li>
+        <li>Lexi claims one random unclaimed word on a fixed timer that starts when your clock starts: every 16 seconds on Easy, 11 seconds on Medium, 7.5 seconds on Hard. She never uses hints and never makes a wrong claim.</li>
+        <li>The race ends the moment every word is claimed. <strong>Win:</strong> you claimed more words than Lexi. <strong>Tie:</strong> equal claims — recorded as a played race, not a win. <strong>Loss:</strong> Lexi claimed more.</li>
+        <li>Race results update Races won / played. Race finishing times are shown for bragging rights but do not set Solo best times, and races do not count as Puzzles solved.</li>
+      </ul>
+      <h3>6 · Hints</h3>
+      <ul>
+        <li>Each new puzzle includes exactly 3 hints. A hint flashes every letter of one randomly chosen unclaimed word for about 3 seconds.</li>
+        <li>Using a hint starts the clock if it hasn't started, but adds no time penalty and does not affect best times or race results.</li>
+        <li>Hints do not carry over between puzzles, and there is no way to earn extra hints mid-puzzle.</li>
+        <li>Exception: in a practice round (see §9), hints are unlimited.</li>
+      </ul>
+      <h3>7 · Custom puzzles (the generator)</h3>
+      <ul>
+        <li>Custom words must be 3 letters or longer and no longer than the grid size (10 / 12 / 15 letters). Letters only — spaces and punctuation act as separators. Duplicates are removed.</li>
+        <li>You need at least 3 valid words; up to 20 are used. All other rules (directions, claiming, clock, hints) are the same as a themed puzzle at that size.</li>
+      </ul>
+      <h3>8 · Records</h3>
+      <ul>
+        <li>Puzzles solved, best time per size, races won/played, and total words found are saved on this device only. “Reset my records” clears all of them; it does not change the puzzle in progress.</li>
+      </ul>
+      <h3>9 · Practice rounds</h3>
+      <ul>
+        <li>Tap <strong>Practice round</strong> to start a practice grid at the currently chosen theme and size. A green banner stays visible while practice is on.</li>
+        <li>Practice is untimed: the clock never starts, and the Time pill reads “Practice” instead of a time.</li>
+        <li>Hints are unlimited in practice, and Lexi never races — even if Mode is set to Race vs AI, a practice round is always solo.</li>
+        <li>Nothing from a practice round is recorded: found words do not add to Total words found, finishing does not count as a puzzle solved, and no best time or race result is saved.</li>
+        <li>Finishing a practice grid and tapping Play again starts another practice grid. Tap <strong>Exit practice</strong> in the banner (or New puzzle) to return to a normal, recorded game.</li>
+      </ul>
+    </div>
+    <div class="sheet-foot"><div class="row-btns" style="margin-top:0">
+      <button class="btn" id="rulesClose" type="button">Close rules</button>
+      <button class="btn secondary" id="rulesHow" type="button">Back to How to play</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- Feedback — standard across all games, saved locally only -->
+<div class="overlay" id="feedbackOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+    <div class="sheet-head"><h2 id="feedbackTitle">Feedback — Word Search</h2>
+      <p>Rate the game, leave a note, and tag it if you like. Tap Save and you're done.</p></div>
+    <div class="sheet-body">
+      <div id="feedbackForm">
+        <h3 style="margin-top:8px">Your rating</h3>
+        <div class="feedback-stars" id="feedbackStars" role="group" aria-label="Rating, 1 to 5 stars">
+          <button type="button" data-rating="1" aria-pressed="false" aria-label="1 star">★</button>
+          <button type="button" data-rating="2" aria-pressed="false" aria-label="2 stars">★</button>
+          <button type="button" data-rating="3" aria-pressed="false" aria-label="3 stars">★</button>
+          <button type="button" data-rating="4" aria-pressed="false" aria-label="4 stars">★</button>
+          <button type="button" data-rating="5" aria-pressed="false" aria-label="5 stars">★</button>
+        </div>
+        <p class="note" id="feedbackRatingLabel" aria-live="polite">No rating yet — tap a star.</p>
+        <h3>Tag <span style="font-weight:600;color:var(--muted)">(optional)</span></h3>
+        <div class="feedback-tags" id="feedbackTags" role="group" aria-label="Feedback tag">
+          <button type="button" data-tag="Bug" aria-pressed="false">Bug</button>
+          <button type="button" data-tag="Suggestion" aria-pressed="false">Suggestion</button>
+          <button type="button" data-tag="Other" aria-pressed="false">Other</button>
+        </div>
+        <h3><label for="feedbackText">Your comment</label></h3>
+        <textarea id="feedbackText" placeholder="What worked, what didn't, what you'd love to see…" aria-label="Your comment"></textarea>
+        <p class="note" style="margin:10px 0 0">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+      </div>
+      <div class="feedback-thanks" id="feedbackThanks" hidden role="status">Thanks! Your feedback was saved.</div>
+    </div>
+    <div class="sheet-foot"><div class="row-btns" style="margin-top:0">
+      <button class="btn" id="feedbackSave" type="button">Save feedback</button>
+      <button class="btn secondary" id="feedbackClose" type="button">Cancel</button>
+    </div></div>
+  </div>
+</div>
+
+<div class="tour-highlight" id="tourHi" hidden></div>
+<div class="tour-card" id="tourCard" hidden role="dialog" aria-label="Walkthrough">
+  <h3 id="tourTitle"></h3><p id="tourText"></p>
+  <div class="row-btns"><span class="tour-count" id="tourCount"></span>
+    <span style="display:flex;gap:8px"><button class="btn secondary" id="tourSkip" type="button">Skip tour</button><button class="btn" id="tourNext" type="button">Next</button></span></div>
+</div>
+
+<script>
+(function(){
+"use strict";
+function $(id){return document.getElementById(id);}
+var THEMES = {
+  animals:["ELEPHANT","GIRAFFE","PENGUIN","DOLPHIN","OCTOPUS","BUTTERFLY","KANGAROO","CHEETAH","TURTLE","RABBIT","MONKEY","ZEBRA","PANDA","KOALA","OTTER","HEDGEHOG"],
+  food:["PANCAKE","AVOCADO","BLUEBERRY","SPAGHETTI","CHOCOLATE","SANDWICH","BROCCOLI","PINEAPPLE","MUFFIN","YOGURT","CARROT","BANANA","WAFFLE","SALMON","CINNAMON"],
+  space:["GALAXY","PLANET","ROCKET","ASTRONAUT","TELESCOPE","COMET","ORBIT","METEOR","SATURN","VENUS","ECLIPSE","NEBULA","STARDUST","GRAVITY","LUNAR"],
+  ocean:["CORAL","WHALE","SEASHELL","TIDEPOOL","ANCHOR","SAILBOAT","SEAHORSE","JELLYFISH","STARFISH","HARBOR","ISLAND","PEARL","SHARK","LAGOON","CURRENT"],
+  fitness:["PROTEIN","WORKOUT","STRETCH","MUSCLE","CARDIO","KETTLEBELL","SQUAT","HYDRATION","VITAMIN","BALANCE","ENERGY","FITNESS","TRAINING","RECOVERY","SMOOTHIE"],
+  house:["KITCHEN","PILLOW","WINDOW","GARDEN","BOOKSHELF","BLANKET","CLOSET","MIRROR","STAIRCASE","FIREPLACE","ARMCHAIR","CURTAIN","BASEMENT","PANTRY","HAMMOCK"],
+  travel:["PASSPORT","JOURNEY","AIRPLANE","BACKPACK","CAMERA","TICKET","HOTEL","BEACH","MOUNTAIN","TRAIN","SUITCASE","COMPASS","VOYAGE","LANTERN","POSTCARD"]
+};
+THEMES.mixed = THEMES.animals.slice(0,4).concat(THEMES.food.slice(0,4),THEMES.space.slice(0,4),THEMES.ocean.slice(0,4),THEMES.travel.slice(0,4));
+var DIFFS = {
+  easy:{size:10,count:8,dirs:[[0,1],[1,0]],label:"Easy",aiMs:16000,dirText:"Words run across and down only."},
+  medium:{size:12,count:11,dirs:[[0,1],[1,0],[1,1],[1,-1]],label:"Medium",aiMs:11000,dirText:"Words run across, down, and diagonally."},
+  hard:{size:15,count:14,dirs:[[0,1],[1,0],[1,1],[1,-1],[0,-1],[-1,0],[-1,-1],[-1,1]],label:"Hard",aiMs:7500,dirText:"Words run in every direction — including backwards."}
+};
+var LS_BEST="rff-wordsearch-bests-v1", LS_SET="rff-wordsearch-settings-v1", LS_SEEN="rff-wordsearch-seen-v1";
+var bests={solved:0,bestEasy:null,bestMedium:null,bestHard:null,racesWon:0,racesPlayed:0,totalFound:0};
+try{var b=JSON.parse(localStorage.getItem(LS_BEST)||"null"); if(b) bests=b;}catch(e){}
+var settings={theme:"animals",diff:"medium",mode:"solo"};
+try{var s=JSON.parse(localStorage.getItem(LS_SET)||"null"); if(s) settings=s;}catch(e){}
+function saveBests(){try{localStorage.setItem(LS_BEST,JSON.stringify(bests));}catch(e){}}
+function saveSettings(){try{localStorage.setItem(LS_SET,JSON.stringify(settings));}catch(e){}}
+function fmt(sec){ if(sec==null) return "—"; var m=Math.floor(sec/60), s2=sec%60; return m+":"+(s2<10?"0":"")+s2; }
+function shuffle(a){ for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;} return a; }
+
+/* ---------- generator ---------- */
+function generate(words, diffKey, maxWords){
+  var cfg=DIFFS[diffKey], N=cfg.size;
+  var grid=[], r,c;
+  for(r=0;r<N;r++){ grid.push(new Array(N).fill(null)); }
+  var placed=[];
+  var sorted=words.slice().sort(function(a,b){return b.length-a.length;});
+  sorted.forEach(function(word){
+    if(maxWords && placed.length>=maxWords) return;
+    if(word.length>N) return;
+    var done=false;
+    for(var attempt=0; attempt<220 && !done; attempt++){
+      var dir=cfg.dirs[Math.floor(Math.random()*cfg.dirs.length)];
+      var dr=dir[0], dc=dir[1];
+      var sr=Math.floor(Math.random()*N), sc=Math.floor(Math.random()*N);
+      var er=sr+dr*(word.length-1), ec=sc+dc*(word.length-1);
+      if(er<0||er>=N||ec<0||ec>=N) continue;
+      var ok=true;
+      for(var i=0;i<word.length;i++){ var cell=grid[sr+dr*i][sc+dc*i]; if(cell!==null && cell!==word[i]){ ok=false; break; } }
+      if(!ok) continue;
+      var cells=[];
+      for(var k=0;k<word.length;k++){ grid[sr+dr*k][sc+dc*k]=word[k]; cells.push({r:sr+dr*k,c:sc+dc*k}); }
+      placed.push({word:word,cells:cells,foundBy:null,color:placed.length%6});
+      done=true;
+    }
+  });
+  var letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  for(r=0;r<N;r++) for(c=0;c<N;c++) if(grid[r][c]===null) grid[r][c]=letters[Math.floor(Math.random()*26)];
+  return {grid:grid, placed:placed, size:N};
+}
+
+/* ---------- state ---------- */
+var G=null, timerInt=null, aiInt=null;
+function stopTimers(){ if(timerInt) clearInterval(timerInt); if(aiInt) clearInterval(aiInt); timerInt=null; aiInt=null; }
+/* Clock is lazy: it starts on the player's first drag/hint, and pauses while
+   How to play, the tour, or Rules is open — reading time never counts. */
+function currentSeconds(){
+  if(!G) return 0;
+  return G.baseSeconds + (G.clockRunning ? Math.floor((Date.now()-G.runStart)/1000) : 0);
+}
+function startClock(){
+  if(!G || G.practice || G.finished || G.clockRunning) return;
+  G.clockRunning=true; G.runStart=Date.now();
+  timerInt=setInterval(function(){ if(G && !G.finished){ G.seconds=currentSeconds(); $("timer").textContent=fmt(G.seconds); } },500);
+  if(settings.mode==="race" && !aiInt) startAI();
+}
+function pauseClock(){
+  if(!G || !G.clockRunning) return;
+  G.baseSeconds=currentSeconds(); G.seconds=G.baseSeconds; G.clockRunning=false;
+  stopTimers();
+  $("timer").textContent=fmt(G.seconds);
+}
+
+function newPuzzle(customWords, isPractice){
+  stopTimers();
+  var diffKey=settings.diff;
+  var pool, maxWords;
+  if(customWords && customWords.length){
+    pool=customWords; maxWords=customWords.length;
+  } else {
+    pool=shuffle(THEMES[settings.theme].slice()).slice(0, DIFFS[diffKey].count+3);
+    maxWords=DIFFS[diffKey].count;
+  }
+  var gen=generate(pool, diffKey, maxWords);
+  G={grid:gen.grid, placed:gen.placed, size:gen.size, seconds:0, baseSeconds:0, clockRunning:false, runStart:0, hints:isPractice?Infinity:3, finished:false,
+     selecting:false, start:null, current:null, selCells:[], custom:!!customWords, practice:!!isPractice};
+  $("hintBtn").disabled=false;
+  $("practiceBanner").hidden=!G.practice;
+  $("practiceBtn").setAttribute("aria-pressed", G.practice?"true":"false");
+  $("practiceBtn").classList.toggle("practice-on", G.practice);
+  renderAll();
+  if(G.practice) setMsg("Practice round — drag across a word to find it.", G.placed.length+" words hidden in this "+G.size+" × "+G.size+" grid. No clock, unlimited hints, nothing saved.");
+  else setMsg("Drag across a word to find it.", G.placed.length+" words hidden in this "+G.size+" × "+G.size+" grid. The clock starts on your first drag.");
+  $("winBanner").hidden=true; $("againBtn").hidden=true;
+  updateStats();
+}
+function startAI(){
+  var ms=DIFFS[settings.diff].aiMs;
+  aiInt=setInterval(function(){
+    if(!G || G.finished) return;
+    var remaining=G.placed.filter(function(p){return !p.foundBy;});
+    if(!remaining.length) return;
+    var pick=remaining[Math.floor(Math.random()*remaining.length)];
+    pick.foundBy="ai";
+    setMsg("Lexi found "+pick.word+"!", "She claims it — the orange words are hers.");
+    renderGrid(); renderWords(); renderRace();
+    checkEnd();
+  }, ms);
+}
+
+/* ---------- rendering ---------- */
+function renderAll(){ renderGrid(); renderWords(); renderRace(); $("dirNote").textContent=DIFFS[settings.diff].dirText; $("hintCount").textContent=G.practice?"∞":G.hints; $("timer").textContent=G.practice?"Practice":"0:00"; updateFound(); }
+function cellKey(r,c){return r+"-"+c;}
+function renderGrid(){
+  var el=$("grid"); el.innerHTML=""; el.style.gridTemplateColumns="repeat("+G.size+",1fr)";
+  // build found map
+  var foundMap={};
+  G.placed.forEach(function(p){ if(p.foundBy){ p.cells.forEach(function(cl){ foundMap[cellKey(cl.r,cl.c)]=p; }); } });
+  for(var r=0;r<G.size;r++) for(var c=0;c<G.size;c++){
+    var btn=document.createElement("button");
+    btn.type="button"; btn.className="cell"; btn.textContent=G.grid[r][c];
+    btn.dataset.r=r; btn.dataset.c=c;
+    btn.setAttribute("role","gridcell"); btn.setAttribute("aria-label","Row "+(r+1)+" column "+(c+1)+" letter "+G.grid[r][c]);
+    var f=foundMap[cellKey(r,c)];
+    if(f) btn.classList.add(f.foundBy==="ai" ? "found-ai" : "found-"+f.color);
+    el.appendChild(btn);
+  }
+  applySel();
+}
+function applySel(){
+  var selSet={}; G.selCells.forEach(function(cl){ selSet[cellKey(cl.r,cl.c)]=true; });
+  var cells=$("grid").children;
+  for(var i=0;i<cells.length;i++){
+    var r=+cells[i].dataset.r, cc=+cells[i].dataset.c;
+    cells[i].classList.toggle("sel", !!selSet[cellKey(r,cc)]);
+  }
+}
+function renderWords(){
+  var ul=$("wordList"); ul.innerHTML="";
+  G.placed.slice().sort(function(a,b){return a.word.localeCompare(b.word);}).forEach(function(p){
+    var li=document.createElement("li"); li.textContent=p.word;
+    if(p.foundBy==="player") li.className="found found-"+p.color;
+    else if(p.foundBy==="ai") li.className="ai";
+    ul.appendChild(li);
+  });
+  updateFound();
+}
+function updateFound(){
+  var you=G.placed.filter(function(p){return p.foundBy==="player";}).length;
+  $("foundCount").textContent=you+" / "+G.placed.length;
+}
+function renderRace(){
+  var isRace=settings.mode==="race" && !(G && G.practice);
+  $("raceCard").hidden=!isRace;
+  if(!isRace || !G) return;
+  var you=G.placed.filter(function(p){return p.foundBy==="player";}).length;
+  var ai=G.placed.filter(function(p){return p.foundBy==="ai";}).length;
+  $("youScore").textContent=you; $("aiScore").textContent=ai;
+  var total=G.placed.length||1;
+  $("youBar").style.width=(you/total*100)+"%"; $("aiBar").style.width=(ai/total*100)+"%";
+}
+function setMsg(m,sub){ $("message").textContent=m||""; $("subMessage").textContent=sub||""; }
+function updateStats(){
+  $("stSolved").textContent=bests.solved;
+  var key=settings.diff==="easy"?"bestEasy":settings.diff==="hard"?"bestHard":"bestMedium";
+  $("stBest").textContent=fmt(bests[key]);
+  $("stRaces").textContent=bests.racesWon+" / "+bests.racesPlayed;
+  $("stFound").textContent=bests.totalFound;
+}
+
+/* ---------- selection ---------- */
+function lineCells(a,b){
+  var dr=b.r-a.r, dc=b.c-a.c;
+  if(dr===0 && dc===0) return [{r:a.r,c:a.c}];
+  var angle=Math.atan2(dr,dc), snap=Math.round(angle/(Math.PI/4))*(Math.PI/4);
+  var sdr=Math.round(Math.sin(snap)), sdc=Math.round(Math.cos(snap));
+  var steps;
+  if(sdr!==0 && sdc!==0) steps=Math.max(Math.abs(dr),Math.abs(dc));
+  else if(sdr!==0) steps=Math.abs(dr); else steps=Math.abs(dc);
+  var out=[];
+  for(var i=0;i<=steps;i++){ var rr=a.r+sdr*i, cc=a.c+sdc*i; if(rr<0||rr>=G.size||cc<0||cc>=G.size) break; out.push({r:rr,c:cc}); }
+  return out;
+}
+function wordFromCells(cells){ return cells.map(function(cl){return G.grid[cl.r][cl.c];}).join(""); }
+function tryClaim(cells){
+  if(cells.length<3) return false;
+  var s=wordFromCells(cells), rev=s.split("").reverse().join("");
+  for(var i=0;i<G.placed.length;i++){
+    var p=G.placed[i];
+    if(!p.foundBy && (p.word===s || p.word===rev) && p.cells.length===cells.length){
+      p.foundBy="player"; if(!G.practice){ bests.totalFound++; saveBests(); }
+      setMsg("Found: "+p.word+"!", G.practice ? "Nice — that's practice, nothing saved." : settings.mode==="race" ? "Nice — that's yours, Lexi can't take it now." : "One down, keep going.");
+      renderGrid(); renderWords(); renderRace(); updateStats(); checkEnd(); return true;
+    }
+  }
+  return false;
+}
+function endSelection(){
+  if(!G.selecting) return;
+  G.selecting=false;
+  var cells=G.selCells.slice();
+  G.selCells=[]; applySel();
+  if(!tryClaim(cells)){
+    if(cells.length>=3){ var g=$("grid"); g.classList.remove("shake"); void g.offsetWidth; g.classList.add("shake"); setMsg("Not a word on the list — try again.","Drag in a straight line: across, down, or diagonal."); }
+  }
+}
+var gridEl=$("grid");
+gridEl.addEventListener("pointerdown", function(e){
+  var t=e.target.closest(".cell"); if(!t || G.finished) return;
+  startClock();
+  e.preventDefault();
+  var cell={r:+t.dataset.r,c:+t.dataset.c};
+  // tap-tap mode: if a start is already set and this is a second distinct tap without drag
+  if(G.tapStart && !G.selecting){
+    G.selCells=lineCells(G.tapStart, cell); applySel();
+    var cells=G.selCells.slice(); G.tapStart=null; G.selCells=[]; applySel();
+    if(!tryClaim(cells) && cells.length>=3) setMsg("Not a word on the list — try again.","");
+    return;
+  }
+  G.selecting=true; G.start=cell; G.current=cell; G.selCells=[cell]; applySel();
+  try{ gridEl.setPointerCapture(e.pointerId); }catch(err){}
+});
+gridEl.addEventListener("pointermove", function(e){
+  if(!G.selecting || !G.start) return;
+  var el=document.elementFromPoint(e.clientX,e.clientY);
+  var t=el && el.closest ? el.closest(".cell") : null;
+  if(!t) return;
+  var cell={r:+t.dataset.r,c:+t.dataset.c};
+  if(G.current && G.current.r===cell.r && G.current.c===cell.c) return;
+  G.current=cell; G.selCells=lineCells(G.start,cell); applySel();
+});
+gridEl.addEventListener("pointerup", function(e){
+  // Distinguish a simple tap (no move) for tap-tap mode
+  if(G.selecting && G.selCells.length===1){
+    G.tapStart=G.start; G.selecting=false; /* keep highlight */
+    return;
+  }
+  G.tapStart=null; endSelection();
+});
+gridEl.addEventListener("pointercancel", function(){ G.tapStart=null; endSelection(); });
+
+/* ---------- end / win ---------- */
+function checkEnd(){
+  var remaining=G.placed.filter(function(p){return !p.foundBy;}).length;
+  if(remaining>0 || G.finished) return;
+  G.seconds=currentSeconds();
+  G.finished=true; G.clockRunning=false; stopTimers();
+  var you=G.placed.filter(function(p){return p.foundBy==="player";}).length;
+  var ai=G.placed.filter(function(p){return p.foundBy==="ai";}).length;
+  var banner=$("winBanner"); banner.hidden=false; $("againBtn").hidden=false;
+  if(G.practice){
+    banner.className="winbanner";
+    banner.textContent="Practice complete! You found all "+you+" words — untimed, and nothing was saved to your records.";
+    setMsg("Practice complete!","Tap Play again for another practice grid, or Exit practice to play for real.");
+    updateStats();
+  } else if(settings.mode==="race"){
+    bests.racesPlayed++;
+    if(you>ai){ bests.racesWon++; banner.className="winbanner"; banner.textContent="You win the race! "+you+" words to Lexi's "+ai+" — finished in "+fmt(G.seconds)+"."; setMsg("Race won!","Tap Play again for a fresh grid."); }
+    else if(you===ai){ banner.className="winbanner"; banner.textContent="It's a tie! "+you+" words each, in "+fmt(G.seconds)+"."; setMsg("Dead heat!","So close — run it back."); }
+    else { banner.className="winbanner lose"; banner.textContent="Lexi takes it, "+ai+" words to your "+you+". Finished in "+fmt(G.seconds)+"."; setMsg("Lexi wins this one.","Bigger grids give you more time to catch her."); }
+  } else {
+    bests.solved++;
+    var key=settings.diff==="easy"?"bestEasy":settings.diff==="hard"?"bestHard":"bestMedium";
+    var isBest=bests[key]==null || G.seconds<bests[key];
+    if(isBest) bests[key]=G.seconds;
+    banner.className="winbanner";
+    banner.textContent="Puzzle complete in "+fmt(G.seconds)+"!"+(isBest?" That's a new best time for this size.":" Your best for this size is "+fmt(bests[key])+".");
+    setMsg("All words found!","Nice hunting.");
+  }
+  saveBests(); updateStats();
+}
+
+/* ---------- controls ---------- */
+$("themeSel").value=settings.theme in THEMES ? settings.theme : "animals";
+$("diffSel").value=DIFFS[settings.diff] ? settings.diff : "medium";
+$("modeSel").value=settings.mode==="race" ? "race" : "solo";
+$("themeSel").addEventListener("change",function(){ settings.theme=this.value; saveSettings(); newPuzzle(); });
+$("diffSel").addEventListener("change",function(){ settings.diff=this.value; saveSettings(); newPuzzle(); updateStats(); });
+$("modeSel").addEventListener("change",function(){ settings.mode=this.value; saveSettings(); newPuzzle(); });
+$("newBtn").addEventListener("click",function(){ newPuzzle(); });
+$("practiceBtn").addEventListener("click",function(){ newPuzzle(null,true); });
+$("exitPracticeBtn").addEventListener("click",function(){ newPuzzle(); });
+$("againBtn").addEventListener("click",function(){ newPuzzle(null, !!(G && G.practice)); });
+$("hintBtn").addEventListener("click",function(){
+  if(!G || G.finished) return;
+  if(!G.practice && G.hints<=0){ setMsg("No hints left this puzzle.","You've got this — scan row by row."); return; }
+  startClock();
+  var remaining=G.placed.filter(function(p){return !p.foundBy;});
+  if(!remaining.length) return;
+  var pick=remaining[Math.floor(Math.random()*remaining.length)];
+  if(!G.practice){ G.hints--; }
+  $("hintCount").textContent=G.practice?"∞":G.hints; $("hintBtn").disabled=!G.practice && G.hints<=0;
+  var keys={}; pick.cells.forEach(function(cl){keys[cellKey(cl.r,cl.c)]=true;});
+  var cells=$("grid").children;
+  for(var i=0;i<cells.length;i++){ if(keys[cellKey(+cells[i].dataset.r,+cells[i].dataset.c)]) cells[i].classList.add("hintflash"); }
+  setMsg("Hint: look for "+pick.word+".","Its letters are flashing in the grid.");
+  setTimeout(function(){ var cs=$("grid").children; for(var j=0;j<cs.length;j++) cs[j].classList.remove("hintflash"); },3200);
+});
+$("resetBtn").addEventListener("click",function(){
+  bests={solved:0,bestEasy:null,bestMedium:null,bestHard:null,racesWon:0,racesPlayed:0,totalFound:0}; saveBests(); updateStats(); setMsg("Records reset.","Fresh start — your current puzzle is untouched.");
+});
+$("customBtn").addEventListener("click",function(){
+  var raw=$("customWords").value.toUpperCase().replace(/[^A-Z]+/g," ").trim();
+  var words=raw ? raw.split(/\s+/).filter(function(w){return w.length>=3;}) : [];
+  words=words.filter(function(w,i){return words.indexOf(w)===i;});
+  var tooLong=words.filter(function(w){return w.length>DIFFS[settings.diff].size;});
+  if(words.length<3){ $("customMsg").textContent="Add at least 3 words of 3 letters or more."; return; }
+  if(tooLong.length){ $("customMsg").textContent="Too long for this grid size: "+tooLong.join(", ")+". Pick a bigger size or shorten them."; return; }
+  if(words.length>20) words=words.slice(0,20);
+  $("customMsg").textContent="Built a custom puzzle with "+words.length+" of your words.";
+  newPuzzle(words);
+});
+$("copyBtn").addEventListener("click",function(){
+  if(!G) return;
+  var text=G.placed.map(function(p){return p.word;}).join(", ");
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(function(){ $("customMsg").textContent="Word list copied."; },function(){ $("customMsg").textContent=text; }); }
+  else $("customMsg").textContent=text;
+});
+$("downloadBtn").addEventListener("click",function(){
+  if(!G) return;
+  var lines=[];
+  lines.push("WORD SEARCH — "+(G.custom?"Custom puzzle":THEMES[settings.theme] ? $("themeSel").selectedOptions[0].textContent : "Puzzle")+" ("+DIFFS[settings.diff].label+", "+G.size+" x "+G.size+")");
+  lines.push("");
+  for(var r=0;r<G.size;r++) lines.push(G.grid[r].join(" "));
+  lines.push(""); lines.push("Find these words:");
+  G.placed.slice().sort(function(a,b){return a.word.localeCompare(b.word);}).forEach(function(p){ lines.push("  "+p.word); });
+  var blob=new Blob([lines.join("\n")],{type:"text/plain"});
+  var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="word-search-puzzle.txt"; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); },2000);
+});
+
+/* ---------- how to play, rules + tour (all opt-in: buttons only, never auto-shown) ---------- */
+var howOverlay=$("howOverlay"), rulesOverlay=$("rulesOverlay");
+function markSeen(){ try{localStorage.setItem(LS_SEEN,"1");}catch(e){} $("newHint").hidden=true; }
+$("howBtn").addEventListener("click",function(){ pauseClock(); markSeen(); rulesOverlay.hidden=true; howOverlay.hidden=false; });
+$("howClose").addEventListener("click",function(){ howOverlay.hidden=true; });
+howOverlay.addEventListener("click",function(e){ if(e.target===howOverlay) howOverlay.hidden=true; });
+$("rulesBtn").addEventListener("click",function(){ pauseClock(); markSeen(); howOverlay.hidden=true; rulesOverlay.hidden=false; });
+$("rulesClose").addEventListener("click",function(){ rulesOverlay.hidden=true; });
+rulesOverlay.addEventListener("click",function(e){ if(e.target===rulesOverlay) rulesOverlay.hidden=true; });
+$("howRules").addEventListener("click",function(){ howOverlay.hidden=true; rulesOverlay.hidden=false; });
+$("rulesHow").addEventListener("click",function(){ rulesOverlay.hidden=true; howOverlay.hidden=false; });
+$("newHintDismiss").addEventListener("click",function(){ markSeen(); });
+var TOUR=[
+  {sel:"#controlsBar",title:"1 · Pick your puzzle",text:"Choose a theme, a grid size, and a mode. Easy hides words across and down only; Hard flips some backwards. Every New puzzle is generated fresh, just for you."},
+  {sel:"#grid",title:"2 · The grid",text:"Drag from a word's first letter to its last — across, down, or diagonal — then let go. Or tap the first letter, then tap the last. Found words light up in colour."},
+  {sel:"#wordsCard",title:"3 · The word list",text:"Every hidden word is listed here and crossed off as you find it. In a race, words Lexi claims turn orange and are gone for good."},
+  {sel:"#raceCard",title:"4 · Race vs Lexi",text:"Switch Mode to Race vs AI and Lexi hunts the same grid, claiming a word every few seconds. Claim more words than her before the grid runs out to win."},
+  {sel:"#hintBtn",title:"5 · Hints",text:"Stuck? You get 3 hints per puzzle. A hint flashes every letter of one unfound word so you can spot its line."},
+  {sel:"#genCard",title:"6 · Make your own",text:"Type any words — spelling lists, names, party themes — and the generator builds a brand-new puzzle around them. Download any puzzle as a text file to print."},
+  {sel:"#statsBar",title:"7 · Your records",text:"Puzzles solved, best times, race wins, and total words found are saved on this device so you can chase your own records."}
+];
+var tourIdx=-1;
+function showTourStep(i){
+  tourIdx=i;
+  if(i>=TOUR.length){ endTour(); return; }
+  var step=TOUR[i];
+  // Race card may be hidden in solo mode — temporarily note it in text flow by showing card if needed
+  if(step.sel==="#raceCard" && $("raceCard").hidden){ $("tourTitle").textContent=step.title; $("tourText").textContent=step.text+" (The race panel appears here when Race mode is on.)"; $("tourCount").textContent="Step "+(i+1)+" of "+TOUR.length; $("tourNext").textContent=i===TOUR.length-1?"Finish":"Next"; $("tourCard").hidden=false; $("tourHi").hidden=true; return; }
+  var target=document.querySelector(step.sel);
+  $("tourTitle").textContent=step.title; $("tourText").textContent=step.text;
+  $("tourCount").textContent="Step "+(i+1)+" of "+TOUR.length;
+  $("tourNext").textContent=i===TOUR.length-1?"Finish":"Next";
+  $("tourCard").hidden=false;
+  var hi=$("tourHi");
+  if(target){ target.scrollIntoView({block:"nearest",behavior:"smooth"});
+    setTimeout(function(){ var r=target.getBoundingClientRect(); hi.hidden=false; hi.style.left=(r.left-6)+"px"; hi.style.top=(r.top-6)+"px"; hi.style.width=(r.width+12)+"px"; hi.style.height=(r.height+12)+"px"; },60);
+  } else hi.hidden=true;
+}
+function endTour(){ tourIdx=-1; $("tourCard").hidden=true; $("tourHi").hidden=true; markSeen(); }
+$("tourNext").addEventListener("click",function(){ showTourStep(tourIdx+1); });
+$("tourSkip").addEventListener("click",endTour);
+$("tourBtn").addEventListener("click",function(){ pauseClock(); markSeen(); showTourStep(0); });
+$("howTour").addEventListener("click",function(){ howOverlay.hidden=true; showTourStep(0); });
+window.addEventListener("resize",function(){ if(tourIdx>=0) showTourStep(tourIdx); });
+
+/* ---------- feedback (standard, local only) ---------- */
+var feedbackOverlay=$("feedbackOverlay"), feedbackRating=0, feedbackTag="";
+function renderFeedbackRating(){
+  var btns=$("feedbackStars").querySelectorAll("button");
+  for(var i=0;i<btns.length;i++){ var v=+btns[i].dataset.rating; btns[i].setAttribute("aria-pressed", v<=feedbackRating ? "true" : "false"); btns[i].style.opacity=(feedbackRating===0||v<=feedbackRating)?"1":".35"; }
+  $("feedbackRatingLabel").textContent=feedbackRating? feedbackRating+" out of 5 stars" : "No rating yet — tap a star.";
+}
+function renderFeedbackTags(){
+  var btns=$("feedbackTags").querySelectorAll("button");
+  for(var i=0;i<btns.length;i++){ btns[i].setAttribute("aria-pressed", btns[i].dataset.tag===feedbackTag ? "true" : "false"); }
+}
+$("feedbackStars").addEventListener("click",function(e){ var b=e.target.closest("button[data-rating]"); if(!b) return; feedbackRating=+b.dataset.rating; renderFeedbackRating(); });
+$("feedbackTags").addEventListener("click",function(e){ var b=e.target.closest("button[data-tag]"); if(!b) return; feedbackTag=(feedbackTag===b.dataset.tag)?"":b.dataset.tag; renderFeedbackTags(); });
+$("feedbackBtn").addEventListener("click",function(){ pauseClock(); howOverlay.hidden=true; rulesOverlay.hidden=true; $("feedbackThanks").hidden=true; $("feedbackForm").hidden=false; $("feedbackSave").hidden=false; feedbackOverlay.hidden=false; });
+function closeFeedback(){ feedbackOverlay.hidden=true; }
+$("feedbackClose").addEventListener("click",closeFeedback);
+feedbackOverlay.addEventListener("click",function(e){ if(e.target===feedbackOverlay) closeFeedback(); });
+$("feedbackSave").addEventListener("click",function(){
+  var record={game:"word-search",rating:feedbackRating,text:$("feedbackText").value.trim(),tag:feedbackTag,timestamp:new Date().toISOString()};
+  try{ var arr=[]; try{ var raw=localStorage.getItem("holos-arcade-feedback"); if(raw){ var parsed=JSON.parse(raw); if(Array.isArray(parsed)) arr=parsed; } }catch(e2){} arr.push(record); localStorage.setItem("holos-arcade-feedback",JSON.stringify(arr)); }catch(e){}
+  $("feedbackForm").hidden=true; $("feedbackSave").hidden=true; $("feedbackThanks").hidden=false;
+  setTimeout(function(){ closeFeedback(); feedbackRating=0; feedbackTag=""; $("feedbackText").value=""; renderFeedbackRating(); renderFeedbackTags(); },1600);
+});
+renderFeedbackRating(); renderFeedbackTags();
+
+/* ---------- init ---------- */
+$("hintBtn").disabled=false;
+newPuzzle();
+/* Tutorial is opt-in only: the game loads straight into play. First-time
+   players get one small, non-blocking hint pointing at the buttons. */
+var seen=false; try{ seen=!!localStorage.getItem(LS_SEEN); }catch(e){}
+if(!seen) $("newHint").hidden=false;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Euchre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#fdfcf7; --bg2:#ffffff; --ink:#171a18; --muted:#5b6560; --line:#e7e2d6;
+  --card:#ffffff; --chip:#f1ede1;
+  --rff:#0e7569;
+  --gold:#ffbe0b; --gold-ink:#7a5b00;
+  --felt:#177245; --felt2:#0d4d2c; --felt-edge:#093a20;
+  --red:#c62f3b; --black:#20242a;
+  --good:#1d7a3a; --bad:#b3261e;
+  --shadow:0 10px 30px rgba(23,26,24,.10);
+  --radius:20px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#111412; --bg2:#171b19; --ink:#f2efe8; --muted:#a8b0ab; --line:#2a2f2c;
+    --card:#1a1e1c; --chip:#242825;
+    --felt:#145c37; --felt2:#0a3d23; --felt-edge:#062b18;
+    --shadow:0 10px 30px rgba(0,0,0,.4);
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;font-family:"Public Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+button{font-family:inherit;cursor:pointer}
+.wrap{max-width:920px;margin:0 auto;padding:14px 16px 40px}
+
+/* Top control row */
+.toprow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.badge{display:inline-flex;align-items:center;gap:7px;background:var(--gold);color:#231a00;font-weight:800;font-size:13px;padding:9px 13px;border-radius:999px}
+.toprow .spacer{flex:1}
+.btn{appearance:none;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;font-size:14.5px;padding:11px 16px;border-radius:12px;min-height:48px;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn:disabled{opacity:.38;cursor:not-allowed}
+.diff-group{display:flex;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px}
+.diff-btn{border:0;background:transparent;padding:8px 14px;border-radius:999px;font-weight:800;min-height:40px;color:var(--muted);font-size:14px}
+.diff-btn.active{background:var(--card);color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.14)}
+
+/* HUD */
+.hud{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.hud span{font-size:12.5px;font-weight:700;background:var(--chip);padding:7px 11px;border-radius:999px}
+.hud span b{font-weight:800}
+.hud span.yours{background:var(--ink);color:var(--bg)}
+.hud span.trumpchip{background:var(--gold);color:#231a00}
+
+/* Table */
+.table{background:radial-gradient(ellipse at 50% 38%, var(--felt) 0%, var(--felt2) 78%);border:10px solid var(--felt-edge);border-radius:28px;padding:16px 14px 18px;box-shadow:var(--shadow), inset 0 0 0 3px rgba(255,190,11,.35);color:#fff}
+.seat{background:rgba(0,0,0,.28);border:2px solid rgba(255,255,255,.14);border-radius:16px;padding:10px 8px;text-align:center;min-width:0;transition:border-color .2s, opacity .2s}
+.seat.turn{border-color:var(--gold);box-shadow:0 0 0 3px rgba(255,190,11,.35)}
+.seat.winner{border-color:var(--gold);background:rgba(255,190,11,.18)}
+.seat.sittingout{opacity:.45}
+.seat .avatar{font-size:26px;line-height:1.1}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
+.seat.thinking .avatar{animation:pulse .8s ease-in-out infinite}
+.seat .pname{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:15px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.seat .ptags{display:flex;gap:4px;justify-content:center;flex-wrap:wrap;margin-top:3px;min-height:20px}
+.tag{font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.16);color:#fff}
+.tag.dealer{background:var(--gold);color:#231a00}
+.tag.maker{background:#fff;color:#14532d}
+.tag.loner{background:var(--red);color:#fff}
+.seat .paction{font-size:12px;font-weight:700;color:#d9f2e2;min-height:18px;margin-top:2px}
+.minihand{display:flex;gap:4px;justify-content:center;margin:6px 0 2px;min-height:34px}
+.minihand .pcard{width:25px;height:34px}
+.minihand .pcard .r{font-size:11px}.minihand .pcard .s{font-size:10px}.minihand .pcard .big{display:none}
+
+.table-grid{display:grid;grid-template-columns:1fr 1.6fr 1fr;gap:10px;align-items:stretch;margin-top:10px}
+.partner-wrap{max-width:300px;margin:0 auto}
+.center{background:rgba(0,0,0,.22);border:2px dashed rgba(255,255,255,.25);border-radius:16px;padding:10px 8px;text-align:center;display:flex;flex-direction:column;justify-content:center}
+.center .clabel{font-size:11.5px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:#bfe6cd}
+.trick-cards{display:flex;gap:6px;justify-content:center;align-items:center;margin-top:8px;min-height:64px;flex-wrap:wrap}
+.trick-slot{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:52px}
+.trick-slot .who{font-size:10.5px;font-weight:800;color:#ffe9a8}
+.trick-slot.winning .pcard{box-shadow:0 0 0 3px var(--gold),0 2px 6px rgba(0,0,0,.35)}
+.upcard-row{display:flex;gap:8px;justify-content:center;align-items:center;margin-top:8px}
+.upcard-row .pcard{width:46px;height:64px;border-radius:8px;padding:4px 5px}
+.upcard-row .pcard .r{font-size:17px}.upcard-row .pcard .s{font-size:15px}.upcard-row .pcard .big{font-size:25px}
+.trump-line{font-family:"Bricolage Grotesque",sans-serif;font-size:19px;font-weight:800;margin-top:6px}
+.trump-line .tsuit{color:var(--gold)}
+.score-line{font-size:13px;font-weight:700;color:#d9f2e2;margin-top:2px}
+.msg{min-height:26px;text-align:center;font-weight:700;font-size:15.5px;margin-top:10px;color:#fff}
+.msg.small{font-size:13.5px;color:#d9f2e2;font-weight:600}
+
+.pcard{width:35px;height:48px;background:#fff;color:var(--black);border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;flex-direction:column;align-items:flex-start;padding:3px 4px;font-weight:800;line-height:1;position:relative;flex:none}
+.pcard .r{font-size:14px}
+.pcard .s{font-size:13px}
+.pcard .big{position:absolute;inset:0;display:grid;place-items:center;font-size:19px}
+.pcard.red{color:var(--red)}
+.pcard.back{background:repeating-linear-gradient(45deg,#8c1d2f 0 5px,#a92638 5px 10px);border:2px solid #fff}
+.pcard.empty{background:rgba(255,255,255,.10);border:2px dashed rgba(255,255,255,.35);box-shadow:none}
+.pcard.bower{box-shadow:0 0 0 2.5px var(--gold),0 2px 6px rgba(0,0,0,.35)}
+
+.you-seat{max-width:460px;margin:12px auto 0}
+.you-cards{display:flex;gap:7px;justify-content:center;margin:8px 0 2px;min-height:78px;flex-wrap:wrap}
+.you-cards .pcard{width:54px;height:76px;border-radius:9px;padding:5px 6px}
+.you-cards .pcard .r{font-size:20px}.you-cards .pcard .s{font-size:17px}.you-cards .pcard .big{font-size:29px}
+button.pcard{border:0;text-align:left;transition:transform .12s, box-shadow .12s}
+button.pcard.playable:hover{transform:translateY(-6px)}
+button.pcard.playable{box-shadow:0 0 0 2.5px var(--gold),0 4px 10px rgba(0,0,0,.4)}
+button.pcard:disabled{cursor:default}
+button.pcard.dim{opacity:.45}
+
+/* Action bar */
+.actionbar{margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px}
+.actionbar .prompt{font-weight:800;font-size:16px;margin:0 0 10px}
+.actionbar .prompt .amt{color:var(--rff)}
+.act-row{display:flex;gap:8px;flex-wrap:wrap}
+.act-row .btn{flex:1;min-height:54px;font-size:15.5px;min-width:120px}
+.btn.order{background:var(--rff);border-color:var(--rff);color:#fff}
+.btn.lonerbtn{background:var(--red);border-color:var(--red);color:#fff}
+.btn.passb{background:var(--chip)}
+.suit-row{display:flex;gap:8px;flex-wrap:wrap}
+.suit-btn{flex:1;min-width:70px;min-height:56px;font-size:24px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:800}
+.suit-btn small{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.suit-btn.red{color:var(--red)}
+.suit-btn:disabled{opacity:.35;cursor:not-allowed}
+.hintline{font-size:13.5px;color:var(--muted);margin:10px 0 0}
+.checkline{display:flex;align-items:center;gap:10px;margin-top:12px;font-weight:700;font-size:14.5px;min-height:44px;cursor:pointer}
+.checkline input{width:22px;height:22px;accent-color:var(--rff);flex:none}
+
+/* Log */
+.log{margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;max-height:170px;overflow:auto}
+.log h4{margin:0 0 6px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.log p{margin:3px 0;font-size:13.5px;color:var(--muted)}
+.log p b{color:var(--ink)}
+
+/* Result panel */
+.result{margin-top:14px;background:var(--card);border:2px solid var(--gold);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;text-align:center}
+.result h3{font-family:"Bricolage Grotesque",sans-serif;font-size:25px;margin:0 0 6px;letter-spacing:-.01em}
+.result p{margin:4px 0;color:var(--muted);font-size:15px}
+.result .bigscore{font-family:"Bricolage Grotesque",sans-serif;font-size:34px;font-weight:800;color:var(--ink)}
+
+/* Footer */
+.pane-footer{margin-top:22px;text-align:center;font-size:13.5px;color:var(--muted)}
+.pane-footer a{color:var(--rff);font-weight:700}
+
+/* One-time hint (non-blocking) */
+.hintbar{display:flex;align-items:center;gap:10px;background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:9px 12px;margin-bottom:12px;font-size:13.5px;font-weight:600}
+.hintbar .grow{flex:1}
+.hintbar button.linklike{appearance:none;border:0;background:transparent;color:var(--rff);font-weight:800;font-size:13.5px;padding:4px 2px;text-decoration:underline;text-underline-offset:2px}
+.hintbar .dismiss{appearance:none;border:0;background:transparent;color:var(--muted);font-size:18px;line-height:1;padding:6px 8px;border-radius:8px;font-weight:800}
+
+/* Tutorial overlay */
+.overlay{position:fixed;inset:0;background:rgba(10,14,12,.62);display:flex;align-items:flex-end;justify-content:center;z-index:60;padding:0}
+@media(min-width:640px){.overlay{align-items:center;padding:20px}}
+.sheet{background:var(--bg2);color:var(--ink);width:100%;max-width:560px;max-height:88vh;overflow:auto;border-radius:22px 22px 0 0;padding:22px 22px 26px;box-shadow:var(--shadow)}
+@media(min-width:640px){.sheet{border-radius:22px}}
+.sheet h3{font-family:"Bricolage Grotesque",sans-serif;font-size:23px;margin:0 0 4px}
+.sheet h4{font-family:"Bricolage Grotesque",sans-serif;font-size:17px;margin:18px 0 4px}
+.sheet h4:first-of-type{margin-top:10px}
+.sheet .stepcount{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--rff)}
+.sheet p{font-size:15px;color:var(--ink)}
+.sheet ul{padding-left:20px;font-size:14.5px}
+.sheet li{margin:5px 0}
+.sheet .navrow{display:flex;gap:8px;margin-top:16px}
+.sheet .navrow .btn{flex:1;min-height:50px}
+.sheet table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}
+.sheet th,.sheet td{border:1px solid var(--line);padding:7px 9px;text-align:left}
+.sheet th{background:var(--chip)}
+
+/* Feedback */
+.feedback-label{font-weight:800;font-size:14.5px;margin:16px 0 6px}
+.feedback-stars{display:flex;gap:6px;flex-wrap:wrap}
+.star-btn{appearance:none;border:1.5px solid var(--line);background:var(--card);color:var(--muted);width:52px;height:52px;border-radius:12px;font-size:26px;line-height:1;display:grid;place-items:center}
+.star-btn.active{background:var(--gold);border-color:var(--gold);color:#231a00}
+.star-btn:focus-visible{outline:3px solid var(--rff);outline-offset:2px}
+.feedback-text{width:100%;min-height:110px;resize:vertical;border:1.5px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font:inherit;font-size:15px;padding:12px}
+.feedback-text:focus{outline:3px solid rgba(14,117,105,.35);border-color:var(--rff)}
+.feedback-terms{font-size:13px;color:var(--muted);margin:10px 0 0;line-height:1.45}
+.feedback-error{font-size:14px;font-weight:700;color:var(--bad);margin:10px 0 0}
+.feedback-thanks{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:16px}
+.feedback-thanks p{margin:0}
+.feedback-tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag-btn{appearance:none;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;font-size:14px;padding:10px 14px;border-radius:999px;min-height:44px}
+.tag-btn.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tag-btn:focus-visible{outline:3px solid var(--rff);outline-offset:2px}
+@media (max-width:560px){
+  .table-grid{grid-template-columns:1fr 1.4fr 1fr;gap:6px}
+  .seat .avatar{font-size:20px}
+  .seat .pname{font-size:12.5px}
+  .you-cards .pcard{width:48px;height:68px}
+  .you-cards .pcard .r{font-size:18px}
+  .trick-slot{min-width:44px}
+  .trick-cards .pcard{width:32px;height:44px}
+}
+@media (prefers-reduced-motion: reduce){
+  *{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="toprow">
+    <span class="badge">🃏 Euchre · Partnerships · First to 10</span>
+    <span class="spacer"></span>
+    <button class="btn" id="howBtn" type="button">❓ How to play</button>
+    <button class="btn" id="rulesBtn" type="button">📖 Rules</button>
+    <button class="btn" id="feedbackBtn" type="button">💬 Feedback</button>
+    <button class="btn primary" id="newMatchBtn" type="button">↻ New match</button>
+  </div>
+
+  <div class="hintbar" id="hintBar" hidden>
+    <span class="grow">👋 New here? Tap <b>How to play</b> for the quick tutorial, or <b>Rules</b> for the full rulebook.</span>
+    <button class="linklike" id="hintHowBtn" type="button">How to play</button>
+    <button class="dismiss" id="hintDismiss" type="button" aria-label="Dismiss hint">×</button>
+  </div>
+
+  <div class="toprow" style="margin-bottom:10px">
+    <div class="diff-group" role="group" aria-label="Difficulty">
+      <button class="diff-btn" data-diff="easy" type="button">Easy</button>
+      <button class="diff-btn active" data-diff="normal" type="button">Normal</button>
+      <button class="diff-btn" data-diff="hard" type="button">Hard</button>
+    </div>
+    <div class="diff-group" role="group" aria-label="Mode">
+      <button class="diff-btn mode-btn active" data-mode="match" type="button">🏆 Match</button>
+      <button class="diff-btn mode-btn" data-mode="practice" type="button">🎓 Practice</button>
+    </div>
+    <span class="spacer"></span>
+    <span style="font-size:13px;color:var(--muted);font-weight:600">You + <b>Pip</b> (partner) vs <b>Rex</b> &amp; <b>June</b></span>
+  </div>
+
+  <div class="hud" id="hud">
+    <span class="yours">You &amp; Pip <b id="hudUs">0</b></span>
+    <span>Rex &amp; June <b id="hudThem">0</b></span>
+    <span>Hand <b id="hudHand">–</b></span>
+    <span>Tricks <b id="hudTricks">0 – 0</b></span>
+    <span class="trumpchip" id="hudTrump" hidden>Trump <b id="hudTrumpSuit">–</b></span>
+    <span id="hudBest">Best: –</span>
+    <span class="trumpchip" id="hudPractice" hidden>🎓 Practice — points don't count</span>
+    <span>🪙 Play money — no real gambling</span>
+  </div>
+
+  <div class="table" id="table">
+    <div class="partner-wrap">
+      <div class="seat" id="seat2">
+        <div class="avatar">🦊</div>
+        <div class="pname">Pip · Partner</div>
+        <div class="ptags" id="tags2"></div>
+        <div class="minihand" id="hand2"></div>
+        <div class="paction" id="act2"></div>
+      </div>
+    </div>
+
+    <div class="table-grid">
+      <div class="seat" id="seat1">
+        <div class="avatar">🦝</div>
+        <div class="pname">Rex</div>
+        <div class="ptags" id="tags1"></div>
+        <div class="minihand" id="hand1"></div>
+        <div class="paction" id="act1"></div>
+      </div>
+
+      <div class="center" id="centerBox">
+        <div class="clabel" id="centerLabel">Up-card</div>
+        <div class="upcard-row" id="upcardRow"></div>
+        <div class="trick-cards" id="trickCards"></div>
+        <div class="trump-line" id="trumpLine" hidden>Trump is <span class="tsuit" id="trumpSuitName"></span></div>
+        <div class="score-line" id="centerScore"></div>
+      </div>
+
+      <div class="seat" id="seat3">
+        <div class="avatar">🦉</div>
+        <div class="pname">June</div>
+        <div class="ptags" id="tags3"></div>
+        <div class="minihand" id="hand3"></div>
+        <div class="paction" id="act3"></div>
+      </div>
+    </div>
+
+    <div class="msg" id="msg">Welcome to Euchre!</div>
+    <div class="msg small" id="msgSub"></div>
+
+    <div class="seat you-seat" id="seat0">
+      <div class="avatar">😀</div>
+      <div class="pname">You</div>
+      <div class="ptags" id="tags0"></div>
+      <div class="you-cards" id="hand0"></div>
+      <div class="paction" id="act0"></div>
+    </div>
+  </div>
+
+  <div class="actionbar" id="actionbar">
+    <p class="prompt" id="prompt">Dealing…</p>
+    <div id="actionArea"></div>
+    <p class="hintline" id="hintLine"></p>
+  </div>
+
+  <div class="result" id="resultPanel" hidden>
+    <h3 id="resultTitle">Match over</h3>
+    <div class="bigscore" id="resultScore"></div>
+    <p id="resultText"></p>
+    <div class="act-row" style="margin-top:12px">
+      <button class="btn primary" id="rematchBtn" type="button">↻ Rematch</button>
+      <button class="btn" id="resultHowBtn" type="button">❓ How to play</button>
+      <button class="btn" id="resultRulesBtn" type="button">📖 Rules</button>
+      <button class="btn" id="resultFeedbackBtn" type="button">💬 Feedback</button>
+    </div>
+  </div>
+
+  <div class="log" id="logBox">
+    <h4>Hand log</h4>
+    <div id="logLines"></div>
+  </div>
+
+  <p class="pane-footer">More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener">Ridiculously Fit and Fed</a><br><button class="btn" id="footerFeedbackBtn" type="button" style="margin-top:10px">💬 Feedback</button></p>
+</div>
+
+<!-- Tutorial overlay -->
+<div class="overlay" id="tutOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+    <div class="stepcount" id="tutStepCount">Step 1 of 6</div>
+    <h3 id="tutTitle">How to play — Euchre</h3>
+    <div id="tutBody"></div>
+    <div class="navrow">
+      <button class="btn" id="tutBack" type="button">← Back</button>
+      <button class="btn" id="tutSkip" type="button">Skip</button>
+      <button class="btn primary" id="tutNext" type="button">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rules overlay -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <div class="stepcount">Full rulebook</div>
+    <h3 id="rulesTitle">Rules — Euchre</h3>
+    <div id="rulesBody">
+      <h4>The game</h4>
+      <p>Euchre is a trick-taking card game for <b>4 players in two fixed partnerships</b>. Partners sit opposite each other. In this game you partner with <b>Pip</b> against <b>Rex &amp; June</b>. Each hand, one team names a <b>trump suit</b> and tries to win at least 3 of the 5 tricks.</p>
+      <h4>The deck &amp; the deal</h4>
+      <ul>
+        <li>Euchre uses a <b>24-card deck</b>: 9, 10, J, Q, K and A in each of the four suits (♠ ♥ ♦ ♣). All other cards are removed.</li>
+        <li>The dealer deals <b>5 cards to each player</b>. The remaining 4 cards form the kitty, and the top one is turned face up — the <b>up-card</b>.</li>
+        <li>The deal rotates one seat to the left after every hand.</li>
+      </ul>
+      <h4>Choosing trump — round 1</h4>
+      <ul>
+        <li>Starting with the player left of the dealer, each player in turn may <b>order up</b> the up-card (making its suit trump) or <b>pass</b>.</li>
+        <li>If anyone orders it up, the dealer picks up the up-card and <b>discards one card</b> face down, back to 5 cards.</li>
+        <li>The player who orders it up is the <b>maker</b> for that hand.</li>
+      </ul>
+      <h4>Choosing trump — round 2 &amp; “stick the dealer”</h4>
+      <ul>
+        <li>If all four players pass in round 1, the up-card is turned down and a second round begins.</li>
+        <li>In round 2, each player in turn may <b>name any suit except the turned-down suit</b> as trump, or pass.</li>
+        <li>If the turn comes back around to the dealer, the dealer <b>must</b> name a trump suit — passing is not allowed. This is called <b>stick the dealer</b>, so every hand has a maker.</li>
+      </ul>
+      <h4>The bowers — the two best cards</h4>
+      <ul>
+        <li>The <b>right bower</b> is the Jack of the trump suit — the highest card in the game.</li>
+        <li>The <b>left bower</b> is the Jack of the other suit of the same colour (e.g. if ♥ is trump, the J♦ is the left bower). The left bower <b>counts as a trump card in every way</b> — it is played and followed as trump, not as its printed suit.</li>
+        <li>Full trump ranking, high to low: <b>Right bower › Left bower › A › K › Q › 10 › 9</b>.</li>
+        <li>In a plain (non-trump) suit the ranking is <b>A › K › Q › J › 10 › 9</b> — except that suit's Jack may be missing if it has become the left bower.</li>
+      </ul>
+      <h4>Playing the tricks</h4>
+      <ul>
+        <li>The player to the <b>left of the dealer leads</b> the first trick (unless that player is sitting out — see Going alone).</li>
+        <li>Each player in turn plays one card. You <b>must follow the suit led if you can</b> — and remember, the left bower follows trump. If you can't follow suit, you may play any card, including trump.</li>
+        <li>The trick is won by the <b>highest trump played</b>; if no trump was played, by the <b>highest card of the suit led</b>. Cards of other suits can never win a trick.</li>
+        <li>The winner of each trick leads the next one. A hand is <b>5 tricks</b>.</li>
+      </ul>
+      <h4>Going alone</h4>
+      <ul>
+        <li>When making trump — in either round — a player may declare they are <b>going alone</b>. Their partner sits the hand out and plays no cards; the maker plays <b>1 against 2</b> and tricks have 3 cards.</li>
+        <li>A loner who takes <b>all 5 tricks scores 4 points</b>; 3–4 tricks scores the usual 1 point; 2 or fewer means the loner is euchred (see scoring).</li>
+      </ul>
+      <h4>Scoring</h4>
+      <table>
+        <tr><th>Result</th><th>Points</th></tr>
+        <tr><td>Makers take 3–4 tricks</td><td>Makers 1</td></tr>
+        <tr><td>Makers take all 5 tricks (a “march”)</td><td>Makers 2</td></tr>
+        <tr><td>Makers take 2 or fewer tricks — <b>euchred!</b></td><td>Defenders 2</td></tr>
+        <tr><td>Loner takes 3–4 tricks</td><td>Loner's team 1</td></tr>
+        <tr><td>Loner takes all 5 tricks</td><td>Loner's team 4</td></tr>
+        <tr><td>Loner takes 2 or fewer — euchred</td><td>Defenders 2</td></tr>
+      </table>
+      <h4>Winning the match</h4>
+      <p>Points are scored after every hand and added to the running total. <b>The first team to reach 10 points wins the match.</b> Only one team scores on any given hand, so there's never a tie at the line.</p>
+      <h4>Special rules &amp; notes for this version</h4>
+      <ul>
+        <li><b>Stick the dealer</b> is always on — a hand is never thrown in; somebody always makes trump.</li>
+        <li><b>No reneging:</b> if you hold a card of the suit led, the game only lets you play a card of that suit (the left bower counts as trump).</li>
+        <li>When a loner's partner sits out, the lead passes to the next active player if the sitting-out player would have led.</li>
+        <li><b>Difficulty</b> (top of the page) changes how sharply all three AI players — Pip included — bid and play.</li>
+        <li><b>Practice mode</b> (top of the page): play hands against the same AI with no match score — hand points are shown but never counted, nothing is added to your match record, and a new practice hand is dealt automatically after each one. Switch back to <b>Match</b> any time to start a fresh match to 10.</li>
+        <li><b>Play money only:</b> points are just for keeping score — there is no real-money wagering, no prizes, and no side bets anywhere in this game.</li>
+        <li>Your match record (wins, matches played, best winning margin) is kept in this browser's local storage only.</li>
+      </ul>
+    </div>
+    <div class="navrow">
+      <button class="btn" id="rulesHowBtn" type="button">❓ Quick tutorial instead</button>
+      <button class="btn primary" id="rulesClose" type="button">Done ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback overlay -->
+<div class="overlay" id="feedbackOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+    <div class="stepcount">Holo's Arcade · Feedback</div>
+    <h3 id="feedbackTitle">Feedback — Euchre</h3>
+    <p style="margin-top:6px">Tell us what worked, what didn't, or what you'd love to see next. Saved on this device only — no email, no account needed.</p>
+
+    <div id="feedbackForm">
+      <p class="feedback-label" id="feedbackRatingLabel">Your rating</p>
+      <div class="feedback-stars" role="radiogroup" aria-labelledby="feedbackRatingLabel">
+        <button class="star-btn" type="button" data-rating="1" role="radio" aria-checked="false" aria-label="1 star">★</button>
+        <button class="star-btn" type="button" data-rating="2" role="radio" aria-checked="false" aria-label="2 stars">★</button>
+        <button class="star-btn" type="button" data-rating="3" role="radio" aria-checked="false" aria-label="3 stars">★</button>
+        <button class="star-btn" type="button" data-rating="4" role="radio" aria-checked="false" aria-label="4 stars">★</button>
+        <button class="star-btn" type="button" data-rating="5" role="radio" aria-checked="false" aria-label="5 stars">★</button>
+      </div>
+
+      <p class="feedback-label" id="feedbackTagLabel">Tag <span style="font-weight:600;color:var(--muted)">(optional)</span></p>
+      <div class="feedback-tags" role="group" aria-labelledby="feedbackTagLabel">
+        <button class="tag-btn" type="button" data-tag="Bug">🐛 Bug</button>
+        <button class="tag-btn" type="button" data-tag="Suggestion">💡 Suggestion</button>
+        <button class="tag-btn" type="button" data-tag="Other">Other</button>
+      </div>
+
+      <label class="feedback-label" for="feedbackText" style="display:block">Your comment</label>
+      <textarea class="feedback-text" id="feedbackText" rows="4" maxlength="1000" placeholder="What did you think? Any bugs, ideas, or favourite moments?"></textarea>
+
+      <p class="feedback-terms">Feedback follows the same Terms &amp; Conditions: please don't include personal information, keep it clean — moderation rules apply — and feedback may be used to improve the games. It's stored only in this browser under <b>holos-arcade-feedback</b>.</p>
+      <p class="feedback-error" id="feedbackError" hidden>Please tap a star rating first.</p>
+
+      <div class="navrow">
+        <button class="btn" id="feedbackCancel" type="button">Cancel</button>
+        <button class="btn primary" id="feedbackSave" type="button">Save feedback</button>
+      </div>
+    </div>
+
+    <div class="feedback-thanks" id="feedbackThanks" hidden role="status">
+      <p><b>Thanks!</b> 💬 Your feedback was saved on this device.</p>
+      <div class="navrow">
+        <button class="btn primary" id="feedbackDone" type="button">Done ✓</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============ Euchre — you + AI partner vs 2 AI ============ */
+var SUITS = ["♠","♥","♦","♣"];
+var SUIT_NAMES = {"♠":"Spades","♥":"Hearts","♦":"Diamonds","♣":"Clubs"};
+var RED = {"♥":true,"♦":true};
+var SAME_COLOR = {"♠":"♣","♣":"♠","♥":"♦","♦":"♥"};
+var RANKS = ["9","10","J","Q","K","A"];
+var NAMES = ["You","Rex","Pip","June"]; // seats 0..3, partners 0&2
+var LS_STATS = "euchre_stats_v1";
+var LS_TUT = "euchre_tut_seen_v1";
+var LS_DIFF = "euchre_diff_v1";
+
+var stats = { played:0, won:0, loners:0, lonerWon:0, euchred:0, bestMargin:null };
+try { var sv = JSON.parse(localStorage.getItem(LS_STATS) || "null"); if (sv) stats = sv; } catch(e){}
+function saveStats(){ try { localStorage.setItem(LS_STATS, JSON.stringify(stats)); } catch(e){} }
+
+var difficulty = "normal";
+try { difficulty = localStorage.getItem(LS_DIFF) || "normal"; } catch(e){}
+if (["easy","normal","hard"].indexOf(difficulty) < 0) difficulty = "normal";
+
+/* ---------- card helpers ---------- */
+function isRightBower(c, trump){ return c.rank === "J" && c.suit === trump; }
+function isLeftBower(c, trump){ return c.rank === "J" && c.suit === SAME_COLOR[trump]; }
+function effSuit(c, trump){ return isLeftBower(c, trump) ? trump : c.suit; }
+function cardValue(c, trump, leadSuit){
+  var es = effSuit(c, trump);
+  if (isRightBower(c, trump)) return 100;
+  if (isLeftBower(c, trump)) return 99;
+  if (es === trump){
+    var ti = RANKS.indexOf(c.rank); // 9..A within trump (J already handled)
+    return 50 + ti;
+  }
+  if (es === leadSuit){
+    return 10 + RANKS.indexOf(c.rank);
+  }
+  return RANKS.indexOf(c.rank); // off-suit non-lead: 0..5, can never beat lead/trump
+}
+function buildDeck(){
+  var d = [];
+  for (var s = 0; s < 4; s++) for (var r = 0; r < RANKS.length; r++) d.push({ suit: SUITS[s], rank: RANKS[r] });
+  return d;
+}
+function shuffle(a){
+  for (var i = a.length - 1; i > 0; i--){ var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; }
+  return a;
+}
+function sortHand(hand, trump){
+  hand.sort(function(a, b){
+    var ea = trump ? effSuit(a, trump) : a.suit, eb = trump ? effSuit(b, trump) : b.suit;
+    var ta = trump && ea === trump ? 0 : 1, tb = trump && eb === trump ? 0 : 1;
+    if (ta !== tb) return ta - tb;
+    if (ea !== eb) return SUITS.indexOf(ea) - SUITS.indexOf(eb);
+    return cardValue(b, trump, null) - cardValue(a, trump, null) || RANKS.indexOf(b.rank) - RANKS.indexOf(a.rank);
+  });
+}
+function countTrump(hand, trump){ var n = 0; for (var i = 0; i < hand.length; i++) if (effSuit(hand[i], trump) === trump) n++; return n; }
+function hasSuit(hand, suit, trump){ for (var i = 0; i < hand.length; i++) if (effSuit(hand[i], trump) === suit) return true; return false; }
+function strengthInSuit(hand, suit){
+  // rough strength if `suit` were trump: bowers + trump count + high cards
+  var n = 0, score = 0;
+  for (var i = 0; i < hand.length; i++){
+    var c = hand[i];
+    if (isRightBower(c, suit)) score += 10;
+    else if (isLeftBower(c, suit)) score += 9;
+    else if (c.suit === suit){ n++; score += 2 + RANKS.indexOf(c.rank) * 0.4; }
+    else if (c.rank === "A") score += 1.2;
+  }
+  return score + n * 1.5;
+}
+
+/* ---------- game state ---------- */
+var G = null;
+var practice = false;
+var statsSnapshot = null; // stats as they were when the current practice hand began
+function newMatch(){
+  G = {
+    scores: [0, 0], handNum: 0, dealer: Math.floor(Math.random() * 4),
+    phase: "idle", hands: [[],[],[],[]], kitty: [], upcard: null,
+    trump: null, maker: -1, alone: false, aloneSeat: -1, defenderAlone: false, defenderSeat: -1,
+    tricksWon: [0, 0], trick: [], leader: 0, current: 0, round: 1,
+    turnCardSuit: null, discardSeat: -1, lastEvent: ""
+  };
+  document.getElementById("resultPanel").hidden = true;
+  logClear();
+  logLine(practice
+    ? "🎓 <b>Practice mode</b> — play hands against the same AI, try things out, no pressure. Points don't count and nothing is added to your match record."
+    : "New match — first team to <b>10 points</b> wins. Good luck!");
+  startHand();
+}
+function teamOf(seat){ return seat % 2; } // 0 = you+Pip, 1 = Rex+June
+function partnerOf(seat){ return (seat + 2) % 4; }
+
+function startHand(){
+  if (practice) statsSnapshot = JSON.stringify(stats);
+  G.handNum++;
+  G.dealer = (G.dealer + 1) % 4;
+  var deck = shuffle(buildDeck());
+  G.hands = [[],[],[],[]];
+  for (var r = 0; r < 5; r++) for (var s = 0; s < 4; s++) G.hands[s].push(deck.pop());
+  G.kitty = [deck.pop(), deck.pop(), deck.pop()];
+  G.upcard = deck.pop();
+  G.trump = null; G.maker = -1; G.alone = false; G.aloneSeat = -1;
+  G.defenderAlone = false; G.defenderSeat = -1;
+  G.tricksWon = [0, 0]; G.trick = []; G.round = 1; G.bid2Passes = 0;
+  seatActions = ["","","",""];
+  for (var i = 0; i < 4; i++) sortHand(G.hands[i], null);
+  G.phase = "bid1"; G.current = (G.dealer + 1) % 4;
+  logLine("— Hand " + G.handNum + " · " + NAMES[G.dealer] + " deals · up-card is " + cardText(G.upcard) + " —");
+  setMsg(NAMES[G.dealer] + " deals. Up-card: " + cardText(G.upcard) + ".", "Round 1: order it up, or pass.");
+  advance();
+}
+
+function cardText(c){ return c.rank + c.suit; }
+function isSittingOut(seat){
+  if (G.alone && seat === partnerOf(G.aloneSeat)) return true;
+  if (G.defenderAlone && seat === partnerOf(G.defenderSeat)) return true;
+  return false;
+}
+
+/* ---------- flow control ---------- */
+var busy = false;
+function advance(){
+  render();
+  if (!G) return;
+  if (G.phase === "bid1" || G.phase === "bid2"){
+    if (G.current === 0){ renderBidUI(); }
+    else { busy = true; setTimeout(aiBid, 750); }
+  } else if (G.phase === "discard"){
+    if (G.discardSeat === 0){ renderDiscardUI(); }
+    else { busy = true; setTimeout(aiDiscard, 750); }
+  } else if (G.phase === "play"){
+    if (isSittingOut(G.current)){ G.current = (G.current + 1) % 4; advance(); return; }
+    if (G.current === 0){ renderPlayUI(); }
+    else { busy = true; setTimeout(aiPlay, 800); }
+  }
+}
+
+function endBiddingAllPassed(){
+  logLine("Everyone passed twice — hand is thrown in, no points.");
+  setMsg("All passed — hand thrown in.", "Redealing…");
+  G.phase = "handOver";
+  render();
+  setTimeout(startHand, 1400);
+}
+
+/* Round 1: current player orders up or passes */
+function bidPass(){
+  logLine(NAMES[G.current] + " passes.");
+  setSeatAction(G.current, "Pass");
+  if (G.phase === "bid1"){
+    if (G.current === G.dealer){
+      // everyone passed round 1 -> round 2, dealer's suit excluded
+      G.phase = "bid2"; G.turnCardSuit = G.upcard.suit;
+      G.current = (G.dealer + 1) % 4;
+      setMsg("Nobody ordered it up.", "Round 2: name a different suit as trump — or pass. Dealer must call if it comes back around.");
+    } else {
+      G.current = (G.current + 1) % 4;
+    }
+  } else {
+    if (G.current === G.dealer){
+      // dealer forced (stick the dealer) — UI/AI never offer the dealer a pass in round 2
+      return;
+    }
+    G.bid2Passes = (G.bid2Passes || 0) + 1;
+    G.current = (G.current + 1) % 4;
+  }
+  advance();
+}
+function bidOrderUp(alone){
+  var maker = G.current;
+  G.maker = maker; G.trump = G.upcard.suit; G.alone = !!alone; G.aloneSeat = alone ? maker : -1;
+  G.hands[G.dealer].push(G.upcard);
+  G.discardSeat = G.dealer;
+  G.phase = "discard";
+  if (alone) stats.loners++;
+  logLine("<b>" + NAMES[maker] + "</b> orders up " + SUIT_NAMES[G.trump] + (alone ? " — <b>going alone!</b>" : "") + ". " + NAMES[G.dealer] + " picks up the " + cardText(G.upcard) + ".");
+  setMsg(NAMES[maker] + " made " + SUIT_NAMES[G.trump] + " trump" + (alone ? " — alone!" : "") + ".", NAMES[G.dealer] + " discards one card.");
+  advance();
+}
+function bidCallSuit(suit, alone){
+  var maker = G.current;
+  G.maker = maker; G.trump = suit; G.alone = !!alone; G.aloneSeat = alone ? maker : -1;
+  if (alone) stats.loners++;
+  logLine("<b>" + NAMES[maker] + "</b> calls " + SUIT_NAMES[suit] + " trump" + (alone ? " — <b>going alone!</b>" : "") + ".");
+  setMsg(NAMES[maker] + " called " + SUIT_NAMES[suit] + " trump" + (alone ? " — alone!" : "") + ".", "");
+  beginPlay();
+}
+function doDiscard(card){
+  var hand = G.hands[G.discardSeat];
+  var idx = hand.indexOf(card);
+  if (idx >= 0) hand.splice(idx, 1);
+  sortHand(hand, G.trump);
+  logLine(NAMES[G.discardSeat] + " discards a card.");
+  beginPlay();
+}
+function beginPlay(){
+  G.phase = "play";
+  G.leader = (G.dealer + 1) % 4;
+  if (isSittingOut(G.leader)) G.leader = (G.leader + 1) % 4;
+  G.current = G.leader; G.trick = []; G.round = 1;
+  setMsg(SUIT_NAMES[G.trump] + " is trump. " + NAMES[G.leader] + " leads.", G.alone ? NAMES[G.aloneSeat] + " is going alone — partner sits out." : "");
+  advance();
+}
+
+/* ---------- trick play ---------- */
+function legalCards(seat){
+  var hand = G.hands[seat];
+  if (!G.trick.length) return hand.slice();
+  var leadSuit = effSuit(G.trick[0].card, G.trump);
+  var follow = hand.filter(function(c){ return effSuit(c, G.trump) === leadSuit; });
+  return follow.length ? follow : hand.slice();
+}
+function playCard(seat, card){
+  var hand = G.hands[seat];
+  var idx = hand.indexOf(card);
+  if (idx < 0) return;
+  hand.splice(idx, 1);
+  G.trick.push({ seat: seat, card: card });
+  setSeatAction(seat, "Played " + cardText(card));
+  render();
+  if (G.trick.length >= (G.alone || G.defenderAlone ? 3 : 4)){
+    busy = true;
+    setTimeout(resolveTrick, 950);
+  } else {
+    G.current = (G.current + 1) % 4;
+    advance();
+  }
+}
+function trickWinner(){
+  var leadSuit = effSuit(G.trick[0].card, G.trump);
+  var best = G.trick[0];
+  for (var i = 1; i < G.trick.length; i++){
+    if (cardValue(G.trick[i].card, G.trump, leadSuit) > cardValue(best.card, G.trump, leadSuit)) best = G.trick[i];
+  }
+  return best.seat;
+}
+function resolveTrick(){
+  var w = trickWinner();
+  G.tricksWon[teamOf(w)]++;
+  logLine(NAMES[w] + " wins trick " + G.round + " (" + G.trick.map(function(t){ return NAMES[t.seat] + " " + cardText(t.card); }).join(" · ") + ").");
+  setMsg(NAMES[w] + " takes the trick.", "Tricks — You & Pip: " + G.tricksWon[0] + " · Rex & June: " + G.tricksWon[1]);
+  G.trick = []; G.round++;
+  render();
+  if (G.round > 5){ scoreHand(); return; }
+  G.leader = w; G.current = w;
+  busy = false;
+  advance();
+}
+function scoreHand(){
+  G.phase = "handOver";
+  var makerTeam = teamOf(G.maker);
+  var makerTricks = G.tricksWon[makerTeam];
+  var pts = 0, defPts = 0, note = "";
+  var aloneSuccess = false;
+  if (G.alone){
+    if (makerTricks === 5){ pts = 4; note = "Loner made — all 5 tricks! +4"; aloneSuccess = true; }
+    else if (makerTricks >= 3){ pts = 1; note = "Loner took " + makerTricks + " tricks. +1"; aloneSuccess = true; }
+    else { defPts = 2; note = "Loner euchred! Defenders +2"; if (makerTeam === 0) stats.euchred++; }
+    if (aloneSuccess && makerTeam === 0) stats.lonerWon++;
+  } else if (G.defenderAlone){
+    var defTeam = teamOf(G.defenderSeat);
+    var defTricks = G.tricksWon[defTeam];
+    if (defTricks === 5){ G.scores[defTeam] += practice ? 0 : 4; note = NAMES[G.defenderSeat] + "'s defensive loner swept all 5! +4"; }
+    else if (defTricks >= 3){ G.scores[defTeam] += practice ? 0 : 1; note = "Defensive loner took " + defTricks + " tricks. +1"; }
+    else { G.scores[makerTeam] += practice ? 0 : 2; note = "Defensive loner stopped — makers +2"; }
+    finishScoring(note);
+    return;
+  } else {
+    if (makerTricks === 5){ pts = 2; note = "March! Makers took all 5 tricks. +2"; }
+    else if (makerTricks >= 3){ pts = 1; note = "Makers took " + makerTricks + " tricks. +1"; }
+    else { defPts = 2; note = "Euchred! Defenders +2"; if (makerTeam === 0) stats.euchred++; }
+  }
+  if (!practice){
+    G.scores[makerTeam] += pts;
+    G.scores[1 - makerTeam] += defPts;
+  }
+  finishScoring(note);
+}
+function finishScoring(note){
+  if (practice){
+    // Practice hands never touch the record: roll back any loner/euchre tallies from this hand.
+    if (statsSnapshot){ try { stats = JSON.parse(statsSnapshot); } catch(e){} }
+    logLine("<b>Practice hand " + G.handNum + ":</b> " + note + " · Points aren't counted in practice — dealing another hand.");
+    setMsg("Practice hand done — " + note, "No score kept. New practice hand coming up…");
+    render();
+    setTimeout(startHand, 2400);
+    return;
+  }
+  saveStats();
+  logLine("<b>Hand " + G.handNum + ":</b> " + note + " · Score — You & Pip " + G.scores[0] + ", Rex & June " + G.scores[1] + ".");
+  setMsg("Hand " + G.handNum + " done — " + note, "Score: You & Pip " + G.scores[0] + " · Rex & June " + G.scores[1]);
+  render();
+  if (G.scores[0] >= 10 || G.scores[1] >= 10){ setTimeout(endMatch, 1300); }
+  else setTimeout(startHand, 1900);
+}
+function endMatch(){
+  G.phase = "matchOver";
+  var won = G.scores[0] > G.scores[1];
+  stats.played++;
+  if (won) stats.won++;
+  var margin = Math.abs(G.scores[0] - G.scores[1]);
+  if (won && (stats.bestMargin === null || margin > stats.bestMargin)) stats.bestMargin = margin;
+  saveStats();
+  document.getElementById("resultTitle").textContent = won ? "🏆 You win the match!" : "Rex & June win this one";
+  document.getElementById("resultScore").textContent = G.scores[0] + " – " + G.scores[1];
+  document.getElementById("resultText").textContent = won
+    ? "Great partnership play. Your record: " + stats.won + " wins in " + stats.played + " matches."
+    : "First to 10 takes it — rematch and take it back. Your record: " + stats.won + " wins in " + stats.played + " matches.";
+  document.getElementById("resultPanel").hidden = false;
+  setMsg(won ? "Match won! 🎉" : "Match lost.", "Final score " + G.scores[0] + " – " + G.scores[1] + ".");
+  render();
+}
+
+/* ---------- AI ---------- */
+function aiNoise(){ return difficulty === "easy" ? (Math.random() * 3.2 - 1.2) : difficulty === "hard" ? (Math.random() * 0.5 - 0.25) : (Math.random() * 1.4 - 0.7); }
+function aiBid(){
+  busy = false;
+  if (!G || (G.phase !== "bid1" && G.phase !== "bid2")) return;
+  var seat = G.current, hand = G.hands[seat];
+  if (G.phase === "bid1"){
+    var s = strengthInSuit(hand, G.upcard.suit) + aiNoise();
+    var partnerDealt = G.dealer === partnerOf(seat);
+    var threshold = difficulty === "hard" ? 15.5 : 16.5;
+    if (partnerDealt) threshold -= 1; // order up partner a bit lighter
+    if (s >= threshold + 5){ bidOrderUp(true); return; }
+    if (s >= threshold){ bidOrderUp(false); return; }
+    bidPass(); return;
+  }
+  // bid2
+  var bestSuit = null, bestScore = -99;
+  for (var i = 0; i < 4; i++){
+    var su = SUITS[i];
+    if (su === G.turnCardSuit) continue;
+    var sc = strengthInSuit(hand, su);
+    if (sc > bestScore){ bestScore = sc; bestSuit = su; }
+  }
+  bestScore += aiNoise();
+  var isDealerSeat = seat === G.dealer;
+  if (isDealerSeat){ // stick the dealer: must call
+    if (bestScore >= 26) { bidCallSuit(bestSuit, true); return; }
+    bidCallSuit(bestSuit, false); return;
+  }
+  if (bestScore >= 24){ bidCallSuit(bestSuit, true); return; }
+  if (bestScore >= (difficulty === "hard" ? 16 : 17)){ bidCallSuit(bestSuit, false); return; }
+  G.bid2Passes = (G.bid2Passes || 0);
+  bidPass();
+}
+function aiDiscard(){
+  busy = false;
+  if (!G || G.phase !== "discard") return;
+  var hand = G.hands[G.discardSeat];
+  // discard lowest-value non-trump; if all trump, lowest trump
+  var sorted = hand.slice().sort(function(a, b){
+    var at = effSuit(a, G.trump) === G.trump ? 1 : 0, bt = effSuit(b, G.trump) === G.trump ? 1 : 0;
+    if (at !== bt) return at - bt;
+    return RANKS.indexOf(a.rank) - RANKS.indexOf(b.rank);
+  });
+  doDiscard(sorted[0]);
+}
+function currentWinningSeat(){
+  if (!G.trick.length) return -1;
+  var leadSuit = effSuit(G.trick[0].card, G.trump);
+  var best = G.trick[0];
+  for (var i = 1; i < G.trick.length; i++) if (cardValue(G.trick[i].card, G.trump, leadSuit) > cardValue(best.card, G.trump, leadSuit)) best = G.trick[i];
+  return best.seat;
+}
+function aiPlay(){
+  busy = false;
+  if (!G || G.phase !== "play") return;
+  var seat = G.current;
+  var legal = legalCards(seat);
+  var hand = G.hands[seat];
+  var trump = G.trump;
+  var sortedAsc = legal.slice().sort(function(a, b){ return cardValue(a, trump, G.trick.length ? effSuit(G.trick[0].card, trump) : null) - cardValue(b, trump, G.trick.length ? effSuit(G.trick[0].card, trump) : null); });
+  var chosen;
+  if (difficulty === "easy" && Math.random() < 0.3){
+    chosen = legal[Math.floor(Math.random() * legal.length)];
+    playCard(seat, chosen); return;
+  }
+  if (!G.trick.length){
+    // leading: hard AI leads trump if maker with bowers; otherwise lead an off-suit Ace or mid card
+    var aces = legal.filter(function(c){ return c.rank === "A" && effSuit(c, trump) !== trump; });
+    var trumps = legal.filter(function(c){ return effSuit(c, trump) === trump; });
+    if (difficulty === "hard" && teamOf(seat) === teamOf(G.maker) && trumps.length >= 3) chosen = trumps[trumps.length - 1] === undefined ? sortedAsc[sortedAsc.length - 1] : trumps.slice().sort(function(a,b){return cardValue(b,trump,null)-cardValue(a,trump,null);})[0];
+    else if (aces.length) chosen = aces[0];
+    else chosen = sortedAsc[Math.floor(sortedAsc.length / 2)] || sortedAsc[0];
+    playCard(seat, chosen); return;
+  }
+  var winSeat = currentWinningSeat();
+  var partnerWinning = teamOf(winSeat) === teamOf(seat);
+  var leadSuit = effSuit(G.trick[0].card, trump);
+  var winVal = Math.max.apply(null, G.trick.map(function(t){ return cardValue(t.card, trump, leadSuit); }));
+  var winners = sortedAsc.filter(function(c){ return cardValue(c, trump, leadSuit) > winVal; });
+  if (partnerWinning){
+    chosen = sortedAsc[0]; // play low, don't waste cards
+  } else if (winners.length){
+    // win as cheaply as possible, but on easy sometimes don't
+    chosen = winners[0];
+    if (difficulty !== "hard" && G.trick.length === 3 && cardValue(winners[0], trump, leadSuit) >= 99 && Math.random() < 0.25) chosen = sortedAsc[0];
+  } else {
+    chosen = sortedAsc[0]; // can't win: shed lowest
+  }
+  playCard(seat, chosen);
+}
+
+/* ---------- player UI ---------- */
+var aloneChecked = false;
+function renderBidUI(){
+  var area = document.getElementById("actionArea");
+  var prompt = document.getElementById("prompt");
+  var hint = document.getElementById("hintLine");
+  area.innerHTML = "";
+  if (G.phase === "bid1"){
+    prompt.innerHTML = "Your call: order up <span class='amt'>" + SUIT_NAMES[G.upcard.suit] + "</span> (" + cardText(G.upcard) + ") as trump?";
+    hint.textContent = countTrump(G.hands[0], G.upcard.suit) + " of your cards would be trump (counting the left bower). Two bowers or 3+ trump is a strong order-up.";
+    var row = document.createElement("div"); row.className = "act-row";
+    var b1 = document.createElement("button"); b1.className = "btn order"; b1.textContent = G.dealer === 0 ? "Pick it up" : "Order it up";
+    b1.onclick = function(){ bidOrderUp(aloneChecked); };
+    var b2 = document.createElement("button"); b2.className = "btn lonerbtn"; b2.textContent = "Order up — alone! 🌙";
+    b2.onclick = function(){ bidOrderUp(true); };
+    var b3 = document.createElement("button"); b3.className = "btn passb"; b3.textContent = "Pass";
+    b3.onclick = function(){ bidPass(); };
+    row.appendChild(b1); row.appendChild(b2); row.appendChild(b3);
+    area.appendChild(row);
+  } else {
+    var mustCall = G.current === G.dealer;
+    prompt.innerHTML = mustCall ? "It came back to you, dealer — you <span class='amt'>must</span> name trump:" : "Your call: name a trump suit (not " + SUIT_NAMES[G.turnCardSuit] + "):";
+    hint.textContent = "Pick the suit where your hand is strongest — bowers count double. " + (mustCall ? "Stick the dealer: passing isn't allowed now." : "Or pass and hope someone else calls.");
+    var srow = document.createElement("div"); srow.className = "suit-row";
+    SUITS.forEach(function(su){
+      var b = document.createElement("button");
+      b.className = "suit-btn" + (RED[su] ? " red" : "");
+      b.innerHTML = su + "<small>" + SUIT_NAMES[su] + "</small>";
+      b.disabled = su === G.turnCardSuit;
+      b.onclick = function(){ bidCallSuit(su, aloneChecked); };
+      srow.appendChild(b);
+    });
+    area.appendChild(srow);
+    var row2 = document.createElement("div"); row2.className = "act-row"; row2.style.marginTop = "8px";
+    if (!mustCall){
+      var bp = document.createElement("button"); bp.className = "btn passb"; bp.textContent = "Pass";
+      bp.onclick = function(){ bidPass(); };
+      row2.appendChild(bp);
+    }
+    var bl = document.createElement("button"); bl.className = "btn lonerbtn"; bl.textContent = "Call it alone 🌙 (tap a suit after ticking)";
+    bl.disabled = true; bl.title = "Tick 'Go alone' below, then tap a suit";
+    row2.appendChild(bl);
+    area.appendChild(row2);
+    var lab = document.createElement("label"); lab.className = "checkline";
+    var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = aloneChecked;
+    cb.onchange = function(){ aloneChecked = cb.checked; };
+    lab.appendChild(cb);
+    lab.appendChild(document.createTextNode("Go alone with the suit I tap (partner sits out — 4 points if I take all 5 tricks)"));
+    area.appendChild(lab);
+  }
+  render();
+}
+function renderDiscardUI(){
+  var area = document.getElementById("actionArea");
+  document.getElementById("prompt").innerHTML = "You picked up the <span class='amt'>" + cardText(G.upcard) + "</span> — tap a card in your hand to discard it.";
+  document.getElementById("hintLine").textContent = "Tip: bury a low off-suit card. Never discard a bower or an Ace if you can help it.";
+  area.innerHTML = "";
+  render();
+}
+function renderPlayUI(){
+  var area = document.getElementById("actionArea");
+  area.innerHTML = "";
+  var legal = legalCards(0);
+  var mustFollow = G.trick.length && legal.length < G.hands[0].length;
+  document.getElementById("prompt").innerHTML = mustFollow
+    ? "Your turn — you must follow <span class='amt'>" + SUIT_NAMES[effSuit(G.trick[0].card, G.trump)] + "</span>. Tap a glowing card."
+    : "Your turn — tap a card to play it.";
+  document.getElementById("hintLine").textContent = hintForPlay(legal) + (practice ? " 🎓 Practice: nothing counts, so try the bold play and see what happens." : "");
+  render();
+}
+function hintForPlay(legal){
+  if (!G.trick.length) return "Leading: an off-suit Ace is a safe opener. Leading trump drags out the opponents' trump.";
+  var winSeat = currentWinningSeat();
+  if (teamOf(winSeat) === 0) return NAMES[winSeat] + " (your team) is winning this trick — play low and save your big cards.";
+  return NAMES[winSeat] + " is winning this trick. Win it as cheaply as you can — or shed a low card if you can't.";
+}
+function onPlayerCard(card){
+  if (!G || busy) return;
+  if (G.phase === "discard" && G.discardSeat === 0){ doDiscard(card); return; }
+  if (G.phase !== "play" || G.current !== 0) return;
+  var legal = legalCards(0);
+  if (legal.indexOf(card) < 0) return;
+  aloneChecked = false;
+  playCard(0, card);
+}
+
+/* ---------- rendering ---------- */
+function el(id){ return document.getElementById(id); }
+function setMsg(a, b){ el("msg").textContent = a; el("msgSub").textContent = b || ""; }
+var seatActions = ["","","",""];
+function setSeatAction(seat, txt){ seatActions[seat] = txt; }
+function cardEl(c, opts){
+  opts = opts || {};
+  var d = document.createElement(opts.button ? "button" : "div");
+  d.className = "pcard" + (RED[c.suit] ? " red" : "");
+  if (opts.bower && G && G.trump && (isRightBower(c, G.trump) || isLeftBower(c, G.trump))) d.className += " bower";
+  d.innerHTML = "<span class='r'>" + c.rank + "</span><span class='s'>" + c.suit + "</span><span class='big'>" + c.suit + "</span>";
+  if (opts.button){ d.type = "button"; }
+  return d;
+}
+function backEl(){
+  var d = document.createElement("div"); d.className = "pcard back"; return d;
+}
+function render(){
+  if (!G) return;
+  el("hudUs").textContent = G.scores[0];
+  el("hudThem").textContent = G.scores[1];
+  el("hudHand").textContent = G.handNum || "–";
+  el("hudTricks").textContent = G.tricksWon[0] + " – " + G.tricksWon[1];
+  if (G.trump){ el("hudTrump").hidden = false; el("hudTrumpSuit").textContent = G.trump + " " + SUIT_NAMES[G.trump]; }
+  else el("hudTrump").hidden = true;
+  el("hudBest").textContent = stats.played ? ("Matches " + stats.won + "W / " + stats.played + " played" + (stats.bestMargin !== null ? " · Best win by " + stats.bestMargin : "")) : "Best: no matches yet";
+
+  for (var s = 0; s < 4; s++){
+    var seatEl = el("seat" + s);
+    seatEl.classList.toggle("turn", (G.phase === "bid1" || G.phase === "bid2") ? G.current === s : G.phase === "discard" ? G.discardSeat === s : G.phase === "play" && G.current === s && !isSittingOut(s));
+    seatEl.classList.toggle("sittingout", isSittingOut(s) && G.phase === "play");
+    seatEl.classList.toggle("thinking", busy && G.phase !== "handOver" && G.phase !== "matchOver" && ((G.current === s && s !== 0) || (G.phase === "discard" && G.discardSeat === s && s !== 0)));
+    var tags = "";
+    if (G.dealer === s) tags += "<span class='tag dealer'>Dealer</span>";
+    if (G.maker === s) tags += "<span class='tag maker'>Maker</span>";
+    if (G.alone && G.aloneSeat === s) tags += "<span class='tag loner'>Alone 🌙</span>";
+    if (isSittingOut(s) && G.phase === "play") tags += "<span class='tag'>Sitting out</span>";
+    el("tags" + s).innerHTML = tags;
+    el("act" + s).textContent = seatActions[s] || "";
+    var handBox = el("hand" + s);
+    handBox.innerHTML = "";
+    if (s === 0){
+      var playable = [];
+      if (!busy){
+        if (G.phase === "discard" && G.discardSeat === 0) playable = G.hands[0].slice();
+        else if (G.phase === "play" && G.current === 0) playable = legalCards(0);
+      }
+      G.hands[0].forEach(function(c){
+        var isPlay = playable.indexOf(c) >= 0;
+        var b = cardEl(c, { button: true, bower: true });
+        if (isPlay) b.className += " playable";
+        else if ((G.phase === "play" && G.current === 0) || (G.phase === "discard" && G.discardSeat === 0)) b.className += " dim";
+        b.disabled = !isPlay;
+        b.setAttribute("aria-label", "Play " + cardText(c));
+        b.onclick = function(){ onPlayerCard(c); };
+        handBox.appendChild(b);
+      });
+    } else {
+      G.hands[s].forEach(function(){ handBox.appendChild(backEl()); });
+    }
+  }
+  // center
+  var upRow = el("upcardRow"); upRow.innerHTML = "";
+  var trickBox = el("trickCards"); trickBox.innerHTML = "";
+  if ((G.phase === "bid1") && G.upcard){
+    el("centerLabel").textContent = "Up-card — " + NAMES[G.dealer] + " deals";
+    upRow.appendChild(cardEl(G.upcard, {}));
+    el("trumpLine").hidden = true;
+  } else if (G.phase === "bid2"){
+    el("centerLabel").textContent = "Up-card turned down — name a new suit";
+    upRow.appendChild(backEl());
+    el("trumpLine").hidden = true;
+  } else {
+    el("centerLabel").textContent = G.phase === "play" || G.phase === "handOver" ? "Trick " + Math.min(G.round, 5) + " of 5" : "Trump";
+    if (G.trump){
+      el("trumpLine").hidden = false;
+      el("trumpSuitName").textContent = G.trump + " " + SUIT_NAMES[G.trump];
+    } else el("trumpLine").hidden = true;
+    if (G.trick.length){
+      var winSeat = trickWinner();
+      G.trick.forEach(function(t){
+        var slot = document.createElement("div");
+        slot.className = "trick-slot" + (t.seat === winSeat ? " winning" : "");
+        slot.appendChild(cardEl(t.card, { bower: true }));
+        var who = document.createElement("div"); who.className = "who"; who.textContent = NAMES[t.seat];
+        slot.appendChild(who);
+        trickBox.appendChild(slot);
+      });
+    }
+  }
+  el("centerScore").textContent = practice ? "🎓 Practice hand — points don't count, just learn the game" : "You & Pip " + G.scores[0] + " · Rex & June " + G.scores[1] + " · first to 10";
+  if (G.phase !== "bid1" && G.phase !== "bid2" && !(G.phase === "discard" && G.discardSeat === 0) && G.phase !== "play"){
+    // clear stale action area prompts between phases
+  }
+  if ((G.phase === "bid1" || G.phase === "bid2") && G.current !== 0){
+    el("prompt").textContent = NAMES[G.current] + " is deciding…";
+    el("actionArea").innerHTML = "";
+    el("hintLine").textContent = "";
+  }
+  if (G.phase === "discard" && G.discardSeat !== 0){
+    el("prompt").textContent = NAMES[G.discardSeat] + " is discarding…";
+    el("actionArea").innerHTML = "";
+    el("hintLine").textContent = "";
+  }
+  if (G.phase === "play" && G.current !== 0){
+    el("prompt").textContent = isSittingOut(G.current) ? "…" : NAMES[G.current] + " is thinking…";
+    el("actionArea").innerHTML = "";
+    el("hintLine").textContent = "";
+  }
+  if (G.phase === "handOver" || G.phase === "matchOver"){
+    el("prompt").textContent = G.phase === "matchOver" ? "Match over — nice game!" : "Hand scored.";
+    el("actionArea").innerHTML = "";
+    el("hintLine").textContent = "";
+  }
+}
+
+/* ---------- log ---------- */
+function logLine(html){
+  var box = el("logLines");
+  var p = document.createElement("p"); p.innerHTML = html;
+  box.appendChild(p);
+  el("logBox").scrollTop = el("logBox").scrollHeight;
+}
+function logClear(){ el("logLines").innerHTML = ""; seatActions = ["","","",""]; }
+
+/* ---------- tutorial ---------- */
+var TUT_STEPS = [
+  { t: "Welcome to Euchre 👋", b: "<p>Euchre is a fast trick-taking game for <b>4 players in partnerships</b>. You play with <b>Pip</b> against <b>Rex &amp; June</b>. First team to <b>10 points</b> wins the match.</p><p>Each hand is only <b>5 cards</b> — a hand takes about a minute.</p>" },
+  { t: "Trump & the bowers 👑", b: "<p>One suit is <b>trump</b> — it beats every other suit. The two strongest cards in the game are the <b>bowers</b>:</p><ul><li><b>Right bower</b> — the Jack of trump. The highest card, period.</li><li><b>Left bower</b> — the Jack of the <i>same-colour</i> suit (e.g. if Hearts ♥ is trump, the J♦ is the left bower). It <b>counts as trump</b>, not as its printed suit!</li></ul><p>Trump order: Right bower &gt; Left bower &gt; A &gt; K &gt; Q &gt; 10 &gt; 9. Bower cards glow gold on the table.</p>" },
+  { t: "Calling trump 🎺", b: "<p>The dealer flips an <b>up-card</b>. Going around, each player can:</p><ul><li><b>Order it up</b> — make the up-card's suit trump (the dealer picks the card up and discards one), or</li><li><b>Pass</b>.</li></ul><p>If everyone passes, there's a second round: anyone can <b>name a different suit</b>. If it gets back to the dealer, the dealer <b>must</b> call — that's 'stick the dealer', so somebody always makes trump.</p>" },
+  { t: "Playing tricks 🂡", b: "<p>The player left of the dealer leads a card. Everyone else <b>must follow suit if they can</b> — remember the left bower follows <i>trump</i>, not its printed suit.</p><p>Highest trump wins the trick; if nobody trumped, the highest card of the led suit wins. Win a trick, lead the next. There are 5 tricks per hand.</p>" },
+  { t: "Going alone 🌙", b: "<p>Got a monster hand? Call trump <b>alone</b> — your partner sits the hand out and you play 1 against 2.</p><ul><li>Take all <b>5 tricks alone: 4 points</b> (the big prize!)</li><li>Take 3–4 tricks: still just 1 point</li><li>Take 2 or fewer: you're euchred — defenders get 2</li></ul><p>Rule of thumb: go alone when you hold both bowers plus another trump or an off-suit Ace.</p>" },
+  { t: "Scoring 🏆", b: "<table><tr><th>Result</th><th>Points</th></tr><tr><td>Makers take 3–4 tricks</td><td>1</td></tr><tr><td>Makers take all 5 (a march)</td><td>2</td></tr><tr><td>Makers take 2 or fewer — <b>euchred!</b></td><td>Defenders get 2</td></tr><tr><td>Loner takes all 5</td><td>4</td></tr><tr><td>Loner takes 3–4</td><td>1</td></tr></table><p>First team to <b>10</b> wins. Difficulty (top of the page) changes how sharp Rex, June — and Pip — play. Your match record is saved on this device. Good luck!</p>" }
+];
+var tutIdx = 0;
+function showTut(idx){
+  tutIdx = Math.max(0, Math.min(TUT_STEPS.length - 1, idx));
+  el("tutStepCount").textContent = "Step " + (tutIdx + 1) + " of " + TUT_STEPS.length;
+  el("tutTitle").textContent = TUT_STEPS[tutIdx].t;
+  el("tutBody").innerHTML = TUT_STEPS[tutIdx].b;
+  el("tutBack").disabled = tutIdx === 0;
+  el("tutNext").textContent = tutIdx === TUT_STEPS.length - 1 ? "Start playing ▶" : "Next →";
+  el("tutOverlay").hidden = false;
+}
+function closeTut(){
+  el("tutOverlay").hidden = true;
+  try { localStorage.setItem(LS_TUT, "1"); } catch(e){}
+  dismissHint();
+}
+el("tutBack").onclick = function(){ showTut(tutIdx - 1); };
+el("tutNext").onclick = function(){ if (tutIdx === TUT_STEPS.length - 1) closeTut(); else showTut(tutIdx + 1); };
+el("tutSkip").onclick = closeTut;
+el("howBtn").onclick = function(){ showTut(0); };
+el("resultHowBtn").onclick = function(){ showTut(0); };
+
+/* ---------- rules overlay (opt-in, separate from the tutorial) ---------- */
+function openRules(){
+  el("tutOverlay").hidden = true;
+  el("rulesOverlay").hidden = false;
+  dismissHint();
+}
+function closeRules(){ el("rulesOverlay").hidden = true; }
+el("rulesBtn").onclick = openRules;
+el("resultRulesBtn").onclick = openRules;
+el("rulesClose").onclick = closeRules;
+el("rulesHowBtn").onclick = function(){ closeRules(); showTut(0); };
+el("rulesOverlay").addEventListener("click", function(ev){ if (ev.target === el("rulesOverlay")) closeRules(); });
+el("tutOverlay").addEventListener("click", function(ev){ if (ev.target === el("tutOverlay")) closeTut(); });
+
+/* ---------- one-time hint (non-blocking; tutorial & rules stay opt-in) ---------- */
+var LS_HINT = "euchre_hint_dismissed_v1";
+function dismissHint(){
+  el("hintBar").hidden = true;
+  try { localStorage.setItem(LS_HINT, "1"); } catch(e){}
+}
+el("hintDismiss").onclick = dismissHint;
+el("hintHowBtn").onclick = function(){ dismissHint(); showTut(0); };
+function maybeShowHint(){
+  var seen = false;
+  try { seen = !!localStorage.getItem(LS_HINT) || !!localStorage.getItem(LS_TUT); } catch(e){}
+  el("hintBar").hidden = seen;
+}
+
+/* ---------- controls ---------- */
+document.querySelectorAll(".diff-btn[data-diff]").forEach(function(b){
+  if (b.getAttribute("data-diff") === difficulty) { document.querySelectorAll(".diff-btn[data-diff]").forEach(function(x){ x.classList.remove("active"); }); b.classList.add("active"); }
+  b.onclick = function(){
+    difficulty = b.getAttribute("data-diff");
+    try { localStorage.setItem(LS_DIFF, difficulty); } catch(e){}
+    document.querySelectorAll(".diff-btn[data-diff]").forEach(function(x){ x.classList.toggle("active", x === b); });
+    logLine("Difficulty set to <b>" + difficulty + "</b> — applies from the next hand.");
+  };
+});
+/* ---------- mode: match vs practice ---------- */
+function setPractice(on){
+  practice = on;
+  document.querySelectorAll(".mode-btn").forEach(function(x){ x.classList.toggle("active", (x.getAttribute("data-mode") === "practice") === on); });
+  el("hudPractice").hidden = !on;
+  el("newMatchBtn").textContent = on ? "↻ New practice" : "↻ New match";
+  aloneChecked = false; busy = false;
+  newMatch();
+}
+document.querySelectorAll(".mode-btn").forEach(function(b){
+  b.onclick = function(){
+    var on = b.getAttribute("data-mode") === "practice";
+    if (on !== practice) setPractice(on);
+  };
+});
+
+el("newMatchBtn").onclick = function(){ aloneChecked = false; busy = false; newMatch(); };
+el("rematchBtn").onclick = function(){ aloneChecked = false; busy = false; newMatch(); };
+
+/* ---------- feedback (standard — saved locally, no network) ---------- */
+var LS_FEEDBACK = "holos-arcade-feedback";
+var feedbackRating = 0;
+var feedbackTag = "";
+function resetFeedbackForm(){
+  feedbackRating = 0;
+  feedbackTag = "";
+  document.querySelectorAll(".star-btn").forEach(function(b){
+    b.classList.remove("active");
+    b.setAttribute("aria-checked", "false");
+  });
+  document.querySelectorAll(".tag-btn").forEach(function(b){ b.classList.remove("active"); });
+  var txt = el("feedbackText"); if (txt) txt.value = "";
+  el("feedbackError").hidden = true;
+  el("feedbackForm").hidden = false;
+  el("feedbackThanks").hidden = true;
+}
+function openFeedback(){
+  el("tutOverlay").hidden = true;
+  el("rulesOverlay").hidden = true;
+  resetFeedbackForm();
+  el("feedbackOverlay").hidden = false;
+}
+function closeFeedback(){ el("feedbackOverlay").hidden = true; }
+document.querySelectorAll(".star-btn").forEach(function(b){
+  b.onclick = function(){
+    feedbackRating = parseInt(b.getAttribute("data-rating"), 10) || 0;
+    document.querySelectorAll(".star-btn").forEach(function(x){
+      var r = parseInt(x.getAttribute("data-rating"), 10) || 0;
+      x.classList.toggle("active", r <= feedbackRating);
+      x.setAttribute("aria-checked", r === feedbackRating ? "true" : "false");
+    });
+    el("feedbackError").hidden = true;
+  };
+});
+document.querySelectorAll(".tag-btn").forEach(function(b){
+  b.onclick = function(){
+    var t = b.getAttribute("data-tag") || "";
+    if (feedbackTag === t){
+      feedbackTag = "";
+      b.classList.remove("active");
+    } else {
+      feedbackTag = t;
+      document.querySelectorAll(".tag-btn").forEach(function(x){ x.classList.toggle("active", x === b); });
+    }
+  };
+});
+el("feedbackBtn").onclick = openFeedback;
+el("footerFeedbackBtn").onclick = openFeedback;
+el("resultFeedbackBtn").onclick = openFeedback;
+el("feedbackCancel").onclick = closeFeedback;
+el("feedbackDone").onclick = closeFeedback;
+el("feedbackOverlay").addEventListener("click", function(ev){ if (ev.target === el("feedbackOverlay")) closeFeedback(); });
+el("feedbackSave").onclick = function(){
+  if (!feedbackRating){
+    el("feedbackError").hidden = false;
+    el("feedbackError").textContent = "Please tap a star rating first.";
+    return;
+  }
+  var record = {
+    game: "euchre",
+    rating: feedbackRating,
+    text: (el("feedbackText").value || "").trim(),
+    tag: feedbackTag,
+    timestamp: new Date().toISOString()
+  };
+  try {
+    var arr = [];
+    var raw = localStorage.getItem(LS_FEEDBACK);
+    if (raw){ var parsed = JSON.parse(raw); if (Array.isArray(parsed)) arr = parsed; }
+    arr.push(record);
+    localStorage.setItem(LS_FEEDBACK, JSON.stringify(arr));
+  } catch(e){
+    el("feedbackError").hidden = false;
+    el("feedbackError").textContent = "Couldn't save on this device — please try again.";
+    return;
+  }
+  el("feedbackForm").hidden = true;
+  el("feedbackThanks").hidden = false;
+};
+
+/* ---------- boot ---------- */
+newMatch();
+maybeShowHint(); // small one-time hint only — tutorial & rules open solely when tapped
+</script>
+</body>
+</html>

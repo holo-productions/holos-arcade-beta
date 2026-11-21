@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="color-scheme" content="light dark"/>
+<link rel="icon" href="data:,">
+<title>Jump Quest — Calico Cat Platformer</title>
+<style>
+*{box-sizing:border-box} body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0f1f2e;color:#fff}
+:root{--sky:#7ec8e3;--grass:#3cb371;--accent:#ffb020;--card:#ffffff;--ink:#14202b}
+button,select{font:inherit;min-height:44px;cursor:pointer}
+.app{max-width:980px;margin:0 auto;padding:12px 12px 28px}
+.topbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.logo{font-weight:900;font-size:28px;letter-spacing:-.5px} .logo span{color:var(--accent)}
+.pill{background:#1e3a4d;border:1px solid #355a74;padding:6px 10px;border-radius:999px;font-size:13px}
+.controlsRow{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.btn{border:0;border-radius:999px;padding:10px 16px;font-weight:800;background:#ffb020;color:#1a1200}
+.btn.secondary{background:#fff;color:#14202b;border:2px solid #e2e8f0}
+.btn.dark{background:#14202b;color:#fff}
+.btn.ghost{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.4)}
+.card{background:#fff;color:#14202b;border-radius:20px;padding:16px;margin:12px 0;box-shadow:0 8px 24px rgba(0,0,0,.18)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.lvl{border:2px solid #e5e7eb;border-radius:16px;padding:12px;text-align:left;background:#f8fafc}
+.lvl.locked{opacity:.55} .lvl strong{display:block;font-size:16px} .lvl small{color:#64748b}
+.worldTitle{font-size:13px;letter-spacing:.12em;text-transform:uppercase;opacity:.8;margin:16px 0 6px;font-weight:800}
+.gameWrap{background:#0b1620;border-radius:20px;padding:10px}
+.hud{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:center;padding:6px 4px 10px;font-weight:800;font-size:14px}
+canvas{width:100%;height:auto;display:block;background:#87ceeb;border-radius:14px;touch-action:none}
+.touch{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
+.tbtn{height:64px;border-radius:16px;border:0;background:#fff;color:#111;font-size:22px;font-weight:900}
+.tbtn:active{background:#ffb020}
+@media(min-width:700px){.touch{max-width:420px;margin-left:auto}}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;padding:16px;z-index:20}
+.modal.open{display:flex}
+.modalBox{background:#fff;color:#111;border-radius:20px;max-width:560px;width:100%;max-height:88vh;overflow:auto;padding:20px}
+.stars button{font-size:28px;background:none;border:0;padding:4px}
+textarea{width:100%;min-height:90px;border-radius:12px;border:1px solid #cbd5e1;padding:10px}
+footer{margin-top:20px;text-align:center;font-size:14px;opacity:.9} footer a{color:#ffb020;font-weight:800}
+.hidden{display:none!important}
+.kbd{background:#111;color:#fff;padding:2px 7px;border-radius:6px;font-size:12px}
+.progress{height:8px;background:#e5e7eb;border-radius:999px;overflow:hidden} .progress i{display:block;height:100%;background:#22c55e}
+select{border-radius:999px;padding:8px 12px;border:2px solid #cbd5e1;background:#fff}
+label{font-weight:700}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar"><div class="logo">JUMP <span>QUEST</span> 🐱</div><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill" id="bestPill">Best Score: 0</span><span class="pill" id="diffPill">Normal</span></div></div>
+  <p style="margin:4px 0 0;opacity:.9;line-height:1.5">Run, jump and stomp your way across 3 worlds as a brave calico cat. Collect coins & stars, dodge spikes, hit checkpoints and beat the Big Beetle Boss!</p>
+
+  <div class="controlsRow">
+    <button class="btn" onclick="showLevels()">▶ Level Select</button>
+    <button class="btn secondary" onclick="openModal('tutorial')">How to Play</button>
+    <button class="btn secondary" onclick="openModal('rules')">Rules</button>
+    <button class="btn secondary" onclick="openModal('feedback')">⭐ Feedback</button>
+    <label style="display:flex;align-items:center;gap:8px;background:#fff;color:#111;padding:6px 10px;border-radius:999px">Difficulty
+      <select id="diffSel" onchange="saveDiff()"><option>Easy</option><option>Normal</option><option>Hard</option></select></label>
+    <label style="display:flex;align-items:center;gap:8px;background:#fff;color:#111;padding:8px 12px;border-radius:999px"><input type="checkbox" id="practiceChk" onchange="savePractice()" style="width:20px;height:20px"> Practice Mode</label>
+  </div>
+  <div id="toast" class="hidden" style="background:#fef3c7;color:#92400e;padding:10px 12px;border-radius:12px;font-weight:700;margin-bottom:8px"></div>
+  <div id="practiceNote" class="hidden" style="background:#fef3c7;color:#92400e;padding:10px 12px;border-radius:12px;font-weight:700">Practice ON: Unlimited lives • No score or unlocks saved • Perfect for learning a level.</div>
+
+  <!-- LEVEL SELECT -->
+  <div id="levelScreen">
+    <div id="levelsContainer"></div>
+    <div class="card"><strong>Your progress</strong><div class="progress" style="margin:10px 0"><i id="progBar" style="width:0%"></i></div><div id="progText" style="font-size:14px;color:#475569">0 / 10 levels cleared</div><div id="bestsList" style="margin-top:10px;font-size:14px;line-height:1.7"></div><button class="btn dark" onclick="resetSave()" style="margin-top:10px">Reset Save Data</button></div>
+  </div>
+
+  <!-- GAME -->
+  <div id="gameScreen" class="hidden">
+    <div class="gameWrap">
+      <div class="hud"><span id="hudLevel">W1-1 Meadow Hop</span><span id="hudLives">❤️ ❤️ ❤️</span><span id="hudScore">Score 0</span><span id="hudCoins">🪙 0</span><span id="hudTime">⏱ 200s</span></div>
+      <canvas id="game" width="900" height="500"></canvas>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn secondary" onclick="pauseGame()">⏸ Pause</button><button class="btn secondary" onclick="restartLevel()">↻ Restart</button><button class="btn ghost" onclick="quitToLevels()">← Levels</button><span id="msg" style="align-self:center;font-weight:800"></span></div>
+      <div class="touch"><button class="tbtn" id="btnL">◀</button><button class="tbtn" id="btnJ">⬆ JUMP</button><button class="tbtn" id="btnR">▶</button></div>
+      <p style="font-size:13px;opacity:.8;margin:8px 2px 2px">Keyboard: <span class="kbd">← →</span> / <span class="kbd">A D</span> move • <span class="kbd">Space</span> / <span class="kbd">W</span> / <span class="kbd">↑</span> jump • Stomp enemies from above!</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 8px">Meet the baddies & goodies</h3>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;font-size:14px;line-height:1.5">
+      <div>🐌 <b>Grumpy Snail</b><br>Slow patrol. Stomp it!</div><div>🪲 <b>Beetle</b><br>Faster & tougher on Hard.</div><div>🪙 <b>Coin +10</b> • ⭐ <b>Star +50</b><br>Grab them all for bests.</div><div>🚩 <b>Checkpoint & Flag</b><br>Checkpoint saves your spot. Flag finishes the level.</div>
+    </div>
+  </div>
+  <footer>More ridiculous health & fitness fun: <a href="https://instagram.com/ridiculouslyfitandfed" target="_blank" rel="noopener">Ridiculously Fit and Fed</a> on Instagram • Jump Quest is an original game for Holo's Arcade.</footer>
+</div>
+
+<!-- MODALS -->
+<div class="modal" id="modal-tutorial"><div class="modalBox"><h2>How to Play — Tutorial</h2><ol style="line-height:1.7"><li><b>Pick a level</b> from Level Select. Locked levels open as you clear earlier ones.</li><li><b>Move:</b> Arrow keys / A-D on keyboard, or ◀ ▶ buttons on touch.</li><li><b>Jump:</b> Space, W, ↑ or the JUMP button. Hold longer for a higher jump.</li><li><b>Stomp:</b> Land on a snail or beetle from above to defeat it (+20). Touching from the side costs a life.</li><li><b>Collect:</b> Coins (+10) and Stars (+50). Watch the timer!</li><li><b>Checkpoints:</b> Run past the small flag — you'll respawn there if you fall.</li><li><b>Finish:</b> Reach the big flag. In the Boss level, stomp the Big Beetle <b>3 times</b> — avoid its charge!</li></ol><button class="btn" onclick="closeModals()">Got it — Let's Play!</button> <button class="btn secondary" onclick="closeModals()">Close</button></div></div>
+
+<div class="modal" id="modal-rules"><div class="modalBox"><h2>Rules</h2><ul style="line-height:1.7"><li><b>Lives:</b> Easy 5 • Normal 3 • Hard 2. Practice = unlimited.</li><li><b>Timer:</b> Easy 300s • Normal 200s • Hard 140s per level. Time out = lose a life & restart from checkpoint.</li><li><b>Enemy speed:</b> Easy 0.6× • Normal 1× • Hard 1.5×.</li><li><b>Scoring:</b> Coin 10, Star 50, Stomp 20, Level clear 200 + time bonus. Practice scores are never saved.</li><li><b>Hazards:</b> Spikes and pits cost a life instantly.</li><li><b>Unlocks:</b> Clear a level to unlock the next. Bests (most coins, fastest time) are saved on this device.</li><li><b>Boss:</b> Big Beetle needs 3 stomps. Between stomps it speeds up.</li></ul><button class="btn" onclick="closeModals()">Close Rules</button></div></div>
+
+<div class="modal" id="modal-feedback"><div class="modalBox"><h2>Feedback</h2><p>Rate Jump Quest and leave a note — saved on this device.</p><div class="stars" id="starRow"></div><textarea id="fbText" placeholder="What did you love? What was too hard / too easy?"></textarea><div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" onclick="saveFeedback()">Save Feedback</button><button class="btn secondary" onclick="closeModals()">Cancel</button></div><p style="font-size:13px;color:#64748b;margin:10px 0 0">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p><p id="fbSaved" style="color:#16a34a;font-weight:700"></p><div id="fbList" style="font-size:14px"></div></div></div>
+
+<div class="modal" id="modal-end"><div class="modalBox" style="text-align:center"><h2 id="endTitle">Level Clear! 🎉</h2><p id="endText" style="line-height:1.6"></p><div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px"><button class="btn" id="nextBtn" onclick="nextLevel()">Next Level →</button><button class="btn secondary" onclick="closeModals();quitToLevels()">Level Select</button><button class="btn secondary" onclick="closeModals();restartLevel()">Replay</button></div></div></div>
+
+<script>
+const LEVELS=[
+{id:'1-1',world:1,name:'Meadow Hop',len:2600,theme:'#87ceeb'},
+{id:'1-2',world:1,name:'Puddle Steps',len:3000,theme:'#7ec8e3'},
+{id:'1-3',world:1,name:'Sunny Cliffs',len:3200,theme:'#fbbf24'},
+{id:'2-1',world:2,name:'Forest Bounce',len:3200,theme:'#86efac'},
+{id:'2-2',world:2,name:'Mushroom Hollow',len:3400,theme:'#a7f3d0'},
+{id:'2-3',world:2,name:'Canopy Run',len:3600,theme:'#6ee7b7'},
+{id:'3-1',world:3,name:'Rocky Ridge',len:3600,theme:'#fca5a5'},
+{id:'3-2',world:3,name:'Spike Valley',len:3800,theme:'#fdba74'},
+{id:'3-3',world:3,name:'Twilight Trail',len:4000,theme:'#c4b5fd'},
+{id:'BOSS',world:4,name:'👑 Big Beetle Boss',len:2200,theme:'#fda4af',boss:true},
+];
+let diff=localStorage.getItem('jq_diff')||'Normal';
+let practice=localStorage.getItem('jq_practice')==='1';
+let unlocked=JSON.parse(localStorage.getItem('jq_unlocked')||'[0]');
+let bests=JSON.parse(localStorage.getItem('jq_bests')||'{}');
+let fbRating=5;
+document.getElementById('diffSel').value=diff;
+document.getElementById('practiceChk').checked=practice;
+function diffCfg(){return diff==='Easy'?{lives:5,time:300,speed:.6}:diff==='Hard'?{lives:2,time:140,speed:1.5}:{lives:3,time:200,speed:1}}
+function saveDiff(){diff=document.getElementById('diffSel').value;localStorage.setItem('jq_diff',diff);updateHeader()}
+function savePractice(){practice=document.getElementById('practiceChk').checked;localStorage.setItem('jq_practice',practice?'1':'0');updateHeader()}
+function updateHeader(){document.getElementById('diffPill').textContent=diff+(practice?' • Practice':'');document.getElementById('practiceNote').classList.toggle('hidden',!practice);let best=Object.values(bests).reduce((a,b)=>a+(b.score||0),0);document.getElementById('bestPill').textContent='Total Best Score: '+best;renderLevels()}
+function renderLevels(){
+ const c=document.getElementById('levelsContainer');c.innerHTML='';
+ [1,2,3,4].forEach(w=>{
+   const h=document.createElement('div');h.className='worldTitle';h.textContent=w===4?'Final Level':'World '+w+(w===1?' — Sunny Meadows':w===2?' — Whispering Forest':' — Rocky Highlands');c.appendChild(h);
+   const g=document.createElement('div');g.className='grid';
+   LEVELS.filter(l=>l.world===w).forEach(l=>{
+     const idx=LEVELS.indexOf(l);const locked=!unlocked.includes(idx);const b=bests[l.id];
+     const btn=document.createElement('button');btn.className='lvl'+(locked?' locked':'');btn.innerHTML=`<strong>${locked?'🔒 ':''}${l.id} ${l.name}</strong><small>${b?`Best: ${b.score} pts • 🪙 ${b.coins} • ${b.time}s`:'Not cleared yet'}<br>${l.boss?'Stomp boss 3×':'Reach the flag'}</small>`;btn.onclick=()=>{if(locked){showToast('🔒 Clear the previous level to unlock this one!')}else startLevel(idx)};g.appendChild(btn);
+   });c.appendChild(g);
+ });
+ const cleared=Object.keys(bests).length;document.getElementById('progBar').style.width=(cleared/10*100)+'%';document.getElementById('progText').textContent=cleared+' / 10 levels cleared • Unlocked: '+unlocked.length;
+ document.getElementById('bestsList').innerHTML=Object.entries(bests).map(([k,v])=>`• ${k}: ${v.score} pts, ${v.coins} coins, best time ${v.time}s`).join('<br>')||'No clears yet — start with 1-1 Meadow Hop!';
+}
+function showLevels(){document.getElementById('levelScreen').classList.remove('hidden');document.getElementById('gameScreen').classList.add('hidden');running=false}
+let resetArmed=false;function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.remove('hidden');setTimeout(()=>t.classList.add('hidden'),3500)}
+function resetSave(){const btn=event.target;if(!resetArmed){resetArmed=true;btn.textContent='Tap again to confirm reset';setTimeout(()=>{resetArmed=false;btn.textContent='Reset Save Data'},3000);return}unlocked=[0];bests={};localStorage.setItem('jq_unlocked','[0]');localStorage.removeItem('jq_bests');resetArmed=false;btn.textContent='Reset Save Data';showToast('Save data reset — starting fresh at 1-1!');updateHeader()}
+function openModal(id){closeModals();document.getElementById('modal-'+id).classList.add('open');if(id==='feedback')renderFb()}
+function closeModals(){document.querySelectorAll('.modal').forEach(m=>m.classList.remove('open'))}
+
+// GAME ENGINE
+const cv=document.getElementById('game'),ctx=cv.getContext('2d');
+let curIdx=0,running=false,paused=false,camX=0,keys={},level=null,player=null,enemies=[],coinsArr=[],starsArr=[],plats=[],spikes=[],startTime=0,timeLeft=0,score=0,coinCount=0,lives=3,checkpointX=40,bossHP=3,frame=0;
+function genLevel(idx){
+ const L=LEVELS[idx];plats=[{x:0,y:430,w:L.len,h:70}];
+ // floating platforms
+ let x=260;while(x<L.len-300){const y=330-((x*7)%120);plats.push({x,y,w:130,h:18});if(x%500<200)plats.push({x:x+160,y:y-70,w:110,h:18});x+=340}
+ // gaps in ground simulated by spikes/pits markers: we add spike patches
+ spikes=[];for(let sx=600;sx<L.len-400;sx+=620){spikes.push({x:sx,y:418,w:56})}
+ coinsArr=[];for(let cx=180;cx<L.len-200;cx+=170){coinsArr.push({x:cx,y:380-((cx*3)%110),taken:false,r:12})}
+ starsArr=[];for(let sx=700;sx<L.len;sx+=1100){starsArr.push({x:sx,y:250,taken:false})}
+ enemies=[];const cfg=diffCfg();
+ for(let ex=520;ex<L.len-350;ex+=480){enemies.push({x:ex,y:398,w:36,h:32,type:(ex%960<480?'snail':'beetle'),dir:1,min:ex-70,max:ex+70,alive:true,speed:(ex%960<480?0.5:0.95)*cfg.speed})}
+ if(L.boss){enemies=[{x:1500,y:350,w:110,h:80,type:'boss',dir:1,min:1100,max:1850,alive:true,speed:1.1*cfg.speed}];bossHP=3}
+ return L;
+}
+function startLevel(idx){
+ curIdx=idx;level=genLevel(idx);const cfg=diffCfg();lives=practice?99:cfg.lives;timeLeft=cfg.time;score=0;coinCount=0;checkpointX=40;bossHP=3;
+ player={x:40,y:360,w:38,h:34,vx:0,vy:0,onGround:false,face:1,walk:0};
+ camX=0;paused=false;running=true;startTime=Date.now();
+ document.getElementById('levelScreen').classList.add('hidden');document.getElementById('gameScreen').classList.remove('hidden');
+ document.getElementById('hudLevel').textContent=level.id+' '+level.name;document.getElementById('msg').textContent='';
+ requestAnimationFrame(loop);window.scrollTo({top:200,behavior:'smooth'});
+}
+function restartLevel(){closeModals();startLevel(curIdx)}
+function quitToLevels(){running=false;showLevels();updateHeader()}
+function pauseGame(){paused=!paused;document.getElementById('msg').textContent=paused?'⏸ Paused':' ';if(!paused)requestAnimationFrame(loop)}
+function nextLevel(){closeModals();if(curIdx<LEVELS.length-1)startLevel(curIdx+1);else quitToLevels()}
+
+function die(reason){
+ if(practice){respawn();document.getElementById('msg').textContent=reason+' — Practice respawn!';return}
+ lives--;updateHUD();
+ if(lives<=0){running=false;document.getElementById('endTitle').textContent='Game Over 💔';document.getElementById('endText').innerHTML=`You ran out of lives on <b>${level.name}</b>.<br>Score: ${score} • Coins: ${coinCount}<br>Tip: Try Practice mode or Easy to learn the jumps!`;document.getElementById('nextBtn').style.display='none';openModal('end');}
+ else respawn();
+}
+function respawn(){player.x=checkpointX;player.y=340;player.vx=0;player.vy=0;camX=Math.max(0,checkpointX-200)}
+function winLevel(){
+ running=false;const elapsed=Math.max(1,Math.round(diffCfg().time-timeLeft));const bonus=Math.round(timeLeft*2);const total=score+200+bonus;
+ if(!practice){
+   if(!unlocked.includes(curIdx+1)&&curIdx+1<LEVELS.length){unlocked.push(curIdx+1);localStorage.setItem('jq_unlocked',JSON.stringify(unlocked))}
+   const prev=bests[level.id];if(!prev||total>prev.score||coinCount>prev.coins){bests[level.id]={score:Math.max(total,prev?.score||0),coins:Math.max(coinCount,prev?.coins||0),time:prev?Math.min(prev.time,elapsed):elapsed};localStorage.setItem('jq_bests',JSON.stringify(bests))}
+ }
+ document.getElementById('endTitle').textContent=level.boss?'🏆 You Beat the Big Beetle!':'Level Clear! 🎉';
+ document.getElementById('endText').innerHTML=`<b>${level.name}</b> complete!<br>Coins: ${coinCount} • Time: ${elapsed}s<br>Clear bonus 200 + time bonus ${bonus}<br><b>Total: ${total} pts</b>${practice?'<br><i>Practice — score not saved.</i>':''}`;
+ document.getElementById('nextBtn').style.display=curIdx<LEVELS.length-1?'':'none';openModal('end');updateHeader();
+}
+function updateHUD(){document.getElementById('hudLives').textContent=practice?'❤️ Practice ∞':'❤️'.repeat(Math.max(0,lives))+' ('+lives+')';document.getElementById('hudScore').textContent='Score '+(score);document.getElementById('hudCoins').textContent='🪙 '+coinCount;document.getElementById('hudTime').textContent='⏱ '+Math.ceil(timeLeft)+'s'}
+
+function loop(){
+ if(!running||paused)return;frame++;
+ // timer
+ timeLeft-=1/60;if(timeLeft<=0){timeLeft=diffCfg().time;die('Time up!')}
+ // input
+ const spd=3.4;player.vx=0;
+ if(keys.left){player.vx=-spd;player.face=-1;player.walk++} if(keys.right){player.vx=spd;player.face=1;player.walk++}
+ player.vy+=0.55;if(player.vy>13)player.vy=13;
+ player.x+=player.vx;player.y+=player.vy;
+ if(player.x<0)player.x=0;if(player.x>level.len-40)player.x=level.len-40;
+ // checkpoint at halfway
+ if(player.x>level.len/2&&checkpointX<level.len/2){checkpointX=level.len/2;document.getElementById('msg').textContent='🚩 Checkpoint!'}
+ // ground / platforms
+ player.onGround=false;
+ plats.forEach(p=>{if(player.x+player.w>p.x&&player.x<p.x+p.w&&player.y+player.h>=p.y&&player.y+player.h<=p.y+22&&player.vy>=0){player.y=p.y-player.h;player.vy=0;player.onGround=true}});
+ if(player.y>520){die('You fell in a pit!')}
+ // spikes
+ spikes.forEach(s=>{if(player.x+28>s.x&&player.x+8<s.x+s.w&&player.y+player.h>415)die('Ouch — spikes!')});
+ // coins/stars
+ coinsArr.forEach(c=>{if(!c.taken&&Math.abs(player.x-c.x)<34&&Math.abs(player.y-c.y)<40){c.taken=true;coinCount++;score+=10}});
+ starsArr.forEach(s=>{if(!s.taken&&Math.abs(player.x-s.x)<36&&Math.abs(player.y-s.y)<42){s.taken=true;score+=50}});
+ // enemies
+ enemies.forEach(e=>{
+   if(!e.alive)return;e.x+=e.dir*e.speed;if(e.x<e.min||e.x>e.max)e.dir*=-1;
+   if(e.type==='boss'&&bossHP===1)e.speed=2.0*diffCfg().speed;
+   const overlap=player.x+player.w>e.x+4&&player.x<e.x+e.w-4&&player.y+player.h>e.y&&player.y<e.y+e.h;
+   if(overlap){
+     if(player.vy>1&&player.y+player.h-e.y<18){ // stomp
+       if(e.type==='boss'){bossHP--;score+=50;player.vy=-11;document.getElementById('msg').textContent='Boss hit! '+bossHP+' stomps left';if(bossHP<=0){e.alive=false;score+=300}}
+       else{e.alive=false;score+=20;player.vy=-9}
+     } else {die('Bumped by a baddie!')}
+   }
+ });
+ // flag / boss win
+ const flagX=level.len-90;
+ if(!level.boss&&player.x>=flagX)winLevel();
+ if(level.boss&&bossHP<=0)winLevel();
+ // camera smooth
+ const target=Math.max(0,Math.min(level.len-900,player.x-320));camX+=(target-camX)*0.12;
+ draw();updateHUD();
+ if(running)requestAnimationFrame(loop);
+}
+function draw(){
+ ctx.clearRect(0,0,900,500);
+ // sky
+ const g=ctx.createLinearGradient(0,0,0,500);g.addColorStop(0,level.theme);g.addColorStop(1,'#fef9c3');ctx.fillStyle=g;ctx.fillRect(0,0,900,500);
+ // hills parallax
+ ctx.fillStyle='rgba(255,255,255,.7)';for(let i=0;i<6;i++){const hx=((i*260-camX*0.3)%1100);ctx.beginPath();ctx.arc(hx,90+(i%3)*28,34,0,7);ctx.fill()}
+ ctx.fillStyle='#4ade80';for(let i=0;i<5;i++){const hx=((i*340-camX*0.5)%1200)-100;ctx.beginPath();ctx.ellipse(hx,430,180,90,0,Math.PI,0);ctx.fill()}
+ // platforms
+ plats.forEach(p=>{const sx=p.x-camX;if(sx<-200||sx>1000)return;ctx.fillStyle='#92400e';ctx.fillRect(sx,p.y,p.w,p.h);ctx.fillStyle='#22c55e';ctx.fillRect(sx,p.y,p.w,10)});
+ // spikes
+ spikes.forEach(s=>{const sx=s.x-camX;ctx.fillStyle='#334155';for(let i=0;i<4;i++){ctx.beginPath();ctx.moveTo(sx+i*14,430);ctx.lineTo(sx+i*14+7,404);ctx.lineTo(sx+i*14+14,430);ctx.fill()}});
+ // checkpoint
+ const chx=level.len/2-camX;ctx.fillStyle='#111';ctx.fillRect(chx,350,4,80);ctx.fillStyle=checkpointX>100?'#22c55e':'#94a3b8';ctx.fillRect(chx+4,350,26,16);
+ // flag
+ if(!level.boss){const fx=level.len-90-camX;ctx.fillStyle='#111';ctx.fillRect(fx,300,5,130);ctx.fillStyle='#ef4444';ctx.beginPath();ctx.moveTo(fx+5,300);ctx.lineTo(fx+48,312);ctx.lineTo(fx+5,326);ctx.fill()}
+ // coins
+ coinsArr.forEach(c=>{if(c.taken)return;const sx=c.x-camX;ctx.fillStyle='#facc15';ctx.beginPath();ctx.arc(sx,c.y+Math.sin(frame/20+c.x)*3,11,0,7);ctx.fill();ctx.strokeStyle='#a16207';ctx.stroke()});
+ starsArr.forEach(s=>{if(s.taken)return;const sx=s.x-camX;ctx.fillStyle='#f59e0b';ctx.font='26px serif';ctx.fillText('★',sx-12,s.y)});
+ // enemies
+ enemies.forEach(e=>{if(!e.alive)return;const sx=e.x-camX;if(e.type==='snail'){ctx.fillStyle='#a78bfa';ctx.beginPath();ctx.ellipse(sx+18,414,20,13,0,0,7);ctx.fill();ctx.fillStyle='#f59e0b';ctx.beginPath();ctx.arc(sx+14,402,13,0,7);ctx.fill();ctx.fillStyle='#111';ctx.fillRect(sx+8,394,3,3);ctx.fillRect(sx+18,394,3,3)}
+  else if(e.type==='beetle'){ctx.fillStyle='#1e293b';ctx.beginPath();ctx.ellipse(sx+18,412,20,15,0,0,7);ctx.fill();ctx.fillStyle='#ef4444';ctx.fillRect(sx+4,404,4,4);ctx.fillRect(sx+28,404,4,4)}
+  else{ // boss
+   ctx.fillStyle='#111827';ctx.beginPath();ctx.ellipse(sx+55,395,58,42,0,0,7);ctx.fill();ctx.fillStyle='#7c3aed';ctx.fillRect(sx+10,362,90,10);ctx.fillStyle='#fff';ctx.font='bold 14px sans-serif';ctx.fillText('HP '+'♥'.repeat(bossHP),sx+28,350);ctx.fillStyle='#ef4444';ctx.beginPath();ctx.arc(sx+30,385,6,0,7);ctx.arc(sx+80,385,6,0,7);ctx.fill();
+  }});
+ // CAT - calico drawn with shapes
+ const px=player.x-camX,py=player.y;const bob=player.onGround&&player.vx!==0?Math.sin(frame/6)*2:0;
+ ctx.save();ctx.translate(px+19,py+17+bob);ctx.scale(player.face,1);
+ // tail
+ ctx.strokeStyle='#f97316';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(-16,8);ctx.quadraticCurveTo(-26,-2,-20,-12+Math.sin(frame/10)*3);ctx.stroke();
+ // body white
+ ctx.fillStyle='#ffffff';ctx.beginPath();ctx.ellipse(0,6,19,13,0,0,7);ctx.fill();
+ // calico patches orange + black
+ ctx.fillStyle='#f97316';ctx.beginPath();ctx.ellipse(-6,2,8,6,0,0,7);ctx.fill();ctx.fillStyle='#111827';ctx.beginPath();ctx.ellipse(9,9,7,5,0,0,7);ctx.fill();
+ // head
+ ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(13,-8,12,0,7);ctx.fill();ctx.fillStyle='#f97316';ctx.beginPath();ctx.arc(8,-13,6,0,7);ctx.fill();
+ // ears
+ ctx.fillStyle='#fff';[[4,-18],[20,-18]].forEach(([ex,ey])=>{ctx.beginPath();ctx.moveTo(ex,ey+4);ctx.lineTo(ex+4,ey-5);ctx.lineTo(ex+8,ey+4);ctx.fill()});
+ // face
+ ctx.fillStyle='#111';ctx.fillRect(16,-10,3,3);ctx.fillRect(23,-10,3,3);ctx.fillStyle='#ec4899';ctx.fillRect(20,-4,3,2);
+ // legs
+ ctx.fillStyle='#fff';ctx.fillRect(-12,16,7,7);ctx.fillRect(7,16,7,7);
+ ctx.restore();
+ // boss arena hint
+ if(level.boss){ctx.fillStyle='rgba(0,0,0,.65)';ctx.fillRect(12,12,300,28);ctx.fillStyle='#fff';ctx.font='bold 13px sans-serif';ctx.fillText('👑 Stomp the Big Beetle 3 times! HP: '+bossHP,20,30)}
+}
+// input
+function jump(){if(player&&player.onGround){player.vy=-12.2;player.onGround=false}}
+window.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp','Space'].includes(e.code))e.preventDefault();if(e.code==='ArrowLeft'||e.code==='KeyA')keys.left=true;if(e.code==='ArrowRight'||e.code==='KeyD')keys.right=true;if(e.code==='Space'||e.code==='KeyW'||e.code==='ArrowUp')jump()});
+window.addEventListener('keyup',e=>{if(e.code==='ArrowLeft'||e.code==='KeyA')keys.left=false;if(e.code==='ArrowRight'||e.code==='KeyD')keys.right=false});
+function bindTouch(id,prop){const el=document.getElementById(id);const on=e=>{e.preventDefault();if(prop==='jump')jump();else keys[prop]=true};const off=e=>{e.preventDefault();if(prop!=='jump')keys[prop]=false};el.addEventListener('pointerdown',on);el.addEventListener('pointerup',off);el.addEventListener('pointerleave',off);el.addEventListener('pointercancel',off)}
+bindTouch('btnL','left');bindTouch('btnR','right');bindTouch('btnJ','jump');
+// feedback
+function renderFb(){const row=document.getElementById('starRow');row.innerHTML='';for(let i=1;i<=5;i++){const b=document.createElement('button');b.textContent=i<=fbRating?'★':'☆';b.onclick=()=>{fbRating=i;renderFb()};row.appendChild(b)}const list=JSON.parse(localStorage.getItem('jq_feedback')||'[]');document.getElementById('fbList').innerHTML=list.slice(-3).map(f=>`<div style="border-top:1px solid #eee;padding:8px 0">${'★'.repeat(f.rating)} — ${f.text}<br><small>${f.date}</small></div>`).join('')}
+function saveFeedback(){const text=document.getElementById('fbText').value.trim();const arr=JSON.parse(localStorage.getItem('jq_feedback')||'[]');arr.push({rating:fbRating,text:text||'(no comment)',date:new Date().toLocaleDateString()});localStorage.setItem('jq_feedback',JSON.stringify(arr));try{var shared=JSON.parse(localStorage.getItem("holos-arcade-feedback")||"[]");if(!Array.isArray(shared))shared=[];shared.push({game:"jump-quest",rating:fbRating||0,text:text||"",tag:"",mode:"real",level:"",difficulty:"",score:0,device:(navigator.userAgent||"").slice(0,120),playTime:0,timestamp:new Date().toISOString()});localStorage.setItem("holos-arcade-feedback",JSON.stringify(shared));}catch(e){}document.getElementById('fbSaved').textContent='Thanks! Feedback saved.';renderFb()}
+updateHeader();
+</script>
+</body>
+</html>

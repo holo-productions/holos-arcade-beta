@@ -1,0 +1,1229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Battleship</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#e6eae8; --panel:#f8f9f6; --panel2:#eef1ec; --ink:#15242f; --muted:#5a6a72;
+    --line:rgba(21,36,47,.18);
+    --water:#17557c; --water2:#0f3d5c; --water-line:rgba(255,255,255,.16);
+    --ship:#5b7183; --ship-edge:#31485c;
+    --sonar:#0e7569; --brass:#b8860b; --brass-ink:#3a2c05;
+    --hit:#c22f2f; --miss:#dce8ee;
+    --btn:#1d3547; --btn-ink:#f2f5f2;
+    --shadow:0 10px 28px rgba(15,35,50,.20);
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0a131a; --panel:#13212c; --panel2:#0f1c26; --ink:#edf2ee; --muted:#9db0ba;
+      --line:rgba(237,242,238,.16);
+      --water:#14507a; --water2:#0d3a5c;
+      --ship:#71879a; --ship-edge:#41586c;
+      --btn:#e6e9dc; --btn-ink:#16242f;
+      --shadow:0 10px 28px rgba(0,0,0,.5);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:Barlow,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);-webkit-tap-highlight-color:transparent}
+  button,select{font:inherit;min-height:44px;cursor:pointer}
+  button:focus-visible,select:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--brass);outline-offset:2px}
+  .wrap{max-width:1060px;margin:0 auto;padding:14px 14px 30px}
+
+  .topbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .title{font-family:"Barlow Condensed",Barlow,sans-serif;font-size:2.3rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:0;line-height:1}
+  .title .wave{color:var(--sonar)}
+  .record{display:flex;gap:8px;flex-wrap:wrap}
+  .record .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-weight:700;font-size:.95rem;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+  .record .pill span{color:var(--muted);font-weight:600;margin-right:6px;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em}
+
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+  .controls select{border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:0 10px;font-weight:600}
+  .ghost-btn{border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:0 14px;font-weight:700}
+  .switch{display:inline-flex;align-items:center;gap:9px;padding:6px 12px 6px 8px;border:1px solid var(--line);border-radius:999px;background:var(--panel);font-weight:700;min-height:44px;cursor:pointer}
+  .switch input{appearance:none;-webkit-appearance:none;margin:0;flex:none;cursor:pointer;width:46px;height:26px;min-height:26px;border-radius:999px;background:#93a1a8;position:relative;transition:background .2s}
+  .switch input::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+  .switch input:checked{background:var(--sonar)}
+  .switch input:checked::after{left:23px}
+
+  .hintbar{display:flex;gap:10px;align-items:center;background:var(--panel);border:1px dashed var(--sonar);border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:.95rem}
+  .hintbar[hidden]{display:none}
+  .hintbar p{margin:0;flex:1}
+  .hintbar button{flex:none}
+  .hint-x{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--ink);width:44px;height:44px;border-radius:50%;font-size:1rem;font-weight:800;padding:0}
+  .msgbar{background:var(--btn);color:var(--btn-ink);border-radius:12px;padding:12px 16px;margin-bottom:14px;box-shadow:var(--shadow)}
+  .msgbar .main{font-weight:800;font-size:1.08rem}
+  .msgbar .sub{font-size:.92rem;opacity:.85;margin-top:2px}
+  .msgbar .sub:empty{display:none}
+
+  /* ---------- boards ---------- */
+  .boards{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  @media (max-width:860px){.boards{grid-template-columns:1fr}}
+  .board-panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:14px}
+  .board-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  .board-head h2{font-family:"Barlow Condensed",Barlow,sans-serif;font-size:1.35rem;letter-spacing:.05em;text-transform:uppercase;margin:0}
+  .board-head .tag{margin-left:auto;font-size:.8rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:5px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);color:var(--muted)}
+  .board-head .tag.live{background:#fbe3e3;color:#8c1d1d;border-color:#e3a3a3}
+  @media (prefers-color-scheme: dark){.board-head .tag.live{background:#3d1a1a;color:#f3b1b1;border-color:#6b3232}}
+  .board{
+    display:grid;grid-template-columns:20px repeat(10,1fr);gap:3px;
+    background:linear-gradient(160deg,var(--water) 0%,var(--water2) 100%);
+    border-radius:12px;padding:8px;user-select:none;-webkit-user-select:none;
+  }
+  .coord{display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:rgba(255,255,255,.75);min-height:0}
+  .cell{
+    appearance:none;border:1px solid var(--water-line);border-radius:5px;background:rgba(255,255,255,.07);
+    aspect-ratio:1/1;min-height:0;padding:0;position:relative;font-size:1rem;line-height:1;color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:800;
+  }
+  button.cell{cursor:pointer}
+  button.cell:hover:not(:disabled){background:rgba(255,255,255,.22)}
+  .cell:disabled{cursor:default;opacity:1}
+  .cell.ship{background:var(--ship);border-color:var(--ship-edge);box-shadow:inset 0 0 0 2px rgba(255,255,255,.18)}
+  .cell.ship::after{content:"";width:34%;height:34%;border-radius:50%;background:rgba(255,255,255,.35)}
+  .cell.hit{background:var(--hit);border-color:#7e1a1a;color:#fff}
+  .cell.hit::after{content:"✕";font-size:.95em}
+  .cell.ship.hit::after{content:"✕"}
+  .cell.sunk{background:#6e1423;border-color:#450a16}
+  .cell.miss{background:rgba(220,232,238,.28);color:var(--miss)}
+  .cell.miss::after{content:"•";font-size:1.3em;color:rgba(255,255,255,.85)}
+  .cell.preview-ok{background:#2e8f83;border-color:#1c5a53}
+  .cell.preview-bad{background:#a03d3d;border-color:#6e2626}
+  .cell.last{outline:3px solid var(--brass);outline-offset:-1px}
+  .cell.targetable{cursor:crosshair}
+  .cell.hint-target{outline:3px solid var(--brass);outline-offset:-1px;background:rgba(184,134,11,.45)!important;animation:practicePulse 1.2s ease-in-out infinite}
+  @keyframes practicePulse{0%,100%{box-shadow:inset 0 0 0 2px rgba(255,255,255,.5)}50%{box-shadow:inset 0 0 0 5px rgba(255,255,255,.15)}}
+  .practice-banner{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#fef3c7;border:1px solid #d9a441;color:#5c3d05;border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:.95rem}
+  .practice-banner[hidden]{display:none}
+  .practice-banner strong{letter-spacing:.02em}
+  @media (prefers-color-scheme: dark){.practice-banner{background:#3a2c05;color:#fde68a;border-color:#8a6d1b}}
+  @media (prefers-reduced-motion: reduce){.cell.hint-target{animation:none}}
+  @media (max-width:420px){.board{grid-template-columns:15px repeat(10,1fr);gap:2px;padding:6px}.coord{font-size:.58rem}.cell{font-size:.82rem}}
+
+  .fleet{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+  .fleet li{font-size:.85rem;font-weight:700;background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:6px 11px;display:inline-flex;gap:7px;align-items:center}
+  .fleet li .pips{letter-spacing:2px;font-size:.7rem;color:var(--sonar)}
+  .fleet li .pips .lost{color:var(--hit)}
+  .fleet li.sunk{opacity:.62;text-decoration:line-through}
+  .fleet li.sunk .pips{color:var(--hit)}
+
+  /* ---------- placement / action panels ---------- */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-top:14px}
+  .panel h2{font-family:"Barlow Condensed",Barlow,sans-serif;font-size:1.15rem;letter-spacing:.05em;text-transform:uppercase;margin:0 0 10px}
+  .ship-tray{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .ship-chip{
+    border:2px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:11px;
+    padding:8px 13px;font-weight:800;display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-height:52px;
+  }
+  .ship-chip small{font-weight:600;color:var(--muted);font-size:.78rem}
+  .ship-chip.selected{border-color:var(--sonar);outline:2px solid var(--sonar);outline-offset:1px}
+  .ship-chip.placed{opacity:.5}
+  .ship-chip.placed small::after{content:" · placed ✓"}
+  .btn{border:none;border-radius:11px;padding:0 18px;font-weight:800;background:var(--btn);color:var(--btn-ink)}
+  .btn.brass{background:var(--brass);color:#fff}
+  @media (prefers-color-scheme: light){.btn.brass{color:var(--brass-ink)}}
+  .btn.sonar{background:var(--sonar);color:#fff}
+  .btn:disabled{opacity:.38;cursor:not-allowed}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap}
+  .btn-row .btn{flex:1 1 auto}
+
+  .battle-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  @media (max-width:560px){.battle-stats{grid-template-columns:repeat(2,1fr)}}
+  .bstat{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px 12px;text-align:center}
+  .bstat b{display:block;font-size:1.25rem}
+  .bstat span{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700}
+
+  .log{list-style:none;margin:0;padding:0;max-height:168px;overflow:auto;display:flex;flex-direction:column;gap:5px;font-size:.92rem}
+  .log li{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:7px 11px}
+  .log li.good{border-color:var(--sonar);font-weight:700}
+  .log li.bad{border-color:var(--hit)}
+  .log:empty::after{content:"No shots fired yet.";color:var(--muted)}
+
+  .result{display:none;text-align:center;padding:22px 16px}
+  .result.show{display:block}
+  .result h2{font-family:"Barlow Condensed",Barlow,sans-serif;font-size:2rem;text-transform:uppercase;letter-spacing:.05em;margin:0 0 6px}
+  .result p{margin:0 0 14px;color:var(--muted);font-size:1rem}
+
+  .stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:14px}
+  @media (max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 3px 10px rgba(0,0,0,.07);padding:10px 12px;text-align:center}
+  .stat b{display:block;font-size:1.25rem}
+  .stat span{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700}
+
+  /* ---------- modal / tour ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(8,15,20,.62);display:flex;align-items:flex-end;justify-content:center;z-index:50}
+  .overlay[hidden]{display:none}
+  .sheet{background:var(--panel);color:var(--ink);width:100%;max-width:680px;max-height:88vh;border-radius:20px 20px 0 0;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+  .sheet-head{padding:20px 20px 4px;flex:none}
+  .sheet-body{overflow:auto;padding:0 20px;flex:1 1 auto}
+  .sheet-foot{flex:none;padding:12px 20px 18px;border-top:1px solid var(--line);background:var(--panel)}
+  @media (min-width:640px){.overlay{align-items:center;padding:20px}.sheet{border-radius:20px}}
+  .sheet h2{font-family:"Barlow Condensed",Barlow,sans-serif;margin:0 0 6px;font-size:1.6rem;letter-spacing:.03em;text-transform:uppercase}
+  .sheet h3{margin:16px 0 6px;font-size:1rem}
+  .sheet p,.sheet li{line-height:1.5;font-size:.95rem}
+  .sheet ul{padding-left:20px;margin:6px 0}
+  .sheet table{border-collapse:collapse;width:100%;font-size:.92rem}
+  .sheet th,.sheet td{border-bottom:1px solid var(--line);padding:7px 6px;text-align:left}
+  .sheet .row-btns{display:flex;gap:8px;flex-wrap:wrap}
+  .stars{display:flex;gap:6px;margin:4px 0 6px}
+  .star{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--muted);border-radius:10px;width:48px;height:48px;min-height:48px;padding:0;font-size:1.5rem;line-height:1;cursor:pointer}
+  .star.on{color:var(--brass);border-color:var(--brass);background:var(--panel)}
+  .fb-tags{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 6px}
+  .fb-tag{border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:999px;padding:0 16px;font-weight:700;min-height:44px;cursor:pointer}
+  .fb-tag.on{border-color:var(--sonar);background:var(--sonar);color:#fff}
+  .fb-field{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);padding:10px 12px;font:inherit;resize:vertical;min-height:96px}
+  .fb-field:focus-visible{outline:3px solid var(--brass);outline-offset:2px}
+  .fb-note{color:var(--muted);font-size:.85rem;line-height:1.5;margin:8px 0 0}
+  .fb-thanks{display:none;text-align:center;padding:10px 0 4px}
+  .fb-thanks.show{display:block}
+  .fb-thanks b{font-family:"Barlow Condensed",Barlow,sans-serif;font-size:1.3rem;letter-spacing:.04em;text-transform:uppercase;display:block;margin-bottom:4px}
+  .tour-highlight{position:fixed;border:3px solid var(--brass);border-radius:14px;z-index:60;pointer-events:none;box-shadow:0 0 0 9999px rgba(8,15,20,.45);transition:all .25s ease}
+  .tour-card{position:fixed;left:12px;right:12px;bottom:12px;z-index:61;background:var(--panel);color:var(--ink);border-radius:16px;box-shadow:var(--shadow);padding:16px;max-width:560px;margin:0 auto}
+  .tour-card h3{margin:0 0 6px;font-family:"Barlow Condensed",Barlow,sans-serif;font-size:1.25rem;letter-spacing:.03em}
+  .tour-card p{margin:0 0 12px;line-height:1.5;font-size:.95rem}
+  .tour-card .row-btns{display:flex;gap:8px;justify-content:space-between;align-items:center}
+  .tour-count{font-size:.82rem;color:var(--muted);font-weight:700}
+
+  footer{margin-top:22px;text-align:center;color:var(--muted);font-size:.88rem;line-height:1.6}
+  footer a{color:inherit;font-weight:700;display:inline-block;padding:8px 4px}
+  @media (prefers-reduced-motion: reduce){.tour-highlight{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <h1 class="title">Battleship <span class="wave" aria-hidden="true">≋</span></h1>
+    <div class="record" aria-label="Match record">
+      <div class="pill"><span>Turn</span><span id="turnLabel">Placement</span></div>
+      <div class="pill"><span>Difficulty</span><span id="diffLabel">Captain</span></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <select id="difficulty" aria-label="Difficulty">
+      <option value="easy">Ensign — easy AI</option>
+      <option value="normal" selected>Captain — standard AI</option>
+      <option value="hard">Admiral — smart AI</option>
+    </select>
+    <label class="switch">
+      <input type="checkbox" id="soundToggle" checked />
+      Sound
+    </label>
+    <label class="switch" title="Practice: no return fire, hints on, nothing counts toward your records">
+      <input type="checkbox" id="practiceToggle" />
+      Practice round
+    </label>
+    <button class="ghost-btn" id="howBtn" type="button">How to play</button>
+    <button class="ghost-btn" id="rulesBtn" type="button">Rules</button>
+    <button class="ghost-btn" id="tourBtn" type="button">Take the tour</button>
+    <button class="ghost-btn" id="feedbackBtn" type="button">Feedback</button>
+    <button class="ghost-btn" id="newBtn" type="button">New game</button>
+  </div>
+
+  <div class="hintbar" id="hintBar" hidden>
+    <p>👋 <strong>New here?</strong> Tap <strong>How to play</strong> for a quick tutorial, <strong>Take the tour</strong> for a guided walkthrough, or <strong>Rules</strong> for the full rulebook — only if you want them. Otherwise, just start placing ships.</p>
+    <button class="hint-x" id="hintClose" type="button" aria-label="Dismiss hint">✕</button>
+  </div>
+
+  <div class="msgbar" role="status" aria-live="polite">
+    <div class="main" id="message">Place your fleet, Captain.</div>
+    <div class="sub" id="subMessage">Pick a ship, then tap your waters to place it. Rotate any time.</div>
+  </div>
+
+  <div class="practice-banner" id="practiceBanner" hidden>
+    <span>🎯 <strong>Practice round</strong> — take your time. The enemy holds fire, hints are on, and this game won't count toward your records or win rate.</span>
+  </div>
+
+  <div class="boards">
+    <section class="board-panel" id="enemyPanel" aria-label="Enemy waters">
+      <div class="board-head">
+        <h2>Enemy waters</h2>
+        <span class="tag" id="enemyTag">Fleet hidden</span>
+      </div>
+      <div class="board" id="enemyBoard" role="grid" aria-label="Enemy board — tap a square to fire"></div>
+      <ul class="fleet" id="enemyFleet" aria-label="Enemy fleet status"></ul>
+    </section>
+
+    <section class="board-panel" id="playerPanel" aria-label="Your waters">
+      <div class="board-head">
+        <h2>Your fleet</h2>
+        <span class="tag" id="playerTag">Placing ships</span>
+      </div>
+      <div class="board" id="playerBoard" role="grid" aria-label="Your board"></div>
+      <ul class="fleet" id="playerFleet" aria-label="Your fleet status"></ul>
+    </section>
+  </div>
+
+  <section class="panel" id="placePanel" aria-label="Place your ships">
+    <h2>Place your ships</h2>
+    <div class="ship-tray" id="shipTray"></div>
+    <div class="btn-row">
+      <button class="btn" id="rotateBtn" type="button">↻ Rotate ship</button>
+      <button class="btn" id="randomBtn" type="button">🎲 Random fleet</button>
+      <button class="btn" id="clearBtn" type="button">Clear</button>
+      <button class="btn sonar" id="startBtn" type="button" disabled>Start battle →</button>
+    </div>
+    <p style="margin:10px 0 0;color:var(--muted);font-size:.9rem">Tip: tap a ship you've already placed to pick it back up and move it. Press <strong>R</strong> to rotate on a keyboard.</p>
+  </section>
+
+  <section class="panel" id="battlePanel" aria-label="Battle" hidden>
+    <h2>Battle stations</h2>
+    <div id="practiceTools" hidden style="margin-bottom:12px">
+      <div class="btn-row">
+        <button class="btn brass" id="hintBtn" type="button">💡 Show me a good target</button>
+        <button class="btn" id="revealBtn" type="button">Peek at enemy fleet</button>
+      </div>
+      <p style="margin:8px 0 0;color:var(--muted);font-size:.9rem">Practice only: tap <strong>Show me a good target</strong> for a suggested square (gold outline), or peek to learn how fleets hide. Peeking is just for learning — no penalty.</p>
+      <p id="peekNote" style="margin:6px 0 0;font-weight:700" hidden>👀 Peeking — enemy ships are showing faintly. Tap Peek again to hide them.</p>
+    </div>
+    <div class="battle-stats">
+      <div class="bstat"><b id="bShots">0</b><span>Your shots</span></div>
+      <div class="bstat"><b id="bHits">0</b><span>Your hits</span></div>
+      <div class="bstat"><b id="bAcc">—</b><span>Accuracy</span></div>
+      <div class="bstat"><b id="bSunk">0 / 5</b><span>Enemy ships sunk</span></div>
+    </div>
+    <div class="result" id="resultBox">
+      <h2 id="resultTitle">Victory!</h2>
+      <p id="resultText"></p>
+      <div class="btn-row" style="justify-content:center">
+        <button class="btn brass" id="rematchBtn" type="button" style="flex:0 1 auto;padding:0 28px">↻ Rematch — new fleets</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Battle log">
+    <h2>Captain's log</h2>
+    <ul class="log" id="log"></ul>
+  </section>
+
+  <div class="stats" aria-label="Your records">
+    <div class="stat"><b id="stGames">0</b><span>Games played</span></div>
+    <div class="stat"><b id="stWins">0</b><span>Wins</span></div>
+    <div class="stat"><b id="stWinRate">—</b><span>Win rate</span></div>
+    <div class="stat"><b id="stFewest">—</b><span>Fewest shots to win</span></div>
+    <div class="stat"><b id="stBestAcc">—</b><span>Best accuracy (win)</span></div>
+  </div>
+
+  <div class="btn-row" style="margin-top:12px">
+    <button class="ghost-btn" id="resetBtn" type="button">Reset records</button>
+  </div>
+
+  <footer>
+    <p>Single player vs the computer — no account, no sign-up. Your records are saved in this browser on this device only.<br />
+    A <a href="../games-hub/">Ridiculously Fit and Fed</a> game · <a href="../games-hub/">Back to the Games Hub</a></p>
+  </footer>
+</div>
+
+<!-- How to play -->
+<div class="overlay" id="howOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+    <div class="sheet-head">
+      <h2 id="howTitle">How to play Battleship</h2>
+      <p><strong>Goal:</strong> sink all five enemy ships before the computer sinks yours.</p>
+    </div>
+    <div class="sheet-body">
+      <h3>Your fleet</h3>
+      <table>
+        <tr><th>Ship</th><th>Length</th></tr>
+        <tr><td>Carrier</td><td>5 squares</td></tr>
+        <tr><td>Battleship</td><td>4 squares</td></tr>
+        <tr><td>Cruiser</td><td>3 squares</td></tr>
+        <tr><td>Submarine</td><td>3 squares</td></tr>
+        <tr><td>Destroyer</td><td>2 squares</td></tr>
+      </table>
+      <h3>Placing your ships</h3>
+      <ul>
+        <li>Pick a ship from the tray, then tap a square on <strong>Your fleet</strong> board to place it.</li>
+        <li>Tap <strong>↻ Rotate ship</strong> (or press R) to switch between horizontal and vertical.</li>
+        <li>Ships can't overlap or run off the board — the preview turns red when a spot won't work.</li>
+        <li>Tap a placed ship to pick it back up and move it. In a hurry? <strong>🎲 Random fleet</strong> places everything for you.</li>
+        <li>When all five are placed, tap <strong>Start battle</strong>.</li>
+      </ul>
+      <h3>Firing</h3>
+      <ul>
+        <li>Tap any square in <strong>Enemy waters</strong> to fire. A red ✕ is a hit, a pale dot is a miss.</li>
+        <li>Hit every square of a ship to sink it — the log and the fleet lists announce each sinking.</li>
+        <li>After your shot, the computer fires back at your fleet. First side to sink all five enemy ships wins.</li>
+      </ul>
+      <h3>The computer captains</h3>
+      <ul>
+        <li><strong>Ensign (easy)</strong> — fires at random. A gentle first game.</li>
+        <li><strong>Captain (standard)</strong> — hunts at random, but once it scores a hit it targets the squares around it until the ship sinks.</li>
+        <li><strong>Admiral (hard)</strong> — hunts on a checkerboard pattern (no ship can hide from it), follows the line of a damaged ship, and remembers the water around ships it has already sunk.</li>
+      </ul>
+      <h3>Practice round</h3>
+      <ul>
+        <li>Flip the <strong>Practice round</strong> switch at the top any time to start a relaxed round.</li>
+        <li>In practice the enemy <strong>never fires back</strong>, there's <strong>no timer and no score</strong>, and the game <strong>doesn't count</strong> toward your records.</li>
+        <li>Use <strong>💡 Show me a good target</strong> for a hint — it points at a square next to a hit, or a smart checkerboard square when you're still hunting.</li>
+        <li>You can also <strong>Peek at the enemy fleet</strong> to see how ships hide. Turn practice off when you're ready for a real battle.</li>
+      </ul>
+      <h3>Want the full rulebook?</h3>
+      <p>Scoring, win conditions, and the special rules live on the separate <strong>Rules</strong> page — tap the Rules button any time.</p>
+    </div>
+    <div class="sheet-foot">
+      <div class="row-btns">
+        <button class="btn brass" id="howClose" type="button">Got it — let's play</button>
+        <button class="btn" id="howTour" type="button">Start the walkthrough</button>
+        <button class="btn" id="howRules" type="button">Read the full Rules</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Full rules -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <div class="sheet-head">
+      <h2 id="rulesTitle">Battleship — Full Rules</h2>
+      <p><strong>The complete rulebook:</strong> setup, turns, sinking, scoring, win conditions, and special rules.</p>
+    </div>
+    <div class="sheet-body">
+      <h3>1. Objective &amp; win condition</h3>
+      <ul>
+        <li>Each side hides a fleet of five ships on a 10 × 10 board (columns A–J, rows 1–10).</li>
+        <li><strong>You win</strong> the moment every square of all five enemy ships has been hit — the whole enemy fleet is sunk.</li>
+        <li><strong>You lose</strong> the moment the computer has hit every square of all five of your ships.</li>
+        <li>There are no draws: you always fire first each game, so a game cannot end tied.</li>
+      </ul>
+      <h3>2. The fleets</h3>
+      <table>
+        <tr><th>Ship</th><th>Length</th><th>Squares to hit</th></tr>
+        <tr><td>Carrier</td><td>5</td><td>5</td></tr>
+        <tr><td>Battleship</td><td>4</td><td>4</td></tr>
+        <tr><td>Cruiser</td><td>3</td><td>3</td></tr>
+        <tr><td>Submarine</td><td>3</td><td>3</td></tr>
+        <tr><td>Destroyer</td><td>2</td><td>2</td></tr>
+        <tr><td><strong>Total</strong></td><td></td><td><strong>17 squares per fleet</strong></td></tr>
+      </table>
+      <h3>3. Placement rules</h3>
+      <ul>
+        <li>Ships are placed in one straight line, horizontally or vertically — never diagonally and never bent.</li>
+        <li>Ships may touch each other (sides or corners) but may <strong>never overlap</strong>, and no part of a ship may run off the board.</li>
+        <li>You may move a ship as often as you like before the battle starts: tap a placed ship to pick it back up.</li>
+        <li>Once you tap <strong>Start battle</strong>, your placement is locked for the rest of that game.</li>
+        <li>The computer's fleet is placed randomly at the start of every game, under the same rules, and stays hidden until you hit it.</li>
+      </ul>
+      <h3>4. Turn &amp; firing rules</h3>
+      <ul>
+        <li>Turns alternate strictly: <strong>one shot for you, then one shot for the computer</strong>. A hit does <em>not</em> earn an extra shot.</li>
+        <li>You may fire at any square in Enemy waters that you have not already fired at. Squares already shot are locked — no square can be fired at twice.</li>
+        <li>A shot on a ship square is a <strong>hit</strong> (red ✕). A shot on open water is a <strong>miss</strong> (pale dot).</li>
+        <li>A ship is <strong>sunk</strong> when every one of its squares has been hit. Sinkings are announced immediately in the message bar, the Captain's log, and both fleet lists.</li>
+        <li>Your most recent shot — and the computer's — is outlined in gold on each board.</li>
+      </ul>
+      <h3>5. Scoring &amp; records</h3>
+      <ul>
+        <li>There is no points score during a game. Your performance is measured by <strong>shots</strong> and <strong>accuracy</strong>: accuracy = hits ÷ shots, shown live during the battle.</li>
+        <li>Records saved on this device: <strong>games played</strong> (finished games only), <strong>wins</strong>, <strong>win rate</strong>, <strong>fewest shots to win</strong>, and <strong>best accuracy in a win</strong>.</li>
+        <li>Fewest-shots and best-accuracy records only count games you <strong>won</strong> — a fast loss never sets them.</li>
+        <li>Abandoning a game with New game before it ends does not count as a played game and does not affect your records.</li>
+        <li><strong>Reset records</strong> wipes all saved records. It does not change the game in progress.</li>
+      </ul>
+      <h3>6. The computer captains (difficulty rules)</h3>
+      <ul>
+        <li><strong>Ensign (easy)</strong> — every shot is chosen at random from squares it has not tried.</li>
+        <li><strong>Captain (standard)</strong> — hunts at random, but after a hit it targets the untried squares next to its hits until that ship is sunk.</li>
+        <li><strong>Admiral (hard)</strong> — hunts on a checkerboard pattern, follows the line of a damaged ship to find its ends, and rules out the water around ships it has sunk.</li>
+        <li>The computer never sees your board: it only knows the results of its own shots, exactly as you only know yours. It never fires at the same square twice.</li>
+        <li>Changing difficulty starts a fresh game with new fleets.</li>
+      </ul>
+      <h3>7. Special rules</h3>
+      <ul>
+        <li><strong>Rematch:</strong> after a game ends, Rematch deals two brand-new fleets at the same difficulty — your previous placement is not kept.</li>
+        <li><strong>Defeat reveal:</strong> if you lose, the enemy ships you never found are revealed (dimmed) on the Enemy waters board so you can see what you missed.</li>
+        <li><strong>Random fleet</strong> is a legal placement: it follows the same no-overlap, on-board rules as manual placement.</li>
+        <li><strong>Practice round:</strong> when the Practice switch is on, the enemy holds fire (no return shots), hints and peek are available, and the result is not counted in games, wins, win rate, fewest shots, or best accuracy. Turning practice on or off starts a fresh game.</li>
+        <li><strong>Sound</strong> is optional flavour only and never affects play; the toggle is saved on this device.</li>
+        <li>Everything is saved in this browser on this device only — no account, no server, nothing leaves your device.</li>
+      </ul>
+    </div>
+    <div class="sheet-foot">
+      <div class="row-btns">
+        <button class="btn brass" id="rulesClose" type="button">Close rules</button>
+        <button class="btn" id="rulesHow" type="button">Back to How to play</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback (standard on all games) -->
+<div class="overlay" id="feedbackOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+    <div class="sheet-head">
+      <h2 id="feedbackTitle">Feedback — Battleship</h2>
+      <p>Tell us how this game plays. Your rating and comment are saved on this device only.</p>
+    </div>
+    <div class="sheet-body">
+      <div id="fbForm">
+        <h3 style="margin-top:8px">Your rating</h3>
+        <div class="stars" id="fbStars" role="radiogroup" aria-label="Star rating">
+          <button class="star" type="button" data-v="1" role="radio" aria-checked="false" aria-label="1 star">★</button>
+          <button class="star" type="button" data-v="2" role="radio" aria-checked="false" aria-label="2 stars">★</button>
+          <button class="star" type="button" data-v="3" role="radio" aria-checked="false" aria-label="3 stars">★</button>
+          <button class="star" type="button" data-v="4" role="radio" aria-checked="false" aria-label="4 stars">★</button>
+          <button class="star" type="button" data-v="5" role="radio" aria-checked="false" aria-label="5 stars">★</button>
+        </div>
+        <h3>What's it about? <span style="color:var(--muted);font-weight:600">(optional)</span></h3>
+        <div class="fb-tags" id="fbTags" role="group" aria-label="Feedback type">
+          <button class="fb-tag" type="button" data-tag="Bug" aria-pressed="false">Bug</button>
+          <button class="fb-tag" type="button" data-tag="Suggestion" aria-pressed="false">Suggestion</button>
+          <button class="fb-tag on" type="button" data-tag="Other" aria-pressed="true">Other</button>
+        </div>
+        <h3>Your comment <span style="color:var(--muted);font-weight:600">(optional)</span></h3>
+        <textarea class="fb-field" id="fbComment" maxlength="1000" placeholder="What worked, what didn't, what you'd change…"></textarea>
+        <p class="fb-note">Feedback follows the same Terms &amp; Conditions as the games: no personal info needed, please keep it clean (moderation rules apply), and feedback may be used to improve the games.</p>
+      </div>
+      <div class="fb-thanks" id="fbThanks">
+        <b>Thanks!</b>
+        <p style="margin:0">Your feedback is saved on this device. It helps decide what gets fixed and built next.</p>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <div class="row-btns">
+        <button class="btn brass" id="fbSubmit" type="button" disabled>Send feedback</button>
+        <button class="btn" id="fbClose" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Opt-in walkthrough (only opens when the player taps Take the tour) -->
+<div class="tour-highlight" id="tourHi" hidden></div>
+<div class="tour-card" id="tourCard" hidden role="dialog" aria-label="Walkthrough">
+  <h3 id="tourTitle"></h3>
+  <p id="tourText"></p>
+  <div class="row-btns">
+    <span class="tour-count" id="tourCount"></span>
+    <span style="display:flex;gap:8px">
+      <button class="btn" id="tourSkip" type="button">Skip tour</button>
+      <button class="btn brass" id="tourNext" type="button">Next</button>
+    </span>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var COLS = "ABCDEFGHIJ", SIZE = 10;
+var SHIP_DEFS = [
+  {name:"Carrier", size:5},
+  {name:"Battleship", size:4},
+  {name:"Cruiser", size:3},
+  {name:"Submarine", size:3},
+  {name:"Destroyer", size:2}
+];
+var DIFFS = {
+  easy:   {label:"Ensign"},
+  normal: {label:"Captain"},
+  hard:   {label:"Admiral"}
+};
+var LS_BEST = "rff-battleship-bests-v1", LS_SEEN = "rff-battleship-seen-v1", LS_SET = "rff-battleship-settings-v1";
+
+function $(id){ return document.getElementById(id); }
+function idx(r,c){ return r*SIZE+c; }
+function rowOf(i){ return Math.floor(i/SIZE); }
+function colOf(i){ return i%SIZE; }
+function coordName(i){ return COLS[colOf(i)] + (rowOf(i)+1); }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+function rand(n){ return Math.floor(Math.random()*n); }
+
+/* ---------- persistent bests & settings ---------- */
+var bests = {games:0, wins:0, bestStreak:0, fewestShots:null, bestAccuracy:null};
+try{ var b = JSON.parse(localStorage.getItem(LS_BEST)||"null"); if(b) bests = b; }catch(e){}
+var settings = {difficulty:"normal", sound:true};
+try{ var s = JSON.parse(localStorage.getItem(LS_SET)||"null"); if(s) settings = s; }catch(e){}
+function saveBests(){ try{ localStorage.setItem(LS_BEST, JSON.stringify(bests)); }catch(e){} }
+function saveSettings(){ try{ localStorage.setItem(LS_SET, JSON.stringify(settings)); }catch(e){} }
+var streak = 0;
+var practiceMode = false;
+var hintCell = -1;
+var peeking = false;
+
+/* ---------- sound (tiny WebAudio blips, resumed on tap) ---------- */
+var audioCtx = null;
+function beep(freq, dur, type, vol, slideTo){
+  if(!settings.sound) return;
+  try{
+    if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state === "suspended") audioCtx.resume();
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type||"sine"; o.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, audioCtx.currentTime + dur);
+    g.gain.setValueAtTime(vol||0.12, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + dur);
+  }catch(e){}
+}
+function sndMiss(){ beep(520, .18, "sine", .07, 240); }
+function sndHit(){ beep(160, .3, "sawtooth", .10, 55); }
+function sndSunk(){ beep(220, .55, "sawtooth", .11, 40); setTimeout(function(){ beep(110, .5, "square", .07, 38); }, 160); }
+function sndPlace(){ beep(340, .09, "triangle", .09); }
+
+/* ---------- game state ---------- */
+function makeFleet(){
+  return SHIP_DEFS.map(function(d){
+    return {name:d.name, size:d.size, cells:[], hits:[], placed:false, sunk:false};
+  });
+}
+var G = null;
+function newGame(){
+  G = {
+    phase:"placement",           /* placement | battle | done */
+    orient:"h",
+    selected:0,                  /* index into player fleet of ship being placed */
+    player: makeFleet(),
+    enemy: makeFleet(),
+    playerShots:{},              /* idx -> "hit"|"miss" on enemy board */
+    aiShots:{},                  /* idx -> "hit"|"miss" on player board */
+    aiOpenHits:[],               /* player-ship cells hit but ship not yet sunk */
+    aiKnownWater:{},             /* hard AI: squares ruled out around sunk ships */
+    shots:0, hits:0,
+    busy:false, counted:false,
+    practice: practiceMode,
+    lastPlayerShot:-1, lastAiShot:-1
+  };
+  hintCell = -1; peeking = false;
+  placeFleetRandom(G.enemy);
+  buildBoards(); renderAll();
+  if(G.practice){
+    setMsg("Practice — place your fleet.", "Take your time. No return fire, hints are on, and nothing counts toward your records.");
+    logLine("🎯 Practice round — enemy is holding fire. Learn at your own pace.", "good");
+  } else {
+    setMsg("Place your fleet, Captain.", "Pick a ship, then tap your waters to place it. Rotate any time.");
+    logLine("New game — the enemy fleet is hiding somewhere out there.", "");
+  }
+}
+
+/* ---------- placement helpers ---------- */
+function cellsFor(start, size, orient){
+  var r = rowOf(start), c = colOf(start), out = [], i;
+  for(i=0;i<size;i++){
+    var rr = orient==="v" ? r+i : r, cc = orient==="h" ? c+i : c;
+    if(rr>=SIZE || cc>=SIZE) return null;
+    out.push(idx(rr,cc));
+  }
+  return out;
+}
+function occupiedBy(fleet, exceptShip){
+  var occ = {};
+  fleet.forEach(function(sh){ if(sh!==exceptShip) sh.cells.forEach(function(i){ occ[i]=sh; }); });
+  return occ;
+}
+function shipAt(fleet, i){
+  for(var k=0;k<fleet.length;k++) if(fleet[k].cells.indexOf(i)>=0) return fleet[k];
+  return null;
+}
+function placeFleetRandom(fleet){
+  fleet.forEach(function(sh){ sh.cells=[]; sh.hits=[]; sh.placed=false; sh.sunk=false; });
+  fleet.forEach(function(sh){
+    var tries = 0;
+    while(tries < 500){
+      tries++;
+      var orient = Math.random()<0.5 ? "h" : "v";
+      var start = rand(SIZE*SIZE);
+      var cells = cellsFor(start, sh.size, orient);
+      if(!cells) continue;
+      var occ = occupiedBy(fleet, sh);
+      if(cells.some(function(i){ return occ[i]; })) continue;
+      sh.cells = cells; sh.placed = true;
+      break;
+    }
+  });
+}
+function allPlaced(fleet){ return fleet.every(function(sh){ return sh.placed; }); }
+
+/* ---------- boards ---------- */
+var playerCellEls = [], enemyCellEls = [];
+function buildBoard(el, cells, isEnemy){
+  el.innerHTML = ""; cells.length = 0;
+  var corner = document.createElement("span"); corner.className = "coord"; el.appendChild(corner);
+  var c, r, i;
+  for(c=0;c<SIZE;c++){ var h = document.createElement("span"); h.className="coord"; h.textContent = COLS[c]; el.appendChild(h); }
+  for(r=0;r<SIZE;r++){
+    var lab = document.createElement("span"); lab.className="coord"; lab.textContent = r+1; el.appendChild(lab);
+    for(c=0;c<SIZE;c++){
+      i = idx(r,c);
+      var cell = document.createElement("button");
+      cell.type = "button"; cell.className = "cell"; cell.dataset.i = i;
+      cell.setAttribute("role","gridcell");
+      cell.setAttribute("aria-label", (isEnemy ? "Fire at " : "Your square ") + coordName(i));
+      (function(cellEl, cellIdx){
+        if(isEnemy) cellEl.addEventListener("click", function(){ onEnemyCell(cellIdx); });
+        else {
+          cellEl.addEventListener("click", function(){ onPlayerCell(cellIdx); });
+          cellEl.addEventListener("mouseenter", function(){ preview(cellIdx); });
+          cellEl.addEventListener("mouseleave", clearPreview);
+        }
+      })(cell, i);
+      el.appendChild(cell); cells.push(cell);
+    }
+  }
+}
+function buildBoards(){
+  buildBoard($("enemyBoard"), enemyCellEls, true);
+  buildBoard($("playerBoard"), playerCellEls, false);
+  $("playerBoard").addEventListener("mouseleave", clearPreview);
+}
+
+/* ---------- rendering ---------- */
+function fleetHTML(fleet, shots){
+  return fleet.map(function(sh){
+    var pips = "";
+    for(var i=0;i<sh.size;i++){
+      var hit = sh.cells.length && shots[sh.cells[i]] === "hit";
+      pips += '<span class="'+(hit?"lost":"")+'">●</span>';
+    }
+    return '<li class="'+(sh.sunk?"sunk":"")+'">'+sh.name+' <span class="pips">'+pips+'</span></li>';
+  }).join("");
+}
+function renderAll(){
+  /* enemy board: only shots are visible */
+  enemyCellEls.forEach(function(el, i){
+    var st = G.playerShots[i];
+    el.className = "cell" + (st ? (st==="hit" ? " hit" : " miss") : "") + (i===G.lastPlayerShot ? " last" : "");
+    var sh = st==="hit" ? shipAt(G.enemy, i) : null;
+    if(sh && sh.sunk) el.classList.add("sunk");
+    el.disabled = G.phase!=="battle" || !!st || G.busy;
+    el.classList.toggle("targetable", G.phase==="battle" && !st);
+    if(i===hintCell && G.phase==="battle" && !st) el.classList.add("hint-target");
+    if(peeking && G.practice){
+      var psh = shipAt(G.enemy, i);
+      if(psh && !st){ el.classList.add("ship"); el.style.opacity = ".45"; } else { el.style.opacity = ""; }
+    } else { el.style.opacity = ""; }
+    if(st) el.setAttribute("aria-label", coordName(i) + (st==="hit" ? " — hit" : " — miss"));
+  });
+  /* player board: ships + AI shots */
+  playerCellEls.forEach(function(el, i){
+    var sh = shipAt(G.player, i);
+    var st = G.aiShots[i];
+    el.className = "cell" + (sh && sh.placed ? " ship" : "") + (st ? (st==="hit" ? " hit" : " miss") : "") + (i===G.lastAiShot ? " last" : "");
+    if(sh && sh.sunk && st==="hit") el.classList.add("sunk");
+    el.disabled = G.phase!=="placement";
+  });
+  $("enemyFleet").innerHTML = fleetHTML(G.enemy, G.playerShots);
+  $("playerFleet").innerHTML = fleetHTML(G.player, G.aiShots);
+  /* panels & tags */
+  $("placePanel").hidden = G.phase!=="placement";
+  $("battlePanel").hidden = G.phase==="placement";
+  $("practiceBanner").hidden = !G.practice;
+  var pt = $("practiceTools"); if(pt) pt.hidden = !(G.practice && G.phase!=="placement");
+  var pn = $("peekNote"); if(pn) pn.hidden = !peeking;
+  var rb = $("revealBtn"); if(rb) rb.textContent = peeking ? "Hide enemy fleet" : "Peek at enemy fleet";
+  $("enemyTag").textContent = G.phase==="placement" ? "Fleet hidden" : (G.phase==="done" ? "Battle over" : "Tap a square to fire");
+  $("enemyTag").classList.toggle("live", G.phase==="battle");
+  $("playerTag").textContent = G.phase==="placement" ? "Placing ships" : (G.phase==="done" ? "Battle over" : "Under fire");
+  $("turnLabel").textContent = G.practice ? (G.phase==="placement" ? "Practice · Placement" : (G.phase==="done" ? "Practice · Done" : "Practice")) : (G.phase==="placement" ? "Placement" : (G.phase==="done" ? "Game over" : "Battle"));
+  $("diffLabel").textContent = DIFFS[settings.difficulty].label;
+  /* tray */
+  renderTray();
+  $("startBtn").disabled = !allPlaced(G.player);
+  /* battle stats */
+  $("bShots").textContent = G.shots;
+  $("bHits").textContent = G.hits;
+  $("bAcc").textContent = G.shots ? Math.round(G.hits/G.shots*100)+"%" : "—";
+  $("bSunk").textContent = G.enemy.filter(function(s){return s.sunk;}).length + " / " + G.enemy.length;
+  /* records */
+  $("stGames").textContent = bests.games;
+  $("stWins").textContent = bests.wins;
+  $("stWinRate").textContent = bests.games ? Math.round(bests.wins/bests.games*100)+"%" : "—";
+  $("stFewest").textContent = bests.fewestShots==null ? "—" : bests.fewestShots;
+  $("stBestAcc").textContent = bests.bestAccuracy==null ? "—" : bests.bestAccuracy+"%";
+}
+function renderTray(){
+  var tray = $("shipTray"); tray.innerHTML = "";
+  G.player.forEach(function(sh, k){
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ship-chip" + (k===G.selected && !sh.placed ? " selected" : "") + (sh.placed ? " placed" : "");
+    btn.innerHTML = sh.name + "<small>Length " + sh.size + " · " + (G.orient==="h" ? "horizontal" : "vertical") + "</small>";
+    btn.addEventListener("click", function(){
+      if(sh.placed){ unplace(sh); }
+      G.selected = k; renderAll();
+    });
+    tray.appendChild(btn);
+  });
+}
+function setMsg(main, sub){ $("message").textContent = main||""; $("subMessage").textContent = sub||""; }
+function logLine(text, cls){
+  var li = document.createElement("li");
+  if(cls) li.className = cls;
+  li.textContent = text;
+  var log = $("log"); log.insertBefore(li, log.firstChild);
+  while(log.children.length > 30) log.removeChild(log.lastChild);
+}
+
+/* ---------- placement interaction ---------- */
+function preview(i){
+  clearPreview();
+  if(G.phase!=="placement") return;
+  var sh = G.player[G.selected];
+  if(!sh || sh.placed) return;
+  var cells = cellsFor(i, sh.size, G.orient);
+  var occ = occupiedBy(G.player, sh);
+  var ok = !!cells && !cells.some(function(x){ return occ[x]; });
+  (cells || [i]).forEach(function(x){ playerCellEls[x].classList.add(ok ? "preview-ok" : "preview-bad"); });
+}
+function clearPreview(){
+  playerCellEls.forEach(function(el){ el.classList.remove("preview-ok","preview-bad"); });
+}
+function unplace(sh){
+  sh.cells = []; sh.hits = []; sh.placed = false; sh.sunk = false;
+}
+function onPlayerCell(i){
+  if(G.phase!=="placement") return;
+  var existing = shipAt(G.player, i);
+  if(existing && existing.placed){
+    unplace(existing);
+    G.selected = G.player.indexOf(existing);
+    setMsg(existing.name + " picked up.", "Tap a new spot to place it, or rotate first.");
+    sndPlace(); renderAll(); return;
+  }
+  var sh = G.player[G.selected];
+  if(!sh || sh.placed){
+    /* select the next unplaced ship automatically */
+    var nxt = G.player.findIndex(function(x){ return !x.placed; });
+    if(nxt<0) return;
+    G.selected = nxt; sh = G.player[nxt];
+  }
+  var cells = cellsFor(i, sh.size, G.orient);
+  var occ = occupiedBy(G.player, sh);
+  if(!cells || cells.some(function(x){ return occ[x]; })){
+    setMsg("Can't place the " + sh.name + " there.", "It would run off the board or overlap another ship. Try rotating.");
+    return;
+  }
+  sh.cells = cells; sh.placed = true; sndPlace();
+  var nxt2 = G.player.findIndex(function(x){ return !x.placed; });
+  if(nxt2>=0){ G.selected = nxt2; setMsg(sh.name + " placed.", "Now the " + G.player[nxt2].name + " — length " + G.player[nxt2].size + "."); }
+  else setMsg("Fleet ready, Captain!", "Tap Start battle when you're happy with your formation.");
+  clearPreview(); renderAll();
+}
+$("rotateBtn").addEventListener("click", function(){
+  G.orient = G.orient==="h" ? "v" : "h"; renderAll();
+});
+document.addEventListener("keydown", function(e){
+  if(e.target && (e.target.tagName==="TEXTAREA" || e.target.tagName==="INPUT")) return;
+  if((e.key==="r" || e.key==="R") && G && G.phase==="placement"){ G.orient = G.orient==="h" ? "v" : "h"; renderAll(); }
+});
+$("randomBtn").addEventListener("click", function(){
+  placeFleetRandom(G.player); sndPlace();
+  setMsg("Random fleet deployed.", "Tap any ship to move it, or Start battle to fight as-is.");
+  renderAll();
+});
+$("clearBtn").addEventListener("click", function(){
+  G.player.forEach(unplace); G.selected = 0;
+  setMsg("Fleet cleared.", "Pick a ship and tap your waters to place it.");
+  renderAll();
+});
+$("startBtn").addEventListener("click", function(){
+  if(!allPlaced(G.player)) return;
+  G.phase = "battle";
+  if(G.practice){
+    setMsg("Practice — fire when ready!", "Tap Enemy waters to shoot. Use the hint button any time — the enemy won't fire back.");
+    logLine("Practice battle started — fire freely, try the hint button.", "good");
+  } else {
+    setMsg("Battle stations!", "Tap a square in Enemy waters to fire your first shot.");
+    logLine("Battle started — good hunting, Captain.", "good");
+  }
+  renderAll();
+});
+
+/* ---------- firing ---------- */
+function applyShot(fleet, shots, i){
+  var sh = shipAt(fleet, i);
+  if(!sh){ shots[i] = "miss"; return {hit:false, sunk:null}; }
+  shots[i] = "hit"; sh.hits.push(i);
+  if(sh.hits.length >= sh.size){ sh.sunk = true; return {hit:true, sunk:sh}; }
+  return {hit:true, sunk:null};
+}
+function fleetSunk(fleet){ return fleet.every(function(sh){ return sh.sunk; }); }
+
+function computeHint(){
+  /* next to an unsunk hit first */
+  var open = [];
+  G.enemy.forEach(function(sh){ if(!sh.sunk) sh.hits.forEach(function(h){ open.push(h); }); });
+  var cands = [];
+  function pushC(x){ if(x>=0 && x<SIZE*SIZE && !G.playerShots[x] && cands.indexOf(x)<0) cands.push(x); }
+  open.forEach(function(h){ var r=rowOf(h), c=colOf(h); if(r>0)pushC(idx(r-1,c)); if(r<SIZE-1)pushC(idx(r+1,c)); if(c>0)pushC(idx(r,c-1)); if(c<SIZE-1)pushC(idx(r,c+1)); });
+  if(cands.length) return cands[rand(cands.length)];
+  var pool = [], j;
+  for(j=0;j<SIZE*SIZE;j++) if(!G.playerShots[j] && (rowOf(j)+colOf(j))%2===0) pool.push(j);
+  if(!pool.length) for(j=0;j<SIZE*SIZE;j++) if(!G.playerShots[j]) pool.push(j);
+  return pool.length ? pool[rand(pool.length)] : -1;
+}
+async function onEnemyCell(i){
+  if(G.phase!=="battle" || G.busy || G.playerShots[i]) return;
+  hintCell = -1;
+  G.busy = true; G.shots++; G.lastPlayerShot = i;
+  var res = applyShot(G.enemy, G.playerShots, i);
+  if(res.hit){
+    G.hits++;
+    if(res.sunk){ sndSunk(); setMsg("You sank their " + res.sunk.name + "!", ""); logLine("💥 " + coordName(i) + " — hit! You sank their " + res.sunk.name + ".", "good"); }
+    else { sndHit(); setMsg("Hit at " + coordName(i) + "!", "Something's burning out there — finish it off."); logLine("🎯 " + coordName(i) + " — hit!", "good"); }
+  } else {
+    sndMiss(); setMsg("Miss at " + coordName(i) + ".", "Just water. The enemy is preparing to fire…");
+    logLine("🌊 " + coordName(i) + " — miss.", "");
+  }
+  renderAll();
+  if(fleetSunk(G.enemy)){ endGame(true); return; }
+  if(G.practice){
+    G.busy = false;
+    if(!res.hit) setMsg("Miss at " + coordName(i) + " — try again!", "Practice: no return fire. Tap the hint button if you want a nudge.");
+    else if(!res.sunk) setMsg("Hit at " + coordName(i) + " — keep going!", "Practice tip: try a square right next to that hit.");
+    renderAll();
+    return;
+  }
+  await sleep(750);
+  if(G.phase!=="battle") return;
+  aiTurn();
+  renderAll();
+  if(fleetSunk(G.player)){ endGame(false); return; }
+  G.busy = false;
+  renderAll();
+}
+
+/* ---------- AI ---------- */
+function aiCandidates(){
+  var untried = [], i;
+  for(i=0;i<SIZE*SIZE;i++) if(!G.aiShots[i] && !G.aiKnownWater[i]) untried.push(i);
+  return untried;
+}
+function aiTargetShot(){
+  var hits = G.aiOpenHits;
+  if(!hits.length) return -1;
+  var candidates = [];
+  function push(i){ if(i>=0 && i<SIZE*SIZE && !G.aiShots[i] && !G.aiKnownWater[i] && candidates.indexOf(i)<0) candidates.push(i); }
+  if(hits.length>=2){
+    /* follow the line */
+    var rows = hits.map(rowOf), cols = hits.map(colOf);
+    var sameRow = rows.every(function(r){ return r===rows[0]; });
+    var sameCol = cols.every(function(c){ return c===cols[0]; });
+    if(sameRow){
+      var r0 = rows[0], mn = Math.min.apply(null, cols), mx = Math.max.apply(null, cols);
+      if(mn>0) push(idx(r0, mn-1));
+      if(mx<SIZE-1) push(idx(r0, mx+1));
+    } else if(sameCol){
+      var c0 = cols[0], mn2 = Math.min.apply(null, rows), mx2 = Math.max.apply(null, rows);
+      if(mn2>0) push(idx(mn2-1, c0));
+      if(mx2<SIZE-1) push(idx(mx2+1, c0));
+    }
+  }
+  if(!candidates.length){
+    hits.forEach(function(h){
+      var r = rowOf(h), c = colOf(h);
+      if(r>0) push(idx(r-1,c));
+      if(r<SIZE-1) push(idx(r+1,c));
+      if(c>0) push(idx(r,c-1));
+      if(c<SIZE-1) push(idx(r,c+1));
+    });
+  }
+  if(!candidates.length) return -1;
+  return candidates[rand(candidates.length)];
+}
+function aiChooseShot(){
+  if(settings.difficulty !== "easy"){
+    var t = aiTargetShot();
+    if(t>=0) return t;
+  }
+  var pool = aiCandidates();
+  if(settings.difficulty === "hard"){
+    var parity = pool.filter(function(i){ return (rowOf(i)+colOf(i))%2===0; });
+    if(parity.length) pool = parity;
+  }
+  if(!pool.length) pool = aiCandidates();
+  return pool[rand(pool.length)];
+}
+function aiTurn(){
+  var i = aiChooseShot();
+  if(i<0) return;
+  G.lastAiShot = i;
+  var res = applyShot(G.player, G.aiShots, i);
+  if(res.hit){
+    G.aiOpenHits.push(i);
+    if(res.sunk){
+      sndSunk();
+      G.aiOpenHits = G.aiOpenHits.filter(function(h){ return res.sunk.cells.indexOf(h)<0; });
+      if(settings.difficulty === "hard"){
+        /* rule out the water around a sunk ship — no ship can touch it diagonally
+           in this AI's doctrine, and orthogonal neighbours are covered by hits/misses */
+        res.sunk.cells.forEach(function(cell){
+          var r = rowOf(cell), c = colOf(cell), dr, dc;
+          for(dr=-1;dr<=1;dr++) for(dc=-1;dc<=1;dc++){
+            var rr = r+dr, cc = c+dc;
+            if(rr<0||cc<0||rr>=SIZE||cc>=SIZE) continue;
+            var n = idx(rr,cc);
+            if(!G.aiShots[n] && !shipAt(G.player, n)) G.aiKnownWater[n] = true;
+          }
+        });
+      }
+      setMsg("They sank your " + res.sunk.name + "!", "Your turn — make it count.");
+      logLine("💥 Enemy hit " + coordName(i) + " — your " + res.sunk.name + " is sunk!", "bad");
+    } else {
+      sndHit();
+      setMsg("Enemy hit your fleet at " + coordName(i) + "!", "Your turn, Captain.");
+      logLine("🎯 Enemy hit " + coordName(i) + ".", "bad");
+    }
+  } else {
+    sndMiss();
+    setMsg("Enemy missed at " + coordName(i) + ".", "Your turn — pick your target.");
+    logLine("🌊 Enemy missed at " + coordName(i) + ".", "");
+  }
+}
+
+/* ---------- end of game ---------- */
+function endGame(won){
+  G.phase = "done"; G.busy = false; hintCell = -1;
+  if(G.practice){
+    var pacc = G.shots ? Math.round(G.hits/G.shots*100) : 0;
+    if(won){
+      setMsg("Practice complete — you sank the whole fleet!", "");
+      $("resultTitle").textContent = "🎯 Practice complete!";
+      $("resultText").textContent = "You sank all five enemy ships in " + G.shots + " shots (" + pacc + "% accuracy). Practice games don't count toward your records — turn Practice off when you're ready for a real battle.";
+      logLine("🎯 Practice won in " + G.shots + " shots — not counted in records.", "good");
+    } else {
+      $("resultTitle").textContent = "Practice over";
+      $("resultText").textContent = "Practice round ended. Try again — practice never counts against you.";
+    }
+    $("resultBox").classList.add("show");
+    renderAll();
+    return;
+  }
+  if(!G.counted){
+    G.counted = true;
+    bests.games++;
+    if(won){
+      bests.wins++; streak++;
+      if(streak > bests.bestStreak) bests.bestStreak = streak;
+      if(bests.fewestShots==null || G.shots < bests.fewestShots) bests.fewestShots = G.shots;
+      var acc = Math.round(G.hits/G.shots*100);
+      if(bests.bestAccuracy==null || acc > bests.bestAccuracy) bests.bestAccuracy = acc;
+    } else streak = 0;
+    saveBests();
+  }
+  var acc = G.shots ? Math.round(G.hits/G.shots*100) : 0;
+  if(won){
+    sndSunk();
+    setMsg("Victory! The enemy fleet is sunk.", "");
+    $("resultTitle").textContent = "🏆 Victory!";
+    $("resultText").textContent = "You sank all five enemy ships in " + G.shots + " shots (" + acc + "% accuracy)" +
+      (bests.fewestShots === G.shots ? " — a new personal best!" : ". Your record is " + bests.fewestShots + " shots.");
+    logLine("🏆 Victory in " + G.shots + " shots!", "good");
+  } else {
+    setMsg("Your fleet is sunk.", "");
+    $("resultTitle").textContent = "Defeat";
+    var remaining = G.enemy.filter(function(s){ return !s.sunk; }).length;
+    $("resultText").textContent = "The " + DIFFS[settings.difficulty].label + " sank your fleet with " + remaining +
+      " enemy ship" + (remaining===1?"":"s") + " still afloat. Reveal: the enemy board now shows what you hit — rematch and hunt them down.";
+    logLine("Defeat — your fleet is sunk.", "bad");
+  }
+  $("resultBox").classList.add("show");
+  renderAll();
+  /* on defeat, reveal remaining enemy ship positions as a courtesy */
+  if(!won){
+    G.enemy.forEach(function(sh){
+      sh.cells.forEach(function(i){
+        if(!G.playerShots[i]){
+          var el = enemyCellEls[i];
+          el.classList.add("ship"); el.style.opacity = ".55";
+        }
+      });
+    });
+  }
+}
+
+/* ---------- controls ---------- */
+var diffSel = $("difficulty");
+diffSel.value = settings.difficulty in DIFFS ? settings.difficulty : "normal";
+settings.difficulty = diffSel.value;
+$("soundToggle").checked = !!settings.sound;
+diffSel.addEventListener("change", function(){
+  settings.difficulty = diffSel.value; saveSettings();
+  $("resultBox").classList.remove("show");
+  newGame();
+  setMsg("New game — " + DIFFS[settings.difficulty].label + " commanding the enemy.", "Place your fleet to begin.");
+});
+$("soundToggle").addEventListener("change", function(){
+  settings.sound = $("soundToggle").checked; saveSettings();
+  if(settings.sound) sndPlace();
+});
+$("newBtn").addEventListener("click", function(){
+  $("resultBox").classList.remove("show");
+  newGame();
+});
+$("rematchBtn").addEventListener("click", function(){
+  $("resultBox").classList.remove("show");
+  newGame();
+});
+$("practiceToggle").addEventListener("change", function(){
+  practiceMode = $("practiceToggle").checked;
+  $("resultBox").classList.remove("show");
+  newGame();
+});
+$("hintBtn").addEventListener("click", function(){
+  if(!G || !G.practice || G.phase!=="battle") return;
+  hintCell = computeHint();
+  if(hintCell>=0){
+    setMsg("Hint: try " + coordName(hintCell) + ".", hintCell>=0 && G.enemy.some(function(sh){ return !sh.sunk && sh.hits.length; }) ? "It's right next to a hit — a ship has to continue somewhere." : "It's a checkerboard square — every ship covers at least one, so it's a smart place to hunt.");
+    logLine("💡 Hint — try " + coordName(hintCell) + ".", "good");
+  }
+  renderAll();
+});
+$("revealBtn").addEventListener("click", function(){
+  if(!G || !G.practice) return;
+  peeking = !peeking; renderAll();
+});
+$("resetBtn").addEventListener("click", function(){
+  bests = {games:0, wins:0, bestStreak:0, fewestShots:null, bestAccuracy:null};
+  streak = 0; saveBests(); renderAll();
+  setMsg("Records reset.", "Your current game is untouched.");
+});
+
+/* ---------- feedback (standard on all games: rating + comment, saved on this device) ---------- */
+var LS_FEEDBACK = "holos-arcade-feedback";
+var feedbackOverlay = $("feedbackOverlay");
+var fbRating = 0;
+var fbTag = "Other";
+function fbPaintStars(){
+  var stars = $("fbStars").children;
+  for(var i=0;i<stars.length;i++){
+    var on = i < fbRating;
+    stars[i].classList.toggle("on", on);
+    stars[i].setAttribute("aria-checked", on && i === fbRating-1 ? "true" : "false");
+  }
+  $("fbSubmit").disabled = fbRating < 1;
+}
+function fbPaintTags(){
+  var tags = $("fbTags").children;
+  for(var i=0;i<tags.length;i++){
+    var on = tags[i].getAttribute("data-tag") === fbTag;
+    tags[i].classList.toggle("on", on);
+    tags[i].setAttribute("aria-pressed", on ? "true" : "false");
+  }
+}
+$("fbStars").addEventListener("click", function(e){
+  var btn = e.target.closest ? e.target.closest(".star") : null;
+  if(!btn) return;
+  fbRating = parseInt(btn.getAttribute("data-v"), 10) || 0;
+  fbPaintStars();
+});
+$("fbTags").addEventListener("click", function(e){
+  var btn = e.target.closest ? e.target.closest(".fb-tag") : null;
+  if(!btn) return;
+  fbTag = btn.getAttribute("data-tag") || "Other";
+  fbPaintTags();
+});
+function openFeedback(){
+  fbRating = 0;
+  fbTag = "Other";
+  $("fbComment").value = "";
+  $("fbForm").style.display = "";
+  $("fbThanks").classList.remove("show");
+  $("fbSubmit").style.display = "";
+  fbPaintStars(); fbPaintTags();
+  feedbackOverlay.hidden = false;
+}
+function closeFeedback(){ feedbackOverlay.hidden = true; }
+$("feedbackBtn").addEventListener("click", openFeedback);
+$("fbClose").addEventListener("click", closeFeedback);
+feedbackOverlay.addEventListener("click", function(e){ if(e.target===feedbackOverlay) closeFeedback(); });
+$("fbSubmit").addEventListener("click", function(){
+  if(fbRating < 1) return;
+  var entry = {
+    game: "battleship",
+    rating: fbRating,
+    text: $("fbComment").value.trim(),
+    tag: fbTag,
+    timestamp: new Date().toISOString()
+  };
+  try{
+    var saved = JSON.parse(localStorage.getItem(LS_FEEDBACK) || "[]");
+    if(!Array.isArray(saved)) saved = [];
+    saved.push(entry);
+    localStorage.setItem(LS_FEEDBACK, JSON.stringify(saved));
+  }catch(e){}
+  $("fbForm").style.display = "none";
+  $("fbSubmit").style.display = "none";
+  $("fbThanks").classList.add("show");
+  sndPlace();
+});
+
+/* ---------- how to play + walkthrough ---------- */
+var howOverlay = $("howOverlay");
+function markSeen(){ try{ localStorage.setItem(LS_SEEN,"1"); }catch(e){} $("hintBar").hidden = true; }
+$("howBtn").addEventListener("click", function(){ howOverlay.hidden = false; markSeen(); });
+$("howClose").addEventListener("click", function(){ howOverlay.hidden = true; });
+howOverlay.addEventListener("click", function(e){ if(e.target===howOverlay) howOverlay.hidden = true; });
+
+var rulesOverlay = $("rulesOverlay");
+$("rulesBtn").addEventListener("click", function(){ rulesOverlay.hidden = false; markSeen(); });
+$("rulesClose").addEventListener("click", function(){ rulesOverlay.hidden = true; });
+rulesOverlay.addEventListener("click", function(e){ if(e.target===rulesOverlay) rulesOverlay.hidden = true; });
+$("howRules").addEventListener("click", function(){ howOverlay.hidden = true; rulesOverlay.hidden = false; });
+$("rulesHow").addEventListener("click", function(){ rulesOverlay.hidden = true; howOverlay.hidden = false; });
+$("hintClose").addEventListener("click", markSeen);
+
+var TOUR = [
+  {sel:"#shipTray", title:"1 · Pick a ship", text:"These are your five ships — Carrier (5) down to Destroyer (2). Tap one to select it, then tap your board to place it. Tap a placed ship any time to pick it back up and move it."},
+  {sel:"#playerPanel", title:"2 · Your waters", text:"This board is your fleet. Ships show as grey hulls. During the battle, red ✕ marks are enemy hits on you and pale dots are their misses."},
+  {sel:"#rotateBtn", title:"3 · Rotate & random", text:"Rotate flips the selected ship between horizontal and vertical (keyboard: R). Random fleet places everything instantly if you'd rather just get fighting."},
+  {sel:"#enemyPanel", title:"4 · Enemy waters", text:"The enemy fleet is hidden here. Once the battle starts, tap any square to fire: red ✕ is a hit, a pale dot is a splash. Sink all five of their ships before they sink yours."},
+  {sel:"#difficulty", title:"5 · Pick your opponent", text:"Ensign fires at random. Captain follows up on its hits. Admiral hunts on a checkerboard, follows the line of a damaged ship, and learns from every sinking. Switching starts a new game."},
+  {sel:"#practiceToggle", title:"6 · Practice round", text:"Flip this on for a relaxed round: the enemy never fires back, you get a hint button and can peek at their fleet, and nothing counts toward your records. Perfect for learning — flip it off for a real battle."},
+  {sel:"#statsBarAnchor", title:"7 · Your records", text:"Games, wins, win rate, fewest shots to win and best accuracy are saved on this device, so every rematch is a shot at your own records."}
+];
+var tourIdx = -1;
+function showTourStep(i){
+  tourIdx = i;
+  if(i>=TOUR.length){ endTour(); return; }
+  var step = TOUR[i], target = document.querySelector(step.sel);
+  $("tourTitle").textContent = step.title;
+  $("tourText").textContent = step.text;
+  $("tourCount").textContent = "Step "+(i+1)+" of "+TOUR.length;
+  $("tourNext").textContent = i===TOUR.length-1 ? "Finish" : "Next";
+  $("tourCard").hidden = false;
+  var hi = $("tourHi");
+  if(target){
+    target.scrollIntoView({block:"nearest", behavior:"smooth"});
+    setTimeout(function(){
+      var r = target.getBoundingClientRect();
+      hi.hidden = false;
+      hi.style.left = (r.left-6)+"px"; hi.style.top = (r.top-6)+"px";
+      hi.style.width = (r.width+12)+"px"; hi.style.height = (r.height+12)+"px";
+    }, 60);
+  } else hi.hidden = true;
+}
+function endTour(){
+  tourIdx = -1; $("tourCard").hidden = true; $("tourHi").hidden = true;
+  try{ localStorage.setItem(LS_SEEN,"1"); }catch(e){}
+}
+$("tourNext").addEventListener("click", function(){ showTourStep(tourIdx+1); });
+$("tourSkip").addEventListener("click", endTour);
+$("tourBtn").addEventListener("click", function(){ markSeen(); showTourStep(0); });
+$("howTour").addEventListener("click", function(){ howOverlay.hidden = true; showTourStep(0); });
+window.addEventListener("resize", function(){ if(tourIdx>=0) showTourStep(tourIdx); });
+
+/* ---------- init ---------- */
+/* anchor for the tour's records step */
+var anchor = document.createElement("span"); anchor.id = "statsBarAnchor";
+var statsEl = document.querySelector(".stats"); statsEl.parentNode.insertBefore(anchor, statsEl); anchor.appendChild(statsEl);
+
+newGame();
+/* Tutorial is opt-in only: never auto-open it. First visit gets one small,
+   non-blocking hint pointing at the How to play / Tour / Rules buttons. */
+var seen = false;
+try{ seen = !!localStorage.getItem(LS_SEEN); }catch(e){}
+if(!seen){ $("hintBar").hidden = false; }
+})();
+</script>
+</body>
+</html>

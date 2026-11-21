@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Water Gun Race — Holo's Arcade</title>
+<meta name="description" content="Hold to spray, keep your stream on the target, and race your duck to the finish against three AI racers. Levels, tickets, and bragging rights — play-money only.">
+<style>
+  :root{
+    --ink:#17324a; --ink-soft:#4a6a82; --panel:#ffffff; --line:#cfe3ef;
+    --water:#1f9be0; --water-deep:#0f6fa8; --sun:#ffb703; --good:#2e9e5b; --bad:#d64541;
+    --lane1:#ffe9ec; --lane2:#e6f6ff; --lane3:#fff6d9; --lane4:#e9f9ee;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink);
+    background:linear-gradient(180deg,#bfe9ff 0%,#eaf8ff 55%,#fff7e0 100%);
+    min-height:100vh; -webkit-tap-highlight-color:transparent;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:14px 14px 30px}
+  h1{font-size:1.7rem;margin:6px 0 2px;letter-spacing:.2px}
+  .tagline{color:var(--ink-soft);font-weight:600;margin:0 0 12px;font-size:.95rem}
+  .topbar{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;margin-bottom:10px}
+  .group{display:flex;flex-wrap:wrap;gap:8px}
+  .btn{
+    font:inherit;font-weight:700;font-size:.95rem;color:var(--ink);background:var(--panel);
+    border:2px solid var(--line);border-radius:999px;padding:10px 16px;min-height:44px;
+    cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  }
+  .btn:active{transform:scale(.97)}
+  .btn.primary{background:var(--water);border-color:var(--water-deep);color:#fff}
+  .btn:disabled{opacity:.45;cursor:default;transform:none}
+  .btn.icon{padding:10px 12px}
+  .hud{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+  .stat{background:var(--panel);border:2px solid var(--line);border-radius:14px;padding:8px 6px;text-align:center}
+  .stat .label{font-size:.7rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-soft)}
+  .stat .value{font-size:1.25rem;font-weight:900;line-height:1.15}
+  .diffrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px}
+  .dlabel{font-weight:800;font-size:.85rem;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.05em}
+  .seg{display:inline-flex;background:var(--panel);border:2px solid var(--line);border-radius:999px;overflow:hidden}
+  .seg button{
+    font:inherit;font-weight:700;font-size:.9rem;border:none;background:transparent;color:var(--ink);
+    padding:10px 14px;min-height:44px;cursor:pointer;
+  }
+  .seg button[aria-pressed="true"]{background:var(--water);color:#fff}
+  .seg button:disabled{opacity:.45;cursor:default}
+  .mode-note{font-size:.88rem;color:var(--ink-soft);font-weight:600;margin:2px 0 10px}
+  .track{
+    position:relative;background:var(--panel);border:3px solid var(--line);border-radius:18px;
+    padding:10px 10px 6px;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
+  }
+  .finish{
+    position:absolute;top:0;bottom:0;width:14px;right:34px;
+    background:repeating-conic-gradient(#17324a 0 25%,#fff 0 50%) 0 0/14px 14px;opacity:.85;
+  }
+  .lane{position:relative;height:62px;border-radius:12px;margin-bottom:8px;overflow:hidden}
+  .lane:nth-child(1){background:var(--lane1)} .lane:nth-child(2){background:var(--lane2)}
+  .lane:nth-child(3){background:var(--lane3)} .lane:nth-child(4){background:var(--lane4)}
+  .lane .who{
+    position:absolute;left:8px;top:4px;font-size:.72rem;font-weight:800;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--ink-soft);z-index:3;
+  }
+  .racer{position:absolute;top:16px;left:0;font-size:34px;line-height:1;z-index:2;will-change:transform;filter:drop-shadow(0 2px 2px rgba(0,0,0,.18))}
+  .racer .place{
+    position:absolute;top:-12px;right:-14px;font-size:.7rem;font-weight:900;background:var(--sun);
+    color:#5a3d00;border-radius:999px;padding:1px 6px;display:none;
+  }
+  .target{
+    position:absolute;right:52px;width:30px;height:30px;border-radius:50%;z-index:2;
+    background:radial-gradient(circle,#fff 0 22%,#e4572e 23% 48%,#fff 49% 70%,#e4572e 71% 100%);
+    border:2px solid #b73a1c;will-change:transform;
+  }
+  .target.hit{box-shadow:0 0 0 4px rgba(255,183,3,.85)}
+  canvas#spray{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4}
+  .countdown{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;z-index:6;
+    font-size:4rem;font-weight:900;color:var(--water-deep);text-shadow:0 3px 0 #fff;background:rgba(255,255,255,.45);
+  }
+  .cover{
+    position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    z-index:5;background:rgba(255,255,255,.82);text-align:center;padding:16px;
+  }
+  .cover .big{font-size:1.6rem;font-weight:900}
+  .cover p{margin:0;color:var(--ink-soft);font-weight:600;max-width:420px}
+  .tankrow{display:flex;align-items:center;gap:10px;margin:12px 2px 4px;font-weight:800;font-size:.85rem;color:var(--ink-soft)}
+  .tank{flex:1;height:16px;border-radius:999px;background:#e3f1f8;border:2px solid var(--line);overflow:hidden}
+  .tankfill{height:100%;width:100%;background:linear-gradient(90deg,var(--water),#63c7f5);transition:width .08s linear}
+  .tankfill.low{background:linear-gradient(90deg,#e4572e,#ffb703)}
+  .aimnote{font-size:.88rem;color:var(--ink-soft);font-weight:600;margin:4px 2px 10px}
+  .spraybtn{
+    width:100%;font:inherit;font-size:1.3rem;font-weight:900;color:#fff;letter-spacing:.03em;
+    background:linear-gradient(180deg,#2fb1f2,var(--water-deep));border:none;border-radius:18px;
+    padding:20px;min-height:68px;cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none;
+    box-shadow:0 6px 0 #0a4f78;
+  }
+  .spraybtn:active,.spraybtn.spraying{transform:translateY(4px);box-shadow:0 2px 0 #0a4f78;background:linear-gradient(180deg,#63c7f5,#1283c4)}
+  .spraybtn:disabled{opacity:.5;cursor:default}
+  .hint{font-size:.9rem;color:var(--ink-soft);font-weight:600;line-height:1.55;margin:14px 2px 0}
+  .newbest{background:var(--sun);color:#5a3d00;font-weight:900;font-size:.75rem;border-radius:999px;padding:2px 9px;margin-left:8px;vertical-align:middle}
+  footer{margin-top:26px;border-top:2px solid var(--line);padding-top:14px;color:var(--ink-soft);font-size:.85rem;line-height:1.6}
+  footer a{color:var(--ink-soft);font-weight:700}
+  footer p{margin:0 0 6px}
+  .overlay{
+    position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;justify-content:center;
+    background:rgba(10,35,55,.55);padding:0;
+  }
+  .overlay[hidden]{display:none}
+  .sheet{
+    background:var(--panel);color:var(--ink);width:100%;max-width:640px;max-height:88vh;overflow:auto;
+    border-radius:20px 20px 0 0;padding:20px 20px 26px;
+  }
+  @media (min-width:640px){.overlay{align-items:center;padding:18px}.sheet{border-radius:20px}}
+  .sheet-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+  .sheet-head h2{margin:0;font-size:1.3rem}
+  .close-x{font:inherit;font-size:1rem;font-weight:900;background:#eef6fb;border:2px solid var(--line);border-radius:999px;width:44px;height:44px;cursor:pointer;color:var(--ink)}
+  .step{display:flex;gap:12px;margin:14px 0}
+  .step .n{
+    flex:0 0 32px;height:32px;border-radius:50%;background:var(--water);color:#fff;font-weight:900;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .step p{margin:4px 0 0;line-height:1.55;font-weight:600;color:#2c4a61}
+  .sheet h3{margin:18px 0 6px;font-size:1.02rem}
+  .sheet p,.sheet li{line-height:1.6;font-weight:600;color:#2c4a61}
+  .sheet ul{margin:6px 0;padding-left:20px}
+  .feedback-stars{display:flex;gap:6px;margin:8px 0 2px}
+  .star-btn{font-size:34px;line-height:1;background:none;border:none;cursor:pointer;padding:6px;min-width:48px;min-height:48px;color:#c8d8e2}
+  .star-btn.active{color:#f5a623}
+  .feedback-note{font-size:.85rem;color:var(--ink-soft);font-weight:700;min-height:1.2em;margin:2px 0 8px}
+  .feedback-card textarea{
+    width:100%;min-height:96px;font:inherit;padding:12px;border:2px solid var(--line);border-radius:12px;resize:vertical;color:var(--ink);
+  }
+  .feedback-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+  .feedback-tags button{
+    font:inherit;font-weight:700;font-size:.9rem;background:var(--panel);color:var(--ink);
+    border:2px solid var(--line);border-radius:999px;padding:10px 16px;min-height:44px;cursor:pointer;
+  }
+  .feedback-tags button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .feedback-terms{color:var(--ink-soft);font-weight:600;font-size:.85rem;line-height:1.5;margin:12px 0 0}
+  .feedback-error{color:var(--bad);font-weight:800;font-size:.9rem;margin-top:10px;min-height:1.25em}
+  .feedback-row{display:flex;gap:10px;margin-top:14px}
+  .feedback-row .btn{flex:1;justify-content:center}
+  .feedback-thanks{text-align:center;padding:24px 8px 8px}
+  .feedback-thanks .thanks-big{font-weight:900;font-size:1.8rem;margin:0 0 6px}
+  .feedback-thanks p{margin:0;color:var(--ink-soft)}
+  .results-list{list-style:none;margin:10px 0;padding:0}
+  .results-list li{display:flex;justify-content:space-between;gap:10px;padding:9px 12px;border:2px solid var(--line);border-radius:12px;margin-bottom:8px;font-weight:700}
+  .results-list li.you{background:#e6f6ff;border-color:var(--water)}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>💦 Water Gun Race</h1>
+  <p class="tagline">Hold to spray, keep your stream on the target, and race your duck to the finish!</p>
+
+  <div class="topbar">
+    <div class="group">
+      <button class="btn primary" id="startBtn" type="button">Start race</button>
+      <button class="btn" id="endPracticeBtn" type="button" hidden>End practice</button>
+      <button class="btn" id="resetBtn" type="button" disabled>Reset</button>
+    </div>
+    <div class="group">
+      <button class="btn" id="howBtn" type="button">How to play</button>
+      <button class="btn" id="rulesBtn" type="button">Rules</button>
+      <button class="btn" id="feedbackBtn" type="button">Feedback</button>
+      <button class="btn icon" id="soundBtn" type="button" aria-pressed="true" aria-label="Sound on">🔊</button>
+    </div>
+  </div>
+
+  <div class="hud" aria-live="off">
+    <div class="stat"><div class="label">Level</div><div class="value" id="levelVal">1</div></div>
+    <div class="stat"><div class="label">Tickets 🎟️</div><div class="value" id="ticketsVal">0</div></div>
+    <div class="stat"><div class="label">Place</div><div class="value" id="placeVal">—</div></div>
+    <div class="stat"><div class="label">Best time</div><div class="value" id="bestVal">—</div></div>
+  </div>
+
+  <div class="diffrow">
+    <span class="dlabel" id="modeLabel">Mode</span>
+    <div class="seg" id="modeSeg" role="group" aria-labelledby="modeLabel">
+      <button type="button" data-mode="race" aria-pressed="true">Race</button>
+      <button type="button" data-mode="practice" aria-pressed="false">Practice</button>
+    </div>
+    <span class="dlabel" id="diffLabel">Difficulty</span>
+    <div class="seg" id="diffSeg" role="group" aria-labelledby="diffLabel">
+      <button type="button" data-diff="easy" aria-pressed="false">😌 Easy</button>
+      <button type="button" data-diff="normal" aria-pressed="true">🎯 Normal</button>
+      <button type="button" data-diff="hard" aria-pressed="false">🔥 Hard</button>
+    </div>
+  </div>
+  <p class="mode-note" id="modeNote">Beat the three AI racers to the finish line. Higher levels = faster rivals and bigger ticket prizes.</p>
+
+  <div class="track" id="track" aria-label="Race track. Drag up or down on the track to aim your water stream.">
+    <div class="finish" aria-hidden="true"></div>
+    <div class="lane"><span class="who">You 🦆</span><div class="racer" id="racer0">🦆<span class="place"></span></div><div class="target" id="target0" aria-hidden="true"></div></div>
+    <div class="lane"><span class="who">Splash 🐸</span><div class="racer" id="racer1">🐸<span class="place"></span></div></div>
+    <div class="lane"><span class="who">Bubbles 🐙</span><div class="racer" id="racer2">🐙<span class="place"></span></div></div>
+    <div class="lane"><span class="who">Jet 🐢</span><div class="racer" id="racer3">🐢<span class="place"></span></div></div>
+    <canvas id="spray" aria-hidden="true"></canvas>
+    <div class="countdown" id="countdown" aria-hidden="true">3</div>
+    <div class="cover" id="cover">
+      <div class="big" id="coverTitle">Ready?</div>
+      <p id="coverText">Pick a difficulty, then press Start race. New here? Try a Practice run first — no rivals breathing down your neck, no tickets on the line.</p>
+      <button class="btn primary" id="coverStartBtn" type="button">Start race</button>
+      <button class="btn" id="coverPracticeBtn" type="button">Practice run</button>
+    </div>
+  </div>
+
+  <div class="tankrow"><span>💧 Tank</span><div class="tank"><div class="tankfill" id="tankFill"></div></div><span id="tankPct">100%</span></div>
+  <p class="aimnote">🎯 Aim: drag <strong>up / down</strong> on the track (or use ↑ ↓ keys) to move your stream onto the bullseye in your lane. Direct hits = full speed!</p>
+
+  <button class="spraybtn" id="sprayBtn" type="button" disabled>HOLD TO SPRAY 💦</button>
+
+  <p class="hint">Spraying drains your tank — let go to refill. A full tank with a direct hit is the fastest way down the track. Tickets are play-money only: no real prizes, no cash value, just bragging rights. 🎟️</p>
+
+  <footer>
+    <p>Part of <strong>Holo's Arcade</strong> · Ridiculously Fit and Fed (RFF) · Fit &amp; Fed Studio · <a href="../games-hub/">Back to the Games Hub</a> · <a href="../games-hub/#legal">Terms &amp; policies</a></p>
+    <p>Best times, tickets, difficulty and settings are saved on this device only. Play-money only — tickets have no cash value.</p>
+    <p><button class="btn" id="feedbackBtnFooter" type="button">💬 Feedback</button></p>
+  </footer>
+</div>
+
+<!-- How to play (opt-in tutorial — never opens on its own) -->
+<div class="overlay" id="howOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+    <div class="sheet-head"><h2 id="howTitle">How to play</h2><button class="close-x" type="button" data-close aria-label="Close">✕</button></div>
+    <div class="step"><div class="n">1</div><p><strong>Pick a mode and difficulty.</strong> <strong>Race</strong> pits you against three AI racers for tickets. <strong>Practice</strong> is a chill solo run — gentle rivals, no tickets, nothing saved. Difficulty sets how fast the AI racers go, how big your target is, and how fast your tank drains. Your difficulty choice is saved on this device.</p></div>
+    <div class="step"><div class="n">2</div><p><strong>Press Start race</strong> and wait for the 3-2-1-GO countdown. Your duck is in the top lane.</p></div>
+    <div class="step"><div class="n">3</div><p><strong>Hold the big SPRAY button</strong> (or hold Space) to fire your water gun. Your duck only moves while you're spraying.</p></div>
+    <div class="step"><div class="n">4</div><p><strong>Aim at the bullseye.</strong> The target in your lane bobs up and down. Drag up/down on the track — or tap ↑ / ↓ — to move your stream. On the bullseye = full speed. Off it = a sad little trickle.</p></div>
+    <div class="step"><div class="n">5</div><p><strong>Watch your tank.</strong> Spraying drains it; letting go refills it. Short, well-aimed bursts beat holding it down forever.</p></div>
+    <div class="step"><div class="n">6</div><p><strong>First to the checkered line wins.</strong> Finish 1st to unlock the next level. Tickets: 1st = 100, 2nd = 60, 3rd = 30, 4th = 10, times the level number. Your best finish time per level and difficulty is saved on this device.</p></div>
+    <p><button class="btn" type="button" id="howToRules">Read the full rules</button></p>
+  </div>
+</div>
+
+<!-- Rules -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <div class="sheet-head"><h2 id="rulesTitle">Rules</h2><button class="close-x" type="button" data-close aria-label="Close">✕</button></div>
+    <h3>Objective</h3>
+    <p>Be the first racer to reach the checkered finish line. You race as the duck 🦆 against three AI racers: Splash 🐸, Bubbles 🐙 and Jet 🐢.</p>
+    <h3>How racing works</h3>
+    <ul>
+      <li>Your racer moves <strong>only while you hold SPRAY</strong> (button, track press-and-hold with the button, or Space key).</li>
+      <li>Your stream's height is set by dragging up/down on the track or with the ↑ / ↓ arrow keys.</li>
+      <li>The bullseye in your lane bobs up and down. Stream on the bullseye = <strong>full speed</strong>. Stream near it = half speed. Stream far from it = quarter speed (a trickle).</li>
+      <li>Spraying drains your water tank. At 0% you can't spray until it refills. Releasing the button refills the tank.</li>
+      <li>AI racers move at their own pace with random surges and slowdowns. They don't use tanks.</li>
+    </ul>
+    <h3>Levels</h3>
+    <p>There are 8 levels. Each level the track gets longer, the AI gets faster, and the bullseye bobs quicker. Finish <strong>1st</strong> to unlock the next level. You can replay any unlocked level from the level selector after a race — your highest unlocked level is saved on this device.</p>
+    <h3>Tickets (play-money only)</h3>
+    <ul>
+      <li>1st place: 100 tickets · 2nd: 60 · 3rd: 30 · 4th: 10 — multiplied by the level number.</li>
+      <li>Tickets are <strong>play-money only</strong>. They have no cash value, can't be bought, sold, or exchanged for real prizes.</li>
+      <li>Your total ticket bank is saved on this device.</li>
+    </ul>
+    <h3>Difficulty</h3>
+    <p><strong>Easy:</strong> slower AI, bigger bullseye, slower tank drain. <strong>Normal:</strong> the standard race. <strong>Hard:</strong> faster AI, smaller bullseye, faster tank drain, and a +50% ticket bonus. Difficulty locks during a race and is saved on this device between visits. Best finish times are saved separately for each difficulty and level.</p>
+    <h3>Practice mode</h3>
+    <p>Practice is a no-pressure warm-up: the AI racers cruise slowly, there are <strong>no tickets</strong>, no level unlocks, and your finish time is <strong>never saved as a best</strong>. Tap <strong>End practice</strong> any time to stop early.</p>
+    <h3>Winning &amp; results</h3>
+    <p>The race ends when <strong>you</strong> cross the finish line (AI finishing times are shown for places already decided). Your place, time, and tickets earned are shown on the results card. If an AI racer finishes before you, you can keep racing for the remaining places.</p>
+  </div>
+</div>
+
+<!-- Results -->
+<div class="overlay" id="resultsOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="resultsTitle">
+    <div class="sheet-head"><h2 id="resultsTitle">Race over!</h2><button class="close-x" type="button" data-close aria-label="Close">✕</button></div>
+    <p id="resultsLine" style="font-weight:800"></p>
+    <ul class="results-list" id="resultsList"></ul>
+    <p id="resultsTickets"></p>
+    <div class="feedback-row">
+      <button class="btn primary" id="againBtn" type="button">Race again</button>
+      <button class="btn" id="nextLevelBtn" type="button" hidden>Next level ▶</button>
+    </div>
+    <div class="diffrow" style="margin-top:14px">
+      <span class="dlabel" id="levelLabel">Level</span>
+      <div class="seg" id="levelSeg" role="group" aria-labelledby="levelLabel"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback (less formal, standard) -->
+<div class="overlay" id="feedbackOverlay" hidden>
+  <div class="sheet feedback-card" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+    <div class="sheet-head"><h2 id="feedbackTitle">How'd we do? 💦</h2><button class="close-x" type="button" data-close aria-label="Close">✕</button></div>
+    <div id="feedbackFormWrap">
+      <p style="margin-top:0">Quick one — tap some stars, tell us anything, done. No homework, promise.</p>
+      <div class="feedback-stars" id="feedbackStars" role="radiogroup" aria-label="Star rating">
+        <button type="button" class="star-btn" data-rating="1" aria-pressed="false" aria-label="1 star">★</button>
+        <button type="button" class="star-btn" data-rating="2" aria-pressed="false" aria-label="2 stars">★</button>
+        <button type="button" class="star-btn" data-rating="3" aria-pressed="false" aria-label="3 stars">★</button>
+        <button type="button" class="star-btn" data-rating="4" aria-pressed="false" aria-label="4 stars">★</button>
+        <button type="button" class="star-btn" data-rating="5" aria-pressed="false" aria-label="5 stars">★</button>
+      </div>
+      <div class="feedback-note" id="feedbackRatingNote"></div>
+      <textarea id="feedbackText" placeholder="Loved it? Something broke? Idea for next time? Spill it here…" aria-label="Your feedback"></textarea>
+      <div class="feedback-tags" id="feedbackTags" role="group" aria-label="Feedback tag (optional)">
+        <button type="button" data-tag="Bug" aria-pressed="false">🐛 Bug</button>
+        <button type="button" data-tag="Suggestion" aria-pressed="false">💡 Suggestion</button>
+        <button type="button" data-tag="Other" aria-pressed="false">💬 Other</button>
+      </div>
+      <p class="feedback-terms">Saved on this device only — nothing is emailed or sent anywhere. We'll automatically note which game, difficulty and level you were on so it's easy to follow up.</p>
+      <div class="feedback-error" id="feedbackError" role="alert"></div>
+      <div class="feedback-row">
+        <button class="btn" type="button" data-close>Cancel</button>
+        <button class="btn primary" id="feedbackSaveBtn" type="button">Send it 💜</button>
+      </div>
+    </div>
+    <div class="feedback-thanks" id="feedbackThanks" hidden>
+      <p class="thanks-big">Thanks! 💜</p>
+      <p>Got it — saved on this device.</p>
+      <div class="feedback-row"><button class="btn primary" type="button" data-close>Done</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var GAME = "water-gun-race";
+  var LS = {
+    diff: "watergunrace_diff",
+    sound: "watergunrace_sound",
+    tickets: "watergunrace_tickets",
+    unlocked: "watergunrace_unlocked",
+    best: function(d,l){ return "watergunrace_best_" + d + "_" + l; }
+  };
+  var FEEDBACK_KEY = "holos-arcade-feedback";
+
+  function lsGet(k, d){ try{ var v = localStorage.getItem(k); return v === null ? d : v; }catch(e){ return d; } }
+  function lsSet(k, v){ try{ localStorage.setItem(k, String(v)); }catch(e){} }
+
+  var DIFFS = {
+    easy:   { label:"Easy",   ai:0.72, target:38, drain:16, bonus:1 },
+    normal: { label:"Normal", ai:0.92, target:30, drain:22, bonus:1 },
+    hard:   { label:"Hard",   ai:1.12, target:24, drain:28, bonus:1.5 }
+  };
+  var MAX_LEVEL = 8;
+  var RACERS = [
+    { name:"You",     emoji:"🦆" },
+    { name:"Splash",  emoji:"🐸" },
+    { name:"Bubbles", emoji:"🐙" },
+    { name:"Jet",     emoji:"🐢" }
+  ];
+  var TICKETS_BY_PLACE = [100, 60, 30, 10];
+
+  var S = {
+    mode: "race",
+    diff: lsGet(LS.diff, "normal"),
+    level: 1,
+    unlocked: Math.min(MAX_LEVEL, Math.max(1, parseInt(lsGet(LS.unlocked, "1"), 10) || 1)),
+    tickets: parseInt(lsGet(LS.tickets, "0"), 10) || 0,
+    sound: lsGet(LS.sound, "1") !== "0",
+    phase: "idle", // idle | countdown | running | done
+    racers: [],    // {pos 0..1, speed, surge, finishTime}
+    tank: 100,
+    spraying: false,
+    aimY: 0.5,     // 0..1 within player lane
+    targetY: 0.5,
+    targetT: 0,
+    startAt: 0,
+    raf: 0,
+    lastTs: 0,
+    particles: []
+  };
+  if (!DIFFS[S.diff]) S.diff = "normal";
+
+  var $ = function(id){ return document.getElementById(id); };
+  var track = $("track"), sprayBtn = $("sprayBtn"), startBtn = $("startBtn"), resetBtn = $("resetBtn");
+  var endPracticeBtn = $("endPracticeBtn"), cover = $("cover"), countdownEl = $("countdown");
+  var tankFill = $("tankFill"), tankPct = $("tankPct");
+  var racerEls = [$("racer0"), $("racer1"), $("racer2"), $("racer3")];
+  var targetEl = $("target0");
+  var canvas = $("spray"), ctx = canvas.getContext("2d");
+
+  /* ---------- sound (tiny, optional) ---------- */
+  var audioCtx = null;
+  function beep(freq, dur, type){
+    if (!S.sound) return;
+    try{
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = type || "sine"; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(); o.stop(audioCtx.currentTime + dur);
+    }catch(e){}
+  }
+
+  /* ---------- settings UI ---------- */
+  function syncSeg(segId, attr, val){
+    var seg = $(segId);
+    Array.prototype.forEach.call(seg.querySelectorAll("button"), function(b){
+      b.setAttribute("aria-pressed", b.getAttribute(attr) === val ? "true" : "false");
+    });
+  }
+  function lockSettings(locked){
+    ["modeSeg","diffSeg"].forEach(function(id){
+      Array.prototype.forEach.call($(id).querySelectorAll("button"), function(b){ b.disabled = locked; });
+    });
+  }
+  function isPractice(){ return S.mode === "practice"; }
+  function fmtTime(sec){ return sec == null ? "—" : sec.toFixed(1) + "s"; }
+  function getBest(){
+    var v = parseFloat(lsGet(LS.best(S.diff, S.level), ""));
+    return isNaN(v) ? null : v;
+  }
+  function refreshHud(){
+    $("levelVal").textContent = S.level;
+    $("ticketsVal").textContent = S.tickets;
+    $("bestVal").textContent = isPractice() ? "—" : fmtTime(getBest());
+    $("modeNote").textContent = isPractice()
+      ? "Practice: gentle rivals, no tickets, nothing saved. Just get a feel for the spray + aim."
+      : "Beat the three AI racers to the finish line. Higher levels = faster rivals and bigger ticket prizes.";
+    startBtn.textContent = isPractice() ? "Start practice" : "Start race";
+    $("coverStartBtn").textContent = isPractice() ? "Start practice" : "Start race";
+    $("coverPracticeBtn").hidden = isPractice();
+    var sb = $("soundBtn");
+    sb.textContent = S.sound ? "🔊" : "🔇";
+    sb.setAttribute("aria-pressed", S.sound ? "true" : "false");
+    sb.setAttribute("aria-label", S.sound ? "Sound on" : "Sound off");
+  }
+
+  $("modeSeg").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-mode]"); if (!b || b.disabled) return;
+    S.mode = b.getAttribute("data-mode");
+    syncSeg("modeSeg", "data-mode", S.mode);
+    resetRace(); refreshHud();
+  });
+  $("diffSeg").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-diff]"); if (!b || b.disabled) return;
+    S.diff = b.getAttribute("data-diff");
+    lsSet(LS.diff, S.diff); // difficulty saved (standard)
+    syncSeg("diffSeg", "data-diff", S.diff);
+    resetRace(); refreshHud();
+  });
+  $("soundBtn").addEventListener("click", function(){
+    S.sound = !S.sound; lsSet(LS.sound, S.sound ? "1" : "0"); refreshHud();
+  });
+
+  /* ---------- race setup ---------- */
+  function trackLength(){ return 1 + (S.level - 1) * 0.18; } // longer each level
+  function resetRace(){
+    cancelAnimationFrame(S.raf);
+    S.phase = "idle"; S.spraying = false; S.tank = 100; S.aimY = 0.5; S.targetY = 0.5; S.targetT = 0;
+    S.particles = [];
+    var d = DIFFS[S.diff];
+    S.racers = RACERS.map(function(r, i){
+      return {
+        pos: 0, finishTime: null,
+        base: i === 0 ? 0 : (0.055 + Math.random() * 0.012) * d.ai * (1 + (S.level - 1) * 0.06) * (isPractice() ? 0.45 : 1),
+        surge: 1, surgeT: Math.random() * 2
+      };
+    });
+    sprayBtn.disabled = true; sprayBtn.classList.remove("spraying");
+    resetBtn.disabled = true; endPracticeBtn.hidden = true;
+    startBtn.disabled = false;
+    countdownEl.style.display = "none";
+    cover.style.display = "flex";
+    $("coverTitle").textContent = isPractice() ? "Practice run" : "Level " + S.level + " — Ready?";
+    $("coverText").textContent = isPractice()
+      ? "No tickets, no pressure. Hold SPRAY, aim at the bullseye, and get a feel for it. Tap End practice whenever you're done."
+      : "Hold SPRAY to move, drag on the track to aim at the bullseye. First to the checkered line wins — finish 1st to unlock Level " + Math.min(MAX_LEVEL, S.level + 1) + ".";
+    lockSettings(false);
+    $("placeVal").textContent = "—";
+    render();
+  }
+
+  function startRace(){
+    if (S.phase === "running" || S.phase === "countdown") return;
+    resetRace();
+    cover.style.display = "none";
+    lockSettings(true);
+    startBtn.disabled = true; resetBtn.disabled = false;
+    endPracticeBtn.hidden = !isPractice();
+    S.phase = "countdown";
+    var n = 3;
+    countdownEl.style.display = "flex"; countdownEl.textContent = n;
+    beep(440, 0.15);
+    var iv = setInterval(function(){
+      n--;
+      if (n > 0){ countdownEl.textContent = n; beep(440, 0.15); }
+      else if (n === 0){ countdownEl.textContent = "GO!"; beep(880, 0.3); }
+      else {
+        clearInterval(iv);
+        countdownEl.style.display = "none";
+        S.phase = "running"; S.startAt = performance.now(); S.lastTs = S.startAt;
+        sprayBtn.disabled = false;
+        S.raf = requestAnimationFrame(loop);
+      }
+    }, 650);
+  }
+
+  function endPractice(){
+    if (!isPractice() || S.phase !== "running") return;
+    finishRace(true);
+  }
+
+  function places(){
+    var order = S.racers.map(function(r, i){ return i; });
+    order.sort(function(a, b){
+      var ra = S.racers[a], rb = S.racers[b];
+      if (ra.finishTime != null && rb.finishTime != null) return ra.finishTime - rb.finishTime;
+      if (ra.finishTime != null) return -1;
+      if (rb.finishTime != null) return 1;
+      return rb.pos - ra.pos;
+    });
+    return order;
+  }
+
+  function finishRace(endedEarly){
+    S.phase = "done"; S.spraying = false;
+    sprayBtn.disabled = true; sprayBtn.classList.remove("spraying");
+    endPracticeBtn.hidden = true;
+    lockSettings(false); startBtn.disabled = false;
+    var now = (performance.now() - S.startAt) / 1000;
+    var order = places();
+    var myPlace = order.indexOf(0) + 1;
+    var practice = isPractice();
+    var earned = 0, newBest = false, unlockedNow = false;
+
+    if (!practice && !endedEarly){
+      earned = Math.round(TICKETS_BY_PLACE[myPlace - 1] * S.level * DIFFS[S.diff].bonus);
+      S.tickets += earned; lsSet(LS.tickets, S.tickets);
+      var prevBest = getBest();
+      if (prevBest == null || now < prevBest){ lsSet(LS.best(S.diff, S.level), now.toFixed(2)); newBest = true; }
+      if (myPlace === 1 && S.level < MAX_LEVEL && S.unlocked < S.level + 1){
+        S.unlocked = S.level + 1; lsSet(LS.unlocked, S.unlocked); unlockedNow = true;
+      }
+      beep(myPlace === 1 ? 1046 : 660, 0.35);
+    }
+
+    $("resultsTitle").textContent = practice ? "Practice done! 💦" : (myPlace === 1 ? "🏆 You win!" : "Race over!");
+    $("resultsLine").textContent = practice
+      ? "Nice warm-up! Practice never counts toward bests or tickets — ready for a real race?"
+      : "You finished #" + myPlace + " in " + now.toFixed(1) + "s on Level " + S.level + " (" + DIFFS[S.diff].label + ")." + (newBest ? " New best time!" : "") + (unlockedNow ? " Level " + S.unlocked + " unlocked! 🎉" : "");
+    var list = $("resultsList"); list.innerHTML = "";
+    order.forEach(function(idx, i){
+      var li = document.createElement("li");
+      if (idx === 0) li.className = "you";
+      var t = S.racers[idx].finishTime;
+      li.innerHTML = "<span>#" + (i + 1) + " " + RACERS[idx].emoji + " " + RACERS[idx].name + "</span><span>" + (t != null ? t.toFixed(1) + "s" : "DNF") + "</span>";
+      list.appendChild(li);
+    });
+    $("resultsTickets").textContent = practice
+      ? "No tickets in practice — that's the deal. 😌"
+      : "+" + earned + " tickets 🎟️ (bank: " + S.tickets + ") — play-money only, no cash value.";
+    $("nextLevelBtn").hidden = !(unlockedNow || (!practice && myPlace === 1 && S.level < MAX_LEVEL));
+    buildLevelSeg();
+    refreshHud();
+    openOverlay("resultsOverlay");
+  }
+
+  function buildLevelSeg(){
+    var seg = $("levelSeg"); seg.innerHTML = "";
+    for (var l = 1; l <= MAX_LEVEL; l++){
+      (function(l){
+        var b = document.createElement("button");
+        b.type = "button"; b.textContent = l <= S.unlocked ? String(l) : "🔒";
+        b.disabled = l > S.unlocked;
+        b.setAttribute("aria-pressed", l === S.level ? "true" : "false");
+        b.setAttribute("aria-label", "Level " + l + (l > S.unlocked ? " (locked)" : ""));
+        b.addEventListener("click", function(){
+          S.level = l; closeOverlay("resultsOverlay"); resetRace(); refreshHud();
+        });
+        seg.appendChild(b);
+      })(l);
+    }
+  }
+
+  /* ---------- game loop ---------- */
+  function loop(ts){
+    if (S.phase !== "running") return;
+    var dt = Math.min(0.05, (ts - S.lastTs) / 1000); S.lastTs = ts;
+    var d = DIFFS[S.diff];
+    var len = trackLength();
+    var elapsed = (ts - S.startAt) / 1000;
+
+    // target bobs up/down in player lane
+    S.targetT += dt * (1.1 + S.level * 0.12);
+    S.targetY = 0.5 + Math.sin(S.targetT * Math.PI) * 0.34;
+
+    // player
+    if (S.spraying && S.tank > 0){
+      S.tank = Math.max(0, S.tank - d.drain * dt);
+      var dist = Math.abs(S.aimY - S.targetY);
+      var mult = dist < 0.09 ? 1 : (dist < 0.22 ? 0.55 : 0.25);
+      S.racers[0].pos += (0.085 * mult / len) * dt;
+      spawnParticles(mult);
+      if (mult === 1 && Math.random() < 0.06) beep(1200, 0.05, "triangle");
+    } else {
+      S.tank = Math.min(100, S.tank + 26 * dt);
+    }
+
+    // AI
+    for (var i = 1; i < 4; i++){
+      var r = S.racers[i];
+      if (r.finishTime != null) continue;
+      r.surgeT -= dt;
+      if (r.surgeT <= 0){ r.surge = 0.75 + Math.random() * 0.6; r.surgeT = 1 + Math.random() * 2.2; }
+      r.pos += (r.base * r.surge / len) * dt;
+      if (r.pos >= 1){ r.pos = 1; r.finishTime = elapsed; }
+    }
+    if (S.racers[0].pos >= 1){
+      S.racers[0].pos = 1; S.racers[0].finishTime = elapsed;
+      render();
+      finishRace(false);
+      return;
+    }
+    var order = places();
+    $("placeVal").textContent = "#" + (order.indexOf(0) + 1);
+    render();
+    S.raf = requestAnimationFrame(loop);
+  }
+
+  function spawnParticles(mult){
+    var w = canvas.width, h = canvas.height;
+    if (!w) return;
+    var laneH = h / 4;
+    var y = laneH * S.aimY + 6;
+    for (var i = 0; i < 3; i++){
+      S.particles.push({
+        x: w * 0.18, y: y + (Math.random() - 0.5) * 8,
+        vx: 260 + Math.random() * 160, vy: (Math.random() - 0.5) * 40,
+        life: 0.45, strong: mult === 1
+      });
+    }
+    if (S.particles.length > 220) S.particles.splice(0, S.particles.length - 220);
+  }
+
+  function render(){
+    var trackW = track.clientWidth - 20;
+    var finishX = trackW - 48;
+    var d = DIFFS[S.diff];
+    targetEl.style.width = d.target + "px"; targetEl.style.height = d.target + "px";
+    var laneH = 62;
+    var ty = 8 + S.targetY * (laneH - d.target - 14);
+    targetEl.style.transform = "translateY(" + ty + "px)";
+    targetEl.classList.toggle("hit", S.spraying && Math.abs(S.aimY - S.targetY) < 0.09);
+    S.racers.forEach(function(r, i){
+      var x = 6 + r.pos * (finishX - 44);
+      racerEls[i].style.transform = "translateX(" + x + "px)";
+      var badge = racerEls[i].querySelector(".place");
+      if (S.phase === "running" || S.phase === "done"){
+        badge.style.display = "inline-block";
+        badge.textContent = "#" + (places().indexOf(i) + 1);
+      } else badge.style.display = "none";
+    });
+    tankFill.style.width = S.tank + "%";
+    tankFill.classList.toggle("low", S.tank < 25);
+    tankPct.textContent = Math.round(S.tank) + "%";
+    // spray particles
+    var w = canvas.width = track.clientWidth, h = canvas.height = track.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+    if (S.spraying && S.tank > 0){
+      ctx.strokeStyle = "rgba(31,155,224,.55)"; ctx.lineWidth = 3; ctx.beginPath();
+      var sy = (h / 4) * S.aimY + 6;
+      ctx.moveTo(w * 0.16, sy); ctx.lineTo(w - 52, sy); ctx.stroke();
+    }
+    S.particles = S.particles.filter(function(p){ return p.life > 0; });
+    S.particles.forEach(function(p){
+      p.life -= 0.016; p.x += p.vx * 0.016; p.y += p.vy * 0.016; p.vy += 300 * 0.016;
+      ctx.fillStyle = p.strong ? "rgba(255,183,3,.9)" : "rgba(99,199,245,.85)";
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.strong ? 3.4 : 2.4, 0, Math.PI * 2); ctx.fill();
+    });
+  }
+
+  /* ---------- input: spray + aim ---------- */
+  function setSpray(on){
+    if (S.phase !== "running"){ S.spraying = false; sprayBtn.classList.remove("spraying"); return; }
+    S.spraying = on && S.tank > 0;
+    sprayBtn.classList.toggle("spraying", S.spraying);
+    if (on) beep(700, 0.06, "triangle");
+  }
+  ["pointerdown"].forEach(function(ev){
+    sprayBtn.addEventListener(ev, function(e){ e.preventDefault(); sprayBtn.setPointerCapture && e.pointerId != null && sprayBtn.setPointerCapture(e.pointerId); setSpray(true); });
+  });
+  ["pointerup","pointercancel","pointerleave"].forEach(function(ev){
+    sprayBtn.addEventListener(ev, function(){ setSpray(false); });
+  });
+  sprayBtn.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+
+  function aimFromEvent(e){
+    var rect = track.getBoundingClientRect();
+    var laneTop = rect.top + 10, laneH = 62;
+    var y = (e.clientY - laneTop) / laneH;
+    S.aimY = Math.max(0, Math.min(1, y));
+  }
+  var aiming = false;
+  track.addEventListener("pointerdown", function(e){ aiming = true; aimFromEvent(e); });
+  track.addEventListener("pointermove", function(e){ if (aiming) aimFromEvent(e); });
+  ["pointerup","pointercancel","pointerleave"].forEach(function(ev){
+    track.addEventListener(ev, function(){ aiming = false; });
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.code === "Space" && S.phase === "running"){ e.preventDefault(); setSpray(true); }
+    if (e.key === "ArrowUp"){ S.aimY = Math.max(0, S.aimY - 0.07); if (S.phase === "running") e.preventDefault(); }
+    if (e.key === "ArrowDown"){ S.aimY = Math.min(1, S.aimY + 0.07); if (S.phase === "running") e.preventDefault(); }
+    if (e.key === "Escape"){
+      ["howOverlay","rulesOverlay","resultsOverlay","feedbackOverlay"].forEach(closeOverlay);
+    }
+  });
+  document.addEventListener("keyup", function(e){
+    if (e.code === "Space") setSpray(false);
+  });
+
+  startBtn.addEventListener("click", startRace);
+  $("coverStartBtn").addEventListener("click", startRace);
+  $("coverPracticeBtn").addEventListener("click", function(){
+    S.mode = "practice"; syncSeg("modeSeg", "data-mode", "practice"); refreshHud(); startRace();
+  });
+  resetBtn.addEventListener("click", function(){ resetRace(); refreshHud(); });
+  endPracticeBtn.addEventListener("click", endPractice);
+  $("againBtn").addEventListener("click", function(){ closeOverlay("resultsOverlay"); startRace(); });
+  $("nextLevelBtn").addEventListener("click", function(){
+    if (S.level < MAX_LEVEL) S.level++;
+    closeOverlay("resultsOverlay"); resetRace(); refreshHud(); startRace();
+  });
+  window.addEventListener("resize", render);
+
+  /* ---------- overlays (tutorial is opt-in only) ---------- */
+  var lastFocus = null;
+  function openOverlay(id){
+    lastFocus = document.activeElement;
+    var ov = $(id); ov.hidden = false;
+    var first = ov.querySelector("button, textarea");
+    if (first) first.focus();
+  }
+  function closeOverlay(id){
+    var ov = $(id); if (!ov || ov.hidden) return;
+    ov.hidden = true;
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  $("howBtn").addEventListener("click", function(){ openOverlay("howOverlay"); });
+  $("rulesBtn").addEventListener("click", function(){ openOverlay("rulesOverlay"); });
+  $("howToRules").addEventListener("click", function(){ closeOverlay("howOverlay"); openOverlay("rulesOverlay"); });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-close]"), function(btn){
+    btn.addEventListener("click", function(){
+      var ov = btn.closest(".overlay"); if (ov) closeOverlay(ov.id);
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".overlay"), function(ov){
+    ov.addEventListener("click", function(e){ if (e.target === ov) closeOverlay(ov.id); });
+  });
+
+  /* ---------- Feedback (less formal — standard, auto-capture) ---------- */
+  var feedbackRating = 0, feedbackTag = "", feedbackThanksTimer = 0;
+  var starBtns = Array.prototype.slice.call(document.querySelectorAll("#feedbackStars .star-btn"));
+  var tagBtns = Array.prototype.slice.call(document.querySelectorAll("#feedbackTags button"));
+  var RATING_LABELS = ["", "1 star — ouch 😬", "2 stars", "3 stars — okay!", "4 stars — nice!", "5 stars — loved it! 💜"];
+  function renderFeedbackStars(){
+    starBtns.forEach(function(b){
+      var v = parseInt(b.dataset.rating, 10);
+      b.classList.toggle("active", v <= feedbackRating);
+      b.setAttribute("aria-pressed", v === feedbackRating ? "true" : "false");
+    });
+    $("feedbackRatingNote").textContent = feedbackRating ? RATING_LABELS[feedbackRating] : "";
+  }
+  function renderFeedbackTags(){
+    tagBtns.forEach(function(b){ b.setAttribute("aria-pressed", b.dataset.tag === feedbackTag ? "true" : "false"); });
+  }
+  function openFeedback(){
+    feedbackRating = 0; feedbackTag = "";
+    $("feedbackText").value = ""; $("feedbackError").textContent = "";
+    $("feedbackFormWrap").hidden = false; $("feedbackThanks").hidden = true;
+    if (feedbackThanksTimer) clearTimeout(feedbackThanksTimer);
+    renderFeedbackStars(); renderFeedbackTags();
+    openOverlay("feedbackOverlay");
+  }
+  starBtns.forEach(function(b){
+    b.addEventListener("click", function(){
+      feedbackRating = parseInt(b.dataset.rating, 10);
+      $("feedbackError").textContent = ""; renderFeedbackStars();
+    });
+  });
+  tagBtns.forEach(function(b){
+    b.addEventListener("click", function(){
+      feedbackTag = (feedbackTag === b.dataset.tag) ? "" : b.dataset.tag;
+      renderFeedbackTags();
+    });
+  });
+  $("feedbackBtn").addEventListener("click", openFeedback);
+  $("feedbackBtnFooter").addEventListener("click", openFeedback);
+  $("feedbackSaveBtn").addEventListener("click", function(){
+    if (!feedbackRating){ $("feedbackError").textContent = "Tap a star first — any star! ⭐"; return; }
+    var record = {
+      game: GAME,
+      rating: feedbackRating,
+      text: $("feedbackText").value.trim(),
+      tag: feedbackTag,
+      timestamp: new Date().toISOString(),
+      // auto-capture (no personal info — just game context so it's easy to follow up)
+      difficulty: S.diff,
+      level: S.level,
+      mode: S.mode,
+      tickets: S.tickets,
+      screen: window.innerWidth + "x" + window.innerHeight
+    };
+    try{
+      var raw = localStorage.getItem(FEEDBACK_KEY);
+      var arr = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(arr)) arr = [];
+      arr.push(record);
+      localStorage.setItem(FEEDBACK_KEY, JSON.stringify(arr));
+    }catch(e){ /* storage unavailable — still thank the player */ }
+    $("feedbackFormWrap").hidden = true;
+    $("feedbackThanks").hidden = false;
+    feedbackThanksTimer = setTimeout(function(){ closeOverlay("feedbackOverlay"); }, 2200);
+  });
+
+  /* ---------- init (tutorial never auto-opens) ---------- */
+  syncSeg("diffSeg", "data-diff", S.diff);
+  syncSeg("modeSeg", "data-mode", S.mode);
+  resetRace();
+  refreshHud();
+})();
+</script>
+</body>
+</html>

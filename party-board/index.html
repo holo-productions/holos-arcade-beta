@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Party Board — Holo's Arcade</title>
+<style>
+  :root{
+    --bg:#241a4d; --bg2:#17102e; --panel:#2f2364; --panel2:#3a2c7a;
+    --ink:#f6f2ff; --gold:#ffd34d; --pink:#ff6b9d; --teal:#2dd4bf; --sky:#38bdf8;
+    --green:#4ade80; --red:#f87171; --btn:#5b4bc4; --btn2:#4a3ba8;
+    --p0:#ff6b9d; --p1:#38bdf8; --p2:#4ade80; --p3:#ffd34d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  body{margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:radial-gradient(ellipse at top,var(--bg) 0%,var(--bg2) 100%);
+    color:var(--ink); min-height:100vh; display:flex; flex-direction:column;}
+  header{padding:10px 12px 2px; text-align:center;}
+  header h1{margin:0; font-size:1.6rem; letter-spacing:.5px;}
+  header h1 .star{color:var(--gold);}
+  header .sub{font-size:.85rem; opacity:.85; margin-top:2px;}
+  main{flex:1; width:100%; max-width:860px; margin:0 auto; padding:6px 10px 10px;}
+  .hidden{display:none !important;}
+  .panel{background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.18); border-radius:16px;
+    padding:16px; margin:10px auto; text-align:center;}
+  .panel h2{margin:4px 0 8px; color:var(--gold);}
+  .panel p{line-height:1.45;}
+  .btn{display:inline-block; background:var(--btn); color:#fff; border:none; border-radius:12px;
+    padding:14px 22px; font-size:1.05rem; font-weight:700; cursor:pointer; min-height:56px; min-width:56px; margin:5px;}
+  .btn:active{background:var(--btn2); transform:scale(.98);}
+  .btn.gold{background:var(--gold); color:#3a2c00;}
+  .btn.teal{background:#0f766e;}
+  .btn.ghost{background:transparent; border:2px solid rgba(255,255,255,.5); color:var(--ink);}
+  .btn:disabled{opacity:.45; cursor:default;}
+  .btn.big{font-size:1.25rem; padding:18px 30px; min-height:64px;}
+  .utilbar{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; padding:6px 4px;}
+  .util-btn{background:rgba(255,255,255,.1); color:var(--ink); border:1px solid rgba(255,255,255,.3);
+    border-radius:999px; padding:12px 16px; font-size:.95rem; font-weight:700; cursor:pointer; min-height:48px;}
+  .util-btn:active{background:rgba(255,255,255,.22);}
+  .pillrow{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin:8px 0;}
+  .pill{background:rgba(255,255,255,.1); border:2px solid rgba(255,255,255,.3); color:var(--ink);
+    border-radius:999px; padding:12px 18px; font-size:1rem; font-weight:700; cursor:pointer; min-height:52px;}
+  .pill.sel{border-color:var(--gold); background:rgba(255,211,77,.2); color:var(--gold);}
+  select,input[type=text]{font-size:1rem; padding:12px; border-radius:10px; min-height:52px; border:1px solid rgba(255,255,255,.4);
+    background:#1c1440; color:var(--ink);}
+  label{font-weight:700;}
+  .seatrow{display:flex; align-items:center; gap:8px; justify-content:center; flex-wrap:wrap; margin:8px 0;}
+  .seatrow .dot{width:26px; height:26px; border-radius:50%; border:2px solid #fff; flex:0 0 auto;}
+  .seatrow input{width:150px;}
+  /* Scoreboard */
+  #scoreboard{display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin:8px 0;}
+  @media (min-width:640px){ #scoreboard{grid-template-columns:repeat(4,1fr);} }
+  .pcard{background:rgba(0,0,0,.3); border:2px solid rgba(255,255,255,.2); border-radius:12px; padding:8px 6px; text-align:center; font-size:.92rem;}
+  .pcard.turn{border-color:var(--gold); box-shadow:0 0 0 2px rgba(255,211,77,.4);}
+  .pcard .pname{font-weight:800; font-size:1rem;}
+  .pcard .nums{font-size:1.05rem; margin-top:2px;}
+  .pcard .ai{font-size:.75rem; opacity:.8;}
+  /* Board */
+  #boardWrap{position:relative; margin:8px auto; max-width:640px;}
+  #board{display:grid; grid-template-columns:repeat(8,1fr); grid-template-rows:repeat(6,1fr); gap:4px;
+    aspect-ratio:8/6; width:100%;}
+  .space{position:relative; border-radius:10px; border:2px solid rgba(255,255,255,.25);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    font-size:clamp(.55rem,2.2vw,.8rem); font-weight:700; text-align:center; padding:2px; min-height:44px; overflow:hidden;}
+  .space .ico{font-size:clamp(.9rem,3.4vw,1.35rem); line-height:1.1;}
+  .space.start{background:#14532d;}
+  .space.coin{background:#713f12;}
+  .space.mini{background:#831843;}
+  .space.chance{background:#4c1d95;}
+  .space.star{background:#854d0e; border-color:var(--gold);}
+  .space.warp{background:#155e75;}
+  .space.lose{background:#7f1d1d;}
+  .space.center{background:rgba(255,255,255,.05); border-style:dashed; font-size:clamp(.7rem,2.6vw,1rem);}
+  .tokens{position:absolute; inset:auto 0 1px 0; display:flex; justify-content:center; gap:2px; pointer-events:none;}
+  .token{width:20px; height:20px; border-radius:50%; border:2px solid #fff; font-size:11px; font-weight:900;
+    display:flex; align-items:center; justify-content:center; color:#1c1440; box-shadow:0 1px 3px rgba(0,0,0,.5);}
+  @media (max-width:520px){ .token{width:16px; height:16px; font-size:9px;} }
+  #status{text-align:center; font-size:1.05rem; font-weight:700; min-height:1.5em; padding:6px 8px;}
+  #diceRow{display:flex; align-items:center; justify-content:center; gap:14px; padding:4px;}
+  #dice{width:72px; height:72px; background:#fff; color:#1c1440; border-radius:14px; font-size:2.4rem; font-weight:900;
+    display:flex; align-items:center; justify-content:center; border:3px solid var(--gold);}
+  #dice.rolling{animation:shake .12s infinite alternate;}
+  @keyframes shake{from{transform:rotate(-6deg) scale(1.05);} to{transform:rotate(6deg) scale(1.05);}}
+  #roundInfo{text-align:center; font-size:.95rem; opacity:.92;}
+  /* Mini-game stage */
+  #miniStage{min-height:300px;}
+  #miniStage h2{margin:4px 0;}
+  #miniHud{font-size:1.1rem; font-weight:800; min-height:1.4em;}
+  .tapPad{width:min(320px,80vw); height:150px; font-size:1.6rem; border-radius:20px;}
+  .pads{display:grid; grid-template-columns:1fr 1fr; gap:10px; max-width:360px; margin:10px auto;}
+  .pad{height:96px; border-radius:16px; border:3px solid rgba(255,255,255,.4); font-size:1.4rem; font-weight:900; cursor:pointer; color:#1c1440;}
+  .pad.lit{outline:5px solid #fff; filter:brightness(1.6);}
+  .reactBox{width:min(360px,85vw); height:170px; border-radius:20px; margin:10px auto; font-size:1.5rem; font-weight:900;
+    display:flex; align-items:center; justify-content:center; border:3px solid rgba(255,255,255,.4); cursor:pointer; padding:10px;}
+  .chests{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin:12px 0;}
+  .chest{width:96px; height:96px; font-size:2.6rem; border-radius:16px; background:var(--panel2); border:3px solid rgba(255,255,255,.35); cursor:pointer;}
+  .quizOpt{display:block; width:min(420px,90vw); margin:8px auto; text-align:left;}
+  .quizOpt.correct{background:#15803d !important;}
+  .quizOpt.wrong{background:#b91c1c !important;}
+  #timingTrack{position:relative; width:min(420px,90vw); height:56px; margin:14px auto; background:#1c1440;
+    border:2px solid rgba(255,255,255,.4); border-radius:12px; overflow:hidden;}
+  #timingZone{position:absolute; top:0; bottom:0; background:rgba(74,222,128,.55); border-left:2px solid var(--green); border-right:2px solid var(--green);}
+  #timingNeedle{position:absolute; top:0; bottom:0; width:6px; background:var(--gold);}
+  #collectField,#dodgeField{position:relative; width:min(420px,92vw); height:300px; margin:10px auto;
+    background:#1c1440; border:2px solid rgba(255,255,255,.35); border-radius:16px; overflow:hidden; touch-action:manipulation;}
+  .fallItem{position:absolute; font-size:2rem; background:none; border:none; cursor:pointer; padding:6px; line-height:1;}
+  #dodgePlayer{position:absolute; bottom:8px; font-size:2.2rem; line-height:1; transition:left .08s;}
+  .dodgeBlock{position:absolute; font-size:1.8rem; line-height:1;}
+  .dodgeBtns{display:flex; gap:10px; justify-content:center;}
+  .dodgeBtns .btn{min-width:130px; font-size:1.3rem;}
+  table.scores{width:100%; max-width:480px; margin:10px auto; border-collapse:collapse; font-size:1rem;}
+  table.scores td, table.scores th{border-bottom:1px solid rgba(255,255,255,.18); padding:8px 6px; text-align:left;}
+  table.scores td.r, table.scores th.r{text-align:right;}
+  .overlay{position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:50; padding:14px;}
+  .overlay.open{display:flex;}
+  .sheet{background:var(--panel); border:1px solid rgba(255,255,255,.3); border-radius:16px; max-width:540px; width:100%;
+    max-height:88vh; overflow-y:auto; padding:20px; text-align:left;}
+  .sheet h2{margin-top:0; color:var(--gold); text-align:center;}
+  .sheet .step{display:none;}
+  .sheet .step.on{display:block;}
+  .dots{text-align:center; margin:10px 0;}
+  .dots span{display:inline-block; width:10px; height:10px; border-radius:50%; background:rgba(255,255,255,.3); margin:0 4px;}
+  .dots span.on{background:var(--gold);}
+  .starsRow{font-size:2.2rem; text-align:center;}
+  .starsRow button{background:none; border:none; font-size:2.2rem; cursor:pointer; padding:6px; min-width:52px; min-height:52px; color:#8b85b8;}
+  .starsRow button.on{color:var(--gold);}
+  textarea{width:100%; font-size:1rem; padding:12px; border-radius:10px; min-height:90px; background:#1c1440; color:var(--ink);
+    border:1px solid rgba(255,255,255,.4); font-family:inherit;}
+  .view{display:none;}
+  .view.on{display:block;}
+  .rulesText{text-align:left; line-height:1.55;}
+  .rulesText li{margin-bottom:6px;}
+  footer{text-align:center; padding:14px 10px 22px; font-size:.95rem;}
+  footer a{color:var(--gold); font-weight:700;}
+  .badge{display:inline-block; background:rgba(255,211,77,.18); border:1px solid var(--gold); color:var(--gold);
+    border-radius:999px; padding:4px 12px; font-size:.85rem; font-weight:800; margin:4px;}
+  .confetti{font-size:1.6rem; letter-spacing:4px;}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="star">★</span> Party Board <span class="star">★</span></h1>
+  <div class="sub">Roll, race, play mini-games — most stars wins!</div>
+</header>
+
+<div class="utilbar">
+  <button class="util-btn" id="btnTutorial" type="button">▶ How to play</button>
+  <button class="util-btn" id="btnRules" type="button">📖 Rules</button>
+  <button class="util-btn" id="btnFeedback" type="button">💬 Feedback</button>
+  <button class="util-btn" id="btnHome" type="button">🏠 Home</button>
+</div>
+
+<main>
+<!-- ============ HOME / SETUP ============ -->
+<section id="viewHome" class="view on">
+  <div class="panel">
+    <h2>🎲 Party Board</h2>
+    <p>A silly board race for <strong>2–4 players on one device</strong> (pass-and-play).
+    Empty seats are filled by <strong>AI rivals</strong>. Roll the dice, loop the board,
+    grab <strong>coins 🪙</strong>, buy <strong>stars ⭐</strong> for 10 coins, and battle in
+    <strong>8 quick mini-games</strong>. Most stars at the end wins!</p>
+
+    <p><label>Players on the board:</label></p>
+    <div class="pillrow" id="totalPills">
+      <button class="pill" data-total="2" type="button">2 players</button>
+      <button class="pill" data-total="3" type="button">3 players</button>
+      <button class="pill" data-total="4" type="button">4 players</button>
+    </div>
+
+    <p><label>Humans sharing this device:</label></p>
+    <div class="pillrow" id="humanPills">
+      <button class="pill" data-humans="1" type="button">1 human</button>
+      <button class="pill" data-humans="2" type="button">2 humans</button>
+      <button class="pill" data-humans="3" type="button">3 humans</button>
+      <button class="pill" data-humans="4" type="button">4 humans</button>
+    </div>
+
+    <div id="seatEditors"></div>
+
+    <p><label for="diffSel">Difficulty (AI skill + mini-game speed):</label><br>
+      <select id="diffSel">
+        <option value="easy">Easy — gentle AI, slower games</option>
+        <option value="normal">Normal — fair fight</option>
+        <option value="hard">Hard — sharp AI, faster games</option>
+      </select>
+    </p>
+
+    <p><label>Game length:</label></p>
+    <div class="pillrow" id="roundPills">
+      <button class="pill" data-rounds="5" type="button">Quick · 5 rounds</button>
+      <button class="pill" data-rounds="10" type="button">Classic · 10 rounds</button>
+      <button class="pill" data-rounds="15" type="button">Marathon · 15 rounds</button>
+    </div>
+
+    <p>
+      <label><input type="checkbox" id="practiceChk" style="width:26px;height:26px;vertical-align:middle;">
+      Practice mode (scores are NOT saved)</label>
+    </p>
+
+    <button class="btn gold big" id="btnStart" type="button">▶ Start game</button>
+    <button class="btn teal" id="btnPracticeMinis" type="button">🎮 Practice mini-games</button>
+    <p id="bestsLine" style="font-size:.92rem; opacity:.92;"></p>
+  </div>
+</section>
+
+<!-- ============ BOARD ============ -->
+<section id="viewBoard" class="view">
+  <div id="roundInfo"></div>
+  <div id="scoreboard"></div>
+  <div id="boardWrap"><div id="board"></div></div>
+  <div id="status">Ready!</div>
+  <div id="diceRow">
+    <div id="dice">🎲</div>
+    <button class="btn gold big" id="btnRoll" type="button">Roll dice</button>
+  </div>
+  <div style="text-align:center;">
+    <button class="btn ghost" id="btnQuit" type="button">Quit to home</button>
+  </div>
+</section>
+
+<!-- ============ MINI-GAME ============ -->
+<section id="viewMini" class="view">
+  <div class="panel" id="miniStage">
+    <h2 id="miniTitle">Mini-game</h2>
+    <p id="miniHow"></p>
+    <div id="miniHud"></div>
+    <div id="miniBody"></div>
+    <div id="miniFoot"></div>
+  </div>
+</section>
+
+<!-- ============ WINNER ============ -->
+<section id="viewWinner" class="view">
+  <div class="panel">
+    <div class="confetti">🎉 ⭐ 🎊 ⭐ 🎉</div>
+    <h2 id="winnerTitle">Winner!</h2>
+    <p id="winnerSub"></p>
+    <table class="scores" id="finalTable"></table>
+    <p id="winnerBests" style="font-size:.92rem; opacity:.92;"></p>
+    <button class="btn gold big" id="btnAgain" type="button">Play again</button>
+    <button class="btn ghost" id="btnWinnerHome" type="button">Home</button>
+  </div>
+</section>
+
+<!-- ============ RULES ============ -->
+<section id="viewRules" class="view">
+  <div class="panel rulesText">
+    <h2 style="text-align:center;">📖 Party Board — Rules</h2>
+    <h3>Goal</h3>
+    <p>Finish with the <strong>most stars ⭐</strong>. Tied on stars? Most <strong>coins 🪙</strong> wins.</p>
+    <h3>Setup</h3>
+    <ul>
+      <li>2–4 players race around a 24-space loop board on one device (pass-and-play).</li>
+      <li>Any seat without a human is played by an AI rival. AI skill follows the difficulty setting.</li>
+      <li>Everyone starts with <strong>10 coins</strong> and <strong>0 stars</strong>.</li>
+      <li>Pick 5, 10, or 15 rounds. One round = every player takes one turn.</li>
+    </ul>
+    <h3>Your turn</h3>
+    <ul>
+      <li>Tap <strong>Roll dice</strong> and move that many spaces. Passing Start pays <strong>+5 coins</strong>.</li>
+      <li><strong>🪙 Coin space:</strong> +3 coins. <strong>💸 Ouch space:</strong> −3 coins (never below 0).</li>
+      <li><strong>⭐ Star space:</strong> buy a star for <strong>10 coins</strong> if you can afford it.</li>
+      <li><strong>🎮 Mini-game space:</strong> everyone plays a mini-game. Coins: 1st = 10, 2nd = 5, 3rd = 3, 4th = 1.</li>
+      <li><strong>❓ Chance space:</strong> a surprise — coins, a move, or a star discount.</li>
+      <li><strong>🌀 Warp space:</strong> zoom forward or backward a few spaces.</li>
+      <li>After every full round, everyone plays a bonus mini-game too.</li>
+    </ul>
+    <h3>The 8 mini-games</h3>
+    <ul>
+      <li><strong>👆 Tap Race</strong> — tap the big button as fast as you can.</li>
+      <li><strong>🧠 Memory Pads</strong> — watch the lights, repeat the pattern.</li>
+      <li><strong>⚡ Reaction</strong> — tap the instant it turns green.</li>
+      <li><strong>🎁 Lucky Chests</strong> — pick chests and find the coins.</li>
+      <li><strong>❓ Quick Quiz</strong> — 3 speedy questions.</li>
+      <li><strong>🎯 Perfect Timing</strong> — stop the needle in the green zone.</li>
+      <li><strong>⭐ Star Catcher</strong> — tap falling stars before they vanish.</li>
+      <li><strong>🧱 Dodge Blocks</strong> — sidestep the falling blocks.</li>
+    </ul>
+    <h3>Modes &amp; saving</h3>
+    <ul>
+      <li><strong>Practice mode:</strong> play freely — results are <strong>not</strong> saved to your bests.</li>
+      <li>Difficulty, bests, and feedback are stored only in this browser on this device (localStorage). Nothing is sent anywhere.</li>
+      <li>All art is original emoji/CSS. This is a generic party game — no licensed characters.</li>
+    </ul>
+    <div style="text-align:center;"><button class="btn gold" id="btnRulesBack" type="button">Back</button></div>
+  </div>
+</section>
+</main>
+
+<footer>
+  More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed" target="_blank" rel="noopener">Ridiculously Fit and Fed</a>
+</footer>
+
+<!-- ============ TUTORIAL (opt-in only) ============ -->
+<div class="overlay" id="tutOverlay" role="dialog" aria-label="How to play">
+  <div class="sheet">
+    <h2>▶ How to play Party Board</h2>
+    <div class="step on">
+      <p><strong>1 · Set up.</strong> Choose 2–4 players and how many are humans sharing this device. AI rivals fill the rest. Pick a difficulty and game length, then tap <strong>Start game</strong>.</p>
+    </div>
+    <div class="step">
+      <p><strong>2 · Roll &amp; move.</strong> On your turn, tap <strong>Roll dice</strong>. Your token hops around the loop board. Passing Start pays +5 coins. Pass the device to the next human when their turn comes.</p>
+    </div>
+    <div class="step">
+      <p><strong>3 · Spaces.</strong> 🪙 coins pay you, 💸 takes coins, 🌀 warps you, ❓ is a surprise, 🎮 starts a mini-game for everyone, and ⭐ lets you buy a star for 10 coins.</p>
+    </div>
+    <div class="step">
+      <p><strong>4 · Mini-games.</strong> There are 8 quick games: tapping, memory, reaction, luck, quiz, timing, catching, and dodging. Best score takes 10 coins. Everyone also plays one after each full round.</p>
+    </div>
+    <div class="step">
+      <p><strong>5 · Win.</strong> When the rounds run out, most stars wins (coins break ties). Use <strong>Practice mode</strong> any time — practice scores are never saved.</p>
+    </div>
+    <div class="dots" id="tutDots"></div>
+    <div style="text-align:center;">
+      <button class="btn ghost" id="tutPrev" type="button">Back</button>
+      <button class="btn gold" id="tutNext" type="button">Next</button>
+      <button class="btn" id="tutClose" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ FEEDBACK ============ -->
+<div class="overlay" id="fbOverlay" role="dialog" aria-label="Feedback">
+  <div class="sheet">
+    <h2>💬 Feedback</h2>
+    <p style="text-align:center;">How much fun was Party Board?</p>
+    <div class="starsRow" id="fbStars">
+      <button type="button" data-v="1" aria-label="1 star">★</button>
+      <button type="button" data-v="2" aria-label="2 stars">★</button>
+      <button type="button" data-v="3" aria-label="3 stars">★</button>
+      <button type="button" data-v="4" aria-label="4 stars">★</button>
+      <button type="button" data-v="5" aria-label="5 stars">★</button>
+    </div>
+    <p><label for="fbTag">What is it about?</label><br>
+      <select id="fbTag" style="width:100%;">
+        <option value="fun">Fun factor</option>
+        <option value="difficulty">Difficulty</option>
+        <option value="mini-games">Mini-games</option>
+        <option value="bug">Bug / glitch</option>
+        <option value="idea">New idea</option>
+        <option value="other">Other</option>
+      </select></p>
+    <p><label for="fbText">Your comment:</label><br>
+      <textarea id="fbText" placeholder="Tell us what you think…"></textarea></p>
+    <p id="fbMsg" style="text-align:center; font-weight:700;"></p>
+    <div style="text-align:center;">
+      <button class="btn gold" id="fbSave" type="button">Save feedback</button>
+      <button class="btn ghost" id="fbClose" type="button">Close</button>
+    </div>
+    <p style="font-size:.85rem; opacity:.85; text-align:center;">Saved on this device only — never uploaded.</p>
+  </div>
+</div>
+
+<!-- ============ PASS DEVICE / CHOICE ============ -->
+<div class="overlay" id="passOverlay" role="dialog" aria-label="Pass the device">
+  <div class="sheet" style="text-align:center;">
+    <h2 id="passTitle">Pass the device!</h2>
+    <p id="passText"></p>
+    <div id="passBtns"></div>
+  </div>
+</div>
+<script>
+"use strict";
+/* ================= Party Board — Holo's Arcade (standalone, localStorage) =================
+   Generic party board game. All art is original emoji/CSS. No licensed characters/names. */
+var $ = function(id){ return document.getElementById(id); };
+var store = {
+  get:function(k, d){ try{ var v = localStorage.getItem("party-board-"+k); return v===null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set:function(k, v){ try{ localStorage.setItem("party-board-"+k, JSON.stringify(v)); }catch(e){} }
+};
+function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
+function randInt(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+/* ---------- Board definition: 24-space loop on an 8x6 perimeter ---------- */
+/* types: start, coin, mini, chance, star, warp, lose */
+var BOARD = [
+  {t:"start",  ico:"🏁", label:"Start"},
+  {t:"coin",   ico:"🪙", label:"+3"},
+  {t:"mini",   ico:"🎮", label:"Mini"},
+  {t:"coin",   ico:"🪙", label:"+3"},
+  {t:"chance", ico:"❓", label:"Chance"},
+  {t:"coin",   ico:"🪙", label:"+3"},
+  {t:"warp",   ico:"🌀", label:"Warp"},
+  {t:"mini",   ico:"🎮", label:"Mini"},
+  {t:"star",   ico:"⭐", label:"Star 10"},
+  {t:"coin",   ico:"🪙", label:"+3"},
+  {t:"lose",   ico:"💸", label:"−3"},
+  {t:"mini",   ico:"🎮", label:"Mini"},
+  {t:"coin",   ico:"🪙", label:"+3"},
+  {t:"chance", ico:"❓", label:"Chance"},
+  {t:"warp",   ico:"🌀", label:"Warp"},
+  {t:"coin",   ico:"🪙", label:"+3"},
+  {t:"mini",   ico:"🎮", label:"Mini"},
+  {t:"star",   ico:"⭐", label:"Star 10"},
+  {t:"coin",   ico:"🪙", label:"+3"},
+  {t:"lose",   ico:"💸", label:"−3"},
+  {t:"chance", ico:"❓", label:"Chance"},
+  {t:"coin",   ico:"🪙", label:"+3"},
+  {t:"mini",   ico:"🎮", label:"Mini"},
+  {t:"warp",   ico:"🌀", label:"Warp"}
+];
+/* grid cell (row,col) for each loop index, walking the perimeter clockwise from top-left */
+function cellFor(i){
+  if(i < 8) return [0, i];                 /* top row left->right: 0..7 */
+  if(i < 12) return [i-7, 7];              /* right col down: 8..11 -> rows 1..4 */
+  if(i < 20) return [5, 19-i];             /* bottom row right->left: 12..19 -> cols 7..0 */
+  return [24-i, 0];                        /* left col up: 20..23 -> rows 4..1 */
+}
+var STAR_COST = 10, START_BONUS = 5, COIN_PAY = 3, LOSE_PAY = 3;
+var MINI_PAYOUT = [10, 5, 3, 1];
+var PLAYER_COLORS = ["#ff6b9d","#38bdf8","#4ade80","#ffd34d"];
+var PLAYER_EMOJI = ["🦊","🐼","🦉","🐸"];
+var AI_NAMES = ["Robo Rex","Bot Bella","Circuit Sam","Pixel Pat"];
+
+/* ---------- Settings / bests ---------- */
+var settings = store.get("settings", {difficulty:"normal", total:4, humans:1, rounds:10, practice:false});
+if(!settings || typeof settings !== "object") settings = {difficulty:"normal", total:4, humans:1, rounds:10, practice:false};
+var bests = store.get("bests", {games:0, humanWins:0, bestStars:0, miniBests:{}});
+if(!bests || typeof bests !== "object") bests = {games:0, humanWins:0, bestStars:0, miniBests:{}};
+if(!bests.miniBests) bests.miniBests = {};
+function saveSettings(){ store.set("settings", settings); }
+function saveBests(){ store.set("bests", bests); }
+function bestsText(){
+  var parts = ["Games played: "+bests.games, "Human wins: "+bests.humanWins, "Best stars in a game: "+bests.bestStars];
+  var mb = Object.keys(bests.miniBests).length;
+  if(mb) parts.push("Mini-game bests saved: "+mb+" of 8");
+  return "🏆 Your bests — " + parts.join(" · ");
+}
+
+/* ---------- Game state ---------- */
+var G = null; /* {players:[{name,human,coins,stars,pos,color,emoji}], turn, round, rounds, practice, difficulty, busy} */
+function curPlayer(){ return G.players[G.turn]; }
+
+/* ---------- Views ---------- */
+var VIEWS = ["viewHome","viewBoard","viewMini","viewWinner","viewRules"];
+var lastView = "viewHome";
+function showView(id){
+  VIEWS.forEach(function(v){ $(v).classList.toggle("on", v===id); });
+  if(id!=="viewRules") lastView = id;
+  window.scrollTo(0,0);
+}
+
+/* ---------- Setup UI ---------- */
+function paintPills(rowId, attr, val){
+  var row = $(rowId);
+  Array.prototype.forEach.call(row.querySelectorAll(".pill"), function(b){
+    b.classList.toggle("sel", String(b.getAttribute(attr)) === String(val));
+  });
+}
+function paintSeatEditors(){
+  var wrap = $("seatEditors"); wrap.innerHTML = "";
+  for(var i=0;i<settings.total;i++){
+    var isHuman = i < settings.humans;
+    var row = document.createElement("div"); row.className = "seatrow";
+    var dot = document.createElement("span"); dot.className = "dot"; dot.style.background = PLAYER_COLORS[i];
+    var lab = document.createElement("span");
+    lab.textContent = "P"+(i+1)+" "+PLAYER_EMOJI[i]+" " + (isHuman ? "Human:" : "AI:");
+    row.appendChild(dot); row.appendChild(lab);
+    if(isHuman){
+      var inp = document.createElement("input"); inp.type = "text"; inp.maxLength = 14;
+      inp.value = (settings["name"+i] || ("Player "+(i+1)));
+      inp.setAttribute("data-seat", i);
+      inp.addEventListener("input", function(){ settings["name"+this.getAttribute("data-seat")] = this.value; saveSettings(); });
+      row.appendChild(inp);
+    } else {
+      var ai = document.createElement("strong"); ai.textContent = AI_NAMES[i] + " 🤖"; row.appendChild(ai);
+    }
+    wrap.appendChild(row);
+  }
+}
+function paintSetup(){
+  paintPills("totalPills","data-total", settings.total);
+  paintPills("humanPills","data-humans", settings.humans);
+  paintPills("roundPills","data-rounds", settings.rounds);
+  $("diffSel").value = settings.difficulty;
+  $("practiceChk").checked = !!settings.practice;
+  paintSeatEditors();
+  $("bestsLine").textContent = bestsText();
+}
+$("totalPills").addEventListener("click", function(e){
+  var b = e.target.closest(".pill"); if(!b) return;
+  settings.total = parseInt(b.getAttribute("data-total"),10);
+  if(settings.humans > settings.total) settings.humans = settings.total;
+  saveSettings(); paintSetup();
+});
+$("humanPills").addEventListener("click", function(e){
+  var b = e.target.closest(".pill"); if(!b) return;
+  settings.humans = clamp(parseInt(b.getAttribute("data-humans"),10), 1, settings.total);
+  saveSettings(); paintSetup();
+});
+$("roundPills").addEventListener("click", function(e){
+  var b = e.target.closest(".pill"); if(!b) return;
+  settings.rounds = parseInt(b.getAttribute("data-rounds"),10);
+  saveSettings(); paintSetup();
+});
+$("diffSel").addEventListener("change", function(){ settings.difficulty = this.value; saveSettings(); });
+$("practiceChk").addEventListener("change", function(){ settings.practice = this.checked; saveSettings(); });
+
+/* ---------- Board rendering ---------- */
+function buildBoard(){
+  var board = $("board"); board.innerHTML = "";
+  var cells = {};
+  for(var i=0;i<BOARD.length;i++){ var rc = cellFor(i); cells[rc[0]+","+rc[1]] = i; }
+  for(var r=0;r<6;r++){
+    for(var c=0;c<8;c++){
+      var d = document.createElement("div");
+      var key = r+","+c;
+      if(key in cells){
+        var idx = cells[key], sp = BOARD[idx];
+        d.className = "space " + sp.t; d.id = "space-"+idx;
+        d.innerHTML = '<span class="ico">'+sp.ico+'</span><span>'+sp.label+'</span><span class="tokens" id="tokens-'+idx+'"></span>';
+      } else {
+        d.className = "space center";
+        if(r===2 && c===3) d.innerHTML = '<span class="ico">🎲</span><span>PARTY<br>BOARD</span>';
+        else if(r===3 && c===4) d.innerHTML = '<span class="ico">⭐</span><span>10 coins<br>= 1 star</span>';
+        else d.innerHTML = "";
+      }
+      board.appendChild(d);
+    }
+  }
+}
+function renderTokens(){
+  for(var i=0;i<BOARD.length;i++){ var t = $("tokens-"+i); if(t) t.innerHTML = ""; }
+  G.players.forEach(function(p, pi){
+    var holder = $("tokens-"+p.pos); if(!holder) return;
+    var tok = document.createElement("span"); tok.className = "token";
+    tok.style.background = p.color; tok.textContent = p.emoji; tok.title = p.name;
+    holder.appendChild(tok);
+  });
+}
+function renderScores(){
+  var sb = $("scoreboard"); sb.innerHTML = "";
+  G.players.forEach(function(p, pi){
+    var card = document.createElement("div");
+    card.className = "pcard" + (pi===G.turn ? " turn" : "");
+    card.innerHTML = '<div class="pname" style="color:'+p.color+'">'+p.emoji+" "+escapeHtml(p.name)+'</div>'+
+      '<div class="nums">⭐ '+p.stars+' &nbsp; 🪙 '+p.coins+'</div>'+
+      '<div class="ai">'+(p.human ? "Human" : "AI rival")+'</div>';
+    sb.appendChild(card);
+  });
+  $("roundInfo").innerHTML = "Round <strong>"+G.round+"</strong> of <strong>"+G.rounds+"</strong> · "+
+    "Turn: <strong>"+escapeHtml(curPlayer().name)+"</strong>" + (G.practice ? ' <span class="badge">PRACTICE — scores not saved</span>' : "");
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+function setStatus(msg){ $("status").innerHTML = msg; }
+
+/* ---------- Pass / choice overlay ---------- */
+function passPrompt(title, text, buttons){
+  return new Promise(function(resolve){
+    $("passTitle").textContent = title;
+    $("passText").innerHTML = text;
+    var wrap = $("passBtns"); wrap.innerHTML = "";
+    buttons.forEach(function(b){
+      var btn = document.createElement("button"); btn.className = "btn " + (b.cls||"gold");
+      btn.textContent = b.label;
+      btn.addEventListener("click", function(){ $("passOverlay").classList.remove("open"); resolve(b.value); });
+      wrap.appendChild(btn);
+    });
+    $("passOverlay").classList.add("open");
+  });
+}
+
+/* ---------- Turn flow ---------- */
+function startGame(){
+  var players = [];
+  for(var i=0;i<settings.total;i++){
+    var human = i < settings.humans;
+    players.push({
+      name: human ? ((settings["name"+i]||"").trim() || ("Player "+(i+1))) : AI_NAMES[i],
+      human: human, coins: 10, stars: 0, pos: 0,
+      color: PLAYER_COLORS[i], emoji: PLAYER_EMOJI[i]
+    });
+  }
+  G = { players: players, turn: 0, round: 1, rounds: settings.rounds,
+        practice: !!settings.practice, difficulty: settings.difficulty, busy: false };
+  buildBoard(); renderTokens(); renderScores();
+  showView("viewBoard");
+  $("dice").textContent = "🎲";
+  setStatus("Game on! <strong>"+escapeHtml(curPlayer().name)+"</strong> rolls first.");
+  maybeAiTurn();
+}
+function maybeAiTurn(){
+  if(!G || G.busy) return;
+  var p = curPlayer();
+  $("btnRoll").disabled = !p.human;
+  $("btnRoll").textContent = p.human ? ("Roll dice — "+p.name) : (p.name+" (AI) is thinking…");
+  if(!p.human){
+    G.busy = true;
+    setTimeout(function(){ G.busy = false; doRoll(); }, 900);
+  }
+}
+async function doRoll(){
+  if(!G || G.busy) return;
+  G.busy = true; $("btnRoll").disabled = true;
+  var p = curPlayer();
+  var diceEl = $("dice"); diceEl.classList.add("rolling");
+  var roll = 1;
+  for(var k=0;k<8;k++){ roll = randInt(1,6); diceEl.textContent = roll; await sleep(70); }
+  diceEl.classList.remove("rolling"); diceEl.textContent = roll;
+  setStatus("<strong>"+escapeHtml(p.name)+"</strong> rolled <strong>"+roll+"</strong>!");
+  await sleep(450);
+  if(!G) return;
+  for(var s=0;s<roll;s++){
+    p.pos = (p.pos + 1) % BOARD.length;
+    if(p.pos === 0){ p.coins += START_BONUS; setStatus("🏁 <strong>"+escapeHtml(p.name)+"</strong> passed Start: +"+START_BONUS+" coins!"); renderScores(); }
+    renderTokens();
+    await sleep(260);
+    if(!G) return;
+  }
+  await resolveSpace(p);
+  if(!G) return;
+  renderScores(); renderTokens();
+  await endTurn();
+}
+async function resolveSpace(p){
+  var sp = BOARD[p.pos];
+  if(sp.t === "coin"){
+    p.coins += COIN_PAY;
+    setStatus("🪙 <strong>"+escapeHtml(p.name)+"</strong> found +"+COIN_PAY+" coins!");
+    await sleep(900);
+  } else if(sp.t === "lose"){
+    var lost = Math.min(LOSE_PAY, p.coins); p.coins -= lost;
+    setStatus("💸 Ouch! <strong>"+escapeHtml(p.name)+"</strong> lost "+lost+" coins.");
+    await sleep(900);
+  } else if(sp.t === "start"){
+    setStatus("🏁 <strong>"+escapeHtml(p.name)+"</strong> landed on Start.");
+    await sleep(700);
+  } else if(sp.t === "warp"){
+    var jump = randInt(2,4) * (Math.random()<0.6 ? 1 : -1);
+    p.pos = ((p.pos + jump) % BOARD.length + BOARD.length) % BOARD.length;
+    setStatus("🌀 Warp! <strong>"+escapeHtml(p.name)+"</strong> zoomed "+(jump>0?"forward "+jump:"back "+(-jump))+" spaces!");
+    renderTokens();
+    await sleep(1000);
+    /* no chain-resolution after warp, keeps turns snappy */
+  } else if(sp.t === "chance"){
+    await doChance(p);
+  } else if(sp.t === "star"){
+    await doStar(p);
+  } else if(sp.t === "mini"){
+    setStatus("🎮 <strong>"+escapeHtml(p.name)+"</strong> landed on a mini-game space — everyone plays!");
+    await sleep(900);
+    if(!G) return;
+    await runMiniGame(pickMini());
+    if(!G) return;
+    showView("viewBoard"); renderScores(); renderTokens();
+  }
+}
+async function doChance(p){
+  var roll = randInt(1,4);
+  if(roll===1){ p.coins += 6; setStatus("❓ Chance: <strong>"+escapeHtml(p.name)+"</strong> found a coin stash! +6 coins."); }
+  else if(roll===2){ var l = Math.min(4, p.coins); p.coins -= l; setStatus("❓ Chance: a silly tax! <strong>"+escapeHtml(p.name)+"</strong> paid "+l+" coins."); }
+  else if(roll===3){ p.pos = (p.pos + 3) % BOARD.length; renderTokens(); setStatus("❓ Chance: <strong>"+escapeHtml(p.name)+"</strong> zoomed 3 spaces forward!"); }
+  else { p.coins += 3; setStatus("❓ Chance: <strong>"+escapeHtml(p.name)+"</strong> got a friendly tip! +3 coins."); }
+  renderScores();
+  await sleep(1100);
+}
+async function doStar(p){
+  if(p.coins < STAR_COST){
+    setStatus("⭐ <strong>"+escapeHtml(p.name)+"</strong> reached the Star space but needs "+STAR_COST+" coins (has "+p.coins+").");
+    await sleep(1000); return;
+  }
+  var buy;
+  if(p.human){
+    buy = await passPrompt("⭐ Buy a star?",
+      "<strong>"+escapeHtml(p.name)+"</strong>, you have "+p.coins+" coins. Buy a star for "+STAR_COST+" coins?",
+      [{label:"⭐ Buy star (−"+STAR_COST+")", value:true, cls:"gold"}, {label:"Save my coins", value:false, cls:"ghost"}]);
+  } else {
+    buy = true; /* AI always buys when able */
+  }
+  if(buy){ p.coins -= STAR_COST; p.stars += 1; setStatus("⭐ <strong>"+escapeHtml(p.name)+"</strong> bought a star! Now has "+p.stars+"."); }
+  else setStatus("<strong>"+escapeHtml(p.name)+"</strong> saved their coins.");
+  renderScores();
+  await sleep(1000);
+}
+async function endTurn(){
+  G.turn += 1;
+  if(G.turn >= G.players.length){
+    G.turn = 0;
+    if(G.round >= G.rounds){ finishGame(); return; }
+    /* end-of-round bonus mini-game */
+    setStatus("🎮 Round "+G.round+" done — bonus mini-game for everyone!");
+    await sleep(900);
+    await runMiniGame(pickMini());
+    G.round += 1;
+    showView("viewBoard");
+  }
+  G.busy = false;
+  renderScores(); renderTokens();
+  setStatus("Your turn, <strong>"+escapeHtml(curPlayer().name)+"</strong>!");
+  maybeAiTurn();
+}
+function finishGame(){
+  G.busy = false;
+  var ranked = G.players.slice().sort(function(a,b){ return (b.stars-a.stars) || (b.coins-a.coins); });
+  var winner = ranked[0];
+  $("winnerTitle").textContent = "🏆 "+winner.name+" wins!";
+  $("winnerSub").innerHTML = winner.emoji+" <strong>"+escapeHtml(winner.name)+"</strong> finished with ⭐ "+winner.stars+" and 🪙 "+winner.coins+".";
+  var tbl = $("finalTable");
+  tbl.innerHTML = "<tr><th>#</th><th>Player</th><th class='r'>⭐ Stars</th><th class='r'>🪙 Coins</th></tr>";
+  ranked.forEach(function(p, i){
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td>"+(i+1)+"</td><td>"+p.emoji+" "+escapeHtml(p.name)+(p.human?"":" 🤖")+"</td><td class='r'>"+p.stars+"</td><td class='r'>"+p.coins+"</td>";
+    tbl.appendChild(tr);
+  });
+  if(!G.practice){
+    bests.games += 1;
+    if(winner.human) bests.humanWins += 1;
+    G.players.forEach(function(p){ if(p.human && p.stars > bests.bestStars) bests.bestStars = p.stars; });
+    saveBests();
+    $("winnerBests").textContent = bestsText();
+  } else {
+    $("winnerBests").textContent = "Practice game — bests were not saved.";
+  }
+  showView("viewWinner");
+}
+$("btnRoll").addEventListener("click", function(){ if(curPlayer() && curPlayer().human) doRoll(); });
+$("btnStart").addEventListener("click", startGame);
+$("btnAgain").addEventListener("click", startGame);
+$("btnQuit").addEventListener("click", function(){ G = null; paintSetup(); showView("viewHome"); });
+$("btnWinnerHome").addEventListener("click", function(){ G = null; paintSetup(); showView("viewHome"); });
+$("btnHome").addEventListener("click", function(){ paintSetup(); showView("viewHome"); });
+</script>
+<script>
+"use strict";
+/* ================= Mini-games =================
+   Each mini-game: play(humanPlayer, difficulty) -> Promise<score> (higher = better).
+   AI scores are simulated per game + difficulty. Humans play in turn (pass-and-play). */
+function diffParams(d){
+  if(d==="easy") return {aiMin:0.25, aiMax:0.55, speed:0.8};
+  if(d==="hard") return {aiMin:0.6, aiMax:0.95, speed:1.3};
+  return {aiMin:0.4, aiMax:0.75, speed:1.0};
+}
+/* AI score = random point inside [min,max] of the game's typical range, scaled by difficulty */
+function aiScore(game, difficulty){
+  var dp = diffParams(difficulty);
+  var f = dp.aiMin + Math.random()*(dp.aiMax-dp.aiMin);
+  return Math.round(game.aiLo + f*(game.aiHi-game.aiLo));
+}
+var lastMiniId = null;
+function pickMini(){
+  var pool = MINI_GAMES.filter(function(g){ return g.id !== lastMiniId; });
+  var g = pool[Math.floor(Math.random()*pool.length)];
+  lastMiniId = g.id;
+  return g;
+}
+function miniShell(game, player){
+  showView("viewMini");
+  $("miniTitle").textContent = game.emoji+" "+game.name;
+  $("miniHow").innerHTML = game.how;
+  $("miniHud").innerHTML = player.emoji+" <strong>"+escapeHtml(player.name)+"</strong> is playing…";
+  $("miniBody").innerHTML = "";
+  $("miniFoot").innerHTML = "";
+}
+function miniReady(game, player){
+  return new Promise(function(resolve){
+    miniShell(game, player);
+    var btn = document.createElement("button");
+    btn.className = "btn gold big"; btn.textContent = "I'm ready — go!";
+    btn.addEventListener("click", function(){ resolve(); });
+    $("miniBody").appendChild(btn);
+    if(!player.human){ setTimeout(resolve, 500); }
+  });
+}
+
+/* ----- 1. Tap Race ----- */
+async function playTapRace(player, difficulty){
+  var dp = diffParams(difficulty);
+  var seconds = 8;
+  return new Promise(function(resolve){
+    var taps = 0, left = seconds;
+    var hud = $("miniHud"), body = $("miniBody");
+    hud.innerHTML = player.emoji+" <strong>"+escapeHtml(player.name)+"</strong> · Taps: 0 · Time: "+left+"s";
+    var btn = document.createElement("button");
+    btn.className = "btn gold tapPad"; btn.textContent = "TAP! TAP! TAP!";
+    btn.addEventListener("click", function(){ taps++; hud.innerHTML = player.emoji+" <strong>"+escapeHtml(player.name)+"</strong> · Taps: "+taps+" · Time: "+left+"s"; });
+    body.appendChild(btn);
+    var iv = setInterval(function(){
+      left--;
+      hud.innerHTML = player.emoji+" <strong>"+escapeHtml(player.name)+"</strong> · Taps: "+taps+" · Time: "+Math.max(left,0)+"s";
+      if(left<=0){ clearInterval(iv); btn.disabled = true; btn.textContent = "Time! "+taps+" taps"; setTimeout(function(){ resolve(taps); }, 700); }
+    }, 1000);
+  });
+}
+/* ----- 2. Memory Pads ----- */
+async function playMemory(player, difficulty){
+  var dp = diffParams(difficulty);
+  var colors = ["#f87171","#4ade80","#38bdf8","#ffd34d"];
+  var names = ["🔴","🟢","🔵","🟡"];
+  var body = $("miniBody"), hud = $("miniHud");
+  var padsWrap = document.createElement("div"); padsWrap.className = "pads";
+  var pads = [];
+  colors.forEach(function(c, i){
+    var b = document.createElement("button"); b.className = "pad"; b.style.background = c; b.textContent = names[i];
+    b.disabled = true; padsWrap.appendChild(b); pads.push(b);
+  });
+  body.appendChild(padsWrap);
+  var seq = [], score = 0;
+  function light(i, ms){
+    return new Promise(function(res){
+      pads[i].classList.add("lit");
+      setTimeout(function(){ pads[i].classList.remove("lit"); setTimeout(res, 140); }, ms);
+    });
+  }
+  while(true){
+    seq.push(randInt(0,3));
+    hud.innerHTML = "Watch the pattern… (length "+seq.length+")";
+    pads.forEach(function(p){ p.disabled = true; });
+    await sleep(500);
+    for(var k=0;k<seq.length;k++){ await light(seq[k], Math.round(420/dp.speed)); }
+    hud.innerHTML = "Your turn! Repeat "+seq.length+" light"+(seq.length>1?"s":"")+".";
+    pads.forEach(function(p){ p.disabled = false; });
+    var ok = await new Promise(function(res){
+      var idx = 0;
+      function handler(e){
+        var i = pads.indexOf(e.currentTarget);
+        pads[i].classList.add("lit"); setTimeout(function(){ pads[i].classList.remove("lit"); }, 180);
+        if(i === seq[idx]){ idx++; if(idx===seq.length){ cleanup(); res(true); } }
+        else { cleanup(); res(false); }
+      }
+      function cleanup(){ pads.forEach(function(p){ p.removeEventListener("click", handler); p.disabled = true; }); }
+      pads.forEach(function(p){ p.addEventListener("click", handler); });
+    });
+    if(!ok) break;
+    score = seq.length;
+    hud.innerHTML = "✅ Got it! Score: "+score;
+    await sleep(600);
+    if(seq.length >= 10) break;
+  }
+  hud.innerHTML = "Game over — longest pattern: "+score;
+  await sleep(800);
+  return score;
+}
+/* ----- 3. Reaction ----- */
+async function playReaction(player, difficulty){
+  var body = $("miniBody"), hud = $("miniHud");
+  var total = 0, rounds = 3;
+  for(var r=1;r<=rounds;r++){
+    var ms = await new Promise(function(resolve){
+      var box = document.createElement("div"); box.className = "reactBox";
+      box.style.background = "#b91c1c"; box.textContent = "Wait for green…";
+      body.innerHTML = ""; body.appendChild(box);
+      hud.innerHTML = "Round "+r+" of "+rounds+" — tap when it turns GREEN!";
+      var goAt = 0, timer = setTimeout(function(){
+        box.style.background = "#15803d"; box.textContent = "TAP NOW!"; goAt = Date.now();
+      }, randInt(1200, 3200));
+      box.addEventListener("click", function(){
+        clearTimeout(timer);
+        if(!goAt){ box.style.background = "#713f12"; box.textContent = "Too soon! +1000ms penalty"; setTimeout(function(){ resolve(1000); }, 800); }
+        else { var t = Date.now()-goAt; box.textContent = t+" ms!"; setTimeout(function(){ resolve(t); }, 800); }
+      }, {once:true});
+    });
+    total += ms;
+  }
+  var avg = Math.round(total/rounds);
+  /* score: faster = higher. 150ms -> 100, 1000ms -> 0 */
+  var score = clamp(Math.round(100 - (avg-150)/8.5), 0, 100);
+  hud.innerHTML = "Average reaction: "+avg+" ms · Score: "+score;
+  await sleep(900);
+  return score;
+}
+/* ----- 4. Lucky Chests ----- */
+async function playLuck(player, difficulty){
+  var body = $("miniBody"), hud = $("miniHud");
+  var total = 0, picks = 3;
+  for(var r=1;r<=picks;r++){
+    var got = await new Promise(function(resolve){
+      body.innerHTML = "";
+      hud.innerHTML = "Pick a chest! ("+r+" of "+picks+") · Found so far: "+total+" 🪙";
+      var values = shuffle([0, 3, 8]);
+      var wrap = document.createElement("div"); wrap.className = "chests";
+      values.forEach(function(v){
+        var b = document.createElement("button"); b.className = "chest"; b.textContent = "🎁";
+        b.addEventListener("click", function(){
+          Array.prototype.forEach.call(wrap.children, function(c, ci){ c.disabled = true; c.textContent = values[ci]===0 ? "💨" : ("🪙"+values[ci]); });
+          setTimeout(function(){ resolve(v); }, 900);
+        });
+        wrap.appendChild(b);
+      });
+      body.appendChild(wrap);
+    });
+    total += got;
+  }
+  hud.innerHTML = "You found "+total+" coins in the chests!";
+  await sleep(800);
+  return total; /* 0..24 */
+}
+/* ----- 5. Quick Quiz ----- */
+var QUIZ_BANK = [
+  {q:"How many sides does a triangle have?", opts:["2","3","4","5"], a:1},
+  {q:"Which planet is called the Red Planet?", opts:["Venus","Jupiter","Mars","Mercury"], a:2},
+  {q:"What is 7 + 8?", opts:["13","14","15","16"], a:2},
+  {q:"Which animal is known as man's best friend?", opts:["Cat","Dog","Horse","Parrot"], a:1},
+  {q:"How many minutes are in one hour?", opts:["30","45","60","90"], a:2},
+  {q:"What colour do you get mixing blue and yellow paint?", opts:["Purple","Orange","Green","Brown"], a:2},
+  {q:"Which ocean is the largest?", opts:["Atlantic","Indian","Arctic","Pacific"], a:3},
+  {q:"What is the capital of Canada?", opts:["Toronto","Ottawa","Vancouver","Calgary"], a:1},
+  {q:"How many legs does a spider have?", opts:["6","8","10","4"], a:1},
+  {q:"Which fruit keeps the doctor away (in the saying)?", opts:["Banana","Apple","Pear","Grape"], a:1},
+  {q:"What is 9 × 3?", opts:["24","27","30","21"], a:1},
+  {q:"Which gas do plants absorb from the air?", opts:["Oxygen","Nitrogen","Carbon dioxide","Helium"], a:2}
+];
+async function playQuiz(player, difficulty){
+  var body = $("miniBody"), hud = $("miniHud");
+  var qs = shuffle(QUIZ_BANK.slice()).slice(0,3);
+  var score = 0;
+  for(var i=0;i<qs.length;i++){
+    var item = qs[i];
+    var started = Date.now();
+    var correct = await new Promise(function(resolve){
+      body.innerHTML = "";
+      hud.innerHTML = "Question "+(i+1)+" of 3";
+      var qp = document.createElement("p"); qp.style.fontSize = "1.2rem"; qp.style.fontWeight = "800"; qp.textContent = item.q;
+      body.appendChild(qp);
+      item.opts.forEach(function(opt, oi){
+        var b = document.createElement("button"); b.className = "btn quizOpt"; b.textContent = opt;
+        b.addEventListener("click", function(){
+          var ok = oi === item.a;
+          b.classList.add(ok ? "correct" : "wrong");
+          Array.prototype.forEach.call(body.querySelectorAll(".quizOpt"), function(x, xi){ x.disabled = true; if(xi===item.a) x.classList.add("correct"); });
+          setTimeout(function(){ resolve(ok); }, 900);
+        });
+        body.appendChild(b);
+      });
+    });
+    if(correct){
+      var secs = (Date.now()-started)/1000;
+      score += 10 + Math.max(0, Math.round(10 - secs)); /* 10 + speed bonus up to 10 */
+    }
+  }
+  hud.innerHTML = "Quiz score: "+score;
+  await sleep(800);
+  return score; /* 0..60 */
+}
+/* ----- 6. Perfect Timing ----- */
+async function playTiming(player, difficulty){
+  var dp = diffParams(difficulty);
+  var body = $("miniBody"), hud = $("miniHud");
+  var total = 0, tries = 3;
+  for(var t=1;t<=tries;t++){
+    var pts = await new Promise(function(resolve){
+      body.innerHTML = "";
+      hud.innerHTML = "Try "+t+" of "+tries+" — stop the needle in the green!";
+      var track = document.createElement("div"); track.id = "timingTrack";
+      var zoneW = 16, zoneL = randInt(10, 70);
+      var zone = document.createElement("div"); zone.id = "timingZone"; zone.style.left = zoneL+"%"; zone.style.width = zoneW+"%";
+      var needle = document.createElement("div"); needle.id = "timingNeedle";
+      track.appendChild(zone); track.appendChild(needle); body.appendChild(track);
+      var btn = document.createElement("button"); btn.className = "btn gold big"; btn.textContent = "STOP!";
+      body.appendChild(btn);
+      var pos = 0, dir = 1, speed = 1.6 * dp.speed, running = true;
+      function frame(){
+        if(!running) return;
+        pos += dir * speed;
+        if(pos >= 98){ pos = 98; dir = -1; }
+        if(pos <= 0){ pos = 0; dir = 1; }
+        needle.style.left = pos+"%";
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+      btn.addEventListener("click", function(){
+        running = false; btn.disabled = true;
+        var center = zoneL + zoneW/2;
+        var dist = Math.abs(pos - center);
+        var p = dist <= zoneW/2 ? Math.round(34 - dist) : Math.max(0, Math.round(20 - dist));
+        hud.innerHTML = dist <= zoneW/2 ? "🎯 In the zone! +"+p : "Missed the zone. +"+p;
+        setTimeout(function(){ resolve(p); }, 900);
+      });
+    });
+    total += pts;
+  }
+  hud.innerHTML = "Timing total: "+total;
+  await sleep(800);
+  return total; /* 0..~100 */
+}
+/* ----- 7. Star Catcher (collect) ----- */
+async function playCollect(player, difficulty){
+  var dp = diffParams(difficulty);
+  var body = $("miniBody"), hud = $("miniHud");
+  return new Promise(function(resolve){
+    body.innerHTML = "";
+    var field = document.createElement("div"); field.id = "collectField";
+    body.appendChild(field);
+    var caught = 0, left = 12, spawnMs = Math.round(650/dp.speed);
+    hud.innerHTML = "Tap the falling ⭐ and 🪙! Caught: 0 · Time: "+left+"s";
+    var spawn = setInterval(function(){
+      var item = document.createElement("button"); item.className = "fallItem";
+      item.textContent = Math.random() < 0.6 ? "⭐" : "🪙";
+      item.style.left = randInt(4, 82)+"%"; item.style.top = "-40px";
+      field.appendChild(item);
+      var y = -40;
+      var fall = setInterval(function(){
+        y += 6;
+        item.style.top = y+"px";
+        if(y > 300){ clearInterval(fall); if(item.parentNode) item.remove(); }
+      }, 30);
+      item.addEventListener("click", function(){
+        caught++; clearInterval(fall); item.remove();
+        hud.innerHTML = "Tap the falling ⭐ and 🪙! Caught: "+caught+" · Time: "+Math.max(left,0)+"s";
+      });
+    }, spawnMs);
+    var tick = setInterval(function(){
+      left--;
+      hud.innerHTML = "Tap the falling ⭐ and 🪙! Caught: "+caught+" · Time: "+Math.max(left,0)+"s";
+      if(left<=0){
+        clearInterval(tick); clearInterval(spawn);
+        field.innerHTML = "";
+        hud.innerHTML = "Time! You caught "+caught+".";
+        setTimeout(function(){ resolve(caught); }, 800);
+      }
+    }, 1000);
+  });
+}
+/* ----- 8. Dodge Blocks ----- */
+async function playDodge(player, difficulty){
+  var dp = diffParams(difficulty);
+  var body = $("miniBody"), hud = $("miniHud");
+  return new Promise(function(resolve){
+    body.innerHTML = "";
+    var field = document.createElement("div"); field.id = "dodgeField";
+    body.appendChild(field);
+    var hero = document.createElement("div"); hero.id = "dodgePlayer"; hero.textContent = player.emoji;
+    var lane = 1, lanes = [8, 44, 80];
+    hero.style.left = lanes[lane]+"%";
+    field.appendChild(hero);
+    var btns = document.createElement("div"); btns.className = "dodgeBtns";
+    var leftBtn = document.createElement("button"); leftBtn.className = "btn gold"; leftBtn.textContent = "◀ Left";
+    var rightBtn = document.createElement("button"); rightBtn.className = "btn gold"; rightBtn.textContent = "Right ▶";
+    leftBtn.addEventListener("click", function(){ lane = clamp(lane-1,0,2); hero.style.left = lanes[lane]+"%"; });
+    rightBtn.addEventListener("click", function(){ lane = clamp(lane+1,0,2); hero.style.left = lanes[lane]+"%"; });
+    btns.appendChild(leftBtn); btns.appendChild(rightBtn);
+    body.appendChild(btns);
+    var survived = 0, alive = true, blocks = [];
+    hud.innerHTML = "Dodge the 🧱! Survived: 0s";
+    var spawn = setInterval(function(){
+      if(!alive) return;
+      var bl = document.createElement("div"); bl.className = "dodgeBlock"; bl.textContent = "🧱";
+      var blLane = randInt(0,2);
+      bl.style.left = lanes[blLane]+"%"; bl.style.top = "-36px";
+      field.appendChild(bl);
+      blocks.push({el:bl, lane:blLane, y:-36});
+    }, Math.round(700/dp.speed));
+    var step = setInterval(function(){
+      if(!alive) return;
+      var heroY = 300 - 52;
+      blocks.forEach(function(b){
+        b.y += 7 * dp.speed;
+        b.el.style.top = b.y+"px";
+        if(b.y > heroY-10 && b.y < heroY+30 && b.lane === lane){
+          alive = false;
+          clearInterval(spawn); clearInterval(step);
+          hud.innerHTML = "💥 Bonk! You survived "+survived+"s.";
+          setTimeout(function(){ resolve(survived); }, 900);
+        }
+        if(b.y > 310){ b.el.remove(); }
+      });
+      blocks = blocks.filter(function(b){ return b.y <= 310; });
+    }, 40);
+    var tick = setInterval(function(){
+      if(!alive){ clearInterval(tick); return; }
+      survived++;
+      hud.innerHTML = "Dodge the 🧱! Survived: "+survived+"s";
+      if(survived >= 15){
+        alive = false; clearInterval(spawn); clearInterval(step); clearInterval(tick);
+        hud.innerHTML = "🏆 Perfect dodge — full 15s!";
+        setTimeout(function(){ resolve(15); }, 900);
+      }
+    }, 1000);
+  });
+}
+
+var MINI_GAMES = [
+  {id:"tap",      emoji:"👆", name:"Tap Race",       how:"Tap the big button as many times as you can in 8 seconds!", play:playTapRace,  aiLo:15, aiHi:55},
+  {id:"memory",   emoji:"🧠", name:"Memory Pads",    how:"Watch the lights flash, then tap them back in the same order. How long a pattern can you remember?", play:playMemory, aiLo:2, aiHi:8},
+  {id:"reaction", emoji:"⚡", name:"Reaction",       how:"Wait for green… then tap as fast as you can! 3 rounds, best average wins. Too soon = penalty.", play:playReaction, aiLo:20, aiHi:85},
+  {id:"luck",     emoji:"🎁", name:"Lucky Chests",   how:"Pick 3 chests. Some hide coins, some hide… nothing. Pure luck!", play:playLuck, aiLo:3, aiHi:21},
+  {id:"quiz",     emoji:"❓", name:"Quick Quiz",     how:"3 speedy questions. Correct + fast = more points!", play:playQuiz, aiLo:10, aiHi:50},
+  {id:"timing",   emoji:"🎯", name:"Perfect Timing", how:"The needle sweeps back and forth. Tap STOP to land it in the green zone. 3 tries!", play:playTiming, aiLo:15, aiHi:85},
+  {id:"collect",  emoji:"⭐", name:"Star Catcher",   how:"Tap the falling stars and coins before they drop! 12 seconds on the clock.", play:playCollect, aiLo:4, aiHi:16},
+  {id:"dodge",    emoji:"🧱", name:"Dodge Blocks",   how:"Use ◀ ▶ to sidestep the falling blocks. Survive as long as you can (15s = perfect)!", play:playDodge, aiLo:4, aiHi:15}
+];
+
+/* Run one mini-game for all players. Humans play in turn; AI scores simulated.
+   Awards coins by rank. Returns after results are shown. */
+async function runMiniGame(game){
+  var results = [];
+  for(var i=0;i<G.players.length;i++){
+    var p = G.players[i];
+    if(p.human){
+      var others = G.players.filter(function(x){ return x.human; }).length;
+      if(others > 1){
+        await passPrompt("🎮 "+game.name,
+          "Pass the device to <strong>"+escapeHtml(p.name)+"</strong> "+p.emoji+" — it's your mini-game turn!",
+          [{label:"I'm "+p.name+" — ready!", value:true, cls:"gold"}]);
+      }
+      await miniReady(game, p);
+      var score = await game.play(p, G.difficulty);
+      results.push({player:p, score:score});
+      if(!G.practice){
+        var prev = bests.miniBests[game.id] || 0;
+        if(score > prev){ bests.miniBests[game.id] = score; saveBests(); }
+      }
+    } else {
+      miniShell(game, p);
+      $("miniBody").innerHTML = "<p style='font-size:1.2rem;'>🤖 "+escapeHtml(p.name)+" is playing…</p>";
+      await sleep(900);
+      var as = aiScore(game, G.difficulty);
+      results.push({player:p, score:as});
+    }
+  }
+  results.sort(function(a,b){ return b.score - a.score; });
+  results.forEach(function(r, rank){
+    var pay = MINI_PAYOUT[Math.min(rank, MINI_PAYOUT.length-1)] || 0;
+    if(G.players.length===2) pay = [10,3][rank] || 0;
+    if(G.players.length===3) pay = [10,5,2][rank] || 0;
+    r.pay = pay; r.player.coins += pay;
+  });
+  /* results screen */
+  showView("viewMini");
+  $("miniTitle").textContent = game.emoji+" "+game.name+" — Results";
+  $("miniHow").innerHTML = "Coins awarded by rank. Back to the board next!";
+  $("miniHud").innerHTML = "🏆 Winner: <strong>"+escapeHtml(results[0].player.name)+"</strong> ("+results[0].score+")";
+  var tbl = document.createElement("table"); tbl.className = "scores";
+  tbl.innerHTML = "<tr><th>#</th><th>Player</th><th class='r'>Score</th><th class='r'>Coins</th></tr>";
+  results.forEach(function(r, i){
+    var tr = document.createElement("tr");
+    tr.innerHTML = "<td>"+(i+1)+"</td><td>"+r.player.emoji+" "+escapeHtml(r.player.name)+(r.player.human?"":" 🤖")+"</td><td class='r'>"+r.score+"</td><td class='r'>+"+r.pay+" 🪙</td>";
+    tbl.appendChild(tr);
+  });
+  $("miniBody").innerHTML = ""; $("miniBody").appendChild(tbl);
+  await new Promise(function(resolve){
+    var btn = document.createElement("button");
+    btn.className = "btn gold big"; btn.textContent = "Back to board ▶";
+    btn.addEventListener("click", resolve);
+    $("miniFoot").innerHTML = ""; $("miniFoot").appendChild(btn);
+  });
+  $("miniFoot").innerHTML = "";
+}
+
+/* Practice mini-games picker (scores NOT saved) */
+async function practiceMinis(){
+  var choice = await new Promise(function(resolve){
+    showView("viewMini");
+    $("miniTitle").textContent = "🎮 Practice mini-games";
+    $("miniHow").innerHTML = "Pick any mini-game to practise. <strong>Practice scores are not saved.</strong>";
+    $("miniHud").innerHTML = "";
+    var body = $("miniBody"); body.innerHTML = "";
+    MINI_GAMES.forEach(function(g){
+      var b = document.createElement("button"); b.className = "btn quizOpt";
+      b.textContent = g.emoji+" "+g.name+" — "+g.how;
+      b.addEventListener("click", function(){ resolve(g); });
+      body.appendChild(b);
+    });
+    var foot = $("miniFoot"); foot.innerHTML = "";
+    var back = document.createElement("button"); back.className = "btn ghost"; back.textContent = "Back home";
+    back.addEventListener("click", function(){ resolve(null); });
+    foot.appendChild(back);
+  });
+  $("miniFoot").innerHTML = "";
+  if(!choice){ showView("viewHome"); return; }
+  var dummy = {name:"You", human:true, emoji:"🦊", color:"#ff6b9d", coins:0, stars:0, pos:0};
+  await miniReady(choice, dummy);
+  var score = await choice.play(dummy, settings.difficulty);
+  $("miniHud").innerHTML = "Practice score: <strong>"+score+"</strong> (not saved)";
+  await new Promise(function(resolve){
+    var btn = document.createElement("button");
+    btn.className = "btn gold"; btn.textContent = "Done";
+    btn.addEventListener("click", resolve);
+    $("miniFoot").appendChild(btn);
+  });
+  $("miniFoot").innerHTML = "";
+  showView("viewHome");
+}
+$("btnPracticeMinis").addEventListener("click", practiceMinis);
+
+/* ---------- Tutorial (opt-in only, never auto-opens) ---------- */
+var tutStep = 0;
+function paintTut(){
+  var steps = $("tutOverlay").querySelectorAll(".step");
+  steps.forEach(function(s, i){ s.classList.toggle("on", i===tutStep); });
+  var dots = $("tutDots"); dots.innerHTML = "";
+  steps.forEach(function(_, i){
+    var d = document.createElement("span"); if(i===tutStep) d.className = "on"; dots.appendChild(d);
+  });
+  $("tutPrev").disabled = tutStep===0;
+  $("tutNext").textContent = tutStep===steps.length-1 ? "Finish" : "Next";
+}
+$("btnTutorial").addEventListener("click", function(){ tutStep = 0; paintTut(); $("tutOverlay").classList.add("open"); });
+$("tutClose").addEventListener("click", function(){ $("tutOverlay").classList.remove("open"); });
+$("tutPrev").addEventListener("click", function(){ if(tutStep>0){ tutStep--; paintTut(); } });
+$("tutNext").addEventListener("click", function(){
+  var n = $("tutOverlay").querySelectorAll(".step").length;
+  if(tutStep < n-1){ tutStep++; paintTut(); } else { $("tutOverlay").classList.remove("open"); }
+});
+
+/* ---------- Rules (separate page/section) ---------- */
+$("btnRules").addEventListener("click", function(){ showView("viewRules"); });
+$("btnRulesBack").addEventListener("click", function(){ showView(lastView || "viewHome"); });
+
+/* ---------- Feedback (rating + comment -> localStorage) ---------- */
+var fbRating = 0;
+function paintFbStars(){
+  Array.prototype.forEach.call($("fbStars").querySelectorAll("button"), function(b){
+    b.classList.toggle("on", parseInt(b.getAttribute("data-v"),10) <= fbRating);
+  });
+}
+$("fbStars").addEventListener("click", function(e){
+  var b = e.target.closest("button"); if(!b) return;
+  fbRating = parseInt(b.getAttribute("data-v"),10); paintFbStars();
+});
+$("btnFeedback").addEventListener("click", function(){ fbRating = 0; paintFbStars(); $("fbText").value=""; $("fbMsg").textContent=""; $("fbOverlay").classList.add("open"); });
+$("fbClose").addEventListener("click", function(){ $("fbOverlay").classList.remove("open"); });
+$("fbSave").addEventListener("click", function(){
+  if(fbRating < 1){ $("fbMsg").textContent = "Please tap a star rating first ⭐"; return; }
+  try{
+    var key = "holos-arcade-feedback";
+    var arr = JSON.parse(localStorage.getItem(key) || "[]");
+    if(!Array.isArray(arr)) arr = [];
+    arr.push({game:"party-board", rating:fbRating, text:$("fbText").value.trim(), tag:$("fbTag").value, timestamp:new Date().toISOString()});
+    localStorage.setItem(key, JSON.stringify(arr));
+    $("fbMsg").textContent = "Thanks! Feedback saved on this device 💛";
+    setTimeout(function(){ $("fbOverlay").classList.remove("open"); }, 900);
+  }catch(e){ $("fbMsg").textContent = "Sorry — saving failed on this device."; }
+});
+
+/* ---------- Init ---------- */
+paintSetup();
+showView("viewHome");
+</script>
+</body>
+</html>

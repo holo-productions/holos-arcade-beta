@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>BPM Guess — Holo's Arcade</title>
+<style>
+  *{box-sizing:border-box}
+  :root{--bg:#17131f;--surface:#241d33;--surface2:#2e2542;--ink:#f5f1ff;--muted:#c9bfe6;--line:#463a66;--accent:#ff5da2;--accent2:#ffd166;--good:#3ddc97;--bad:#ff6b6b;--radius:16px}
+  @media (prefers-color-scheme:light){:root{--bg:#f6f2ff;--surface:#fff;--surface2:#efe8ff;--ink:#241d33;--muted:#5b4f7a;--line:#d8ccf5}}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
+  .wrap{max-width:680px;margin:0 auto;padding:16px 14px 28px}
+  header{text-align:center;margin-bottom:14px}
+  .kicker{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;color:var(--accent2);font-weight:700;margin:0}
+  h1{margin:4px 0 2px;font-size:2rem}
+  .sub{color:var(--muted);margin:0}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:14px}
+  .label{font-weight:800;font-size:.82rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+  .pills{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .pills button,.btn,.choice{min-height:48px;font:inherit;font-weight:700;border-radius:999px;border:1.5px solid var(--line);background:var(--surface2);color:var(--ink);padding:10px 18px;cursor:pointer}
+  .pills button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;font-size:1.05rem}
+  .btn.secondary{background:var(--surface2);border-color:var(--line);color:var(--ink);width:auto}
+  .btn:disabled{opacity:.45;cursor:default}
+  .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+  .desc{color:var(--muted);font-size:.93rem;min-height:2.6em}
+  .hud{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center;margin-bottom:14px}
+  .hud .cell{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 4px}
+  .hud .k{font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .hud .v{font-size:1.25rem;font-weight:800}
+  .pulse{width:110px;height:110px;border-radius:50%;margin:14px auto;background:radial-gradient(circle at 35% 30%,#fff3,var(--surface2));border:3px solid var(--line);display:grid;place-items:center;font-size:2rem}
+  .pulse.beat{animation:beat .18s ease-out}
+  @keyframes beat{0%{transform:scale(1.18);border-color:var(--accent)}100%{transform:scale(1)}}
+  .choices{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  .choice{border-radius:14px;font-size:1.15rem}
+  .choice.correct{background:var(--good);border-color:var(--good);color:#06281a}
+  .choice.wrong{background:var(--bad);border-color:var(--bad);color:#2b0606}
+  input[type=range]{width:100%;height:48px;accent-color:var(--accent)}
+  .slider-val{text-align:center;font-size:2rem;font-weight:800;margin:4px 0}
+  .feedback{text-align:center;font-weight:700;min-height:3em;margin-top:10px}
+  .feedback .pts{color:var(--accent2);font-size:1.2rem}
+  .best{color:var(--muted);text-align:center;font-size:.92rem}
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+  .modal.open{display:flex}
+  .modal-card{background:var(--surface);color:var(--ink);border-radius:var(--radius);max-width:520px;width:100%;max-height:85vh;overflow:auto;padding:20px}
+  .modal-card h2{margin-top:0}
+  footer{text-align:center;color:var(--muted);font-size:.9rem;margin-top:18px}
+  footer a{color:var(--accent)}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="kicker">Holo's Arcade</p>
+    <h1>🎧 BPM Guess</h1>
+    <p class="sub">Hear the beat. Guess the tempo. How close can you get?</p>
+  </header>
+
+  <!-- Start / setup -->
+  <section class="card" id="setupCard">
+    <p class="label" id="diffLabel">Difficulty</p>
+    <div class="pills" role="group" aria-labelledby="diffLabel">
+      <button type="button" data-diff="easy" aria-pressed="false">😌 Easy</button>
+      <button type="button" data-diff="normal" aria-pressed="true">🎯 Normal</button>
+      <button type="button" data-diff="hard" aria-pressed="false">🔥 Hard</button>
+    </div>
+    <p class="desc" id="diffDesc" aria-live="polite"></p>
+
+    <p class="label" id="modeLabel">Guess mode</p>
+    <div class="pills" role="group" aria-labelledby="modeLabel">
+      <button type="button" data-mode="choice" aria-pressed="true">🔢 Multiple choice</button>
+      <button type="button" data-mode="slider" aria-pressed="false">🎚️ Slider</button>
+    </div>
+    <p class="desc" id="modeDesc" aria-live="polite"></p>
+
+    <button class="btn" type="button" id="startBtn">▶ Start game (10 rounds)</button>
+    <button class="btn secondary" type="button" id="practiceBtn" style="width:100%;margin-top:8px">🧪 Practice round — no score, with hints</button>
+    <div class="row">
+      <button class="btn secondary" type="button" id="howToBtn" aria-haspopup="dialog">❓ How to play</button>
+      <button class="btn secondary" type="button" id="rulesBtn" aria-haspopup="dialog">📜 Rules</button>
+    </div>
+    <p class="best" id="bestLine"></p>
+  </section>
+
+  <!-- Game -->
+  <section id="gameCard" hidden>
+    <div class="hud" aria-live="polite">
+      <div class="cell"><div class="k">Round</div><div class="v" id="hudRound">1/10</div></div>
+      <div class="cell"><div class="k">Score</div><div class="v" id="hudScore">0</div></div>
+      <div class="cell"><div class="k">Streak</div><div class="v" id="hudStreak">0 🔥</div></div>
+      <div class="cell"><div class="k">Best</div><div class="v" id="hudBest">0</div></div>
+    </div>
+
+    <div class="card">
+      <p class="desc" id="practiceBanner" hidden style="text-align:center;min-height:0">🧪 <strong>Practice mode</strong> — no score, no streak, no timer. Guess as many rounds as you like; your best scores are untouched.</p>
+      <p class="label" style="text-align:center">Listen to the beat…</p>
+      <div class="pulse" id="pulse" aria-hidden="true">🥁</div>
+      <div class="row">
+        <button class="btn secondary" type="button" id="playBtn">▶ Play beat</button>
+        <button class="btn secondary" type="button" id="stopBtn" disabled>⏹ Stop</button>
+      </div>
+
+      <div id="choiceArea">
+        <p class="label" style="margin-top:16px">How many beats per minute (BPM)?</p>
+        <div class="choices" id="choices"></div>
+      </div>
+
+      <div id="sliderArea" hidden>
+        <p class="label" style="margin-top:16px">Slide to your guess</p>
+        <div class="slider-val"><span id="sliderVal">100</span> BPM</div>
+        <input type="range" id="bpmSlider" min="40" max="200" step="1" value="100" aria-label="Your BPM guess" />
+        <button class="btn" type="button" id="sliderSubmit">Lock in guess</button>
+      </div>
+
+      <div id="hintRow" hidden>
+        <div class="row">
+          <button class="btn secondary" type="button" id="hintBtn">💡 Hint</button>
+          <button class="btn secondary" type="button" id="endPracticeBtn">✖ End practice</button>
+        </div>
+        <p class="desc" id="hintText" aria-live="polite" style="text-align:center;min-height:0"></p>
+      </div>
+
+      <p class="feedback" id="feedback" aria-live="polite"></p>
+      <button class="btn" type="button" id="nextBtn" hidden>Next round →</button>
+    </div>
+  </section>
+
+  <!-- Results -->
+  <section class="card" id="resultCard" hidden>
+    <h2 style="text-align:center;margin-top:0">🎉 Game over!</h2>
+    <p style="text-align:center;font-size:1.3rem">Final score: <strong id="finalScore">0</strong></p>
+    <p style="text-align:center" id="finalDetail"></p>
+    <button class="btn" type="button" id="againBtn">↻ Play again</button>
+    <div class="row">
+      <button class="btn secondary" type="button" id="howToBtn2" aria-haspopup="dialog">❓ How to play</button>
+      <button class="btn secondary" type="button" id="rulesBtn2" aria-haspopup="dialog">📜 Rules</button>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>BPM Guess</strong> is a Holo's Arcade game. Every beat is synthesized live in your browser — no songs, recordings, or samples.</p>
+    <p>More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener noreferrer">Ridiculously Fit and Fed</a></p>
+  </footer>
+</div>
+
+<!-- How to play (opt-in tutorial only) -->
+<div class="modal" id="howToModal" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
+  <div class="modal-card">
+    <h2 id="howToTitle">❓ How to play</h2>
+    <ol>
+      <li>Pick a <strong>difficulty</strong> and a <strong>guess mode</strong>, then tap <strong>Start game</strong>.</li>
+      <li>Tap <strong>▶ Play beat</strong> and listen. A synthesized kick-and-click loop plays at a secret tempo (BPM = beats per minute). The drum pulses on every beat — tap along in your head or count for a few seconds.</li>
+      <li><strong>Multiple choice:</strong> tap the BPM you think is right.</li>
+      <li><strong>Slider:</strong> drag the slider to your best guess, then tap <strong>Lock in guess</strong>. The closer you are, the more points you earn.</li>
+      <li>You get <strong>10 rounds</strong>. Build a <strong>streak</strong> of good guesses for bonus points!</li>
+      <li><strong>Just warming up?</strong> Tap <strong>🧪 Practice round</strong> instead — endless rounds, no score, no timer, and a <strong>💡 Hint</strong> button that narrows down the tempo. Practice never touches your best scores.</li>
+      <li>Tip: count the beats in 15 seconds and multiply by 4 — that's your BPM.</li>
+    </ol>
+    <button class="btn" type="button" data-close="howToModal">Got it!</button>
+  </div>
+</div>
+
+<!-- Rules -->
+<div class="modal" id="rulesModal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="modal-card">
+    <h2 id="rulesTitle">📜 Rules &amp; scoring</h2>
+    <h3>The game</h3>
+    <ul>
+      <li>Each game is <strong>10 rounds</strong>. Every round, a beat loop plays at a hidden BPM chosen at random inside your difficulty's range.</li>
+      <li>All sounds are <strong>synthesized live with WebAudio</strong> — no songs, recordings, or samples are used.</li>
+      <li>You may play/stop the beat as often as you like before guessing. One guess per round.</li>
+      <li><strong>Practice rounds</strong> are separate from scored games: endless rounds, no points, no streaks, no timer, an optional hint each round, and they never change your saved best scores.</li>
+    </ul>
+    <h3>Difficulty</h3>
+    <ul>
+      <li><strong>Easy:</strong> 60–120 BPM. Multiple-choice options are spaced 15 BPM apart. Slider: full points within 5 BPM, partial points up to 25 BPM away.</li>
+      <li><strong>Normal:</strong> 70–160 BPM. Options spaced 10 BPM apart. Slider: full points within 3 BPM, partial up to 20 BPM away.</li>
+      <li><strong>Hard:</strong> 80–180 BPM. Options spaced 5 BPM apart. Slider: full points within 2 BPM, partial up to 15 BPM away.</li>
+      <li>Your difficulty and mode choices are saved on this device and restored next visit.</li>
+    </ul>
+    <h3>Scoring</h3>
+    <ul>
+      <li><strong>Multiple choice:</strong> correct answer = <strong>100 points</strong>. Wrong answer = 0.</li>
+      <li><strong>Slider:</strong> points scale with closeness — 100 points inside the full-points window, then fewer the further away you are, down to 0 at the edge of the partial window. An <strong>exact</strong> guess earns a <strong>+25 exact bonus</strong> (125 total).</li>
+      <li><strong>Streak bonus:</strong> a round counts toward your streak if you earn at least 50 points. Each streak round adds <strong>+10 × current streak</strong> bonus points (streak 1 = +10, streak 2 = +20, … capped at +50). A round under 50 points resets the streak to 0.</li>
+      <li><strong>Best scores</strong> are saved on this device for every difficulty + mode combination, plus an overall best.</li>
+    </ul>
+    <button class="btn" type="button" data-close="rulesModal">Close</button>
+  </div>
+</div>
+
+<script>
+/* Pure game logic (no DOM) — difficulty table, choices, scoring. */
+var BPM_DIFFS = {
+  easy:   { label:"Easy",   min:60,  max:120, spacing:15, fullWindow:5, partialWindow:25,
+            desc:"Easy — 60–120 BPM, choices spaced 15 apart, forgiving slider. Great first run." },
+  normal: { label:"Normal", min:70,  max:160, spacing:10, fullWindow:3, partialWindow:20,
+            desc:"Normal — 70–160 BPM, choices spaced 10 apart, balanced slider scoring." },
+  hard:   { label:"Hard",   min:80,  max:180, spacing:5,  fullWindow:2, partialWindow:15,
+            desc:"Hard — 80–180 BPM, choices only 5 apart, tight slider scoring. Trust your ears!" }
+};
+function bpmRandomInt(min, max, rand){ return min + Math.floor((rand || Math.random)() * (max - min + 1)); }
+function bpmChoices(bpm, diffKey, rand){
+  var d = BPM_DIFFS[diffKey], r = rand || Math.random;
+  var opts = [bpm];
+  var deltas = [d.spacing, -d.spacing, 2*d.spacing, -2*d.spacing, 3*d.spacing, -3*d.spacing];
+  // shuffle deltas
+  for (var i = deltas.length - 1; i > 0; i--){ var j = Math.floor(r() * (i + 1)); var t = deltas[i]; deltas[i] = deltas[j]; deltas[j] = t; }
+  for (var k = 0; k < deltas.length && opts.length < 4; k++){
+    var v = bpm + deltas[k];
+    if (v >= 40 && v <= 200 && opts.indexOf(v) === -1) opts.push(v);
+  }
+  while (opts.length < 4){ var w = bpmRandomInt(40, 200, r); if (opts.indexOf(w) === -1) opts.push(w); }
+  for (var m = opts.length - 1; m > 0; m--){ var n = Math.floor(r() * (m + 1)); var u = opts[m]; opts[m] = opts[n]; opts[n] = u; }
+  return opts;
+}
+function bpmSliderPoints(guess, actual, diffKey){
+  var d = BPM_DIFFS[diffKey], diff = Math.abs(guess - actual);
+  if (diff === 0) return 125; // 100 + 25 exact bonus
+  if (diff <= d.fullWindow) return 100;
+  if (diff >= d.partialWindow) return 0;
+  // linear from 100 (at fullWindow) down to 0 (at partialWindow)
+  return Math.round(100 * (d.partialWindow - diff) / (d.partialWindow - d.fullWindow));
+}
+function bpmStreakBonus(streak){ return Math.min(50, 10 * streak); }
+</script>
+
+<script>
+(function(){
+  "use strict";
+  var GAME_SLUG = "bpm-guess";
+  var LS = {
+    diff: "bpm-guess:difficulty",
+    mode: "bpm-guess:mode",
+    best: "bpm-guess:best",          // JSON { "easy:choice": 900, ..., overall: 900 }
+    feedback: "holos-arcade-feedback" // shared arcade feedback array
+  };
+  function lsGet(k, fb){ try { var v = localStorage.getItem(k); return v === null ? fb : v; } catch(e){ return fb; } }
+  function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+  function $(id){ return document.getElementById(id); }
+
+  var diffKey = lsGet(LS.diff, "normal"); if (!BPM_DIFFS[diffKey]) diffKey = "normal";
+  var mode = lsGet(LS.mode, "choice"); if (mode !== "choice" && mode !== "slider") mode = "choice";
+  var best = {};
+  try { best = JSON.parse(lsGet(LS.best, "{}")) || {}; } catch(e){ best = {}; }
+
+  var ROUNDS = 10;
+  var state = { round:0, score:0, streak:0, bestStreak:0, bpm:0, guessed:false, practice:false };
+
+  /* ---------- WebAudio beat (all synthesized) ---------- */
+  var actx = null, timerId = null, nextBeatTime = 0, beatCount = 0, playing = false;
+  function ensureAudio(){
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === "suspended") actx.resume();
+  }
+  function kick(t, accent){
+    var osc = actx.createOscillator(), g = actx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(accent ? 160 : 140, t);
+    osc.frequency.exponentialRampToValueAtTime(48, t + 0.12);
+    g.gain.setValueAtTime(accent ? 0.9 : 0.7, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+    osc.connect(g); g.connect(actx.destination);
+    osc.start(t); osc.stop(t + 0.2);
+    // click layer
+    var c = actx.createOscillator(), cg = actx.createGain();
+    c.type = "square"; c.frequency.setValueAtTime(accent ? 1800 : 1200, t);
+    cg.gain.setValueAtTime(0.12, t); cg.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+    c.connect(cg); cg.connect(actx.destination); c.start(t); c.stop(t + 0.04);
+  }
+  function scheduler(){
+    var spb = 60 / state.bpm;
+    while (nextBeatTime < actx.currentTime + 0.15){
+      var accent = (beatCount % 4 === 0);
+      kick(nextBeatTime, accent);
+      var delayMs = Math.max(0, (nextBeatTime - actx.currentTime) * 1000);
+      (function(d){ setTimeout(pulse, d); })(delayMs);
+      nextBeatTime += spb; beatCount++;
+    }
+  }
+  function pulse(){
+    var p = $("pulse"); p.classList.remove("beat"); void p.offsetWidth; p.classList.add("beat");
+  }
+  function playBeat(){
+    ensureAudio(); stopBeat();
+    playing = true; beatCount = 0; nextBeatTime = actx.currentTime + 0.06;
+    scheduler(); timerId = setInterval(scheduler, 40);
+    $("playBtn").disabled = true; $("stopBtn").disabled = false;
+  }
+  function stopBeat(){
+    if (timerId) clearInterval(timerId); timerId = null; playing = false;
+    $("playBtn").disabled = false; $("stopBtn").disabled = true;
+  }
+
+  /* ---------- Setup UI ---------- */
+  function syncPills(){
+    document.querySelectorAll("[data-diff]").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-diff") === diffKey ? "true" : "false"); });
+    document.querySelectorAll("[data-mode]").forEach(function(b){ b.setAttribute("aria-pressed", b.getAttribute("data-mode") === mode ? "true" : "false"); });
+    $("diffDesc").textContent = BPM_DIFFS[diffKey].desc;
+    $("modeDesc").textContent = mode === "choice"
+      ? "Multiple choice — pick from 4 tempos. Correct = 100 points."
+      : "Slider — drag to your guess. Closer = more points, exact = 125.";
+    updateBestLine();
+  }
+  function bestKey(){ return diffKey + ":" + mode; }
+  function updateBestLine(){
+    var b = best[bestKey()] || 0, o = best.overall || 0;
+    $("bestLine").textContent = "Best (" + BPM_DIFFS[diffKey].label + " · " + (mode === "choice" ? "Multiple choice" : "Slider") + "): " + b + " · Overall best: " + o;
+    $("hudBest").textContent = b;
+  }
+  document.querySelectorAll("[data-diff]").forEach(function(b){
+    b.addEventListener("click", function(){ diffKey = b.getAttribute("data-diff"); lsSet(LS.diff, diffKey); syncPills(); });
+  });
+  document.querySelectorAll("[data-mode]").forEach(function(b){
+    b.addEventListener("click", function(){ mode = b.getAttribute("data-mode"); lsSet(LS.mode, mode); syncPills(); });
+  });
+
+  /* ---------- Modals (opt-in only — never auto-shown) ---------- */
+  function openModal(id){ $(id).classList.add("open"); }
+  function closeModal(id){ $(id).classList.remove("open"); }
+  $("howToBtn").addEventListener("click", function(){ openModal("howToModal"); });
+  $("howToBtn2").addEventListener("click", function(){ openModal("howToModal"); });
+  $("rulesBtn").addEventListener("click", function(){ openModal("rulesModal"); });
+  $("rulesBtn2").addEventListener("click", function(){ openModal("rulesModal"); });
+  document.querySelectorAll("[data-close]").forEach(function(b){ b.addEventListener("click", function(){ closeModal(b.getAttribute("data-close")); }); });
+  document.querySelectorAll(".modal").forEach(function(m){ m.addEventListener("click", function(e){ if (e.target === m) m.classList.remove("open"); }); });
+
+  /* ---------- Game flow ---------- */
+  function startGame(practice){
+    state = { round:0, score:0, streak:0, bestStreak:0, bpm:0, guessed:false, practice: !!practice };
+    $("setupCard").hidden = true; $("resultCard").hidden = true; $("gameCard").hidden = false;
+    $("practiceBanner").hidden = !state.practice;
+    $("hintRow").hidden = !state.practice;
+    nextRound();
+  }
+  function endPractice(){
+    stopBeat();
+    $("gameCard").hidden = true; $("resultCard").hidden = true; $("setupCard").hidden = false;
+    syncPills();
+  }
+  function nextRound(){
+    stopBeat();
+    state.round++; state.guessed = false;
+    var d = BPM_DIFFS[diffKey];
+    state.bpm = bpmRandomInt(d.min, d.max);
+    $("hudRound").textContent = state.practice ? "Practice" : state.round + "/" + ROUNDS;
+    $("hudScore").textContent = state.practice ? "—" : state.score;
+    $("hudStreak").textContent = state.practice ? "—" : state.streak + " 🔥";
+    updateBestLine();
+    $("feedback").innerHTML = "";
+    $("hintText").textContent = "";
+    $("nextBtn").hidden = true;
+    $("nextBtn").textContent = state.practice ? "Next practice round →" : (state.round >= ROUNDS ? "See results →" : "Next round →");
+
+    if (mode === "choice"){
+      $("choiceArea").hidden = false; $("sliderArea").hidden = true;
+      var box = $("choices"); box.innerHTML = "";
+      bpmChoices(state.bpm, diffKey).forEach(function(v){
+        var btn = document.createElement("button");
+        btn.type = "button"; btn.className = "choice"; btn.textContent = v + " BPM";
+        btn.addEventListener("click", function(){ guessChoice(v, btn); });
+        box.appendChild(btn);
+      });
+    } else {
+      $("choiceArea").hidden = true; $("sliderArea").hidden = false;
+      var mid = Math.round((d.min + d.max) / 2);
+      $("bpmSlider").value = mid; $("sliderVal").textContent = mid;
+      $("sliderSubmit").disabled = false;
+    }
+    playBeat();
+  }
+  function award(basePts, headline){
+    if (state.practice){
+      $("feedback").innerHTML = headline + "<br>No points in practice — just train those ears! 🎧" +
+        "<br>The beat was <strong>" + state.bpm + " BPM</strong>.";
+      $("nextBtn").hidden = false;
+      return;
+    }
+    var bonus = 0;
+    if (basePts >= 50){ state.streak++; bonus = bpmStreakBonus(state.streak); }
+    else state.streak = 0;
+    state.bestStreak = Math.max(state.bestStreak, state.streak);
+    var total = basePts + bonus;
+    state.score += total;
+    $("hudScore").textContent = state.score;
+    $("hudStreak").textContent = state.streak + " 🔥";
+    $("feedback").innerHTML = headline + "<br><span class='pts'>+" + total + " points</span>" +
+      (bonus ? " (includes +" + bonus + " streak bonus)" : "") +
+      "<br>The beat was <strong>" + state.bpm + " BPM</strong>.";
+    $("nextBtn").hidden = false;
+  }
+  function guessChoice(v, btn){
+    if (state.guessed) return; state.guessed = true; stopBeat();
+    var correct = (v === state.bpm);
+    document.querySelectorAll(".choice").forEach(function(c){
+      c.disabled = true;
+      if (parseInt(c.textContent, 10) === state.bpm) c.classList.add("correct");
+      else if (c === btn) c.classList.add("wrong");
+    });
+    award(correct ? 100 : 0, correct ? "✅ Nailed it!" : "❌ Not quite — you picked " + v + " BPM.");
+  }
+  $("bpmSlider").addEventListener("input", function(){ $("sliderVal").textContent = this.value; });
+  $("sliderSubmit").addEventListener("click", function(){
+    if (state.guessed) return; state.guessed = true; stopBeat();
+    this.disabled = true;
+    var guess = parseInt($("bpmSlider").value, 10);
+    var pts = bpmSliderPoints(guess, state.bpm, diffKey);
+    var off = Math.abs(guess - state.bpm);
+    award(pts, off === 0 ? "🎯 EXACT! Incredible ears!" : "You guessed " + guess + " BPM — off by " + off + ".");
+  });
+  $("nextBtn").addEventListener("click", function(){
+    if (state.practice) nextRound();
+    else if (state.round >= ROUNDS) endGame(); else nextRound();
+  });
+  $("hintBtn").addEventListener("click", function(){
+    if (!state.practice || state.guessed) return;
+    var lo = Math.max(40, state.bpm - 15), hi = Math.min(200, state.bpm + 15);
+    var rel = state.bpm > 100 ? "faster" : (state.bpm < 100 ? "slower" : "right at");
+    $("hintText").textContent = "💡 The tempo is between " + lo + " and " + hi + " BPM — " +
+      (state.bpm === 100 ? "exactly 100 BPM, a steady mid-tempo." : rel + " than 100 BPM. Count the beats for 15 seconds and multiply by 4.");
+  });
+  $("endPracticeBtn").addEventListener("click", endPractice);
+  function endGame(){
+    stopBeat();
+    $("gameCard").hidden = true; $("resultCard").hidden = false;
+    $("finalScore").textContent = state.score;
+    var k = bestKey(), isBest = state.score > (best[k] || 0);
+    if (isBest) best[k] = state.score;
+    if (state.score > (best.overall || 0)) best.overall = state.score;
+    lsSet(LS.best, JSON.stringify(best));
+    $("finalDetail").textContent = BPM_DIFFS[diffKey].label + " · " + (mode === "choice" ? "Multiple choice" : "Slider") +
+      " · Best streak: " + state.bestStreak + " 🔥" + (isBest ? " · 🏆 New best score!" : " · Best: " + (best[k] || 0));
+    updateBestLine();
+  }
+  $("startBtn").addEventListener("click", function(){ startGame(false); });
+  $("practiceBtn").addEventListener("click", function(){ startGame(true); });
+  $("againBtn").addEventListener("click", function(){ startGame(false); });
+  $("playBtn").addEventListener("click", playBeat);
+  $("stopBtn").addEventListener("click", stopBeat);
+
+  syncPills();
+
+  /* ---------- Feedback button (Holo's Arcade standard) ---------- */
+  var fbBtn = document.createElement("button");
+  fbBtn.type = "button"; fbBtn.className = "btn secondary"; fbBtn.id = "fbBtn"; fbBtn.textContent = "💬 Feedback";
+  document.querySelector("footer").appendChild(fbBtn);
+  var fbModal = document.createElement("div");
+  fbModal.className = "modal"; fbModal.id = "fbModal"; fbModal.setAttribute("role", "dialog"); fbModal.setAttribute("aria-modal", "true"); fbModal.setAttribute("aria-label", "Send feedback");
+  fbModal.innerHTML =
+    "<div class='modal-card'><h2>💬 Feedback</h2>" +
+    "<div id='fbForm'><p class='label'>Your rating</p><div class='pills' id='fbStars' role='radiogroup' aria-label='Rating'>" +
+    [1,2,3,4,5].map(function(n){ return "<button type='button' data-star='" + n + "' aria-label='" + n + " star" + (n>1?"s":"") + "'>★</button>"; }).join("") +
+    "</div><textarea id='fbText' rows='4' style='width:100%;font:inherit;padding:10px;border-radius:10px' placeholder='Tell us what you think…' aria-label='Your feedback'></textarea>" +
+    "<p style='color:var(--muted);font-size:.85rem;text-align:center;margin:10px 0 0'>By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>" +
+    "<div class='row'><button type='button' class='btn secondary' id='fbCancel'>Cancel</button><button type='button' class='btn' id='fbSave' style='width:auto'>Save</button></div></div>" +
+    "<p id='fbThanks' hidden style='text-align:center;font-size:1.1rem'>Thanks! 💜</p></div>";
+  document.body.appendChild(fbModal);
+  var fbRating = 0;
+  function paintStars(){ fbModal.querySelectorAll("[data-star]").forEach(function(s){ s.setAttribute("aria-pressed", Number(s.getAttribute("data-star")) <= fbRating ? "true" : "false"); }); }
+  fbModal.querySelectorAll("[data-star]").forEach(function(s){ s.addEventListener("click", function(){ fbRating = Number(s.getAttribute("data-star")); paintStars(); }); });
+  fbBtn.addEventListener("click", function(){ $("fbForm").hidden = false; $("fbThanks").hidden = true; fbModal.classList.add("open"); });
+  $("fbCancel").addEventListener("click", function(){ fbModal.classList.remove("open"); });
+  fbModal.addEventListener("click", function(e){ if (e.target === fbModal) fbModal.classList.remove("open"); });
+  $("fbSave").addEventListener("click", function(){
+    var rec = { game: GAME_SLUG, rating: fbRating, text: $("fbText").value.trim(), timestamp: new Date().toISOString() };
+    try {
+      var arr = [];
+      try { arr = JSON.parse(localStorage.getItem(LS.feedback) || "[]"); if (!Array.isArray(arr)) arr = []; } catch(e){ arr = []; }
+      arr.push(rec); localStorage.setItem(LS.feedback, JSON.stringify(arr));
+    } catch(e){}
+    $("fbForm").hidden = true; $("fbThanks").hidden = false;
+    fbRating = 0; paintStars(); $("fbText").value = "";
+    setTimeout(function(){ fbModal.classList.remove("open"); }, 1200);
+  });
+})();
+</script>
+</body>
+</html>

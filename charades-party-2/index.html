@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
+<title>Charades Party</title>
+<style>
+*{box-sizing:border-box}
+:root{--bg:#fff7e6;--surface:#fffdf8;--ink:#231f1a;--muted:#6b6259;--line:#e7d8bd;--accent:#7c3aed;--accent2:#f59e0b;--green:#15803d;--red:#b91c1c;--teamA:#2563eb;--teamB:#db2777;--shadow:0 10px 30px rgba(35,31,26,.14)}
+@media(prefers-color-scheme:dark){:root{--bg:#17141f;--surface:#221e30;--ink:#f5f0ff;--muted:#c4b8d9;--line:#3d3555;--accent:#a78bfa;--accent2:#fbbf24;--shadow:0 10px 30px rgba(0,0,0,.5)}}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
+.wrap{max-width:760px;margin:0 auto;padding:16px 14px 32px}
+h1{font-size:2.2rem;margin:.2em 0;text-align:center}
+.sub{text-align:center;color:var(--muted);margin:0 0 14px}
+.card{background:var(--surface);border:1.5px solid var(--line);border-radius:18px;padding:18px;box-shadow:var(--shadow);margin-bottom:14px}
+label{font-weight:700;display:block;margin:12px 0 6px}
+input[type=text],select,textarea{width:100%;font:inherit;padding:12px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);min-height:52px}
+.btn{display:block;width:100%;min-height:60px;padding:14px 18px;font:inherit;font-size:1.1rem;font-weight:800;border-radius:16px;border:2px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;margin-top:12px}
+.btn:active{opacity:.8}.btn.secondary{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.got{background:var(--green);border-color:var(--green);font-size:1.35rem;min-height:72px}
+.btn.pass{background:transparent;color:var(--red);border-color:var(--red);min-height:64px}
+.btn.small{width:auto;display:inline-block;min-height:48px;font-size:.95rem;padding:10px 16px;margin-top:0}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:140px}
+.pills{display:flex;gap:8px;flex-wrap:wrap}
+.pill{min-height:52px;padding:10px 16px;border-radius:999px;border:2px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-weight:700;cursor:pointer}
+.pill[aria-pressed=true]{background:var(--accent);color:#fff;border-color:var(--accent)}
+.scoreboard{display:flex;gap:10px}.score{flex:1;text-align:center;padding:12px;border-radius:14px;border:2px solid var(--line)}
+.score.a{border-color:var(--teamA)}.score.b{border-color:var(--teamB)}.score b{font-size:1.9rem;display:block}
+.score.active{outline:3px solid var(--accent2)}
+.prompt{font-size:2.4rem;font-weight:900;text-align:center;padding:28px 10px;line-height:1.1;word-break:break-word}
+.timer{font-size:2rem;font-weight:900;text-align:center}
+.timerbar{height:14px;background:var(--line);border-radius:999px;overflow:hidden;margin:8px 0 14px}
+.timerfill{height:100%;background:var(--accent2);width:100%;transition:width .25s linear}
+.banner{background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;padding:10px 14px;border-radius:12px;font-weight:700;margin-bottom:12px}
+@media(prefers-color-scheme:dark){.banner{background:#3a2f12;color:#fde68a}}
+[hidden]{display:none!important}
+.toprow{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+details.card summary{cursor:pointer;font-weight:800;font-size:1.1rem;min-height:48px;display:flex;align-items:center}
+footer{text-align:center;color:var(--muted);padding:20px 10px 8px;font-size:.95rem}
+footer a{color:var(--accent);font-weight:800}
+.stars{display:flex;gap:6px}.star{font-size:30px;background:none;border:none;cursor:pointer;min-width:48px;min-height:48px;color:#bbb}.star.on{color:#f5a623}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}.modal.open{display:flex}
+.modal .card{max-width:440px;width:100%}
+.center{text-align:center}.muted{color:var(--muted)}
+ul{text-align:left}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>🎭 Charades Party</h1>
+<p class="sub">Act it out. No talking. Two teams, one phone, pass-and-play!</p>
+
+<div class="toprow">
+<button type="button" class="pill" id="howBtn">❓ How to play</button>
+<button type="button" class="pill" id="rulesBtn">📜 Rules</button>
+<button type="button" class="pill" id="feedbackBtn">💬 Feedback</button>
+</div>
+
+<div id="practiceBanner" class="banner" hidden>🧪 Practice mode — scores are NOT saved.</div>
+
+<!-- SETUP -->
+<section id="screenSetup" class="card">
+<h2>Set up your party</h2>
+<div class="row">
+<div><label for="teamAName">Team 1 name</label><input type="text" id="teamAName" value="Team Cats" maxlength="24"></div>
+<div><label for="teamBName">Team 2 name</label><input type="text" id="teamBName" value="Team Dogs" maxlength="24"></div>
+</div>
+<label>Category</label>
+<div class="pills" id="catPills" role="group" aria-label="Category"></div>
+<label>Difficulty <span class="muted">(saved automatically)</span></label>
+<div class="pills" id="diffPills" role="group" aria-label="Difficulty">
+<button type="button" class="pill" data-diff="easy" aria-pressed="false">😌 Easy · 90s · unlimited passes</button>
+<button type="button" class="pill" data-diff="classic" aria-pressed="true">🎯 Classic · 60s · 3 passes</button>
+<button type="button" class="pill" data-diff="hard" aria-pressed="false">🔥 Party Hard · 45s · 1 pass · 2 pts</button>
+</div>
+<label>Rounds <span class="muted">(each team acts once per round)</span></label>
+<div class="pills" id="roundPills">
+<button type="button" class="pill" data-rounds="3" aria-pressed="true">3 rounds</button>
+<button type="button" class="pill" data-rounds="5" aria-pressed="false">5 rounds</button>
+<button type="button" class="pill" data-rounds="10" aria-pressed="false">10 rounds</button>
+</div>
+<label><input type="checkbox" id="practiceToggle"> Practice mode (scores not saved)</label>
+<button type="button" class="btn" id="startBtn">▶ Start Game</button>
+<p class="muted center" id="bestsLine">Best score yet: —</p>
+</section>
+
+<!-- SCOREBOARD -->
+<section id="scoreboard" class="card" hidden>
+<div class="scoreboard">
+<div class="score a" id="scoreA"><span id="nameA">Team Cats</span><b id="ptsA">0</b><span class="muted">points</span></div>
+<div class="score b" id="scoreB"><span id="nameB">Team Dogs</span><b id="ptsB">0</b><span class="muted">points</span></div>
+</div>
+<p class="center muted" id="roundLine">Round 1 of 3</p>
+</section>
+
+<!-- TURN INTRO -->
+<section id="screenIntro" class="card center" hidden>
+<h2 id="introTitle">Team Cats — your turn!</h2>
+<p>Pass the phone to the <b>actor</b>. Only the actor should see the next screen.</p>
+<p class="muted">Everyone else: eyes away! 👀</p>
+<button type="button" class="btn" id="revealBtn">👀 I'm the actor — show my words</button>
+</section>
+
+<!-- PLAYING -->
+<section id="screenPlay" class="card" hidden>
+<div class="timer" id="timerText">60</div>
+<div class="timerbar"><div class="timerfill" id="timerFill"></div></div>
+<p class="center muted" id="playMeta">Animals · Passes left: 3</p>
+<div class="prompt" id="promptText">—</div>
+<button type="button" class="btn got" id="gotBtn">✅ Got It!</button>
+<button type="button" class="btn pass" id="passBtn">⏭ Pass</button>
+<button type="button" class="btn secondary" id="pauseBtn">⏸ Pause</button>
+</section>
+
+<!-- TURN SUMMARY -->
+<section id="screenSummary" class="card center" hidden>
+<h2>⏰ Time's up!</h2>
+<p id="summaryText"></p>
+<ul id="summaryList"></ul>
+<button type="button" class="btn" id="nextBtn">Next turn →</button>
+</section>
+
+<!-- WINNER -->
+<section id="screenWinner" class="card center" hidden>
+<h2 id="winnerTitle">🏆 Winner!</h2>
+<p id="winnerText" style="font-size:1.3rem;font-weight:800"></p>
+<p id="finalScores"></p>
+<button type="button" class="btn" id="playAgainBtn">🔁 Play Again</button>
+<button type="button" class="btn secondary" id="homeBtn">🏠 Back to Setup</button>
+</section>
+
+<!-- TUTORIAL (opt-in only) -->
+<details class="card" id="howto">
+<summary>❓ How to play — Tutorial</summary>
+<ol>
+<li>Split into <b>2 teams</b>. Pick a category, difficulty and rounds above.</li>
+<li>Tap <b>Start Game</b>, then pass the phone to the first team's actor.</li>
+<li>The actor taps <b>“I'm the actor”</b> — a secret word appears with a timer.</li>
+<li><b>Act it out without talking!</b> Your team shouts guesses.</li>
+<li>Tap <b>✅ Got It!</b> when they guess right — you score and a new word appears.</li>
+<li>Stuck? Tap <b>⏭ Pass</b> (limited on Classic/Hard) for a new word.</li>
+<li>When time runs out, pass the phone to the other team. Most points after all rounds wins!</li>
+</ol>
+<p>This tutorial only opens when you tap “How to play” — it never pops up on its own.</p>
+</details>
+
+<!-- RULES (separate page/section) -->
+<details class="card" id="rules">
+<summary>📜 Rules</summary>
+<ul>
+<li><b>Teams:</b> 2 teams, pass-and-play on one device. Each team acts once per round.</li>
+<li><b>No talking, no mouthing words, no spelling letters</b> while acting. Gestures, mime and sounds like animal noises only if your group agrees before starting.</li>
+<li><b>Scoring:</b> Easy/Classic = 1 point per “Got It!”. Party Hard = 2 points per “Got It!”.</li>
+<li><b>Timer:</b> Easy 90s · Classic 60s · Party Hard 45s per turn.</li>
+<li><b>Passes:</b> Easy unlimited · Classic 3 per turn · Party Hard 1 per turn. A pass scores 0.</li>
+<li><b>Categories:</b> Animals, Actions, Jobs, Food, Sports, Objects, or All Mixed. Prompts are original word lists made for this game — no movie titles.</li>
+<li><b>Winner:</b> Highest score after the chosen rounds. A tie is a tie — rematch encouraged!</li>
+<li><b>Practice mode:</b> Play freely; scores and bests are not saved.</li>
+<li><b>Fair play:</b> Only the actor sees the prompt. Guessing team must say the exact word (close enough is up to the other team — be kind!).</li>
+</ul>
+</details>
+
+<footer>
+<div>More ridiculous health &amp; fitness fun: <a href="https://instagram.com/ridiculouslyfitandfed" target="_blank" rel="noopener">Ridiculously Fit and Fed</a></div>
+<div style="margin-top:6px">Charades Party — free party game. No accounts, no tracking; scores stay on this device.</div>
+</footer>
+</div>
+
+<!-- FEEDBACK MODAL -->
+<div class="modal" id="fbModal" role="dialog" aria-modal="true" aria-label="Send feedback">
+<div class="card">
+<h2>💬 Feedback</h2>
+<div id="fbForm">
+<div class="stars" id="fbStars">
+<button type="button" class="star" data-v="1" aria-label="1 star">★</button><button type="button" class="star" data-v="2" aria-label="2 stars">★</button><button type="button" class="star" data-v="3" aria-label="3 stars">★</button><button type="button" class="star" data-v="4" aria-label="4 stars">★</button><button type="button" class="star" data-v="5" aria-label="5 stars">★</button>
+</div>
+<label for="fbText">Comment</label><textarea id="fbText" placeholder="Tell us what you think…"></textarea>
+<label for="fbTag">Tag (optional)</label>
+<select id="fbTag"><option value="">Tag (optional)</option><option>Bug</option><option>Suggestion</option><option>Other</option></select>
+<div class="row" style="margin-top:12px"><button type="button" class="btn secondary" id="fbCancel">Cancel</button><button type="button" class="btn" id="fbSave">Save</button></div>
+</div>
+<p id="fbThanks" hidden class="center" style="font-size:1.2rem">Thanks! 💜</p>
+</div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id)};
+var PROMPTS={
+"Animals":["Elephant","Kangaroo","Penguin","Octopus","Giraffe","Monkey","Frog","Owl","Shark","Butterfly","Horse","Pig","Chicken","Snake","Bear","Lion","Rabbit","Turtle","Bee","Cat","Dog","Fish","Spider","Crab","Flamingo"],
+"Actions":["Brushing teeth","Riding a bicycle","Swimming","Dancing","Cooking","Reading a book","Climbing a ladder","Fishing","Painting","Playing guitar","Skiing","Running a race","Jumping rope","Typing","Washing a car","Planting flowers","Playing piano","Skateboarding","Flying a kite","Building a snowman","Taking a photo","Singing in the shower","Lifting weights","Yoga pose","Knitting"],
+"Jobs":["Firefighter","Doctor","Teacher","Chef","Police officer","Farmer","Astronaut","Plumber","Dentist","Librarian","Bus driver","Hairdresser","Photographer","Electrician","Baker","Veterinarian","Construction worker","Mail carrier","Musician","Scientist","Pilot","Carpenter","Lifeguard","Painter","Judge"],
+"Food":["Pizza","Banana","Popcorn","Spaghetti","Ice cream cone","Hamburger","Carrot","Birthday cake","Hot dog","Watermelon","Cheese","Pancakes","Taco","Donut","Apple pie","Sushi roll","Chocolate bar","French fries","Peanut butter sandwich","Lemonade","Cupcake","Corn on the cob","Grapes","Milkshake","Toast"],
+"Sports":["Soccer","Basketball","Tennis","Baseball","Golf","Boxing","Gymnastics","Surfing","Ice hockey","Volleyball","Bowling","Archery","Weightlifting","Skiing downhill","Skateboarding trick","Fishing cast","Running hurdles","Swimming dive","Karate kick","Ping pong","Badminton","Rowing","Climbing","Darts","Frisbee throw"],
+"Objects":["Umbrella","Toothbrush","Ladder","Camera","Guitar","Bicycle","Clock","Telephone","Scissors","Balloon","Kite","Hammer","Book","Chair","Mirror","Broom","Hat","Sunglasses","Backpack","Candle","Key","Pillow","Telescope","Watering can","Alarm clock"]
+};
+var CATS=Object.keys(PROMPTS);
+var DIFFS={easy:{time:90,passes:Infinity,points:1,label:"Easy"},classic:{time:60,passes:3,points:1,label:"Classic"},hard:{time:45,passes:1,points:2,label:"Party Hard"}};
+function storeGet(k,d){try{var v=localStorage.getItem("charadesParty_v1_"+k);return v===null?d:JSON.parse(v)}catch(e){return d}}
+function storeSet(k,v){try{localStorage.setItem("charadesParty_v1_"+k,JSON.stringify(v))}catch(e){}}
+var state={category:storeGet("category","All Mixed"),diff:storeGet("difficulty","classic"),rounds:3,practice:false,teams:[{name:"Team Cats",score:0},{name:"Team Dogs",score:0}],round:1,turnTeam:0,deck:[],current:"",timeLeft:60,passesLeft:3,turnGot:[],turnPassed:[],timerId:null,paused:false,turnScore:0};
+if(!DIFFS[state.diff])state.diff="classic";
+// Category pills
+var catWrap=$("catPills");
+["All Mixed"].concat(CATS).forEach(function(c){var b=document.createElement("button");b.type="button";b.className="pill";b.textContent=c;b.setAttribute("aria-pressed",c===state.category?"true":"false");b.addEventListener("click",function(){state.category=c;storeSet("category",c);catWrap.querySelectorAll(".pill").forEach(function(x){x.setAttribute("aria-pressed",x.textContent===c?"true":"false")})});catWrap.appendChild(b)});
+// Difficulty (saved)
+function syncDiff(){document.querySelectorAll("#diffPills .pill").forEach(function(x){x.setAttribute("aria-pressed",x.getAttribute("data-diff")===state.diff?"true":"false")})}
+document.querySelectorAll("#diffPills .pill").forEach(function(b){b.addEventListener("click",function(){state.diff=b.getAttribute("data-diff");storeSet("difficulty",state.diff);syncDiff()})});syncDiff();
+document.querySelectorAll("#roundPills .pill").forEach(function(b){b.addEventListener("click",function(){state.rounds=Number(b.getAttribute("data-rounds"));document.querySelectorAll("#roundPills .pill").forEach(function(x){x.setAttribute("aria-pressed",x===b?"true":"false")})})});
+$("practiceToggle").addEventListener("change",function(){$("practiceBanner").hidden=!this.checked});
+function show(id){["screenSetup","screenIntro","screenPlay","screenSummary","screenWinner"].forEach(function(s){$(s).hidden=s!==id})}
+function buildDeck(){var pool=state.category==="All Mixed"?CATS.reduce(function(a,c){return a.concat(PROMPTS[c].map(function(p){return{word:p,cat:c}}))},[]):PROMPTS[state.category].map(function(p){return{word:p,cat:state.category}});for(var i=pool.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=pool[i];pool[i]=pool[j];pool[j]=t}return pool}
+function updateScoreboard(){$("nameA").textContent=state.teams[0].name;$("nameB").textContent=state.teams[1].name;$("ptsA").textContent=state.teams[0].score;$("ptsB").textContent=state.teams[1].score;$("roundLine").textContent="Round "+state.round+" of "+state.rounds;$("scoreA").classList.toggle("active",state.turnTeam===0);$("scoreB").classList.toggle("active",state.turnTeam===1)}
+function updateBests(){var best=storeGet("bestScore",null);var games=storeGet("gamesPlayed",0);$("bestsLine").textContent=best===null?"Best score yet: —":"Best team score yet: "+best+" · Games played: "+games}
+$("startBtn").addEventListener("click",function(){
+ state.teams[0].name=$("teamAName").value.trim()||"Team 1";state.teams[1].name=$("teamBName").value.trim()||"Team 2";
+ state.teams[0].score=0;state.teams[1].score=0;state.round=1;state.turnTeam=0;state.practice=$("practiceToggle").checked;$("practiceBanner").hidden=!state.practice;
+ state.deck=buildDeck();$("scoreboard").hidden=false;updateScoreboard();showIntro();
+});
+function showIntro(){$("introTitle").textContent=state.teams[state.turnTeam].name+" — your turn!";updateScoreboard();show("screenIntro")}
+$("revealBtn").addEventListener("click",startTurn);
+function nextPrompt(){if(!state.deck.length)state.deck=buildDeck();var item=state.deck.pop();state.current=item.word;$("promptText").textContent=item.word;$("playMeta").textContent=item.cat+" · "+DIFFS[state.diff].label+" · Passes left: "+(state.passesLeft===Infinity?"∞":state.passesLeft)}
+function startTurn(){
+ var d=DIFFS[state.diff];state.timeLeft=d.time;state.passesLeft=d.passes;state.turnGot=[];state.turnPassed=[];state.turnScore=0;state.paused=false;$("pauseBtn").textContent="⏸ Pause";
+ show("screenPlay");nextPrompt();renderTimer();
+ clearInterval(state.timerId);state.timerId=setInterval(function(){if(state.paused)return;state.timeLeft--;renderTimer();if(state.timeLeft<=0)endTurn()},1000);
+}
+function renderTimer(){$("timerText").textContent=Math.max(0,state.timeLeft);$("timerFill").style.width=(100*Math.max(0,state.timeLeft)/DIFFS[state.diff].time)+"%"}
+$("gotBtn").addEventListener("click",function(){var pts=DIFFS[state.diff].points;state.turnGot.push(state.current);state.turnScore+=pts;state.teams[state.turnTeam].score+=pts;updateScoreboard();nextPrompt()});
+$("passBtn").addEventListener("click",function(){if(state.passesLeft<=0){$("playMeta").textContent="No passes left! Keep acting!";return}if(state.passesLeft!==Infinity)state.passesLeft--;state.turnPassed.push(state.current);nextPrompt()});
+$("pauseBtn").addEventListener("click",function(){state.paused=!state.paused;this.textContent=state.paused?"▶ Resume":"⏸ Pause"});
+function endTurn(){
+ clearInterval(state.timerId);
+ $("summaryText").textContent=state.teams[state.turnTeam].name+" scored "+state.turnScore+" point"+(state.turnScore===1?"":"s")+" this turn! Got "+state.turnGot.length+", passed "+state.turnPassed.length+".";
+ var ul=$("summaryList");ul.innerHTML="";state.turnGot.forEach(function(w){var li=document.createElement("li");li.textContent="✅ "+w;ul.appendChild(li)});state.turnPassed.forEach(function(w){var li=document.createElement("li");li.textContent="⏭ "+w+" (passed)";ul.appendChild(li)});
+ if(!state.turnGot.length&&!state.turnPassed.length){var li=document.createElement("li");li.textContent="No words finished — next turn!";ul.appendChild(li)}
+ show("screenSummary");
+}
+$("nextBtn").addEventListener("click",function(){
+ if(state.turnTeam===0){state.turnTeam=1;showIntro()}
+ else{if(state.round>=state.rounds){showWinner()}else{state.round++;state.turnTeam=0;showIntro()}}
+});
+function showWinner(){
+ var a=state.teams[0],b=state.teams[1];
+ $("winnerTitle").textContent=a.score===b.score?"🤝 It's a tie!":"🏆 "+(a.score>b.score?a.name:b.name)+" wins!";
+ $("winnerText").textContent=a.score===b.score?"Both teams scored "+a.score+"! Rematch?":(a.score>b.score?a.name:b.name)+" takes the crown with "+Math.max(a.score,b.score)+" points!";
+ $("finalScores").textContent=a.name+": "+a.score+" · "+b.name+": "+b.score+(state.practice?" (practice — not saved)":"");
+ if(!state.practice){var best=storeGet("bestScore",0);storeSet("bestScore",Math.max(best,a.score,b.score));storeSet("gamesPlayed",storeGet("gamesPlayed",0)+1);var bestTurn=storeGet("bestTurnGot",0);storeSet("bestTurnGot",Math.max(bestTurn,state.turnGot.length));updateBests()}
+ show("screenWinner");
+}
+$("playAgainBtn").addEventListener("click",function(){state.teams[0].score=0;state.teams[1].score=0;state.round=1;state.turnTeam=0;state.deck=buildDeck();updateScoreboard();showIntro()});
+$("homeBtn").addEventListener("click",function(){$("scoreboard").hidden=true;show("screenSetup");updateBests()});
+// Tutorial / Rules: opt-in only
+$("howBtn").addEventListener("click",function(){var d=$("howto");d.open=!d.open;if(d.open)d.scrollIntoView({behavior:"smooth"})});
+$("rulesBtn").addEventListener("click",function(){var d=$("rules");d.open=!d.open;if(d.open)d.scrollIntoView({behavior:"smooth"})});
+// Feedback
+var fbRating=0;
+$("feedbackBtn").addEventListener("click",function(){$("fbForm").hidden=false;$("fbThanks").hidden=true;$("fbModal").classList.add("open")});
+$("fbCancel").addEventListener("click",function(){$("fbModal").classList.remove("open")});
+$("fbModal").addEventListener("click",function(e){if(e.target===this)this.classList.remove("open")});
+document.querySelectorAll(".star").forEach(function(s){s.addEventListener("click",function(){fbRating=Number(s.getAttribute("data-v"));document.querySelectorAll(".star").forEach(function(x){x.classList.toggle("on",Number(x.getAttribute("data-v"))<=fbRating)})})});
+$("fbSave").addEventListener("click",function(){
+ var rec={game:"charades-party",rating:fbRating,text:$("fbText").value.trim(),tag:$("fbTag").value,timestamp:new Date().toISOString()};
+ try{var arr=[];try{arr=JSON.parse(localStorage.getItem("holos-arcade-feedback")||"[]");if(!Array.isArray(arr))arr=[]}catch(e){arr=[]}arr.push(rec);localStorage.setItem("holos-arcade-feedback",JSON.stringify(arr))}catch(e){}
+ $("fbForm").hidden=true;$("fbThanks").hidden=false;fbRating=0;document.querySelectorAll(".star").forEach(function(x){x.classList.remove("on")});$("fbText").value="";$("fbTag").value="";setTimeout(function(){$("fbModal").classList.remove("open")},1200);
+});
+updateBests();
+// Exposed for automated verification (does not affect gameplay)
+window.__charades={PROMPTS:PROMPTS,DIFFS:DIFFS,state:state,buildDeck:buildDeck};
+})();
+</script>
+</body>
+</html>

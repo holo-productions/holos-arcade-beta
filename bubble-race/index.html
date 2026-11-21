@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Bubble Race</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
+    <style>
+      :root{
+        --bg:#e8f4f8; --bg2:#d7edf5; --ink:#17323b; --ink-soft:#3d5a64;
+        --card:#ffffff; --card-line:#c3dde6;
+        --board:#0e5a63; --board-edge:#083f46; --board-inner:#12707b;
+        --dot:#eaf7f5; --dot-line:#9fd3cf;
+        --coral:#f4503c; --teal:#0ea47f; --gold:#f2a007; --sky:#2f7fe0;
+        --accent:#f4503c; --accent-ink:#ffffff;
+        --bubble-hi:#ffffff; --bubble-mid:#bfeaf2; --bubble-lo:#5fc3d8;
+        --shadow:0 10px 24px rgba(10,50,60,.16);
+        --good:#0ea47f; --warn:#b96a00;
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --bg:#0a1c22; --bg2:#0d242c; --ink:#eaf6f8; --ink-soft:#a9c6cd;
+          --card:#123039; --card-line:#23505c;
+          --board:#0b454d; --board-edge:#062c31; --board-inner:#0f5a64;
+          --dot:#d9efec; --dot-line:#5f9791;
+          --bubble-hi:#ffffff; --bubble-mid:#a8dcea; --bubble-lo:#3d9db4;
+          --shadow:0 10px 24px rgba(0,0,0,.45);
+        }
+      }
+      *{ box-sizing:border-box; }
+      html,body{ margin:0; padding:0; }
+      body{
+        font-family:"Nunito",system-ui,sans-serif; color:var(--ink);
+        background:linear-gradient(180deg,var(--bg) 0%,var(--bg2) 100%);
+        min-height:100vh; -webkit-tap-highlight-color:transparent;
+      }
+      button, select, input, textarea{ font-family:inherit; font-size:1rem; color:inherit; }
+      button{ cursor:pointer; }
+      button:focus-visible, select:focus-visible, a:focus-visible, [tabindex]:focus-visible{ outline:3px solid var(--gold); outline-offset:2px; }
+      .wrap{ max-width:1060px; margin:0 auto; padding:14px 14px 8px; }
+
+      /* ---------- status banner ---------- */
+      .status{
+        display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+        background:var(--card); border:2px solid var(--card-line); border-radius:16px;
+        padding:10px 14px; box-shadow:var(--shadow);
+      }
+      .status .turn-dot{ width:22px; height:22px; border-radius:50%; flex:0 0 auto;
+        box-shadow:inset -3px -4px 6px rgba(0,0,0,.25), inset 3px 4px 6px rgba(255,255,255,.45); }
+      .status .msg{ font-family:"Baloo 2",cursive; font-weight:700; font-size:1.18rem; line-height:1.25; flex:1 1 220px; }
+      .status .sub{ width:100%; color:var(--ink-soft); font-size:.92rem; font-weight:600; }
+      .practice-flag{ display:none; background:var(--gold); color:#231600; font-weight:800;
+        border-radius:999px; padding:3px 12px; font-size:.82rem; }
+      body.practice .practice-flag{ display:inline-block; }
+
+      /* ---------- controls ---------- */
+      .controls{ display:flex; flex-wrap:wrap; gap:10px; margin:14px 0; align-items:stretch; }
+      .ctl{ background:var(--card); border:2px solid var(--card-line); border-radius:14px; padding:8px 12px;
+        display:flex; align-items:center; gap:10px; min-height:52px; }
+      .ctl label{ font-weight:800; font-size:.9rem; }
+      .ctl select{ min-height:40px; border-radius:10px; border:2px solid var(--card-line);
+        background:var(--card); padding:4px 8px; font-weight:700; }
+      .btn{ border:none; border-radius:14px; padding:10px 18px; min-height:52px;
+        font-family:"Baloo 2",cursive; font-weight:700; font-size:1.05rem;
+        background:var(--card); color:var(--ink); border:2px solid var(--card-line);
+        display:inline-flex; align-items:center; gap:8px; justify-content:center; }
+      .btn:active{ transform:scale(.97); }
+      .btn.primary{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink);
+        box-shadow:0 6px 14px rgba(244,80,60,.35); }
+      .btn.toggle[aria-pressed="true"]{ background:var(--gold); border-color:var(--gold); color:#231600; }
+      .btn.small{ min-height:44px; padding:8px 14px; font-size:.98rem; }
+      .diff-note{ width:100%; color:var(--ink-soft); font-size:.88rem; font-weight:600; margin-top:-6px; }
+
+      /* ---------- layout ---------- */
+      .layout{ display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:16px; align-items:start; }
+      @media (max-width:820px){ .layout{ grid-template-columns:1fr; } }
+
+      /* ---------- board ---------- */
+      .board-frame{ background:var(--card); border:2px solid var(--card-line); border-radius:22px;
+        padding:10px; box-shadow:var(--shadow); }
+      .board{ position:relative; width:100%; aspect-ratio:1/1; border-radius:18px;
+        background:radial-gradient(circle at 50% 42%, var(--board-inner) 0%, var(--board) 55%, var(--board-edge) 100%);
+        overflow:hidden; touch-action:manipulation; }
+      .board .ring-label{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+        width:34%; text-align:center; color:rgba(255,255,255,.16);
+        font-family:"Baloo 2",cursive; font-weight:800; font-size:clamp(1rem,4.5vw,1.7rem);
+        letter-spacing:.14em; pointer-events:none; user-select:none; }
+      .dot{ position:absolute; width:5.6%; aspect-ratio:1/1; border-radius:50%;
+        transform:translate(-50%,-50%); background:var(--dot); border:2px solid var(--dot-line); }
+      .dot.start-dot{ border-width:3px; }
+      .dot.lane-dot{ opacity:.92; }
+      .yard{ position:absolute; width:18%; aspect-ratio:1/1; transform:translate(-50%,-50%);
+        border-radius:22%; background:rgba(255,255,255,.14); border:2px dashed rgba(255,255,255,.4); }
+      .yard .slot{ position:absolute; width:34%; aspect-ratio:1/1; border-radius:50%;
+        background:rgba(0,0,0,.16); border:2px solid rgba(255,255,255,.35); transform:translate(-50%,-50%); }
+      .tray{ position:absolute; width:19%; height:6.4%; transform:translate(-50%,-50%);
+        border-radius:999px; background:rgba(255,215,90,.22); border:2px solid rgba(255,215,90,.65); }
+      .tray-label{ position:absolute; transform:translate(-50%,-50%); color:#ffe28a;
+        font-size:clamp(.5rem,1.8vw,.68rem); font-weight:800; letter-spacing:.08em; pointer-events:none; }
+
+      /* bubble dice */
+      .bubble{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+        width:23%; aspect-ratio:1/1; border-radius:50%; border:none; padding:0; z-index:6;
+        background:radial-gradient(circle at 32% 28%, var(--bubble-hi) 0%, var(--bubble-mid) 42%, var(--bubble-lo) 100%);
+        box-shadow:inset -8px -12px 22px rgba(20,90,110,.35), inset 6px 8px 16px rgba(255,255,255,.75), 0 12px 26px rgba(0,0,0,.3);
+        display:flex; align-items:center; justify-content:center; flex-direction:column; gap:2px; }
+      .bubble:not(:disabled){ cursor:pointer; animation:breathe 2.6s ease-in-out infinite; }
+      .bubble:disabled{ cursor:default; filter:saturate(.65) brightness(.97); }
+      .bubble .pop-word{ font-family:"Baloo 2",cursive; font-weight:800; color:#0b5568;
+        font-size:clamp(.95rem,3.6vw,1.5rem); line-height:1; text-shadow:0 1px 0 rgba(255,255,255,.7); }
+      .bubble .pop-hint{ font-size:clamp(.55rem,1.9vw,.72rem); font-weight:800; color:#0b5568; opacity:.75; }
+      @keyframes breathe{ 0%,100%{ box-shadow:inset -8px -12px 22px rgba(20,90,110,.35), inset 6px 8px 16px rgba(255,255,255,.75), 0 12px 26px rgba(0,0,0,.3), 0 0 0 0 rgba(255,255,255,.55);} 50%{ box-shadow:inset -8px -12px 22px rgba(20,90,110,.35), inset 6px 8px 16px rgba(255,255,255,.75), 0 12px 26px rgba(0,0,0,.3), 0 0 0 12px rgba(255,255,255,0);} }
+      .bubble.popping{ animation:pop .5s ease-out; }
+      @keyframes pop{ 0%{ transform:translate(-50%,-50%) scale(1);} 35%{ transform:translate(-50%,-50%) scale(1.28);} 60%{ transform:translate(-50%,-50%) scale(.9);} 100%{ transform:translate(-50%,-50%) scale(1);} }
+      .die{ display:none; width:52%; aspect-ratio:1/1; background:#fff; border-radius:18%;
+        box-shadow:inset 0 0 0 2px rgba(0,0,0,.08), 0 3px 8px rgba(0,0,0,.25); padding:9%;
+        grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); }
+      .bubble.rolled .die{ display:grid; }
+      .bubble.rolled .pop-word, .bubble.rolled .pop-hint{ display:none; }
+      .die i{ border-radius:50%; margin:16%; }
+      .die i.on{ background:#17323b; }
+
+      /* pegs */
+      .peg{ position:absolute; width:6.4%; aspect-ratio:1/1; border-radius:50%; z-index:5;
+        transform:translate(-50%,-50%); transition:left .38s ease, top .38s ease, width .2s ease;
+        display:flex; align-items:center; justify-content:center;
+        color:#fff; font-weight:800; font-size:clamp(.6rem,2.2vw,.85rem);
+        text-shadow:0 1px 2px rgba(0,0,0,.45); border:2px solid rgba(255,255,255,.75);
+        box-shadow:inset -3px -5px 7px rgba(0,0,0,.28), inset 3px 4px 6px rgba(255,255,255,.5), 0 4px 8px rgba(0,0,0,.3);
+        user-select:none; }
+      .peg.finished{ width:4.6%; font-size:.55rem; }
+      .peg.movable{ cursor:pointer; z-index:8; animation:pegPulse 0.9s ease-in-out infinite; }
+      .peg.suggested{ box-shadow:0 0 0 4px var(--gold), inset -3px -5px 7px rgba(0,0,0,.28), inset 3px 4px 6px rgba(255,255,255,.5), 0 4px 10px rgba(0,0,0,.35); }
+      @keyframes pegPulse{ 0%,100%{ box-shadow:inset -3px -5px 7px rgba(0,0,0,.28), inset 3px 4px 6px rgba(255,255,255,.5), 0 4px 8px rgba(0,0,0,.3), 0 0 0 0 rgba(255,255,255,.75);} 50%{ box-shadow:inset -3px -5px 7px rgba(0,0,0,.28), inset 3px 4px 6px rgba(255,255,255,.5), 0 4px 8px rgba(0,0,0,.3), 0 0 0 7px rgba(255,255,255,0);} }
+
+      /* floating bubbles on win */
+      .float-b{ position:absolute; border-radius:50%; pointer-events:none; z-index:9;
+        background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.95), rgba(160,225,240,.45) 60%, rgba(120,200,225,.25));
+        box-shadow:inset -2px -3px 6px rgba(20,90,110,.25); animation:rise linear forwards; }
+      @keyframes rise{ from{ transform:translateY(0); opacity:.95;} to{ transform:translateY(-46vh); opacity:0;} }
+
+      /* ---------- side panel ---------- */
+      .panel{ display:flex; flex-direction:column; gap:14px; }
+      .card{ background:var(--card); border:2px solid var(--card-line); border-radius:16px; padding:14px; box-shadow:var(--shadow); }
+      .card h2{ font-family:"Baloo 2",cursive; font-size:1.08rem; margin:0 0 10px; }
+      .racer{ display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:12px; border:2px solid transparent; flex-wrap:wrap; }
+      .racer .rprog{ margin-left:auto; }
+      .racer.active{ border-color:var(--gold); background:rgba(242,160,7,.1); }
+      .racer .chip{ width:26px; height:26px; border-radius:50%; flex:0 0 auto;
+        box-shadow:inset -3px -4px 6px rgba(0,0,0,.25), inset 3px 4px 6px rgba(255,255,255,.45); }
+      .racer .rname{ font-weight:800; flex:1; }
+      .racer .rprog{ font-size:.85rem; color:var(--ink-soft); font-weight:700; white-space:nowrap; }
+      .racer .mini-pegs{ display:flex; gap:4px; }
+      .racer .mini-pegs i{ width:11px; height:11px; border-radius:50%; background:var(--card-line); display:block; }
+      .racer .mini-pegs i.done{ background:var(--gold); box-shadow:0 0 0 2px rgba(242,160,7,.35); }
+      .racer .mini-pegs i.out{ background:currentColor; opacity:.85; }
+      .move-btns{ display:none; flex-direction:column; gap:8px; }
+      .move-btns.show{ display:flex; }
+      .move-btns button{ min-height:46px; border-radius:12px; border:2px solid var(--card-line);
+        background:var(--card); font-weight:800; text-align:left; padding:8px 12px; }
+      .move-btns button.suggested{ border-color:var(--gold); background:rgba(242,160,7,.14); }
+      .log{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:7px; font-size:.92rem; font-weight:600; }
+      .log li{ border-left:4px solid var(--card-line); padding:2px 0 2px 10px; color:var(--ink-soft); }
+      .log li:first-child{ color:var(--ink); border-left-color:var(--gold); }
+      .stats-line{ font-weight:700; color:var(--ink-soft); font-size:.93rem; line-height:1.5; }
+      .stats-line b{ color:var(--ink); }
+
+      /* ---------- bottom buttons / footer ---------- */
+      .menu-row{ display:flex; flex-wrap:wrap; gap:10px; margin:16px 0 6px; }
+      footer{ text-align:center; padding:18px 10px 26px; color:var(--ink-soft); }
+      footer .brand{ font-family:"Baloo 2",cursive; font-weight:800; font-size:1.05rem; color:var(--ink); }
+      footer p{ margin:4px 0 0; font-size:.85rem; font-weight:600; }
+
+      /* ---------- modals ---------- */
+      .overlay{ position:fixed; inset:0; background:rgba(6,30,38,.62); z-index:50;
+        display:none; align-items:flex-end; justify-content:center; padding:0; }
+      .overlay.open{ display:flex; }
+      @media (min-width:640px){ .overlay{ align-items:center; padding:20px; } }
+      .sheet{ background:var(--card); color:var(--ink); width:100%; max-width:560px; max-height:88vh;
+        overflow-y:auto; border-radius:22px 22px 0 0; padding:22px 22px 26px; box-shadow:var(--shadow); }
+      @media (min-width:640px){ .sheet{ border-radius:22px; } }
+      .sheet h2{ font-family:"Baloo 2",cursive; margin:0 0 6px; font-size:1.45rem; }
+      .sheet h3{ font-family:"Baloo 2",cursive; margin:16px 0 4px; font-size:1.05rem; }
+      .sheet p, .sheet li{ line-height:1.5; }
+      .sheet ul{ padding-left:20px; margin:6px 0; }
+      .sheet .row{ display:flex; gap:10px; flex-wrap:wrap; margin-top:18px; }
+      .sheet .row .btn{ flex:1 1 140px; }
+      .tut-visual{ border-radius:14px; padding:16px; text-align:center; margin:12px 0;
+        background:linear-gradient(180deg,var(--bg),var(--bg2)); border:2px solid var(--card-line); }
+      .tut-visual .big{ font-family:"Baloo 2",cursive; font-weight:800; font-size:1.6rem; }
+      .tut-visual .demo-bubble{ width:92px; height:92px; margin:4px auto 8px; border-radius:50%;
+        background:radial-gradient(circle at 32% 28%, var(--bubble-hi) 0%, var(--bubble-mid) 42%, var(--bubble-lo) 100%);
+        box-shadow:inset -6px -9px 16px rgba(20,90,110,.35), inset 5px 6px 12px rgba(255,255,255,.75), 0 8px 18px rgba(0,0,0,.25);
+        display:flex; align-items:center; justify-content:center; color:#0b5568;
+        font-family:"Baloo 2",cursive; font-weight:800; font-size:1.25rem; animation:breathe2 2.6s ease-in-out infinite; }
+      @keyframes breathe2{ 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.05);} }
+      .tut-visual .demo-pegs{ display:flex; gap:10px; justify-content:center; margin:6px 0; }
+      .tut-visual .demo-pegs i{ width:34px; height:34px; border-radius:50%; display:block;
+        box-shadow:inset -3px -5px 7px rgba(0,0,0,.28), inset 3px 4px 6px rgba(255,255,255,.5); border:2px solid rgba(255,255,255,.75); }
+      .dots{ display:flex; gap:7px; justify-content:center; margin-top:14px; }
+      .dots i{ width:10px; height:10px; border-radius:50%; background:var(--card-line); }
+      .dots i.on{ background:var(--accent); }
+      .stars{ display:flex; gap:6px; margin:6px 0 4px; }
+      .stars button{ width:48px; height:48px; border-radius:12px; border:2px solid var(--card-line);
+        background:var(--card); font-size:1.45rem; line-height:1; color:var(--card-line); }
+      .stars button.on{ color:var(--gold); border-color:var(--gold); }
+      .sheet label.flabel{ display:block; font-weight:800; margin:14px 0 6px; }
+      .sheet textarea, .sheet select.fbcat{ width:100%; border:2px solid var(--card-line); border-radius:12px;
+        padding:10px; background:var(--card); min-height:44px; }
+      .sheet textarea{ min-height:96px; resize:vertical; }
+      .capture{ background:var(--bg); border:2px solid var(--card-line); border-radius:12px; padding:10px 12px;
+        font-size:.8rem; white-space:pre-wrap; word-break:break-word; max-height:150px; overflow-y:auto; }
+      .thanks{ display:none; text-align:center; padding:10px 0 2px; }
+      .thanks .big{ font-family:"Baloo 2",cursive; font-weight:800; font-size:1.3rem; }
+      .end-emoji{ font-size:2.6rem; text-align:center; }
+      .end-title{ text-align:center; }
+      .end-sub{ text-align:center; color:var(--ink-soft); font-weight:600; }
+      @media (prefers-reduced-motion: reduce){
+        .bubble:not(:disabled), .peg.movable, .tut-visual .demo-bubble{ animation:none; }
+        .peg{ transition:none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <!-- Status -->
+      <div class="status" role="status" aria-live="polite">
+        <span class="turn-dot" id="turnDot" style="background:var(--coral)"></span>
+        <span class="msg" id="statusMsg">Your turn — pop the bubble!</span>
+        <span class="practice-flag">PRACTICE — no score kept</span>
+        <span class="sub" id="statusSub">You need a 6 to get a peg out of its yard.</span>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls">
+        <div class="ctl">
+          <label for="diffSel">AI difficulty</label>
+          <select id="diffSel">
+            <option value="easy">Easy — chill</option>
+            <option value="medium" selected>Medium — a real race</option>
+            <option value="hard">Hard — ruthless bubblers</option>
+          </select>
+        </div>
+        <button class="btn toggle" id="practiceBtn" aria-pressed="false" type="button">Practice mode: Off</button>
+        <button class="btn" id="soundBtn" type="button">Sound: On</button>
+        <button class="btn primary" id="newGameBtn" type="button">New game</button>
+        <span class="diff-note" id="diffNote"></span>
+      </div>
+
+      <div class="layout">
+        <!-- Board -->
+        <div class="board-frame">
+          <div class="board" id="board" aria-label="Bubble Race board">
+            <div class="ring-label">BUBBLE<br/>RACE</div>
+            <button class="bubble" id="bubbleBtn" type="button" aria-label="Pop the bubble to roll the dice">
+              <span class="pop-word">POP!</span>
+              <span class="pop-hint">tap to roll</span>
+              <span class="die" id="dieFace" aria-hidden="true"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Side panel -->
+        <div class="panel">
+          <div class="card">
+            <h2>Racers</h2>
+            <div id="racerList"></div>
+          </div>
+          <div class="card move-btns" id="moveCard">
+            <h2>Pick a peg to move</h2>
+            <div id="moveBtns" style="display:flex;flex-direction:column;gap:8px;"></div>
+          </div>
+          <div class="card">
+            <h2>What just happened</h2>
+            <ul class="log" id="gameLog"></ul>
+          </div>
+          <div class="card">
+            <h2>Your score so far</h2>
+            <p class="stats-line" id="statsLine">No games finished yet — this could be the one!</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Menu -->
+      <div class="menu-row">
+        <button class="btn" id="tutorialBtn" type="button">How to play (tutorial)</button>
+        <button class="btn" id="rulesBtn" type="button">Rules</button>
+        <button class="btn" id="feedbackBtn" type="button">Something wonky? Tell us!</button>
+      </div>
+
+      <footer>
+        <div class="brand">Ridiculously Fit and Fed</div>
+        <p>Bubble Race — an original pop-dice board game. Part of Holo's Arcade.</p>
+      </footer>
+    </div>
+
+    <!-- Tutorial overlay -->
+    <div class="overlay" id="tutorialOverlay" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+      <div class="sheet">
+        <h2 id="tutTitle">How to play</h2>
+        <div class="tut-visual" id="tutVisual"></div>
+        <p id="tutText"></p>
+        <div class="dots" id="tutDots"></div>
+        <div class="row">
+          <button class="btn" id="tutBack" type="button">Back</button>
+          <button class="btn primary" id="tutNext" type="button">Next</button>
+          <button class="btn" id="tutClose" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rules overlay -->
+    <div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+      <div class="sheet">
+        <h2 id="rulesTitle">Bubble Race rules</h2>
+        <p>Race all <b>4 of your pegs</b> around the bubble track and into your golden home tray. First racer to get every peg home wins!</p>
+        <h3>Getting started</h3>
+        <ul>
+          <li>Your pegs begin in your yard (the dashed corner pen).</li>
+          <li>You need to roll a <b>6</b> to move a peg out of the yard onto its start bubble.</li>
+        </ul>
+        <h3>On your turn</h3>
+        <ul>
+          <li>Tap the big bubble in the middle to pop it and roll the dice.</li>
+          <li>Tap one of your glowing pegs to move it that many bubbles. (Buttons appear beside the board too, if tapping pegs is fiddly.)</li>
+          <li>Roll a <b>6</b> and you get <b>another turn</b> — pop again!</li>
+          <li>If no peg can move, your turn passes. If you rolled a 6 but still can't move, pop again.</li>
+        </ul>
+        <h3>Bumping</h3>
+        <ul>
+          <li>Land exactly on a bubble where a rival peg sits and — <b>pop!</b> — that peg is sent all the way back to its yard.</li>
+          <li>There are <b>no safe bubbles</b> on the main track. Watch your back!</li>
+          <li>Your own pegs can happily share a bubble.</li>
+        </ul>
+        <h3>Coming home</h3>
+        <ul>
+          <li>After a full lap, your peg turns down its own coloured lane toward the middle.</li>
+          <li>You need the <b>exact roll</b> to land in the home tray — too big a roll and that peg has to stay put.</li>
+        </ul>
+        <h3>Modes</h3>
+        <ul>
+          <li><b>Difficulty</b> changes how clever the three rival racers play. Your pick is remembered for next time.</li>
+          <li><b>Practice mode</b> keeps the rivals gentle, shows a gold ring on a suggested move, and doesn't count the game in your score.</li>
+        </ul>
+        <div class="row">
+          <button class="btn primary" id="rulesClose" type="button">Got it — let's race!</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback overlay -->
+    <div class="overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+      <div class="sheet">
+        <h2 id="fbTitle">Something wonky? Or just wanna say hi?</h2>
+        <p>No forms-to-nowhere, promise. Jot it down here — it saves right on this device so you can copy it into your review notes anytime.</p>
+        <div id="fbForm">
+          <label class="flabel">How's the game treating you?</label>
+          <div class="stars" id="fbStars" role="radiogroup" aria-label="Star rating">
+            <button type="button" data-star="1" aria-label="1 star">★</button>
+            <button type="button" data-star="2" aria-label="2 stars">★</button>
+            <button type="button" data-star="3" aria-label="3 stars">★</button>
+            <button type="button" data-star="4" aria-label="4 stars">★</button>
+            <button type="button" data-star="5" aria-label="5 stars">★</button>
+          </div>
+          <label class="flabel" for="fbCat">What's it about?</label>
+          <select class="fbcat" id="fbCat">
+            <option value="Something's broken">Something's broken</option>
+            <option value="Idea / suggestion">Idea / suggestion</option>
+            <option value="Too easy / too hard">Too easy / too hard</option>
+            <option value="Just saying hi">Just saying hi</option>
+          </select>
+          <label class="flabel" for="fbMsg">Tell us in your own words</label>
+          <textarea id="fbMsg" placeholder="e.g. The bubble wouldn't pop on my second turn…"></textarea>
+          <label class="flabel">We auto-attached this (so you don't have to type the boring bits)</label>
+          <div class="capture" id="fbCapture"></div>
+          <div class="row">
+            <button class="btn primary" id="fbSubmit" type="button">Save my feedback</button>
+            <button class="btn" id="fbClose" type="button">Never mind</button>
+          </div>
+        </div>
+        <div class="thanks" id="fbThanks">
+          <div class="big">Got it — thanks a bunch!</div>
+          <p>Your note is saved on this device with the rest of your feedback.</p>
+          <div class="row">
+            <button class="btn primary" id="fbCopy" type="button">Copy my feedback</button>
+            <button class="btn" id="fbDone" type="button">Back to the race</button>
+          </div>
+          <p id="fbCopyMsg" style="font-weight:700;color:var(--good);"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game over overlay -->
+    <div class="overlay" id="endOverlay" role="dialog" aria-modal="true" aria-labelledby="endTitle">
+      <div class="sheet">
+        <div class="end-emoji" id="endEmoji">🏆</div>
+        <h2 class="end-title" id="endTitle">You win!</h2>
+        <p class="end-sub" id="endSub"></p>
+        <p class="stats-line" style="text-align:center;" id="endStats"></p>
+        <div class="row">
+          <button class="btn primary" id="againBtn" type="button">Race again</button>
+          <button class="btn" id="endClose" type="button">Look at the board</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    (function(){
+      "use strict";
+      /* ================= constants ================= */
+      var TRACK = 28;          // bubbles on the main loop
+      var LANE_START = 28;     // progress where the home lane begins
+      var WIN_AT = 31;         // progress = finished (in home tray)
+      var PLAYERS = [
+        { name:"You",   short:"You", color:"#f4503c", cssVar:"var(--coral)", start:0,  ai:false },
+        { name:"Pip",   short:"Pip", color:"#0ea47f", cssVar:"var(--teal)",  start:7,  ai:true  },
+        { name:"Sunny", short:"Sunny", color:"#f2a007", cssVar:"var(--gold)", start:14, ai:true  },
+        { name:"Sky",   short:"Sky", color:"#2f7fe0", cssVar:"var(--sky)",  start:21, ai:true  }
+      ];
+      var BASE_CENTERS = [ {x:12.5,y:12.5}, {x:87.5,y:12.5}, {x:87.5,y:87.5}, {x:12.5,y:87.5} ];
+      var SLOT_OFF = [ {x:-4.2,y:-4.2}, {x:4.2,y:-4.2}, {x:-4.2,y:4.2}, {x:4.2,y:4.2} ];
+      var DIFF_NOTES = {
+        easy:  "Easy: rivals pick moves at random. Great for a first race or a chill win.",
+        medium:"Medium: rivals grab bumps and race for home when they can. A fair fight.",
+        hard:  "Hard: rivals bump you on purpose, dodge danger, and waste nothing. Good luck!"
+      };
+      var PIP_MAP = { 1:[4], 2:[0,8], 3:[0,4,8], 4:[0,2,6,8], 5:[0,2,4,6,8], 6:[0,2,3,5,6,8] };
+
+      /* ================= saved settings ================= */
+      function lsGet(k, d){ try{ var v = localStorage.getItem(k); return v===null ? d : v; }catch(e){ return d; } }
+      function lsSet(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+      function lsJSON(k, d){ try{ var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } }
+      function lsSetJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+
+      var difficulty = lsGet("bubbleRace_difficulty","medium");
+      if (DIFF_NOTES[difficulty] === undefined) difficulty = "medium";
+      var practice = lsGet("bubbleRace_practice","0") === "1";
+      var soundOn = lsGet("bubbleRace_sound","1") === "1";
+      var stats = lsJSON("bubbleRace_stats", { played:0, wins:0, losses:0 });
+
+      /* ================= dom ================= */
+      var $ = function(id){ return document.getElementById(id); };
+      var boardEl=$("board"), bubbleBtn=$("bubbleBtn"), dieFace=$("dieFace"),
+          statusMsg=$("statusMsg"), statusSub=$("statusSub"), turnDot=$("turnDot"),
+          logEl=$("gameLog"), racerList=$("racerList"), moveCard=$("moveCard"), moveBtns=$("moveBtns"),
+          diffSel=$("diffSel"), diffNote=$("diffNote"), practiceBtn=$("practiceBtn"), soundBtn=$("soundBtn");
+
+      /* die face pips */
+      for (var i=0;i<9;i++){ var pip=document.createElement("i"); dieFace.appendChild(pip); }
+      function showDie(v){
+        bubbleBtn.classList.add("rolled");
+        var pips = dieFace.children, on = PIP_MAP[v] || [];
+        for (var j=0;j<9;j++){ pips[j].className = on.indexOf(j)>=0 ? "on" : ""; }
+        bubbleBtn.setAttribute("aria-label","You rolled a "+v);
+      }
+      function hideDie(){ bubbleBtn.classList.remove("rolled"); }
+
+      /* ================= geometry ================= */
+      function trackXY(idx){
+        var a = (-90 + idx*(360/TRACK)) * Math.PI/180, r = 39;
+        return { x: 50 + r*Math.cos(a), y: 50 + r*Math.sin(a) };
+      }
+      function laneXY(p, step){ /* step 0..2 for progress 28..30 */
+        var pl = PLAYERS[p];
+        var a = (-90 + pl.start*(360/TRACK)) * Math.PI/180;
+        var r = [31.5, 25, 18.5][step];
+        return { x: 50 + r*Math.cos(a), y: 50 + r*Math.sin(a) };
+      }
+      function baseXY(p, peg){ var c=BASE_CENTERS[p], o=SLOT_OFF[peg]; return { x:c.x+o.x, y:c.y+o.y }; }
+      function trayXY(p, peg){
+        var c=BASE_CENTERS[p], top = (p===0||p===1);
+        return { x: c.x + [-6,-2,2,6][peg], y: c.y + (top ? 11.5 : -11.5) };
+      }
+      function pegXY(p, peg, prog){
+        if (prog < 0) return baseXY(p, peg);
+        if (prog < TRACK) return trackXY((PLAYERS[p].start + prog) % TRACK);
+        if (prog < WIN_AT) return laneXY(p, prog - LANE_START);
+        return trayXY(p, peg);
+      }
+
+      /* ================= build board ================= */
+      var pegEls = [];
+      function buildBoard(){
+        var frag = document.createDocumentFragment();
+        /* yards + trays */
+        PLAYERS.forEach(function(pl, p){
+          var c = BASE_CENTERS[p];
+          var yard = document.createElement("div"); yard.className="yard";
+          yard.style.left=c.x+"%"; yard.style.top=c.y+"%";
+          SLOT_OFF.forEach(function(o){
+            var s=document.createElement("span"); s.className="slot";
+            s.style.left=(50 + o.x/0.18)+"%"; s.style.top=(50 + o.y/0.18)+"%";
+            yard.appendChild(s);
+          });
+          frag.appendChild(yard);
+          var top=(p===0||p===1);
+          var tray=document.createElement("div"); tray.className="tray";
+          tray.style.left=c.x+"%"; tray.style.top=(c.y + (top?11.5:-11.5))+"%";
+          frag.appendChild(tray);
+          var lab=document.createElement("span"); lab.className="tray-label";
+          lab.style.left=c.x+"%"; lab.style.top=(c.y + (top?11.5:-11.5))+"%";
+          lab.textContent="HOME"; frag.appendChild(lab);
+        });
+        /* track dots */
+        for (var t=0;t<TRACK;t++){
+          var xy=trackXY(t), d=document.createElement("div"); d.className="dot";
+          d.style.left=xy.x+"%"; d.style.top=xy.y+"%";
+          PLAYERS.forEach(function(pl){
+            if (pl.start===t){ d.classList.add("start-dot"); d.style.borderColor=pl.color; d.style.background=pl.color+"33"; }
+          });
+          frag.appendChild(d);
+        }
+        /* lane dots */
+        PLAYERS.forEach(function(pl,p){
+          for (var s=0;s<3;s++){
+            var xy=laneXY(p,s), d=document.createElement("div"); d.className="dot lane-dot";
+            d.style.left=xy.x+"%"; d.style.top=xy.y+"%";
+            d.style.background=pl.color+"55"; d.style.borderColor=pl.color;
+            frag.appendChild(d);
+          }
+        });
+        boardEl.insertBefore(frag, bubbleBtn);
+        /* pegs */
+        PLAYERS.forEach(function(pl,p){
+          pegEls[p]=[];
+          for (var g=0; g<4; g++){
+            var el=document.createElement("div"); el.className="peg";
+            el.style.background=pl.color; el.textContent=(g+1);
+            el.setAttribute("role","button");
+            el.setAttribute("aria-label", pl.name+" peg "+(g+1));
+            (function(pp,gg){ el.addEventListener("click", function(){ onPegTap(pp,gg); }); })(p,g);
+            boardEl.appendChild(el); pegEls[p][g]=el;
+          }
+        });
+      }
+
+      /* ================= sound ================= */
+      var actx=null;
+      function beep(freq, dur, type, vol, slideTo){
+        if (!soundOn) return;
+        try{
+          if (!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+          if (actx.state==="suspended") actx.resume();
+          var o=actx.createOscillator(), g=actx.createGain();
+          o.type=type||"sine"; o.frequency.setValueAtTime(freq, actx.currentTime);
+          if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, actx.currentTime+dur);
+          g.gain.setValueAtTime(vol||0.12, actx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime+dur);
+          o.connect(g); g.connect(actx.destination); o.start(); o.stop(actx.currentTime+dur);
+        }catch(e){}
+      }
+      function sndPop(){ beep(500,0.16,"sine",0.16,1200); }
+      function sndBump(){ beep(220,0.2,"triangle",0.18,70); }
+      function sndHome(){ beep(660,0.12,"sine",0.12); setTimeout(function(){beep(880,0.16,"sine",0.12);},110); }
+      function sndWin(){ [523,659,784,1046].forEach(function(f,i){ setTimeout(function(){beep(f,0.22,"sine",0.13);}, i*130); }); }
+      function sndLose(){ [440,349,293,220].forEach(function(f,i){ setTimeout(function(){beep(f,0.22,"sine",0.11);}, i*150); }); }
+
+      /* ================= game state ================= */
+      var S = null;
+      var timers = [];
+      function later(fn, ms){ timers.push(setTimeout(fn, ms)); }
+      function clearTimers(){ timers.forEach(clearTimeout); timers=[]; }
+
+      function newGame(){
+        clearTimers();
+        S = {
+          pegs: PLAYERS.map(function(){ return [-1,-1,-1,-1]; }),
+          turn: 0, dice: null, phase: "roll", /* roll | move | over */
+          movable: [], over:false, startedAt: new Date()
+        };
+        hideDie();
+        logEl.innerHTML="";
+        addLog("New race! First to get all 4 pegs home wins.");
+        renderAll();
+        setStatus("Your turn — pop the bubble!", "You need a 6 to get a peg out of its yard.");
+        updateBubble();
+      }
+
+      function addLog(text){
+        var li=document.createElement("li"); li.textContent=text;
+        logEl.insertBefore(li, logEl.firstChild);
+        while (logEl.children.length>6) logEl.removeChild(logEl.lastChild);
+      }
+      function setStatus(msg, sub){
+        statusMsg.textContent=msg;
+        statusSub.textContent=sub||"";
+        turnDot.style.background=PLAYERS[S.turn].color;
+      }
+
+      function canMove(p, peg, roll){
+        var prog=S.pegs[p][peg];
+        if (prog===WIN_AT) return false;
+        if (prog<0) return roll===6;
+        return prog+roll<=WIN_AT;
+      }
+      function movablePegs(p, roll){
+        var out=[]; for (var g=0;g<4;g++) if (canMove(p,g,roll)) out.push(g); return out;
+      }
+      function absPos(p, prog){ return (PLAYERS[p].start + prog) % TRACK; }
+
+      /* score a move for AI + practice hints */
+      function scoreMove(p, peg, roll){
+        var prog=S.pegs[p][peg], to = prog<0 ? 0 : prog+roll, score = Math.random()*4;
+        if (prog<0) score+=50;                       /* leave the yard */
+        if (to===WIN_AT) score+=60;                  /* peg home */
+        else if (to>=LANE_START) score+=22;          /* into the lane */
+        score += to*0.4;                             /* prefer leading peg a bit */
+        if (to<TRACK){                               /* bump check */
+          var abs=absPos(p,to);
+          PLAYERS.forEach(function(_,q){
+            if (q===p) return;
+            S.pegs[q].forEach(function(op){ if (op>=0 && op<TRACK && absPos(q,op)===abs) score+=42; });
+          });
+          if (difficulty==="hard" || practice){
+            /* danger: rival 1-6 behind this bubble could bump us next */
+            var danger=false;
+            PLAYERS.forEach(function(_,q){
+              if (q===p) return;
+              S.pegs[q].forEach(function(op){
+                if (op>=0 && op<TRACK){ var d=(abs-absPos(q,op)+TRACK)%TRACK; if (d>=1&&d<=6) danger=true; }
+              });
+            });
+            if (danger) score-=26;
+            if (prog>=0 && prog<TRACK){ /* escaping danger is good */
+              var cur=absPos(p,prog), inDanger=false;
+              PLAYERS.forEach(function(_,q){
+                if (q===p) return;
+                S.pegs[q].forEach(function(op){
+                  if (op>=0 && op<TRACK){ var d=(cur-absPos(q,op)+TRACK)%TRACK; if (d>=1&&d<=6) inDanger=true; }
+                });
+              });
+              if (inDanger) score+=30;
+            }
+          }
+        }
+        return score;
+      }
+      function bestMove(p, roll, list){
+        var eff = practice ? "hard" : difficulty;
+        if (eff==="easy") return list[Math.floor(Math.random()*list.length)];
+        var best=list[0], bs=-1e9;
+        list.forEach(function(g){ var sc=scoreMove(p,g,roll); if (sc>bs){ bs=sc; best=g; } });
+        return best;
+      }
+
+      /* ================= rendering ================= */
+      function renderPegs(){
+        /* stacking offsets for pegs sharing a track/lane bubble */
+        var groups={};
+        PLAYERS.forEach(function(_,p){ S.pegs[p].forEach(function(prog,g){
+          if (prog>=0 && prog<WIN_AT){ var k = prog<TRACK ? "t"+absPos(p,prog) : "l"+p+"_"+prog; (groups[k]=groups[k]||[]).push(p+"_"+g); }
+        });});
+        var offs=[{x:0,y:0},{x:-2.1,y:-2.1},{x:2.1,y:-2.1},{x:-2.1,y:2.1},{x:2.1,y:2.1}];
+        PLAYERS.forEach(function(_,p){ S.pegs[p].forEach(function(prog,g){
+          var el=pegEls[p][g], xy=pegXY(p,g,prog), ox=0, oy=0;
+          if (prog>=0 && prog<WIN_AT){
+            var k = prog<TRACK ? "t"+absPos(p,prog) : "l"+p+"_"+prog;
+            var idx=groups[k].indexOf(p+"_"+g); if (idx>0){ ox=offs[idx].x; oy=offs[idx].y; }
+          }
+          el.style.left=(xy.x+ox)+"%"; el.style.top=(xy.y+oy)+"%";
+          el.classList.toggle("finished", prog===WIN_AT);
+          var isMov = (S.phase==="move" && S.turn===p && S.movable.indexOf(g)>=0);
+          el.classList.toggle("movable", isMov);
+          el.classList.toggle("suggested", isMov && practice && g===S.suggested);
+          el.style.pointerEvents = "auto"; /* clicks are guarded in onPegTap; move buttons beside the board are the large-target alternative */
+          el.setAttribute("aria-label", PLAYERS[p].name+" peg "+(g+1)+(prog<0?", in yard":prog===WIN_AT?", home":""));
+        });});
+      }
+      function renderRacers(){
+        racerList.innerHTML="";
+        PLAYERS.forEach(function(pl,p){
+          var row=document.createElement("div"); row.className="racer"+(S.turn===p&&!S.over?" active":"");
+          row.style.color=pl.color;
+          var home=S.pegs[p].filter(function(v){return v===WIN_AT;}).length;
+          var out=S.pegs[p].filter(function(v){return v>=0&&v<WIN_AT;}).length;
+          row.innerHTML='<span class="chip" style="background:'+pl.color+'"></span>'+
+            '<span class="rname" style="color:var(--ink)">'+pl.name+(pl.ai?" (AI)":"")+'</span>'+
+            '<span class="mini-pegs">'+S.pegs[p].map(function(v){
+              return '<i class="'+(v===WIN_AT?"done":v>=0?"out":"")+'"></i>'; }).join("")+'</span>'+
+            '<span class="rprog">'+home+' home · '+out+' racing</span>';
+          racerList.appendChild(row);
+        });
+      }
+      function renderMoveBtns(){
+        moveBtns.innerHTML="";
+        if (S.phase==="move" && S.turn===0){
+          moveCard.classList.add("show");
+          S.movable.forEach(function(g){
+            var prog=S.pegs[0][g];
+            var b=document.createElement("button"); b.type="button";
+            if (practice && g===S.suggested) b.className="suggested";
+            b.textContent = prog<0 ? ("Peg "+(g+1)+" — out of the yard!") :
+              ("Peg "+(g+1)+" — move "+S.dice+(prog+S.dice===WIN_AT?" (home!)":prog+S.dice>=LANE_START?" (into home lane)":""));
+            if (practice && g===S.suggested) b.textContent += " ★ suggested";
+            (function(gg){ b.addEventListener("click", function(){ chooseMove(gg); }); })(g);
+            moveBtns.appendChild(b);
+          });
+        } else moveCard.classList.remove("show");
+      }
+      function renderStats(){
+        if (stats.played===0){ $("statsLine").textContent="No games finished yet — this could be the one!"; return; }
+        $("statsLine").innerHTML="Games finished: <b>"+stats.played+"</b> · Wins: <b>"+stats.wins+
+          "</b> · Losses: <b>"+stats.losses+"</b>"+(practice?"<br>(Practice games don't count.)":"");
+      }
+      function renderAll(){ renderPegs(); renderRacers(); renderMoveBtns(); renderStats(); }
+      function updateBubble(){
+        var humanTurn = S && !S.over && S.turn===0 && S.phase==="roll";
+        bubbleBtn.disabled = !humanTurn;
+        bubbleBtn.querySelector(".pop-hint").textContent = humanTurn ? "tap to roll" : (S&&S.over?"race over":"wait for it…");
+      }
+
+      /* ================= turn flow ================= */
+      function rollDice(){ return 1+Math.floor(Math.random()*6); }
+
+      function doRoll(){
+        if (!S || S.over || S.phase!=="roll") return;
+        var p=S.turn;
+        bubbleBtn.classList.remove("popping"); void bubbleBtn.offsetWidth; bubbleBtn.classList.add("popping");
+        sndPop();
+        S.phase="rolling"; updateBubble();
+        /* quick face shuffle, then settle */
+        var ticks=0;
+        var iv=setInterval(function(){ showDie(rollDice()); if(++ticks>=6){ clearInterval(iv); settleRoll(p); } }, 70);
+        timers.push(iv);
+      }
+      function settleRoll(p){
+        var roll=rollDice(); S.dice=roll; showDie(roll);
+        var pl=PLAYERS[p];
+        addLog(pl.name+" rolled a "+roll+".");
+        S.movable=movablePegs(p, roll);
+        if (S.movable.length===0){
+          if (roll===6){
+            S.phase="roll";
+            setStatus(pl.name+" rolled a 6 but no peg can move — "+(p===0?"pop again!":"rolling again…"), "Overshot the home tray? Those pegs need an exact roll.");
+            renderAll(); updateBubble();
+            if (p!==0) later(function(){ doRoll(); }, 900);
+          } else {
+            setStatus(pl.name+" rolled a "+roll+" — no peg can move.", p===0?"So close.":"Passing the bubble along…");
+            renderAll(); updateBubble();
+            later(nextTurn, 1200);
+          }
+          return;
+        }
+        S.phase="move";
+        S.suggested = (p===0 && practice) ? bestMove(0, roll, S.movable) : (p!==0 ? bestMove(p, roll, S.movable) : null);
+        if (p===0){
+          setStatus("You rolled a "+roll+" — tap a glowing peg!", practice ? "Gold ring = suggested move. No pressure though." : "Glowing pegs can move. The buttons beside the board work too.");
+          renderAll(); updateBubble();
+        } else {
+          setStatus(pl.name+" rolled a "+roll+"…", pl.name+" is picking a peg.");
+          renderAll(); updateBubble();
+          later(function(){ chooseMove(bestMove(p, roll, S.movable)); }, 750);
+        }
+      }
+
+      function chooseMove(g){
+        if (!S || S.over || S.phase!=="move") return;
+        var p=S.turn, pl=PLAYERS[p], roll=S.dice;
+        var from=S.pegs[p][g], to = from<0 ? 0 : from+roll;
+        S.pegs[p][g]=to;
+        S.phase="anim";
+        var bumped=[];
+        if (to<TRACK){
+          var abs=absPos(p,to);
+          PLAYERS.forEach(function(_,q){
+            if (q===p) return;
+            S.pegs[q].forEach(function(op,og){ if (op>=0 && op<TRACK && absPos(q,op)===abs){ S.pegs[q][og]=-1; bumped.push(PLAYERS[q].name); } });
+          });
+        }
+        if (from<0) addLog(pl.name+" popped peg "+(g+1)+" out of the yard!");
+        else if (to===WIN_AT){ addLog(pl.name+"'s peg "+(g+1)+" is HOME!"); sndHome(); }
+        else addLog(pl.name+" moved peg "+(g+1)+".");
+        if (bumped.length){ addLog("POP! "+pl.name+" bumped "+bumped.join(", ")+" back to the yard!"); sndBump(); }
+        renderAll(); updateBubble();
+
+        if (S.pegs[p].every(function(v){ return v===WIN_AT; })){ later(function(){ gameOver(p); }, 450); return; }
+        if (roll===6){
+          S.phase="roll"; S.dice=null;
+          setStatus(pl.name+" rolled a 6 — extra turn!", p===0 ? "Pop the bubble again!" : pl.name+" pops again…");
+          renderAll(); updateBubble();
+          if (p!==0) later(doRoll, 850);
+        } else {
+          later(nextTurn, 550);
+        }
+      }
+      function nextTurn(){
+        if (!S || S.over) return;
+        S.turn=(S.turn+1)%4; S.phase="roll"; S.dice=null; S.movable=[]; hideDie();
+        var pl=PLAYERS[S.turn];
+        if (S.turn===0) setStatus("Your turn — pop the bubble!", allInYard(0) ? "You need a 6 to get a peg out of its yard." : "Fingers crossed for a 6 — extra turn!");
+        else setStatus(pl.name+"'s turn…", pl.name+" is reaching for the bubble.");
+        renderAll(); updateBubble();
+        if (S.turn!==0) later(doRoll, 800);
+      }
+      function allInYard(p){ return S.pegs[p].every(function(v){ return v<0; }); }
+
+      function gameOver(p){
+        S.over=true; S.phase="over"; renderAll(); updateBubble();
+        var youWon = p===0;
+        if (!practice){
+          stats.played++; if (youWon) stats.wins++; else stats.losses++;
+          lsSetJSON("bubbleRace_stats", stats);
+        }
+        renderStats();
+        if (youWon){ sndWin(); bubbleBurst(); } else sndLose();
+        $("endEmoji").textContent = youWon ? "🏆" : "🫧";
+        $("endTitle").textContent = youWon ? "You win the Bubble Race!" : PLAYERS[p].name+" wins the race!";
+        $("endSub").textContent = practice ? "That was practice — no score kept. Fancy a real one?"
+          : youWon ? "All four pegs home. Champion bubbling!" : "All of "+PLAYERS[p].name+"'s pegs made it home first. Rematch?";
+        $("endStats").innerHTML = practice ? "Practice mode: wins and losses aren't counted." :
+          "Your score: <b>"+stats.wins+"</b> wins · <b>"+stats.losses+"</b> losses in <b>"+stats.played+"</b> finished games.";
+        setStatus(youWon ? "You win! All your pegs are home." : PLAYERS[p].name+" wins this one.", "Hit New game or Race again to go another round.");
+        addLog(youWon ? "You win the race!" : PLAYERS[p].name+" wins the race.");
+        $("endOverlay").classList.add("open");
+      }
+      function bubbleBurst(){
+        for (var i=0;i<14;i++){
+          var b=document.createElement("div"); b.className="float-b";
+          var sz=14+Math.random()*30;
+          b.style.width=sz+"px"; b.style.height=sz+"px";
+          b.style.left=(8+Math.random()*84)+"%"; b.style.top=(55+Math.random()*30)+"%";
+          b.style.animationDuration=(1.6+Math.random()*1.6)+"s";
+          boardEl.appendChild(b);
+          (function(el){ setTimeout(function(){ el.remove(); }, 3400); })(b);
+        }
+      }
+
+      function onPegTap(p, g){
+        if (!S || S.over) return;
+        if (S.turn===0 && p===0 && S.phase==="move" && S.movable.indexOf(g)>=0) chooseMove(g);
+      }
+
+      /* ================= controls ================= */
+      bubbleBtn.addEventListener("click", function(){ if (S && S.turn===0) doRoll(); });
+      $("newGameBtn").addEventListener("click", function(){ $("endOverlay").classList.remove("open"); newGame(); });
+      $("againBtn").addEventListener("click", function(){ $("endOverlay").classList.remove("open"); newGame(); });
+      $("endClose").addEventListener("click", function(){ $("endOverlay").classList.remove("open"); });
+
+      diffSel.value=difficulty; diffNote.textContent=DIFF_NOTES[difficulty];
+      diffSel.addEventListener("change", function(){
+        difficulty=diffSel.value; lsSet("bubbleRace_difficulty", difficulty);
+        diffNote.textContent=DIFF_NOTES[difficulty];
+        addLog("Difficulty set to "+diffSel.options[diffSel.selectedIndex].text+".");
+      });
+      function paintPractice(){
+        practiceBtn.setAttribute("aria-pressed", practice?"true":"false");
+        practiceBtn.textContent="Practice mode: "+(practice?"On":"Off");
+        document.body.classList.toggle("practice", practice);
+      }
+      practiceBtn.addEventListener("click", function(){
+        practice=!practice; lsSet("bubbleRace_practice", practice?"1":"0"); paintPractice();
+        addLog(practice ? "Practice mode on — gentle rivals, suggested moves, no score kept." : "Practice mode off — this one counts!");
+        if (S && !S.over) renderAll();
+      });
+      function paintSound(){ soundBtn.textContent="Sound: "+(soundOn?"On":"Off"); }
+      soundBtn.addEventListener("click", function(){
+        soundOn=!soundOn; lsSet("bubbleRace_sound", soundOn?"1":"0"); paintSound(); if (soundOn) sndPop();
+      });
+      paintPractice(); paintSound();
+
+      /* ================= tutorial ================= */
+      var TUT=[
+        { big:"Welcome to Bubble Race!", visual:'<div class="demo-pegs"><i style="background:#f4503c"></i><i style="background:#0ea47f"></i><i style="background:#f2a007"></i><i style="background:#2f7fe0"></i></div>',
+          text:"You race 4 coral pegs (that's you!) against three rival racers — Pip, Sunny, and Sky. First to get all 4 pegs home wins. Let's walk through it — takes about a minute." },
+        { big:"Pop the bubble", visual:'<div class="demo-bubble">POP!</div>',
+          text:"On your turn, tap the big bubble in the middle of the board. It pops and rolls the dice for you. No chasing a runaway die under the couch — you're welcome." },
+        { big:"You need a 6 to start", visual:'<div class="demo-pegs"><i style="background:#f4503c"></i></div>',
+          text:"Your pegs start in your yard (the dashed pen in your corner). A peg can only leave the yard when you roll a 6 — then it pops onto your start bubble." },
+        { big:"Move a glowing peg", visual:'<div class="demo-pegs"><i style="background:#f4503c"></i><i style="background:#f4503c;opacity:.45"></i><i style="background:#f4503c;opacity:.45"></i></div>',
+          text:"After a roll, every peg that can move starts pulsing. Tap one to move it that many bubbles around the track. If tapping little pegs is fiddly, big buttons appear beside the board too." },
+        { big:"Bump your rivals!", visual:'<div class="demo-pegs"><i style="background:#f4503c"></i><i style="background:#2f7fe0"></i></div>',
+          text:"Land exactly on a bubble where a rival peg is sitting and — pop! — their peg gets sent all the way back to its yard. Fair warning: they can do the exact same thing to you. There are no safe bubbles on the main track." },
+        { big:"A 6 means go again", visual:'<div class="demo-bubble">6</div>',
+          text:"Roll a 6 and you get an extra turn, every time. Chain a few 6s and you can cross half the board before anyone else blinks." },
+        { big:"The home stretch", visual:'<div class="demo-pegs"><i style="background:#ffd75a"></i><i style="background:#ffd75a"></i><i style="background:#ffd75a"></i><i style="background:#ffd75a"></i></div>',
+          text:"After a full lap, your peg turns down its own coloured lane toward the middle, then into the golden HOME tray. You need the exact roll to land in the tray — too big and that peg waits. Get all 4 home and you win! Tip: try Practice mode first — it suggests moves with a gold ring and doesn't keep score." }
+      ];
+      var tutIdx=0;
+      function showTut(){
+        var t=TUT[tutIdx];
+        $("tutVisual").innerHTML='<div class="big">'+t.big+"</div>"+t.visual;
+        $("tutText").textContent=t.text;
+        $("tutDots").innerHTML=TUT.map(function(_,i){ return '<i class="'+(i===tutIdx?"on":"")+'"></i>'; }).join("");
+        $("tutBack").disabled = tutIdx===0;
+        $("tutNext").textContent = tutIdx===TUT.length-1 ? "Done — let's play!" : "Next";
+      }
+      $("tutorialBtn").addEventListener("click", function(){ tutIdx=0; showTut(); $("tutorialOverlay").classList.add("open"); });
+      $("tutBack").addEventListener("click", function(){ if (tutIdx>0){ tutIdx--; showTut(); } });
+      $("tutNext").addEventListener("click", function(){
+        if (tutIdx<TUT.length-1){ tutIdx++; showTut(); } else $("tutorialOverlay").classList.remove("open");
+      });
+      $("tutClose").addEventListener("click", function(){ $("tutorialOverlay").classList.remove("open"); });
+
+      /* ================= rules ================= */
+      $("rulesBtn").addEventListener("click", function(){ $("rulesOverlay").classList.add("open"); });
+      $("rulesClose").addEventListener("click", function(){ $("rulesOverlay").classList.remove("open"); });
+
+      /* ================= feedback ================= */
+      var fbRating=0, lastFeedbackText="";
+      function captureText(){
+        var pegSummary = S ? PLAYERS.map(function(pl,p){
+          return pl.name+": ["+S.pegs[p].map(function(v){ return v<0?"yard":v===WIN_AT?"home":v; }).join(", ")+"]";
+        }).join("\n") : "no game started";
+        return "Game: Bubble Race (Holo's Arcade)\n"+
+          "When: "+new Date().toLocaleString()+"\n"+
+          "Difficulty: "+difficulty+(practice?" (practice mode)":"")+"\n"+
+          "Whose turn: "+(S?PLAYERS[S.turn].name:"—")+" · Last roll: "+(S&&S.dice?S.dice:"—")+"\n"+
+          "Pegs:\n"+pegSummary+"\n"+
+          "Screen: "+window.innerWidth+"×"+window.innerHeight+"\n"+
+          "Device/browser: "+navigator.userAgent;
+      }
+      $("feedbackBtn").addEventListener("click", function(){
+        $("fbCapture").textContent=captureText();
+        $("fbForm").style.display="block"; $("fbThanks").style.display="none";
+        $("feedbackOverlay").classList.add("open");
+      });
+      $("fbClose").addEventListener("click", function(){ $("feedbackOverlay").classList.remove("open"); });
+      $("fbDone").addEventListener("click", function(){ $("feedbackOverlay").classList.remove("open"); });
+      Array.prototype.forEach.call($("fbStars").children, function(btn){
+        btn.addEventListener("click", function(){
+          fbRating=parseInt(btn.getAttribute("data-star"),10);
+          Array.prototype.forEach.call($("fbStars").children, function(b){
+            b.classList.toggle("on", parseInt(b.getAttribute("data-star"),10)<=fbRating);
+          });
+        });
+      });
+      $("fbSubmit").addEventListener("click", function(){
+        var entry={ when:new Date().toISOString(), rating:fbRating, category:$("fbCat").value,
+          message:$("fbMsg").value.trim(), capture:captureText() };
+        var all=lsJSON("bubbleRace_feedback", []); all.push(entry); lsSetJSON("bubbleRace_feedback", all);
+        /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+        try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "bubble-race", rating: entry.rating||0, text: entry.message||"", tag: entry.category||"", mode: "real", level: "", difficulty: "", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+        lastFeedbackText="Bubble Race feedback\nRating: "+(fbRating?fbRating+" / 5 stars":"not rated")+
+          "\nAbout: "+entry.category+"\nMessage: "+(entry.message||"(no message)")+"\n\n"+entry.capture;
+        $("fbForm").style.display="none"; $("fbThanks").style.display="block"; $("fbCopyMsg").textContent="";
+      });
+      $("fbCopy").addEventListener("click", function(){
+        function done(){ $("fbCopyMsg").textContent="Copied! Paste it wherever you keep your review notes."; }
+        if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(lastFeedbackText).then(done, done); }
+        else {
+          var ta=document.createElement("textarea"); ta.value=lastFeedbackText; document.body.appendChild(ta);
+          ta.select(); try{ document.execCommand("copy"); }catch(e){} ta.remove(); done();
+        }
+      });
+
+      /* close overlays by tapping the backdrop */
+      Array.prototype.forEach.call(document.querySelectorAll(".overlay"), function(ov){
+        ov.addEventListener("click", function(e){ if (e.target===ov) ov.classList.remove("open"); });
+      });
+
+      /* ================= go ================= */
+      buildBoard();
+      newGame();
+    })();
+    </script>
+  </body>
+</html>

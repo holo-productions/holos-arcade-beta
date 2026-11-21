@@ -1,0 +1,1265 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Snake</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@700&display=swap" rel="stylesheet" />
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2rem; }
+
+      :root {
+        --bg: #f4f1ea;
+        --bg-accent: #e6dfc9;
+        --surface: #fffdf7;
+        --ink: #1d1a14;
+        --ink-soft: #5c5546;
+        --line: #d8d0bd;
+        --accent: #2e7d24;
+        --accent-dark: #256b1d;
+        --accent-ink: #ffffff;
+        --danger: #c8401f;
+        --gold: #b97f06;
+        --board-frame: #22401c;
+        --board-frame-edge: #152a11;
+        --shadow: 0 18px 40px rgba(29, 26, 20, 0.18);
+        --overlay-bg: rgba(24, 22, 14, 0.55);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #12140e;
+          --bg-accent: #1d2114;
+          --surface: #1f2217;
+          --ink: #eef2e0;
+          --ink-soft: #aab39b;
+          --line: #3a402c;
+          --accent: #69c24a;
+          --accent-dark: #7ed957;
+          --accent-ink: #14230d;
+          --danger: #ff7a52;
+          --gold: #f2b53a;
+          --board-frame: #1b3016;
+          --board-frame-edge: #0d1a09;
+          --shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+          --overlay-bg: rgba(0, 0, 0, 0.62);
+        }
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Public Sans", system-ui, sans-serif;
+        background:
+          radial-gradient(1100px 500px at 85% -10%, var(--bg-accent), transparent 60%),
+          var(--bg);
+        color: var(--ink);
+        min-height: 100vh;
+      }
+      .wrap { max-width: 560px; margin: 0 auto; padding: 18px 16px 40px; }
+
+      /* ---------- Top bar ---------- */
+      .topbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+      .topbar .spacer { flex: 1; }
+      .btn {
+        font: inherit; font-weight: 700; font-size: 0.9rem;
+        border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+        border-radius: 999px; padding: 8px 16px; cursor: pointer;
+        min-height: 40px; display: inline-flex; align-items: center; gap: 6px;
+        text-decoration: none;
+      }
+      .btn:hover { border-color: var(--ink-soft); }
+      .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+      .btn.primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+      .btn.icon { padding: 8px 12px; min-width: 44px; justify-content: center; }
+      .btn:focus-visible, .pad-btn:focus-visible, .seg button:focus-visible, a:focus-visible {
+        outline: 3px solid var(--accent); outline-offset: 2px;
+      }
+      .backlink { font-weight: 700; font-size: 0.9rem; color: var(--ink-soft); text-decoration: none; padding: 8px 4px; min-height: 40px; display: inline-flex; align-items: center; }
+      .backlink:hover { color: var(--ink); }
+
+      /* ---------- Title ---------- */
+      h1 {
+        font-family: "Bricolage Grotesque", sans-serif; font-weight: 800;
+        font-size: 2.4rem; line-height: 1; margin: 4px 0 4px;
+      }
+      .tagline { color: var(--ink-soft); margin: 0 0 16px; font-size: 0.98rem; }
+
+      /* ---------- Stats ---------- */
+      .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+      .stat { background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 8px 6px; text-align: center; }
+      .stat .num { font-family: "Space Mono", monospace; font-weight: 700; font-size: 1.35rem; line-height: 1.15; display: block; }
+      .stat .num.pop { animation: popnum 0.3s ease-out; }
+      @keyframes popnum { 0% { transform: scale(1.25); color: var(--accent-dark); } 100% { transform: scale(1); } }
+      @media (prefers-reduced-motion: reduce) { .stat .num.pop { animation: none; } }
+      .stat .lbl { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+
+      /* ---------- Setting rows ---------- */
+      .set-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+      .set-row .set-lbl { font-weight: 700; font-size: 0.88rem; color: var(--ink-soft); min-width: 62px; }
+      .seg { display: inline-flex; background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; padding: 3px; }
+      .seg button {
+        font: inherit; font-weight: 700; font-size: 0.88rem;
+        border: 0; background: transparent; color: var(--ink-soft);
+        border-radius: 999px; padding: 6px 16px; cursor: pointer; min-height: 38px;
+      }
+      .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+      .set-note { font-size: 0.82rem; color: var(--ink-soft); margin: 0; }
+      .practice-banner {
+        display: none; align-items: center; gap: 10px; flex-wrap: wrap;
+        background: #fff3c4; color: #4a3602; border: 1.5px dashed #b97f06;
+        border-radius: 14px; padding: 10px 12px; margin: 0 0 12px;
+        font-size: 0.9rem; font-weight: 600; line-height: 1.4;
+      }
+      @media (prefers-color-scheme: dark) {
+        .practice-banner { background: #332a08; color: #ffe9a3; border-color: var(--gold); }
+      }
+      .practice-banner.show { display: flex; }
+      .practice-banner .btn { margin-left: auto; min-height: 36px; padding: 6px 12px; font-size: 0.85rem; }
+      .practice-banner .btn[hidden] { display: none; }
+      .practice-tag {
+        display: inline-block; background: #f2b53a; color: #2a1e02; font-weight: 800;
+        border-radius: 999px; padding: 3px 12px; font-size: 0.82rem; margin-bottom: 8px;
+      }
+
+      /* ---------- Controls ---------- */
+      .controls { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 12px; }
+      .controls .btn { flex: 1; justify-content: center; min-height: 48px; font-size: 1rem; }
+      .controls .btn.primary { flex: 1.4; }
+
+      /* ---------- Board ---------- */
+      .board-frame {
+        background: var(--board-frame);
+        border: 2px solid var(--board-frame-edge);
+        border-radius: 20px; padding: 10px;
+        box-shadow: var(--shadow);
+      }
+      .board-inner { position: relative; border-radius: 12px; overflow: hidden; }
+      canvas { display: block; width: 100%; aspect-ratio: 1 / 1; touch-action: none; background: #2c5225; }
+      .board-overlay {
+        position: absolute; inset: 0; display: none;
+        align-items: center; justify-content: center; text-align: center;
+        background: rgba(12, 24, 9, 0.72); color: #f2f7e8; padding: 20px;
+      }
+      .board-overlay.open { display: flex; }
+      .board-overlay .big {
+        font-family: "Bricolage Grotesque", sans-serif; font-weight: 800;
+        font-size: 2.1rem; line-height: 1.05; margin: 0 0 8px;
+      }
+      .board-overlay .count { font-size: 4.2rem; }
+      .board-overlay p { margin: 0 0 6px; font-size: 0.98rem; }
+      .board-overlay .sub { color: #c9dcb4; font-size: 0.88rem; }
+      .board-overlay .newbest {
+        display: inline-block; background: #f2b53a; color: #2a1e02; font-weight: 800;
+        border-radius: 999px; padding: 3px 12px; font-size: 0.82rem; margin-bottom: 8px;
+      }
+      .board-overlay .btn { margin-top: 12px; background: #7ed957; border-color: #7ed957; color: #14230d; }
+      .board-overlay .btn:hover { background: #93e374; border-color: #93e374; }
+
+      .hint { text-align: center; color: var(--ink-soft); font-size: 0.85rem; margin: 12px 0 0; }
+      .hint.gone { display: none; }
+
+      /* ---------- D-pad ---------- */
+      .dpad { display: none; margin: 16px auto 0; width: 186px;
+        grid-template-columns: repeat(3, 58px); grid-template-rows: repeat(3, 58px); gap: 6px; }
+      .dpad.on { display: grid; }
+      .pad-btn {
+        font: inherit; font-size: 1.25rem; line-height: 1;
+        border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+        border-radius: 14px; cursor: pointer; min-height: 58px;
+        display: flex; align-items: center; justify-content: center;
+        -webkit-tap-highlight-color: transparent; user-select: none; touch-action: manipulation;
+      }
+      .pad-btn:active { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+      .pad-up { grid-area: 1 / 2; } .pad-left { grid-area: 2 / 1; }
+      .pad-right { grid-area: 2 / 3; } .pad-down { grid-area: 3 / 2; }
+      .pad-mid { grid-area: 2 / 2; border: 1.5px dashed var(--line); border-radius: 14px; }
+
+      .career { text-align: center; color: var(--ink-soft); font-size: 0.85rem; margin: 16px 0 0; }
+      .career strong { color: var(--ink); font-family: "Space Mono", monospace; }
+
+      /* ---------- More games (this batch) ---------- */
+      .more-games { margin-top: 30px; }
+      .more-games h2 { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; font-size: 1.35rem; margin: 0 0 4px; }
+      .more-games .lede { color: var(--ink-soft); font-size: 0.92rem; margin: 0 0 12px; }
+      .game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 8px; }
+      .game-card {
+        display: block; background: var(--surface); border: 1.5px solid var(--line);
+        border-radius: 14px; padding: 12px 14px; text-decoration: none; color: var(--ink);
+      }
+      .game-card:hover { border-color: var(--ink-soft); }
+      .game-card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+      .game-card .gname { font-weight: 800; font-size: 0.98rem; display: block; margin-bottom: 2px; }
+      .game-card .gdesc { color: var(--ink-soft); font-size: 0.83rem; line-height: 1.4; display: block; }
+      .game-card.here { border-color: var(--accent); }
+      .game-card .gnow { color: var(--accent-dark); font-weight: 700; font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; }
+
+      footer { margin-top: 26px; border-top: 1.5px solid var(--line); padding-top: 14px; color: var(--ink-soft); font-size: 0.85rem; }
+      footer a { color: var(--ink-soft); font-weight: 600; }
+      footer a:hover { color: var(--ink); }
+      footer p { margin: 0 0 6px; }
+
+      /* ---------- Overlays (How to play / Rules) ---------- */
+      .overlay {
+        position: fixed; inset: 0; z-index: 40; display: none;
+        align-items: flex-end; justify-content: center;
+        background: var(--overlay-bg); padding: 0;
+      }
+      .overlay.open { display: flex; }
+      @media (min-width: 640px) { .overlay { align-items: center; padding: 20px; } }
+      .sheet {
+        background: var(--surface); color: var(--ink); width: 100%; max-width: 560px;
+        max-height: 88vh; overflow-y: auto; border-radius: 20px 20px 0 0;
+        padding: 22px 20px 26px; box-shadow: var(--shadow);
+      }
+      @media (min-width: 640px) { .sheet { border-radius: 20px; } }
+      .sheet h2 { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; font-size: 1.5rem; margin: 0 0 4px; }
+      .sheet h3 { font-family: "Bricolage Grotesque", sans-serif; font-weight: 700; font-size: 1.05rem; margin: 18px 0 6px; }
+      .sheet p, .sheet li { font-size: 0.95rem; line-height: 1.5; }
+      .sheet ul, .sheet ol { margin: 6px 0; padding-left: 22px; }
+      .sheet li { margin-bottom: 4px; }
+      .sheet .lede { color: var(--ink-soft); margin: 0 0 8px; }
+      .sheet table { width: 100%; border-collapse: collapse; margin: 8px 0 4px; font-size: 0.92rem; }
+      .sheet th, .sheet td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      .sheet th { font-size: 0.72rem; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-soft); }
+      .sheet td.num, .sheet th.num { text-align: right; font-family: "Space Mono", monospace; }
+      .sheet .close-row { display: flex; justify-content: flex-end; margin-top: 18px; }
+      kbd {
+        font-family: "Space Mono", monospace; font-size: 0.82em; font-weight: 700;
+        background: var(--bg-accent); border: 1px solid var(--line); border-bottom-width: 2.5px;
+        border-radius: 6px; padding: 1px 6px; white-space: nowrap;
+      }
+
+      /* ---------- Feedback ---------- */
+      .fb-label { display: block; font-weight: 700; font-size: 0.9rem; margin: 16px 0 6px; }
+      .fb-stars { display: flex; gap: 4px; }
+      .fb-star {
+        font: inherit; font-size: 1.9rem; line-height: 1; background: none; border: 0;
+        color: var(--line); cursor: pointer; padding: 4px 2px; min-width: 44px; min-height: 44px;
+      }
+      .fb-star.on { color: var(--gold); }
+      .fb-star:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+      .fb-text {
+        width: 100%; font: inherit; font-size: 0.95rem; line-height: 1.45;
+        background: var(--bg); color: var(--ink); border: 1.5px solid var(--line);
+        border-radius: 12px; padding: 10px 12px; resize: vertical; min-height: 96px;
+      }
+      .fb-text:focus { outline: 3px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+      .fb-terms { font-size: 0.82rem; color: var(--ink-soft); line-height: 1.5; margin: 12px 0 0; }
+      .fb-terms a { color: var(--ink-soft); font-weight: 600; }
+      .fb-error { font-size: 0.88rem; color: var(--danger); font-weight: 600; margin: 8px 0 0; display: none; }
+      .fb-error.show { display: block; }
+      .fb-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+      .fb-actions .btn { flex: 1; justify-content: center; }
+      .fb-thanks { text-align: center; padding: 18px 0 6px; display: none; }
+      .fb-thanks.show { display: block; }
+      .fb-thanks .big { font-family: "Bricolage Grotesque", sans-serif; font-weight: 800; font-size: 1.6rem; margin: 0 0 6px; }
+      .fb-thanks p { color: var(--ink-soft); margin: 0 0 14px; }
+      .fb-form.hide { display: none; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="topbar">
+        <a class="backlink" href="../games-hub/">← Games Hub</a>
+        <span class="spacer"></span>
+        <button class="btn" id="howBtn" type="button">How to play</button>
+        <button class="btn" id="rulesBtn" type="button">Rules</button>
+        <button class="btn" id="feedbackBtn" type="button">Feedback</button>
+        <button class="btn icon" id="soundBtn" type="button" aria-label="Sound on" aria-pressed="true">🔊</button>
+      </div>
+
+      <h1>Snake</h1>
+      <p class="tagline">Eat apples, grow longer, and don't bite yourself. The board speeds up as you feast.</p>
+
+      <div class="stats" role="group" aria-label="Game stats">
+        <div class="stat"><span class="num" id="statScore">0</span><span class="lbl">Score</span></div>
+        <div class="stat"><span class="num" id="statBest">0</span><span class="lbl">Best</span></div>
+        <div class="stat"><span class="num" id="statLength">4</span><span class="lbl">Length</span></div>
+        <div class="stat"><span class="num" id="statSpeed">1</span><span class="lbl">Speed</span></div>
+      </div>
+
+      <div class="set-row">
+        <span class="set-lbl" id="modeLbl">Round</span>
+        <div class="seg" role="group" aria-labelledby="modeLbl">
+          <button type="button" data-mode="scored" aria-pressed="true">For real</button>
+          <button type="button" data-mode="practice" aria-pressed="false">Practice round</button>
+        </div>
+        <p class="set-note" id="modeNote">This one counts — chase that best score.</p>
+      </div>
+
+      <div class="practice-banner" id="practiceBanner" role="status">
+        <span>Warm-up laps only — bumps won&rsquo;t end it, it runs a touch slower, and nothing counts toward your best.</span>
+        <button class="btn" id="endPracticeBtn" type="button" hidden>End practice</button>
+      </div>
+
+      <div class="set-row">
+        <span class="set-lbl" id="diffLbl">Speed</span>
+        <div class="seg" role="group" aria-labelledby="diffLbl">
+          <button type="button" data-diff="chill" aria-pressed="false">Chill</button>
+          <button type="button" data-diff="classic" aria-pressed="true">Classic</button>
+          <button type="button" data-diff="turbo" aria-pressed="false">Turbo</button>
+        </div>
+        <p class="set-note" id="diffNote">Classic pace · apples worth ×2</p>
+      </div>
+
+      <div class="set-row">
+        <span class="set-lbl" id="edgeLbl">Edges</span>
+        <div class="seg" role="group" aria-labelledby="edgeLbl">
+          <button type="button" data-edge="solid" aria-pressed="true">Solid walls</button>
+          <button type="button" data-edge="wrap" aria-pressed="false">Wrap-around</button>
+        </div>
+      </div>
+
+      <div class="board-frame">
+        <div class="board-inner">
+          <canvas id="board" width="600" height="600" aria-label="Snake game board"></canvas>
+          <div class="board-overlay" id="boardOverlay">
+            <div id="overlayContent"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary" id="startBtn" type="button">▶ Start game</button>
+        <button class="btn" id="restartBtn" type="button">↺ Restart</button>
+      </div>
+
+      <p class="hint" id="hint">Steer with the arrow keys, WASD, a swipe on the board, or the pad below. <kbd>Space</kbd> pauses.</p>
+
+      <div class="dpad" id="dpad" aria-label="Direction pad">
+        <button class="pad-btn pad-up" type="button" data-dir="up" aria-label="Move up">▲</button>
+        <button class="pad-btn pad-left" type="button" data-dir="left" aria-label="Move left">◀</button>
+        <div class="pad-mid" aria-hidden="true"></div>
+        <button class="pad-btn pad-right" type="button" data-dir="right" aria-label="Move right">▶</button>
+        <button class="pad-btn pad-down" type="button" data-dir="down" aria-label="Move down">▼</button>
+      </div>
+
+      <p class="career" id="career"></p>
+
+      <section class="more-games" aria-labelledby="moreTitle">
+        <h2 id="moreTitle">More from the arcade</h2>
+        <p class="lede">Snake is one of 13 games in this batch — every one is single-player, saves its best scores on your device, and has an opt-in How to play plus a full Rules page.</p>
+        <div class="game-grid">
+          <span class="game-card here" aria-current="page"><span class="gname">Snake</span><span class="gdesc">Eat apples, grow longer, don't bite yourself.</span><span class="gnow">You're playing it</span></span>
+          <a class="game-card" href="../block-drop/"><span class="gname">Block Drop</span><span class="gdesc">Stack the falling blocks and clear full lines.</span></a>
+          <a class="game-card" href="../breakout/"><span class="gname">Breakout</span><span class="gdesc">Bounce the ball off your paddle and smash every brick.</span></a>
+          <a class="game-card" href="../tile-2048/"><span class="gname">2048</span><span class="gdesc">Slide and merge matching tiles to reach the 2048 tile.</span></a>
+          <a class="game-card" href="../match-3/"><span class="gname">Match-3</span><span class="gdesc">Swap neighbouring gems to line up three or more.</span></a>
+          <a class="game-card" href="../mahjong-solitaire/"><span class="gname">Mahjong Solitaire</span><span class="gdesc">Clear the layout by matching pairs of free tiles.</span></a>
+          <a class="game-card" href="../nonogram/"><span class="gname">Nonogram</span><span class="gdesc">Fill the picture grid using the number clues.</span></a>
+          <a class="game-card" href="../simon/"><span class="gname">Simon</span><span class="gdesc">Watch the colours and sounds, then repeat the pattern.</span></a>
+          <a class="game-card" href="../whack-a-mole/"><span class="gname">Whack-a-Mole</span><span class="gdesc">Bonk the moles before they duck back down.</span></a>
+          <a class="game-card" href="../tower-defense/"><span class="gname">Tower Defense</span><span class="gdesc">Place your towers and stop wave after wave.</span></a>
+          <a class="game-card" href="../word-scramble/"><span class="gname">Word Scramble</span><span class="gdesc">Unscramble the jumbled letters into the real word.</span></a>
+          <a class="game-card" href="../math-quiz/"><span class="gname">Math Quiz</span><span class="gdesc">Quick-fire arithmetic against the clock.</span></a>
+          <a class="game-card" href="../flags-quiz/"><span class="gname">Flags Quiz</span><span class="gdesc">Name the country from its flag.</span></a>
+        </div>
+      </section>
+
+      <footer>
+        <p>Part of the games arcade · <a href="../games-hub/">Back to the Games Hub</a> · <a href="../games-hub/#legal">Terms &amp; policies</a></p>
+        <p>Best scores and settings are saved on this device only.</p>
+      </footer>
+    </div>
+
+    <!-- How to play (opt-in tutorial) -->
+    <div class="overlay" id="howOverlay" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+      <div class="sheet">
+        <h2 id="howTitle">How to play</h2>
+        <p class="lede">Thirty seconds and you'll be slithering like a pro.</p>
+        <ol>
+          <li>Press <strong>Start game</strong>. After a quick 3·2·1, your snake heads right on its own — it never stops moving.</li>
+          <li><strong>Steer</strong> with the arrow keys or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> on a keyboard, by <strong>swiping</strong> on the board, or with the <strong>arrow pad</strong> on touch screens.</li>
+          <li>Eat the <strong>red apples</strong> to score and grow one segment longer each time.</li>
+          <li>Watch for the <strong>golden apple</strong> — it appears after every 5th regular apple and vanishes in about 7 seconds. Grab it for bonus points.</li>
+          <li>Don't run into a wall (in Solid walls mode) and never bite your own body. That's the whole game — survive, feast, beat your best.</li>
+          <li><strong>New to it or just warming up?</strong> Pick <strong>Practice round</strong> up top. It's a touch slower, bumps into walls and yourself won't end it, and the score is just for fun — it never touches your best or your career totals. Tap <strong>End practice</strong> whenever you've had enough, then flip back to <strong>For real</strong> when you're ready.</li>
+        </ol>
+        <h3>Handy keys</h3>
+        <ul>
+          <li><kbd>Space</kbd> or <kbd>P</kbd> — pause / resume</li>
+          <li><kbd>R</kbd> — restart</li>
+          <li><kbd>Esc</kbd> — close a pop-up (the game auto-pauses while one is open)</li>
+        </ul>
+        <div class="close-row"><button class="btn primary" type="button" data-close>Got it</button></div>
+      </div>
+    </div>
+
+    <!-- Rules (full, separate from tutorial) -->
+    <div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+      <div class="sheet">
+        <h2 id="rulesTitle">Snake — full rules</h2>
+        <p class="lede">Everything that scores, speeds up, or ends your run.</p>
+
+        <h3>The board &amp; your snake</h3>
+        <ul>
+          <li>The board is a 20 × 20 grid. Your snake starts 4 segments long, moving right, and moves continuously — there is no stopping or reversing.</li>
+          <li>You cannot turn 180°. A turn directly back into your own neck is ignored.</li>
+          <li>Up to two quick turns in a row are remembered, so fast zig-zags work if you time them.</li>
+        </ul>
+
+        <h3>Scoring</h3>
+        <table>
+          <tr><th>Event</th><th class="num">Chill ×1</th><th class="num">Classic ×2</th><th class="num">Turbo ×3</th></tr>
+          <tr><td>Red apple</td><td class="num">10</td><td class="num">20</td><td class="num">30</td></tr>
+          <tr><td>Golden apple</td><td class="num">50</td><td class="num">100</td><td class="num">150</td></tr>
+        </table>
+        <ul>
+          <li>Every apple — red or golden — grows your snake by exactly 1 segment.</li>
+          <li>Changing difficulty mid-run is allowed, but the score multiplier for each apple uses the difficulty in effect when you eat it. Your best score is shared across all difficulties and edge modes.</li>
+        </ul>
+
+        <h3>Golden apples (special rule)</h3>
+        <ul>
+          <li>After every 5th red apple you eat, a golden apple appears on a random empty square.</li>
+          <li>It stays for about 7 seconds, then disappears. Only one can be on the board at a time.</li>
+          <li>Eating it does not count toward the next golden apple — only red apples advance that counter.</li>
+        </ul>
+
+        <h3>Speed</h3>
+        <ul>
+          <li>The snake speeds up a little after every 5 apples eaten: roughly 4% faster per speed level, up to a top speed for each difficulty.</li>
+          <li>Starting pace: Chill is the gentlest, Classic is the traditional arcade pace, Turbo starts fast and gets frantic.</li>
+        </ul>
+
+        <h3>Edges</h3>
+        <ul>
+          <li><strong>Solid walls:</strong> touching any wall ends the run.</li>
+          <li><strong>Wrap-around:</strong> you pass through a wall and come out the opposite side. Only your own body can end the run.</li>
+        </ul>
+
+        <h3>Practice rounds</h3>
+        <ul>
+          <li>Pick <strong>Practice round</strong> before you start. Practice runs a touch slower than the speed you picked.</li>
+          <li>Walls wrap you around to the other side and biting yourself doesn't end it — you just slither on through. It's for getting the hang of steering, not for sweating.</li>
+          <li>Practice scores, lengths, and apples <strong>don't count</strong>: no best score, no career totals. The end screen shows what you did, marked as practice.</li>
+          <li>Tap <strong>End practice</strong> (in the yellow banner or the pause screen) to wrap up early. Switching back to <strong>For real</strong> mid-run scraps that run without saving it.</li>
+        </ul>
+
+        <h3>How a run ends &amp; winning</h3>
+        <ul>
+          <li>A run ends when your head hits a wall (Solid walls mode) or any part of your own body.</li>
+          <li>There is no final level: Snake is a high-score game. You "win" a run by beating your saved best score.</li>
+          <li><strong>Perfect game:</strong> if your snake ever fills all 400 squares, the run ends as a win, whatever the score.</li>
+          <li>Pausing, opening How to play or Rules, or switching tabs pauses the clock — a golden apple's 7 seconds only tick down while you play.</li>
+        </ul>
+
+        <div class="close-row"><button class="btn primary" type="button" data-close>Close</button></div>
+      </div>
+    </div>
+
+    <!-- Feedback (standard on all games) -->
+    <div class="overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+      <div class="sheet">
+        <h2 id="feedbackTitle">Feedback</h2>
+        <p class="lede">How was Snake? Your rating and comment are saved on this device only — syncing comes later.</p>
+
+        <div class="fb-form" id="fbForm">
+          <span class="fb-label" id="fbRatingLbl">Your rating</span>
+          <div class="fb-stars" role="radiogroup" aria-labelledby="fbRatingLbl" id="fbStars">
+            <button class="fb-star" type="button" role="radio" aria-checked="false" aria-label="1 star" data-star="1">★</button>
+            <button class="fb-star" type="button" role="radio" aria-checked="false" aria-label="2 stars" data-star="2">★</button>
+            <button class="fb-star" type="button" role="radio" aria-checked="false" aria-label="3 stars" data-star="3">★</button>
+            <button class="fb-star" type="button" role="radio" aria-checked="false" aria-label="4 stars" data-star="4">★</button>
+            <button class="fb-star" type="button" role="radio" aria-checked="false" aria-label="5 stars" data-star="5">★</button>
+          </div>
+
+          <label class="fb-label" for="fbText">Your comment</label>
+          <textarea class="fb-text" id="fbText" maxlength="1000" placeholder="What did you like? What could be better?"></textarea>
+          <p class="fb-error" id="fbError">Please pick a star rating first.</p>
+
+          <p class="fb-terms">Feedback follows the same <a href="../games-hub/#legal">Terms &amp; policies</a> as the games: no personal info needed, keep it clean (moderation rules apply), and feedback may be used to improve the games.</p>
+
+          <div class="fb-actions">
+            <button class="btn" type="button" data-close-feedback>Cancel</button>
+            <button class="btn primary" type="button" id="fbSubmit">Send feedback</button>
+          </div>
+        </div>
+
+        <div class="fb-thanks" id="fbThanks" aria-live="polite">
+          <p class="big">Thanks! 💚</p>
+          <p>Your feedback was saved on this device. It helps make the games better.</p>
+          <button class="btn primary" type="button" data-close-feedback>Done</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    (function () {
+      "use strict";
+
+      var COLS = 20, ROWS = 20;
+      var LS_BEST = "snake-best-v1";
+      var LS_STATS = "snake-stats-v1";
+      var LS_PREFS = "snake-prefs-v1";
+      var LS_HINT = "snake-hint-v1";
+
+      var DIFFS = {
+        chill:   { label: "Chill",   base: 175, min: 80, step: 7, mult: 1, note: "Gentle pace · apples worth ×1" },
+        classic: { label: "Classic", base: 130, min: 62, step: 6, mult: 2, note: "Classic pace · apples worth ×2" },
+        turbo:   { label: "Turbo",   base: 98,  min: 48, step: 4, mult: 3, note: "Fast & frantic · apples worth ×3" }
+      };
+      var DIRS = {
+        up:    { x: 0, y: -1 },
+        down:  { x: 0, y: 1 },
+        left:  { x: -1, y: 0 },
+        right: { x: 1, y: 0 }
+      };
+
+      /* ---------- Storage (all on-device) ---------- */
+      function loadJSON(key, fallback) {
+        try {
+          var raw = localStorage.getItem(key);
+          if (!raw) return fallback;
+          var parsed = JSON.parse(raw);
+          return parsed && typeof parsed === "object" ? parsed : fallback;
+        } catch (e) { return fallback; }
+      }
+      function saveJSON(key, val) {
+        try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) {}
+      }
+      function saveFlag(key) { try { localStorage.setItem(key, "1"); } catch (e) {} }
+      function readFlag(key) { try { return localStorage.getItem(key) === "1"; } catch (e) { return false; } }
+
+      var best = loadJSON(LS_BEST, { score: 0, length: 0 });
+      var stats = loadJSON(LS_STATS, { games: 0, apples: 0 });
+      var prefs = loadJSON(LS_PREFS, { difficulty: "classic", edges: "solid", soundOn: true, mode: "scored" });
+      if (!DIFFS[prefs.difficulty]) prefs.difficulty = "classic";
+      if (prefs.edges !== "wrap") prefs.edges = "solid";
+      if (typeof prefs.soundOn !== "boolean") prefs.soundOn = true;
+      if (prefs.mode !== "practice") prefs.mode = "scored";
+
+      var difficulty = prefs.difficulty;
+      var edges = prefs.edges;
+      var soundOn = prefs.soundOn;
+      var mode = prefs.mode;
+      function isPractice() { return mode === "practice"; }
+
+      /* ---------- DOM ---------- */
+      function $(id) { return document.getElementById(id); }
+      var canvas = $("board"), ctx = canvas.getContext("2d");
+      var boardOverlay = $("boardOverlay"), overlayContent = $("overlayContent");
+      var startBtn = $("startBtn"), restartBtn = $("restartBtn");
+      var statScore = $("statScore"), statBest = $("statBest"),
+          statLength = $("statLength"), statSpeed = $("statSpeed");
+      var diffNote = $("diffNote"), career = $("career"), hint = $("hint");
+      var modeNote = $("modeNote"), practiceBanner = $("practiceBanner"), endPracticeBtn = $("endPracticeBtn");
+      var soundBtn = $("soundBtn");
+      var reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      /* ---------- Sound (tiny WebAudio bleeps) ---------- */
+      var audioCtx = null;
+      function beep(freq, dur, type, vol, when) {
+        if (!soundOn) return;
+        try {
+          if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          if (audioCtx.state === "suspended") audioCtx.resume();
+          var t = audioCtx.currentTime + (when || 0);
+          var osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+          osc.type = type || "square";
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(vol || 0.05, t);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+          osc.connect(gain); gain.connect(audioCtx.destination);
+          osc.start(t); osc.stop(t + dur + 0.02);
+        } catch (e) {}
+      }
+      function sndEat()   { beep(660, 0.09, "square", 0.045); }
+      function sndBonus() { beep(660, 0.08, "square", 0.05); beep(880, 0.08, "square", 0.05, 0.07); beep(1320, 0.12, "square", 0.05, 0.14); }
+      function sndDie()   { beep(320, 0.16, "sawtooth", 0.05); beep(210, 0.2, "sawtooth", 0.05, 0.13); beep(130, 0.3, "sawtooth", 0.05, 0.26); }
+      function sndWin()   { beep(523, 0.1, "square", 0.05); beep(659, 0.1, "square", 0.05, 0.09); beep(784, 0.1, "square", 0.05, 0.18); beep(1046, 0.22, "square", 0.05, 0.27); }
+      function sndClick() { beep(440, 0.05, "square", 0.03); }
+
+      /* ---------- Game state ---------- */
+      var state = "idle"; // idle | countdown | running | paused | over
+      var snake = [], dir = DIRS.right, dirQueue = [];
+      var food = null, bonus = null, bonusLeftMs = 0;
+      var score = 0, runApples = 0, redSinceBonus = 0, lastTickMs = 0;
+      var timer = null, countTimer = null, lastTs = 0;
+      var ateFlash = 0; // frames of head "pop" after eating
+
+      function tickMs() {
+        var d = DIFFS[difficulty];
+        var lvl = Math.floor(runApples / 5);
+        var ms = Math.max(d.min, d.base - lvl * d.step);
+        if (isPractice()) ms = Math.max(105, ms + 45); // practice runs a touch slower
+        return ms;
+      }
+      function speedLevel() { return Math.floor(runApples / 5) + 1; }
+
+      function emptyCell() {
+        var taken = {};
+        snake.forEach(function (s) { taken[s.x + "," + s.y] = true; });
+        if (food) taken[food.x + "," + food.y] = true;
+        if (bonus) taken[bonus.x + "," + bonus.y] = true;
+        var free = [];
+        for (var x = 0; x < COLS; x++) for (var y = 0; y < ROWS; y++) {
+          if (!taken[x + "," + y]) free.push({ x: x, y: y });
+        }
+        if (!free.length) return null;
+        return free[Math.floor(Math.random() * free.length)];
+      }
+
+      function resetRun() {
+        var cy = Math.floor(ROWS / 2);
+        snake = [
+          { x: 7, y: cy }, { x: 6, y: cy }, { x: 5, y: cy }, { x: 4, y: cy }
+        ];
+        dir = DIRS.right; dirQueue = [];
+        score = 0; runApples = 0; redSinceBonus = 0;
+        bonus = null; bonusLeftMs = 0; ateFlash = 0;
+        food = emptyCell();
+        updateStats();
+        draw();
+      }
+
+      function updateStats(pop) {
+        statScore.textContent = score;
+        statBest.textContent = isPractice() ? best.score : Math.max(best.score, score);
+        statLength.textContent = snake.length;
+        statSpeed.textContent = speedLevel();
+        if (pop && !reducedMotion) {
+          statScore.classList.remove("pop");
+          void statScore.offsetWidth;
+          statScore.classList.add("pop");
+          setTimeout(function () { statScore.classList.remove("pop"); }, 320);
+        }
+        career.innerHTML = "Career: <strong>" + stats.games + "</strong> games · <strong>" +
+          stats.apples + "</strong> apples eaten · best length <strong>" +
+          Math.max(best.length, 0) + "</strong>" +
+          (isPractice() ? " · <strong>Practice</strong> — this round doesn't count" : "");
+        if (endPracticeBtn) {
+          endPracticeBtn.hidden = !(isPractice() && (state === "running" || state === "paused" || state === "countdown"));
+        }
+      }
+
+      function startBtnLabel() {
+        if (state === "paused") return "▶ Resume";
+        if (state === "over") return isPractice() ? "▶ Practice again" : "▶ Play again";
+        return isPractice() ? "▶ Start practice" : "▶ Start game";
+      }
+      function updateModeUI() {
+        document.querySelectorAll("[data-mode]").forEach(function (b) {
+          b.setAttribute("aria-pressed", b.getAttribute("data-mode") === mode ? "true" : "false");
+        });
+        modeNote.textContent = isPractice()
+          ? "Just for fun — slower, no game-over bumps, score doesn't count."
+          : "This one counts — chase that best score.";
+        practiceBanner.classList.toggle("show", isPractice());
+        if (state === "idle" || state === "over") startBtn.textContent = startBtnLabel();
+        updateStats();
+      }
+
+      /* ---------- Overlay on the board ---------- */
+      function showOverlay(html) { overlayContent.innerHTML = html; boardOverlay.classList.add("open"); }
+      function hideOverlay() { boardOverlay.classList.remove("open"); overlayContent.innerHTML = ""; }
+
+      function showReady() {
+        if (isPractice()) {
+          showOverlay(
+            '<span class="practice-tag">Practice round</span>' +
+            '<p class="big">Ready to warm up?</p>' +
+            '<p class="sub">Eat apples and get the hang of it. Bumps won\'t end it, and the score is just for fun.</p>' +
+            '<button class="btn" type="button" id="ovStart">▶ Start practice</button>'
+          );
+        } else {
+          showOverlay(
+            '<p class="big">Ready?</p>' +
+            '<p class="sub">Eat apples. Grow. Don\'t bite yourself.</p>' +
+            '<button class="btn" type="button" id="ovStart">▶ Start</button>'
+          );
+        }
+        var b = $("ovStart");
+        if (b) b.addEventListener("click", function () { startGame(); });
+      }
+
+      /* ---------- Flow ---------- */
+      function startGame() {
+        stopLoop();
+        resetRun();
+        state = "countdown";
+        startBtn.textContent = "⏸ Pause";
+        updateStats();
+        if (!readFlag(LS_HINT)) { hint.classList.add("gone"); saveFlag(LS_HINT); }
+        var n = 3;
+        showOverlay('<p class="big count" id="countNum">' + n + "</p>");
+        countTimer = setInterval(function () {
+          n--;
+          if (n <= 0) {
+            clearInterval(countTimer); countTimer = null;
+            hideOverlay();
+            state = "running";
+            updateStats();
+            lastTs = performance.now();
+            timer = requestAnimationFrame(loop);
+          } else {
+            var el = $("countNum");
+            if (el) el.textContent = n;
+            beep(520, 0.06, "square", 0.035);
+          }
+        }, reducedMotion ? 260 : 520);
+        beep(520, 0.06, "square", 0.035);
+      }
+
+      function stopLoop() {
+        if (timer) cancelAnimationFrame(timer);
+        timer = null;
+        if (countTimer) { clearInterval(countTimer); countTimer = null; }
+      }
+
+      function pauseGame(showMsg) {
+        if (state !== "running" && state !== "countdown") return;
+        stopLoop();
+        state = "paused";
+        startBtn.textContent = "▶ Resume";
+        updateStats();
+        if (showMsg) {
+          showOverlay(
+            (isPractice() ? '<span class="practice-tag">Practice round</span>' : "") +
+            '<p class="big">Paused</p>' +
+            '<p class="sub">Score ' + score + " · length " + snake.length + "</p>" +
+            '<button class="btn" type="button" id="ovResume">▶ Resume</button>' +
+            (isPractice() ? ' <button class="btn" type="button" id="ovEndPractice">End practice</button>' : "")
+          );
+          var b = $("ovResume");
+          if (b) b.addEventListener("click", resumeGame);
+          var e = $("ovEndPractice");
+          if (e) e.addEventListener("click", endPractice);
+        }
+      }
+
+      function resumeGame() {
+        if (state !== "paused") return;
+        hideOverlay();
+        state = "running";
+        startBtn.textContent = "⏸ Pause";
+        updateStats();
+        lastTs = performance.now();
+        timer = requestAnimationFrame(loop);
+      }
+
+      function endPractice() {
+        if (!isPractice()) return;
+        if (state !== "running" && state !== "paused" && state !== "countdown") return;
+        stopLoop();
+        state = "over";
+        startBtn.textContent = "▶ Practice again";
+        updateStats();
+        showOverlay(
+          '<span class="practice-tag">Practice round</span>' +
+          '<p class="big">Nice warm-up!</p>' +
+          "<p>Score <strong>" + score + "</strong> · Length <strong>" + snake.length +
+          "</strong> · Apples <strong>" + runApples + "</strong></p>" +
+          '<p class="sub">Just for fun — that one didn\'t count toward your best (' + best.score + ").</p>" +
+          '<button class="btn" type="button" id="ovAgain">↺ Practice again</button> ' +
+          '<button class="btn" type="button" id="ovGoReal">Go for real</button>'
+        );
+        var b = $("ovAgain");
+        if (b) { b.addEventListener("click", startGame); b.focus(); }
+        var g = $("ovGoReal");
+        if (g) g.addEventListener("click", function () {
+          setMode("scored");
+          startGame();
+        });
+      }
+
+      function endRun(won) {
+        if (isPractice()) {
+          // Practice only reaches here by filling the board — celebrate, save nothing.
+          stopLoop();
+          state = "over";
+          startBtn.textContent = "▶ Practice again";
+          updateStats();
+          sndWin();
+          showOverlay(
+            '<span class="practice-tag">Practice round</span>' +
+            '<p class="big">You filled the board!</p>' +
+            "<p>Score <strong>" + score + "</strong> · Length <strong>" + snake.length +
+            "</strong> · Apples <strong>" + runApples + "</strong></p>" +
+            '<p class="sub">In practice, no less. That one didn\'t count — imagine it for real.</p>' +
+            '<button class="btn" type="button" id="ovAgain">↺ Practice again</button>'
+          );
+          var pb = $("ovAgain");
+          if (pb) { pb.addEventListener("click", startGame); pb.focus(); }
+          return;
+        }
+        stopLoop();
+        state = "over";
+        startBtn.textContent = "▶ Play again";
+        var isBest = score > best.score;
+        if (isBest) { best.score = score; }
+        if (snake.length > best.length) best.length = snake.length;
+        saveJSON(LS_BEST, best);
+        stats.games += 1;
+        stats.apples += runApples;
+        saveJSON(LS_STATS, stats);
+        updateStats();
+        if (won) sndWin(); else sndDie();
+        showOverlay(
+          (isBest && score > 0 ? '<span class="newbest">★ New best!</span>' : "") +
+          '<p class="big">' + (won ? "You filled the board!" : "Game over") + "</p>" +
+          "<p>Score <strong>" + score + "</strong> · Length <strong>" + snake.length +
+          "</strong> · Apples <strong>" + runApples + "</strong></p>" +
+          '<p class="sub">Best score: ' + best.score + "</p>" +
+          '<button class="btn" type="button" id="ovAgain">↺ Play again</button>'
+        );
+        var b = $("ovAgain");
+        if (b) { b.addEventListener("click", startGame); b.focus(); }
+      }
+
+      /* ---------- Core loop ---------- */
+      function loop(ts) {
+        if (state !== "running") return;
+        var dt = ts - lastTs;
+        lastTs = ts;
+        lastTickMs += dt;
+        if (bonus) {
+          bonusLeftMs -= dt;
+          if (bonusLeftMs <= 0) { bonus = null; bonusLeftMs = 0; }
+        }
+        var interval = tickMs();
+        var guard = 0;
+        while (lastTickMs >= interval && state === "running" && guard < 4) {
+          lastTickMs -= interval;
+          step();
+          guard++;
+        }
+        draw();
+        if (state === "running") timer = requestAnimationFrame(loop);
+      }
+
+      function step() {
+        if (dirQueue.length) {
+          var next = dirQueue.shift();
+          if (!(next.x === -dir.x && next.y === -dir.y) && !(next.x === dir.x && next.y === dir.y)) dir = next;
+        }
+        var head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+        if (edges === "wrap" || isPractice()) {
+          // Practice always wraps — walls are just a suggestion there.
+          head.x = (head.x + COLS) % COLS;
+          head.y = (head.y + ROWS) % ROWS;
+        } else if (head.x < 0 || head.y < 0 || head.x >= COLS || head.y >= ROWS) {
+          endRun(false);
+          return;
+        }
+
+        var eating = (food && head.x === food.x && head.y === food.y) ||
+                     (bonus && head.x === bonus.x && head.y === bonus.y);
+        var eatingBonus = !!(bonus && head.x === bonus.x && head.y === bonus.y);
+
+        // Self-collision: the tail cell frees up this step unless we're growing.
+        // In practice, biting yourself doesn't end it — you slither on through.
+        if (!isPractice()) {
+          var body = eating ? snake : snake.slice(0, snake.length - 1);
+          for (var i = 0; i < body.length; i++) {
+            if (body[i].x === head.x && body[i].y === head.y) { endRun(false); return; }
+          }
+        }
+
+        snake.unshift(head);
+        if (!eating) { snake.pop(); return; }
+
+        var mult = DIFFS[difficulty].mult;
+        runApples++;
+        ateFlash = 3;
+        if (eatingBonus) {
+          score += 50 * mult;
+          bonus = null; bonusLeftMs = 0;
+          sndBonus();
+        } else {
+          score += 10 * mult;
+          redSinceBonus++;
+          sndEat();
+          food = emptyCell();
+          if (!food) { updateStats(true); endRun(true); return; } // board full
+          if (redSinceBonus >= 5 && !bonus) {
+            redSinceBonus = 0;
+            var cell = emptyCell();
+            if (cell) { bonus = cell; bonusLeftMs = 7000; }
+          }
+        }
+        if (snake.length >= COLS * ROWS) { updateStats(true); endRun(true); return; }
+        updateStats(true);
+      }
+
+      function queueDir(d) {
+        if (state !== "running" && state !== "countdown") return;
+        var last = dirQueue.length ? dirQueue[dirQueue.length - 1] : dir;
+        if (d.x === -last.x && d.y === -last.y) return; // no reversing
+        if (d.x === last.x && d.y === last.y) return;   // no duplicates
+        if (dirQueue.length < 2) dirQueue.push(d);
+      }
+
+      /* ---------- Drawing ---------- */
+      var cellPx = 30;
+      function fitCanvas() {
+        var w = canvas.clientWidth || 600;
+        var dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(w * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        cellPx = w / COLS;
+        draw();
+      }
+
+      function roundRect(x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+      }
+
+      function drawApple(cx, cy, golden, fracLeft) {
+        var c = cellPx;
+        var r = c * 0.34 * (golden ? 1.05 : 1);
+        // stem
+        ctx.strokeStyle = "#6b4423";
+        ctx.lineWidth = Math.max(2, c * 0.07);
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - r * 0.75);
+        ctx.quadraticCurveTo(cx + r * 0.12, cy - r * 1.15, cx + r * 0.34, cy - r * 1.22);
+        ctx.stroke();
+        // leaf
+        ctx.fillStyle = "#4d9b3a";
+        ctx.beginPath();
+        ctx.ellipse(cx + r * 0.48, cy - r * 1.05, r * 0.34, r * 0.17, -0.5, 0, Math.PI * 2);
+        ctx.fill();
+        // body
+        ctx.fillStyle = golden ? "#f5b921" : "#e2483d";
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fill();
+        // shine
+        ctx.fillStyle = "rgba(255,255,255,0.4)";
+        ctx.beginPath();
+        ctx.ellipse(cx - r * 0.35, cy - r * 0.38, r * 0.2, r * 0.13, -0.6, 0, Math.PI * 2);
+        ctx.fill();
+        // golden countdown ring
+        if (golden && fracLeft != null) {
+          ctx.strokeStyle = "rgba(255, 236, 170, 0.95)";
+          ctx.lineWidth = Math.max(2, c * 0.08);
+          ctx.beginPath();
+          ctx.arc(cx, cy, r + c * 0.13, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, fracLeft));
+          ctx.stroke();
+        }
+      }
+
+      function draw() {
+        var c = cellPx, W = COLS * c, H = ROWS * c;
+        // grass checkerboard
+        for (var x = 0; x < COLS; x++) {
+          for (var y = 0; y < ROWS; y++) {
+            ctx.fillStyle = (x + y) % 2 === 0 ? "#2f5727" : "#2a4e23";
+            ctx.fillRect(x * c, y * c, c, c);
+          }
+        }
+        if (edges === "solid" && !isPractice()) {
+          ctx.strokeStyle = "rgba(226, 72, 61, 0.55)";
+          ctx.lineWidth = Math.max(2, c * 0.09);
+          ctx.strokeRect(ctx.lineWidth / 2, ctx.lineWidth / 2, W - ctx.lineWidth, H - ctx.lineWidth);
+        }
+        if (food) drawApple(food.x * c + c / 2, food.y * c + c / 2, false, null);
+        if (bonus) drawApple(bonus.x * c + c / 2, bonus.y * c + c / 2, true, bonusLeftMs / 7000);
+
+        // snake body (tail → head so the head draws on top)
+        for (var i = snake.length - 1; i >= 0; i--) {
+          var s = snake[i];
+          var t = snake.length <= 1 ? 0 : i / (snake.length - 1); // 0 head → 1 tail
+          var hue = 96 - t * 14, light = 62 - t * 16;
+          var pad = c * 0.07, sz = c - pad * 2;
+          if (i === 0 && ateFlash > 0) { pad = c * 0.01; sz = c - pad * 2; }
+          ctx.fillStyle = "hsl(" + hue + ", 62%, " + light + "%)";
+          roundRect(s.x * c + pad, s.y * c + pad, sz, sz, c * 0.26);
+          ctx.fill();
+          if (i === 0) {
+            // eyes, oriented by travel direction
+            var cxp = s.x * c + c / 2, cyp = s.y * c + c / 2;
+            var ex = dir.x !== 0 ? dir.x * c * 0.14 : 0;
+            var ey = dir.y !== 0 ? dir.y * c * 0.14 : 0;
+            var px = dir.y !== 0 ? c * 0.17 : 0;
+            var py = dir.x !== 0 ? c * 0.17 : 0;
+            [[-1, 1], [1, 1]].forEach(function (sgn) {
+              var eyeX = cxp + ex + px * sgn[0], eyeY = cyp + ey + py * sgn[0];
+              ctx.fillStyle = "#ffffff";
+              ctx.beginPath(); ctx.arc(eyeX, eyeY, c * 0.13, 0, Math.PI * 2); ctx.fill();
+              ctx.fillStyle = "#1c2a12";
+              ctx.beginPath(); ctx.arc(eyeX + dir.x * c * 0.05, eyeY + dir.y * c * 0.05, c * 0.065, 0, Math.PI * 2); ctx.fill();
+            });
+            // tongue when idle/ready, for a bit of charm
+            if (state === "idle") {
+              ctx.strokeStyle = "#e2483d";
+              ctx.lineWidth = Math.max(1.5, c * 0.06);
+              var tx = cxp + dir.x * c * 0.42, ty = cyp + dir.y * c * 0.42;
+              ctx.beginPath();
+              ctx.moveTo(cxp + dir.x * c * 0.3, cyp + dir.y * c * 0.3);
+              ctx.lineTo(tx, ty);
+              ctx.lineTo(tx + (dir.y !== 0 ? c * 0.1 : 0) + dir.x * c * 0.08, ty + (dir.x !== 0 ? c * 0.1 : 0) + dir.y * c * 0.08);
+              ctx.moveTo(tx, ty);
+              ctx.lineTo(tx - (dir.y !== 0 ? c * 0.1 : 0) + dir.x * c * 0.08, ty - (dir.x !== 0 ? c * 0.1 : 0) + dir.y * c * 0.08);
+              ctx.stroke();
+            }
+          }
+        }
+        if (ateFlash > 0) ateFlash--;
+      }
+
+      /* ---------- Controls wiring ---------- */
+      startBtn.addEventListener("click", function () {
+        sndClick();
+        if (state === "running" || state === "countdown") pauseGame(true);
+        else if (state === "paused") resumeGame();
+        else startGame();
+      });
+      restartBtn.addEventListener("click", function () { sndClick(); startGame(); });
+
+      function setMode(nextMode) {
+        if (nextMode !== "practice") nextMode = "scored";
+        if (nextMode === mode) { updateModeUI(); return; }
+        var midRun = (state === "running" || state === "paused" || state === "countdown");
+        mode = nextMode;
+        prefs.mode = mode; saveJSON(LS_PREFS, prefs);
+        if (midRun) {
+          // A run can't change what it counts for halfway — scrap it, no saving.
+          stopLoop();
+          state = "idle";
+          resetRun();
+          startBtn.textContent = startBtnLabel();
+          showReady();
+        }
+        updateModeUI();
+      }
+      document.querySelectorAll("[data-mode]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          sndClick();
+          var wasOver = (state === "over");
+          setMode(btn.getAttribute("data-mode"));
+          if (state === "idle") showReady();
+          else if (wasOver) { state = "idle"; resetRun(); startBtn.textContent = startBtnLabel(); updateModeUI(); showReady(); }
+        });
+      });
+      if (endPracticeBtn) endPracticeBtn.addEventListener("click", function () { sndClick(); endPractice(); });
+
+      document.querySelectorAll("[data-diff]").forEach(function (btn) {
+        btn.setAttribute("aria-pressed", btn.getAttribute("data-diff") === difficulty ? "true" : "false");
+        btn.addEventListener("click", function () {
+          difficulty = btn.getAttribute("data-diff");
+          prefs.difficulty = difficulty; saveJSON(LS_PREFS, prefs);
+          document.querySelectorAll("[data-diff]").forEach(function (b) {
+            b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+          });
+          diffNote.textContent = DIFFS[difficulty].note;
+          sndClick();
+        });
+      });
+      diffNote.textContent = DIFFS[difficulty].note;
+
+      document.querySelectorAll("[data-edge]").forEach(function (btn) {
+        btn.setAttribute("aria-pressed", btn.getAttribute("data-edge") === edges ? "true" : "false");
+        btn.addEventListener("click", function () {
+          edges = btn.getAttribute("data-edge");
+          prefs.edges = edges; saveJSON(LS_PREFS, prefs);
+          document.querySelectorAll("[data-edge]").forEach(function (b) {
+            b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+          });
+          draw();
+          sndClick();
+        });
+      });
+
+      function syncSoundBtn() {
+        soundBtn.textContent = soundOn ? "🔊" : "🔇";
+        soundBtn.setAttribute("aria-pressed", soundOn ? "true" : "false");
+        soundBtn.setAttribute("aria-label", soundOn ? "Sound on" : "Sound off");
+      }
+      soundBtn.addEventListener("click", function () {
+        soundOn = !soundOn;
+        prefs.soundOn = soundOn; saveJSON(LS_PREFS, prefs);
+        syncSoundBtn();
+        sndClick();
+      });
+      syncSoundBtn();
+
+      // D-pad: show when there's no fine pointer (touch devices)
+      var dpad = $("dpad");
+      if (window.matchMedia && window.matchMedia("(pointer: coarse)").matches) dpad.classList.add("on");
+      dpad.querySelectorAll("[data-dir]").forEach(function (btn) {
+        btn.addEventListener("pointerdown", function (ev) {
+          ev.preventDefault();
+          queueDir(DIRS[btn.getAttribute("data-dir")]);
+        });
+      });
+
+      // Swipe on the board
+      var touchStart = null;
+      canvas.addEventListener("touchstart", function (ev) {
+        if (ev.touches.length === 1) touchStart = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+      }, { passive: true });
+      canvas.addEventListener("touchmove", function (ev) {
+        if (state === "running") ev.preventDefault();
+        if (!touchStart || !ev.touches.length) return;
+        var dx = ev.touches[0].clientX - touchStart.x;
+        var dy = ev.touches[0].clientY - touchStart.y;
+        if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
+        if (Math.abs(dx) > Math.abs(dy)) queueDir(dx > 0 ? DIRS.right : DIRS.left);
+        else queueDir(dy > 0 ? DIRS.down : DIRS.up);
+        touchStart = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+      }, { passive: false });
+      canvas.addEventListener("touchend", function () { touchStart = null; });
+
+      // Keyboard
+      document.addEventListener("keydown", function (ev) {
+        var anyOverlayOpen = document.querySelector(".overlay.open");
+        if (anyOverlayOpen) return; // overlay handles its own Escape
+        var k = ev.key;
+        // If a button has focus, Space/Enter belong to that button's click.
+        if ((k === " " || k === "Enter") && document.activeElement && document.activeElement.tagName === "BUTTON") return;
+        var handled = true;
+        if (k === "ArrowUp" || k === "w" || k === "W") queueDir(DIRS.up);
+        else if (k === "ArrowDown" || k === "s" || k === "S") queueDir(DIRS.down);
+        else if (k === "ArrowLeft" || k === "a" || k === "A") queueDir(DIRS.left);
+        else if (k === "ArrowRight" || k === "d" || k === "D") queueDir(DIRS.right);
+        else if (k === " " || k === "p" || k === "P") {
+          if (state === "running" || state === "countdown") pauseGame(true);
+          else if (state === "paused") resumeGame();
+          else if (state === "idle" || state === "over") startGame();
+        }
+        else if (k === "r" || k === "R") startGame();
+        else handled = false;
+        if (handled) ev.preventDefault();
+      });
+
+      // Auto-pause when the tab loses focus
+      document.addEventListener("visibilitychange", function () {
+        if (document.hidden && state === "running") pauseGame(false);
+        if (document.hidden && state === "paused") {
+          showOverlay('<p class="big">Paused</p><p class="sub">Score ' + score + '</p><button class="btn" type="button" id="ovResume">▶ Resume</button>');
+          var b = $("ovResume");
+          if (b) b.addEventListener("click", resumeGame);
+        }
+      });
+
+      /* ---------- How to play / Rules overlays ---------- */
+      var lastFocus = null;
+      function wireOverlay(openBtnId, overlayId) {
+        var overlay = $(overlayId), openBtn = $(openBtnId);
+        function open() {
+          lastFocus = document.activeElement;
+          if (state === "running") pauseGame(false);
+          overlay.classList.add("open");
+          var c = overlay.querySelector("[data-close]");
+          if (c) c.focus();
+        }
+        function close() {
+          overlay.classList.remove("open");
+          if (lastFocus && lastFocus.focus) lastFocus.focus();
+        }
+        openBtn.addEventListener("click", open);
+        overlay.querySelector("[data-close]").addEventListener("click", close);
+        overlay.addEventListener("click", function (ev) { if (ev.target === overlay) close(); });
+        document.addEventListener("keydown", function (ev) {
+          if (ev.key === "Escape" && overlay.classList.contains("open")) close();
+        });
+      }
+      wireOverlay("howBtn", "howOverlay");
+      wireOverlay("rulesBtn", "rulesOverlay");
+
+      /* ---------- Feedback (standard: rating + comment, saved locally) ---------- */
+      var LS_FEEDBACK = "snake-feedback-v1";
+      var fbOverlay = $("feedbackOverlay");
+      var fbForm = $("fbForm"), fbThanks = $("fbThanks");
+      var fbText = $("fbText"), fbError = $("fbError"), fbSubmit = $("fbSubmit");
+      var fbStars = Array.prototype.slice.call(fbOverlay.querySelectorAll("[data-star]"));
+      var fbRating = 0;
+      var fbLastFocus = null;
+
+      function paintStars() {
+        fbStars.forEach(function (s) {
+          var v = parseInt(s.getAttribute("data-star"), 10);
+          s.classList.toggle("on", v <= fbRating);
+          s.setAttribute("aria-checked", v === fbRating ? "true" : "false");
+        });
+      }
+      fbStars.forEach(function (s) {
+        s.addEventListener("click", function () {
+          fbRating = parseInt(s.getAttribute("data-star"), 10);
+          fbError.classList.remove("show");
+          paintStars();
+        });
+      });
+
+      function openFeedback() {
+        fbLastFocus = document.activeElement;
+        if (state === "running") pauseGame(false);
+        fbRating = 0; paintStars();
+        fbText.value = "";
+        fbError.classList.remove("show");
+        fbForm.classList.remove("hide");
+        fbThanks.classList.remove("show");
+        fbOverlay.classList.add("open");
+        if (fbStars[0]) fbStars[0].focus();
+      }
+      function closeFeedback() {
+        fbOverlay.classList.remove("open");
+        if (fbLastFocus && fbLastFocus.focus) fbLastFocus.focus();
+      }
+      $("feedbackBtn").addEventListener("click", openFeedback);
+      fbOverlay.querySelectorAll("[data-close-feedback]").forEach(function (b) {
+        b.addEventListener("click", closeFeedback);
+      });
+      fbOverlay.addEventListener("click", function (ev) { if (ev.target === fbOverlay) closeFeedback(); });
+      document.addEventListener("keydown", function (ev) {
+        if (ev.key === "Escape" && fbOverlay.classList.contains("open")) closeFeedback();
+      });
+      fbSubmit.addEventListener("click", function () {
+        if (!fbRating) { fbError.classList.add("show"); return; }
+        var entry = {
+          game: "Snake",
+          rating: fbRating,
+          comment: (fbText.value || "").trim().slice(0, 1000),
+          mode: mode,
+          difficulty: difficulty,
+          edges: edges,
+          speedLevel: speedLevel(),
+          score: score,
+          length: snake.length,
+          apples: runApples,
+          gameState: state,
+          at: new Date().toISOString()
+        };
+        var saved = loadJSON(LS_FEEDBACK, []);
+        if (!Array.isArray(saved)) saved = [];
+        saved.push(entry);
+        saveJSON(LS_FEEDBACK, saved);
+        /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+        try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "snake", rating: entry.rating||0, text: entry.comment||"", tag: "", mode: "real", level: "", difficulty: entry.difficulty||"", score: entry.score||0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+        fbForm.classList.add("hide");
+        fbThanks.classList.add("show");
+        var done = fbThanks.querySelector("[data-close-feedback]");
+        if (done) done.focus();
+        sndClick();
+      });
+
+      /* ---------- Init ---------- */
+      if (readFlag(LS_HINT)) hint.classList.add("gone");
+      resetRun();
+      updateModeUI();
+      startBtn.textContent = startBtnLabel();
+      showReady();
+      fitCanvas();
+      var resizeT = null;
+      window.addEventListener("resize", function () {
+        clearTimeout(resizeT);
+        resizeT = setTimeout(fitCanvas, 120);
+      });
+    })();
+    </script>
+  </body>
+</html>

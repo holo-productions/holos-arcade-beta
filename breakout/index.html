@@ -1,0 +1,891 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Breakout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f3efe6; --bg2:#e9e2d0; --panel:#fffdf6; --panel2:#171a1e; --ink:#1a1d21; --muted:#6b6f66;
+    --line:#d8d0ba; --accent:#d9481f; --accent2:#0f766e; --gold:#e9a426; --field:#101418; --field-line:#2a2f36;
+    --btn:#1a1d21; --btn-ink:#fffdf6; --shadow:0 10px 30px rgba(26,29,33,.14);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#121417; --bg2:#17191d; --panel:#1c1f24; --panel2:#0e1013; --ink:#f2efe6; --muted:#a8a99f; --line:#2e3238; --btn:#f2efe6; --btn-ink:#17191d; --shadow:0 10px 30px rgba(0,0,0,.45); }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.45;-webkit-tap-highlight-color:transparent}
+  button{font:inherit;min-height:44px;cursor:pointer}
+  .wrap{max-width:880px;margin:0 auto;padding:16px 16px 28px}
+  /* Top bar */
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .brand{display:flex;align-items:center;gap:12px}
+  .mark{width:44px;height:44px;border-radius:8px;background:var(--panel2);display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:8px;flex:none}
+  .mark i{display:block;border-radius:2px}
+  .mark i:nth-child(1){background:#e94f2a}.mark i:nth-child(2){background:#e9a426}.mark i:nth-child(3){background:#2aa198}
+  .mark i:nth-child(4){background:#2aa198}.mark i:nth-child(5){background:#3b82c4}.mark i:nth-child(6){background:#e94f2a}
+  .mark i:nth-child(7){background:#e9a426}.mark i:nth-child(8){background:#e94f2a}.mark i:nth-child(9){background:#3b82c4}
+  h1{font-family:"Chakra Petch",system-ui,sans-serif;font-size:30px;letter-spacing:.06em;line-height:1;margin:0;font-weight:700}
+  .sub{font-size:13px;color:var(--muted);margin-top:3px}
+  .top-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{border:1.5px solid var(--ink);background:transparent;color:var(--ink);padding:9px 14px;border-radius:999px;font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:7px}
+  .btn.primary{background:var(--btn);color:var(--btn-ink)}
+  .btn.accent{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn:active{transform:translateY(1px)}
+  .btn:focus-visible, canvas:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+  /* Score strip */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 12px 7px}
+  .stat .k{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .stat .v{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:700;line-height:1.15}
+  .stat .v small{font-size:13px;color:var(--muted);font-weight:600}
+  .lives{letter-spacing:2px;color:var(--accent);font-size:18px !important;padding-top:2px}
+  /* Stage */
+  .stage{background:var(--panel2);border-radius:14px;padding:10px;box-shadow:var(--shadow);position:relative}
+  .canvas-wrap{position:relative;border-radius:8px;overflow:hidden;background:var(--field)}
+  canvas{display:block;width:100%;height:auto;aspect-ratio:4/3;touch-action:none}
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;background:rgba(10,12,14,.78);color:#f5f1e6;backdrop-filter:blur(2px)}
+  .overlay[hidden]{display:none}
+  .overlay h2{font-family:"Chakra Petch",sans-serif;font-size:clamp(26px,6vw,40px);margin:0 0 6px;letter-spacing:.04em}
+  .overlay p{margin:0 0 16px;color:#cfcaba;max-width:420px;font-size:15px}
+  .overlay .big-score{font-family:"IBM Plex Mono",monospace;font-size:15px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);padding:8px 14px;border-radius:999px;margin-bottom:16px}
+  .overlay .row{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  .overlay .btn{border-color:#f5f1e6;color:#f5f1e6}
+  .overlay .btn.primary{background:#f5f1e6;color:#17191d;border-color:#f5f1e6}
+  .overlay .btn.accent{background:var(--accent);border-color:var(--accent);color:#fff}
+  .hintbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 4px 2px;color:#b9bcb2;font-size:13px;flex-wrap:wrap}
+  .hintbar .keys{font-family:"IBM Plex Mono",monospace;font-size:12px}
+  .hintbar kbd{background:#262b31;border:1px solid #3a4048;border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:#f2efe6;font-family:inherit}
+  /* Controls */
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+  .controls .spacer{flex:1}
+  .control-group{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .control-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .seg{display:inline-flex;border:1.5px solid var(--ink);border-radius:999px;overflow:hidden}
+  .seg button{border:0;background:transparent;padding:9px 13px;font-weight:600;font-size:14px;min-height:42px;color:var(--ink)}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+  .diff-note{margin:8px 2px 0;font-size:13px;color:var(--muted)}
+  .diff-note strong{color:var(--ink)}
+  .practice-banner{display:none;align-items:center;gap:8px;background:#e6f4f1;border:1.5px solid var(--accent2);color:#0b4f4a;border-radius:10px;padding:9px 12px;font-size:13.5px;font-weight:600;margin-bottom:10px}
+  .practice-banner.on{display:flex}
+  .practice-banner .pill{background:var(--accent2);color:#fff;font-size:11px;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:999px;font-weight:700;flex:none}
+  .practice-banner .exit-practice{margin-left:auto;flex:none;border:1.5px solid var(--accent2);background:transparent;color:inherit;padding:6px 12px;border-radius:999px;font-weight:700;font-size:13px;min-height:38px}
+  @media (prefers-color-scheme: dark){ .practice-banner{background:#12312e;color:#c8ece7} }
+  .seg button[data-mode="practice"][aria-pressed="true"]{background:var(--accent2);color:#fff}
+  .stat.practice-on{border-color:var(--accent2);box-shadow:inset 0 0 0 1px var(--accent2)}
+  .touchpad{display:none;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+  .touchpad button{min-height:56px;border-radius:12px;border:1.5px solid var(--ink);background:var(--panel);font-size:22px;color:var(--ink)}
+  @media (pointer:coarse){ .touchpad{display:grid} }
+  /* Legend */
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:13px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .chip{width:22px;height:12px;border-radius:3px;display:inline-block;flex:none}
+  .power{width:22px;height:22px;border-radius:50%;display:inline-grid;place-items:center;font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:700;color:#fff;flex:none}
+  footer{margin-top:18px;font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  /* Modals */
+  .modal-backdrop{position:fixed;inset:0;background:rgba(10,12,14,.62);display:flex;align-items:flex-end;justify-content:center;padding:0;z-index:50}
+  .modal-backdrop[hidden]{display:none}
+  .modal{background:var(--panel);color:var(--ink);width:100%;max-width:640px;max-height:88vh;overflow:auto;border-radius:16px 16px 0 0;padding:20px 20px 26px;box-shadow:var(--shadow)}
+  @media(min-width:640px){ .modal-backdrop{align-items:center;padding:18px} .modal{border-radius:16px} }
+  .modal h2{font-family:"Chakra Petch",sans-serif;font-size:24px;margin:0 0 4px;letter-spacing:.03em}
+  .modal h3{font-size:15px;margin:18px 0 6px}
+  .modal p,.modal li{font-size:14.5px}
+  .modal ul{margin:6px 0;padding-left:20px}
+  .modal li{margin:4px 0}
+  .modal .close-row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .icon-btn{width:44px;height:44px;border-radius:50%;border:1.5px solid var(--ink);background:transparent;font-size:18px;line-height:1;flex:none;color:var(--ink)}
+  table.score-table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0}
+  table.score-table th,table.score-table td{padding:7px 8px;text-align:left;border-bottom:1px solid var(--line)}
+  table.score-table td:last-child,table.score-table th:last-child{text-align:right;font-family:"IBM Plex Mono",monospace;font-weight:600}
+  .kbd-row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  .kbd-row span{font-size:13px;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+  /* Feedback */
+  .stars{display:flex;gap:6px;margin:8px 0 4px}
+  .stars button{width:48px;height:48px;border-radius:12px;border:1.5px solid var(--line);background:var(--panel);font-size:24px;line-height:1;color:var(--muted);padding:0}
+  .stars button[aria-pressed="true"]{border-color:var(--gold);color:var(--gold);background:var(--bg2)}
+  .stars button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+  .fb-field{margin-top:14px}
+  .fb-field label{display:block;font-size:13px;font-weight:700;letter-spacing:.04em;margin-bottom:6px}
+  .fb-field textarea{width:100%;min-height:110px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font:inherit;font-size:14.5px;padding:10px 12px;resize:vertical}
+  .fb-field textarea:focus-visible{outline:3px solid var(--gold);outline-offset:1px}
+  .fb-terms{font-size:12.5px;color:var(--muted);margin-top:10px}
+  .fb-status{font-size:14px;font-weight:600;margin-top:12px;min-height:20px}
+  .fb-status:empty{margin-top:0;min-height:0}
+  @media(max-width:560px){ h1{font-size:24px} .stats{grid-template-columns:repeat(2,1fr)} .stat .v{font-size:20px} }
+  @media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      <div>
+        <h1>BREAKOUT</h1>
+        <div class="sub">Smash every brick. Don't drop the ball.</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="btnHow" type="button">? How to play</button>
+      <button class="btn" id="btnRules" type="button">§ Rules</button>
+      <button class="btn" id="btnFeedback" type="button">✎ Feedback</button>
+      <button class="btn" id="btnSound" type="button" aria-pressed="true">🔊 Sound on</button>
+    </div>
+  </div>
+
+  <div class="practice-banner" id="practiceBanner" role="status"><span class="pill">Practice</span><span>No score saved · No game over · Hints &amp; aim guide on · Ball stays at a steady, slower pace</span><button class="exit-practice" id="btnExitPractice" type="button">Exit practice → Play</button></div>
+
+  <div class="stats" role="group" aria-label="Game stats">
+    <div class="stat" id="statScoreBox"><div class="k" id="statScoreLabel">Score</div><div class="v" id="statScore">0</div></div>
+    <div class="stat"><div class="k">Best</div><div class="v" id="statBest">0 <small id="bestNote"></small></div></div>
+    <div class="stat"><div class="k">Level</div><div class="v" id="statLevel">1</div></div>
+    <div class="stat"><div class="k">Balls left</div><div class="v lives" id="statLives" aria-label="3 balls left">●●●</div></div>
+  </div>
+
+  <div class="stage">
+    <div class="canvas-wrap">
+      <canvas id="game" width="800" height="600" tabindex="0" role="img" aria-label="Breakout game board. Use left and right arrow keys or drag to move the paddle. Press space to launch the ball."></canvas>
+      <div class="overlay" id="overlay">
+        <h2 id="ovTitle">Ready?</h2>
+        <p id="ovText">Move the paddle to bounce the ball into the wall. Clear every brick to advance. Normal difficulty — 3 balls. Want it gentler or tougher? Pick Easy or Hard under the board.</p>
+        <div class="big-score" id="ovScore" hidden>Score 0</div>
+        <div class="row">
+          <button class="btn accent" id="ovPrimary" type="button">▶ Start game</button>
+          <button class="btn" id="ovPractice" type="button">🎯 Practice round</button>
+          <button class="btn" id="ovHow" type="button">How to play</button>
+        </div>
+      </div>
+    </div>
+    <div class="hintbar">
+      <span id="hintText">👆 Drag, move your mouse, or use the arrow keys — then tap / press Space to launch.</span>
+      <span class="keys"><kbd>←</kbd> <kbd>→</kbd> move &nbsp;·&nbsp; <kbd>Space</kbd> launch / pause &nbsp;·&nbsp; <kbd>P</kbd> pause</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" id="btnNew" type="button">↺ New game</button>
+    <button class="btn" id="btnPracticeMain" type="button">🎯 Practice round</button>
+    <button class="btn" id="btnPause" type="button">⏸ Pause</button>
+    <div class="spacer"></div>
+    <div class="control-group">
+      <span class="control-label" id="modeLabel">Mode</span>
+      <div class="seg" role="group" aria-labelledby="modeLabel">
+        <button type="button" data-mode="play" aria-pressed="true">▶ Play</button>
+        <button type="button" data-mode="practice" aria-pressed="false">🎯 Practice</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <span class="control-label" id="diffLabel">Difficulty</span>
+      <div class="seg" role="group" aria-labelledby="diffLabel">
+        <button type="button" data-diff="easy" aria-pressed="false">Easy</button>
+        <button type="button" data-diff="normal" aria-pressed="true">Normal</button>
+        <button type="button" data-diff="hard" aria-pressed="false">Hard</button>
+      </div>
+    </div>
+  </div>
+  <p class="diff-note" id="diffNote"><strong>Normal</strong> · 3 balls · standard paddle &amp; ball speed · armoured bricks from Level 2. Changes apply on your next new game.</p>
+  <p class="diff-note" id="modeNote"><strong>Play mode</strong> · Score counts and your best is saved. Switch to <strong>Practice</strong> for a no-pressure round: no score saved, no game over, hints and an aim guide on, and a steady slower ball — great for warming up or learning angles.</p>
+
+  <div class="touchpad" aria-hidden="false">
+    <button type="button" id="touchLeft" aria-label="Move paddle left">◀</button>
+    <button type="button" id="touchRight" aria-label="Move paddle right">▶</button>
+  </div>
+
+  <div class="legend" aria-label="Power-up legend">
+    <span><span class="power" style="background:#0f766e">W</span> Wide paddle</span>
+    <span><span class="power" style="background:#3b82c4">S</span> Slow ball</span>
+    <span><span class="power" style="background:#d9481f">+</span> Extra ball in play</span>
+    <span><span class="power" style="background:#e9a426;color:#17191d">★</span> Extra life (rare)</span>
+    <span>Power-ups fall from some bricks — catch one with the paddle to use it.</span>
+  </div>
+
+  <footer>
+    <span>Single player · Best score is saved on this device only.</span>
+    <span>Part of the arcade build list — more games coming to the hub.</span>
+  </footer>
+</div>
+
+<!-- HOW TO PLAY -->
+<div class="modal-backdrop" id="modalHow" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+    <div class="close-row"><h2 id="howTitle">How to play</h2><button class="icon-btn" data-close="modalHow" aria-label="Close">✕</button></div>
+    <p>A quick tour — no walkthrough, just the controls. Read it once and you're set.</p>
+    <h3>New: Practice round</h3>
+    <p>Pick <strong>🎯 Practice</strong> under the board (or <strong>Practice round</strong> on the start screen) when you just want to warm up or learn.</p>
+    <ul>
+      <li><strong>No score, no pressure:</strong> points aren't saved and never touch your Best.</li>
+      <li><strong>No game over:</strong> drop the ball and a new one is served — unlimited balls (shown as ∞).</li>
+      <li><strong>Hints on:</strong> a dashed aim guide shows where a stuck ball will head, plus extra tips in the hint bar while you play.</li>
+      <li><strong>Steady pace:</strong> the ball stays slower and doesn't speed up as you smash bricks.</li>
+      <li><strong>Untimed:</strong> take as long as you like. Switch back to <strong>▶ Play</strong> and start a New game when you're ready to score.</li>
+    </ul>
+    <h3>Pick your difficulty</h3>
+    <p>Use the <strong>Difficulty</strong> buttons under the board before you start. Changing it mid-game applies on your next new game.</p>
+    <ul>
+      <li><strong>Easy:</strong> 5 balls, wider paddle, slower ball, more power-up drops, no armoured bricks until Level 3.</li>
+      <li><strong>Normal:</strong> 3 balls, standard paddle &amp; ball speed — the classic game.</li>
+      <li><strong>Hard:</strong> 3 balls, narrower paddle, faster ball, fewer power-up drops, more armoured bricks.</li>
+    </ul>
+    <h3>1. Launch the ball</h3>
+    <p>Press <strong>Start game</strong>, then tap the board, click, or press <strong>Space</strong>. The ball sits on your paddle until you launch it.</p>
+    <h3>2. Move the paddle</h3>
+    <div class="kbd-row"><span>🖱️ Mouse — move to steer</span><span>👆 Touch — drag on the board</span><span>⌨️ ← → or A / D</span><span>📱 Hold ◀ ▶ buttons</span></div>
+    <p>Where the ball hits the paddle decides its angle: centre = straight up, edges = sharp angle. Use the edges to reach stubborn corner bricks.</p>
+    <h3>3. Clear the wall</h3>
+    <p>Every brick you smash scores points (top rows are worth more). Clear the whole wall to move to the next level — the wall gets taller and the ball gets faster.</p>
+    <h3>4. Catch the falling power-ups</h3>
+    <ul>
+      <li><strong>W — Wide:</strong> paddle grows for 12 seconds.</li>
+      <li><strong>S — Slow:</strong> ball slows down for 10 seconds.</li>
+      <li><strong>+ — Extra ball:</strong> a second ball joins play. You only lose a life when the <em>last</em> ball drops.</li>
+      <li><strong>★ — Extra life:</strong> rare. +1 ball in reserve.</li>
+    </ul>
+    <h3>5. Don't drop it</h3>
+    <p>If the last ball falls past the paddle, you lose one of your balls (5 on Easy, 3 on Normal / Hard) and the next one is served on the paddle. Lose them all and the game ends — your best score is kept.</p>
+    <p style="margin-top:16px"><button class="btn primary" data-close="modalHow" type="button">Got it — back to the game</button></p>
+  </div>
+</div>
+
+<!-- RULES -->
+<div class="modal-backdrop" id="modalRules" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <div class="close-row"><h2 id="rulesTitle">Rules</h2><button class="icon-btn" data-close="modalRules" aria-label="Close">✕</button></div>
+    <p>The full rules for this version of Breakout — scoring, special rules, and how a game is won or lost.</p>
+
+    <h3>Practice round</h3>
+    <ul>
+      <li>Practice is a separate mode, chosen with the <strong>Mode</strong> buttons under the board. It applies from your next new game (or straight away from the start screen's Practice button).</li>
+      <li>In Practice: <strong>no score is saved</strong>, your Best never changes, there is <strong>no game over</strong> (unlimited balls), play is <strong>untimed</strong>, the ball speed stays at a steady slower pace and does not ramp up, and hints + a dashed aim guide are shown.</li>
+      <li>Bricks, power-ups, levels, and paddle controls work exactly as in Play mode, so practice transfers directly. Level-clear bonuses are not awarded in Practice.</li>
+      <li>Switching back to Play starts scoring again on your next new game.</li>
+    </ul>
+
+    <h3>Difficulty</h3>
+    <ul>
+      <li><strong>Easy:</strong> start with 5 balls · paddle 138px wide · ball base speed 4.2 (cap 7.5) · power-up drop about 1 in 5 bricks · armoured bricks only from Level 3 and at half the Normal rate.</li>
+      <li><strong>Normal (default):</strong> start with 3 balls · paddle 110px wide · ball base speed 5.2 (cap 9.5) · power-up drop about 1 in 7 bricks · armoured bricks from Level 2.</li>
+      <li><strong>Hard:</strong> start with 3 balls · paddle 92px wide · ball base speed 6.6 (cap 12) · power-up drop about 1 in 9 bricks · armoured bricks from Level 2 at a higher rate.</li>
+      <li>Pick difficulty under the board. A change made while a run is in progress applies from the <strong>next new game</strong> — it never changes a ball, paddle, or wall mid-run.</li>
+      <li>Extra life (★) can raise your reserve to at most 2 above your difficulty's starting balls (Easy max 7, Normal / Hard max 5).</li>
+    </ul>
+
+    <h3>Objective &amp; win condition</h3>
+    <ul>
+      <li>There is no final level — play is endless. Clear a wall to advance to the next level; each level adds challenge (see below).</li>
+      <li>A run ends when you run out of balls. Your final score is compared against your saved best.</li>
+      <li>Clearing a level awards a <strong>500-point bonus</strong> plus <strong>100 points per ball in reserve</strong>.</li>
+    </ul>
+
+    <h3>Scoring</h3>
+    <table class="score-table">
+      <tr><th>Brick row (top → bottom)</th><th>Colour</th><th>Points</th></tr>
+      <tr><td>Row 1 (top)</td><td>Red</td><td>70</td></tr>
+      <tr><td>Row 2</td><td>Orange</td><td>60</td></tr>
+      <tr><td>Row 3</td><td>Gold</td><td>50</td></tr>
+      <tr><td>Row 4</td><td>Green</td><td>40</td></tr>
+      <tr><td>Row 5</td><td>Teal</td><td>30</td></tr>
+      <tr><td>Row 6</td><td>Blue</td><td>20</td></tr>
+      <tr><td>Rows 7+</td><td>Slate</td><td>10</td></tr>
+    </table>
+    <ul>
+      <li><strong>Combo:</strong> bricks smashed in a row without the ball touching the paddle build a combo. Every 5th brick in a combo earns double points for that brick. Touching the paddle resets the combo.</li>
+      <li>On higher levels some bricks are <strong>armoured</strong> (darker, with a border): they need 2 hits. The first hit cracks them (no points); the second smashes them for full points.</li>
+    </ul>
+
+    <h3>Lives &amp; the ball</h3>
+    <ul>
+      <li>You start with <strong>5 balls on Easy, 3 on Normal / Hard</strong>. Losing the last ball in play costs 1 reserve ball.</li>
+      <li>The ball speeds up slightly with every brick smashed and every level, up to a cap. Your <strong>Difficulty</strong> sets the starting speed and the cap (see Difficulty above).</li>
+      <li>The ball never bounces perfectly horizontally — a minimum vertical angle is enforced so rallies can't stall forever.</li>
+      <li>The ball bounces off the left, right, and top walls. There is no bottom wall.</li>
+    </ul>
+
+    <h3>Power-ups — special rules</h3>
+    <ul>
+      <li>How often a smashed brick drops a power-up depends on difficulty: about 1 in 5 on Easy, 1 in 7 on Normal, 1 in 9 on Hard. It only works if the <strong>paddle catches it</strong>; if it falls past, it's gone.</li>
+      <li><strong>Wide (W)</strong> lasts 12 seconds. Catching another Wide while active resets the timer — it doesn't stack wider.</li>
+      <li><strong>Slow (S)</strong> lasts 10 seconds and cuts ball speed by 30%. It doesn't stack.</li>
+      <li><strong>Extra ball (+)</strong> adds one ball in play, launched from the paddle at an angle. Max 3 balls in play at once.</li>
+      <li><strong>Extra life (★)</strong> adds 1 reserve ball, up to 2 above your difficulty's starting balls (max 7 on Easy, 5 on Normal / Hard).</li>
+      <li>All timed effects end immediately when you lose a ball or clear a level.</li>
+    </ul>
+
+    <h3>Levels</h3>
+    <ul>
+      <li>Level 1 starts with 6 rows. Each new level adds 1 row, up to 10 rows.</li>
+      <li>Wall patterns rotate by level: full wall, checkerboard gaps, columns, and a diamond.</li>
+      <li>Armoured bricks appear from Level 2 onward, more of them each level.</li>
+    </ul>
+
+    <h3>Pausing &amp; fairness</h3>
+    <ul>
+      <li>Press <strong>P</strong>, <strong>Space</strong> (while playing), or the Pause button to pause. The game also auto-pauses if you switch tabs.</li>
+      <li>Changing Difficulty applies from the next new game — it never changes a ball, paddle, or wall already in play.</li>
+    </ul>
+    <p style="margin-top:16px"><button class="btn primary" data-close="modalRules" type="button">Close rules</button></p>
+  </div>
+</div>
+
+<!-- FEEDBACK -->
+<div class="modal-backdrop" id="modalFeedback" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+    <div class="close-row"><h2 id="feedbackTitle">Feedback</h2><button class="icon-btn" data-close="modalFeedback" aria-label="Close">✕</button></div>
+    <p>How's Breakout playing? Rate it and leave a note — what you liked, what felt off, or what you'd change.</p>
+    <div class="fb-field">
+      <label id="ratingLabel">Your rating</label>
+      <div class="stars" role="group" aria-labelledby="ratingLabel">
+        <button type="button" data-star="1" aria-pressed="false" aria-label="1 star">★</button>
+        <button type="button" data-star="2" aria-pressed="false" aria-label="2 stars">★</button>
+        <button type="button" data-star="3" aria-pressed="false" aria-label="3 stars">★</button>
+        <button type="button" data-star="4" aria-pressed="false" aria-label="4 stars">★</button>
+        <button type="button" data-star="5" aria-pressed="false" aria-label="5 stars">★</button>
+      </div>
+    </div>
+    <div class="fb-field">
+      <label id="tagLabel">What's this about?</label>
+      <div class="seg" role="group" aria-labelledby="tagLabel">
+        <button type="button" data-tag="Bug" aria-pressed="false">Bug</button>
+        <button type="button" data-tag="Suggestion" aria-pressed="true">Suggestion</button>
+        <button type="button" data-tag="Other" aria-pressed="false">Other</button>
+      </div>
+    </div>
+    <div class="fb-field">
+      <label for="fbComment">Your comment</label>
+      <textarea id="fbComment" maxlength="1000" placeholder="Tell us what you think…"></textarea>
+    </div>
+    <p class="fb-terms">Feedback follows the same Terms &amp; Conditions as the games: no personal info needed, please keep it clean (moderation rules apply), and feedback may be used to improve the games. Saved on this device only for now.</p>
+    <p class="fb-status" id="fbStatus" role="status"></p>
+    <p style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn primary" id="btnSendFeedback" type="button">Save</button>
+      <button class="btn" data-close="modalFeedback" type="button">Cancel</button>
+    </p>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var W=800,H=600;
+var canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+var BEST_KEY='rff_arcade_breakout_best_v1';
+var best=0; try{ best=parseInt(localStorage.getItem(BEST_KEY)||'0',10)||0; }catch(e){ best=0; }
+var DIFFS={
+  easy:{label:'Easy',lives:5,paddleW:138,base:4.2,cap:7.5,dropChance:0.20,armourFrom:3,armourScale:0.5,armourAdd:0,note:'5 balls · wider paddle · slower ball · more power-ups · armoured bricks from Level 3.'},
+  normal:{label:'Normal',lives:3,paddleW:110,base:5.2,cap:9.5,dropChance:1/7,armourFrom:2,armourScale:1,armourAdd:0,note:'3 balls · standard paddle & ball speed · armoured bricks from Level 2.'},
+  hard:{label:'Hard',lives:3,paddleW:92,base:6.6,cap:12,dropChance:1/9,armourFrom:2,armourScale:1,armourAdd:0.08,note:'3 balls · narrower paddle · faster ball · fewer power-ups · more armoured bricks.'}
+};
+var selectedDiff='normal'; /* chosen in the UI */
+var activeDiff='normal';   /* actually in effect for the current run */
+var selectedMode='play';   /* 'play' | 'practice' — chosen in the UI */
+var activeMode='play';     /* actually in effect for the current run */
+function diff(){ return DIFFS[activeDiff]; }
+function isPractice(){ return activeMode==='practice'; }
+function maxLives(){ return isPractice()? 99 : diff().lives+2; }
+
+var ROW_COLORS=[
+ {fill:'#e94f2a',dark:'#b93a1e',pts:70,name:'Red'},
+ {fill:'#ef7d1a',dark:'#bd5f10',pts:60,name:'Orange'},
+ {fill:'#e9a426',dark:'#b97e14',pts:50,name:'Gold'},
+ {fill:'#4caf50',dark:'#357a38',pts:40,name:'Green'},
+ {fill:'#2aa198',dark:'#1e7a73',pts:30,name:'Teal'},
+ {fill:'#3b82c4',dark:'#2a6396',pts:20,name:'Blue'},
+ {fill:'#7d8a99',dark:'#5a6673',pts:10,name:'Slate'}
+];
+function rowStyle(r){ return ROW_COLORS[Math.min(r,ROW_COLORS.length-1)]; }
+
+/* ---------- Audio ---------- */
+var audioCtx=null, soundOn=true;
+function beep(freq,dur,type,vol){
+  if(!soundOn) return;
+  try{
+    if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==='suspended') audioCtx.resume();
+    var o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.type=type||'square'; o.frequency.value=freq;
+    g.gain.setValueAtTime(vol||0.05,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001,audioCtx.currentTime+(dur||0.06));
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime+(dur||0.06));
+  }catch(e){}
+}
+var sfx={
+  paddle:function(){beep(220,0.05,'square',0.04);},
+  wall:function(){beep(180,0.04,'square',0.03);},
+  brick:function(combo){beep(420+Math.min(combo,10)*28,0.055,'square',0.05);},
+  crack:function(){beep(300,0.05,'sawtooth',0.04);},
+  power:function(){beep(660,0.09,'sine',0.07); setTimeout(function(){beep(880,0.1,'sine',0.07);},70);},
+  lose:function(){beep(240,0.16,'sawtooth',0.06); setTimeout(function(){beep(140,0.22,'sawtooth',0.06);},120);},
+  level:function(){[523,659,784].forEach(function(f,i){setTimeout(function(){beep(f,0.1,'square',0.05);},i*90);});},
+  over:function(){[392,330,262,196].forEach(function(f,i){setTimeout(function(){beep(f,0.14,'square',0.05);},i*130);});}
+};
+
+/* ---------- State ---------- */
+var state='ready'; // ready | serving | playing | paused | levelclear | gameover
+var score=0, lives=3, level=1, combo=0, bricksSmashedThisLevel=0, practiceBricks=0;
+var paddle={w:110, baseW:110, h:14, x:W/2-55, y:H-34, speed:9, wideUntil:0};
+var balls=[], bricks=[], drops=[];
+var keys={left:false,right:false};
+var pointerX=null, touchDir=0;
+var lastTime=0, rafId=null, hintShown=true;
+
+function ballSpeed(){ var s=diff(); if(isPractice()) return Math.max(3.2, s.base*0.82); return Math.min(s.base + (level-1)*0.35 + bricksSmashedThisLevel*0.03, s.cap); }
+function makeBall(x,y,angle,speed){
+  var sp=speed||ballSpeed();
+  return {x:x,y:y,r:8,dx:Math.sin(angle)*sp,dy:-Math.cos(angle)*sp, stuck:false};
+}
+function serveBall(){
+  balls=[makeBall(paddle.x+paddle.w/2, paddle.y-10, 0.5)];
+  balls[0].stuck=true; balls[0].dx=0; balls[0].dy=0;
+  drops=[]; combo=0;
+}
+
+/* ---------- Level building ---------- */
+function buildLevel(lv){
+  bricks=[]; bricksSmashedThisLevel=0;
+  var rows=Math.min(5+lv,10);
+  var cols=10, gap=6, top=64, left=24;
+  var bw=(W-left*2-gap*(cols-1))/cols, bh=22;
+  var pattern=(lv-1)%4; // 0 full, 1 checker, 2 columns, 3 diamond
+  for(var r=0;r<rows;r++){
+    for(var c=0;c<cols;c++){
+      var include=true;
+      if(pattern===1) include=((r+c)%2===0)||r===0;
+      if(pattern===2) include=(c%2===0)||r<2;
+      if(pattern===3){ var mid=(cols-1)/2; include=Math.abs(c-mid)<= (r+1.5); if(r===0) include=Math.abs(c-mid)<=1.5; }
+      if(!include) continue;
+      var d=diff();
+      var armoured = lv>=d.armourFrom && Math.random() < Math.min((0.06+(lv-2)*0.05)*d.armourScale + d.armourAdd, 0.38);
+      bricks.push({x:left+c*(bw+gap), y:top+r*(bh+gap), w:bw, h:bh, row:r, hp:armoured?2:1, maxHp:armoured?2:1, alive:true});
+    }
+  }
+}
+
+/* ---------- Power-ups ---------- */
+var POWER_TYPES=[
+  {k:'W',color:'#0f766e',weight:34},
+  {k:'S',color:'#3b82c4',weight:30},
+  {k:'+',color:'#d9481f',weight:26},
+  {k:'★',color:'#e9a426',weight:10}
+];
+function maybeDrop(x,y){
+  if(Math.random()>diff().dropChance) return;
+  var total=100, roll=Math.random()*total, pick=POWER_TYPES[0];
+  for(var i=0;i<POWER_TYPES.length;i++){ roll-=POWER_TYPES[i].weight; if(roll<=0){pick=POWER_TYPES[i];break;} }
+  if(pick.k==='+' && balls.length>=3) pick=POWER_TYPES[0];
+  if(pick.k==='★' && isPractice()) pick=POWER_TYPES[0]; /* unlimited balls in Practice — an extra life is useless, give Wide instead */
+  if(pick.k==='★' && lives>=maxLives()) pick=POWER_TYPES[1];
+  drops.push({x:x,y:y,r:13,k:pick.k,color:pick.color,vy:2.4});
+}
+var slowUntil=0;
+function applyPower(k){
+  var now=performance.now();
+  if(k==='W'){ paddle.wideUntil=now+12000; }
+  else if(k==='S'){ slowUntil=now+10000; }
+  else if(k==='+'){ if(balls.length<3) balls.push(makeBall(paddle.x+paddle.w/2,paddle.y-12,-0.7)); }
+  else if(k==='★'){ if(lives<maxLives()) lives++; }
+  sfx.power(); updateStats();
+}
+function effectsActive(){ var now=performance.now(); paddle.w = (now<paddle.wideUntil)? paddle.baseW*1.55 : paddle.baseW; }
+
+/* ---------- Stats / best ---------- */
+var elScore=document.getElementById('statScore'), elBest=document.getElementById('statBest'),
+    elLevel=document.getElementById('statLevel'), elLives=document.getElementById('statLives'),
+    bestNote=document.getElementById('bestNote');
+function updateStats(){
+  var practice=isPractice();
+  document.getElementById('practiceBanner').classList.toggle('on', practice);
+  document.getElementById('statScoreBox').classList.toggle('practice-on', practice);
+  document.getElementById('statScoreLabel').textContent = practice ? 'Bricks smashed' : 'Score';
+  elScore.textContent = practice ? String(practiceBricks) : score.toLocaleString();
+  elBest.firstChild.textContent=best.toLocaleString()+' ';
+  if(practice && !bestNote.textContent) bestNote.textContent='· not counted in practice';
+  if(!practice && bestNote.textContent==='· not counted in practice') bestNote.textContent='';
+  elLevel.textContent=level;
+  if(practice){ elLives.textContent='∞'; elLives.setAttribute('aria-label','Unlimited balls in practice'); }
+  else { var dots=''; for(var i=0;i<Math.max(lives,0);i++) dots+='●'; elLives.textContent=dots||'—'; elLives.setAttribute('aria-label', lives+' balls left'); }
+}
+function saveBest(){
+  if(isPractice()) return;
+  if(score>best){ best=score; bestNote.textContent='· new!'; try{ localStorage.setItem(BEST_KEY,String(best)); }catch(e){} }
+}
+
+/* ---------- Overlay ---------- */
+var overlay=document.getElementById('overlay'), ovTitle=document.getElementById('ovTitle'),
+    ovText=document.getElementById('ovText'), ovScore=document.getElementById('ovScore'),
+    ovPrimary=document.getElementById('ovPrimary');
+function showOverlay(title,text,primaryLabel,scoreLine){
+  ovTitle.textContent=title; ovText.textContent=text; ovPrimary.textContent=primaryLabel;
+  if(scoreLine){ ovScore.hidden=false; ovScore.textContent=scoreLine; } else ovScore.hidden=true;
+  overlay.hidden=false;
+}
+function hideOverlay(){ overlay.hidden=true; }
+
+/* ---------- Flow ---------- */
+function applyDifficulty(){
+  activeDiff=selectedDiff; activeMode=selectedMode;
+  var d=diff();
+  paddle.baseW=d.paddleW; paddle.w=d.paddleW;
+  paddle.x=Math.max(6,Math.min(W-paddle.w-6, W/2-paddle.w/2));
+  return d;
+}
+function applyModeOnly(mode){ selectedMode=mode; activeMode=mode; syncModeUI(); }
+function newGame(){
+  var d=applyDifficulty();
+  score=0; practiceBricks=0; lives=d.lives; level=1; combo=0; bestNote.textContent='';
+  paddle.wideUntil=0; slowUntil=0;
+  buildLevel(level); serveBall();
+  state='serving'; updateStats();
+  if(isPractice()) showOverlay('Practice round','Level 1 · '+d.label+' — '+bricks.length+' bricks, unlimited balls. No score saved. Follow the dashed aim guide, then launch when you\'re set.','▶ Launch ball','Practice · Bricks smashed 0');
+  else showOverlay('Ready?','Level 1 · '+d.label+' — '+bricks.length+' bricks, '+lives+' balls. Launch the ball when you\'re set.','▶ Launch ball','Score 0 · Best '+best.toLocaleString());
+}
+function startRun(){
+  var d=applyDifficulty();
+  score=0; practiceBricks=0; lives=d.lives; level=1; combo=0; bestNote.textContent='';
+  paddle.wideUntil=0; slowUntil=0;
+  buildLevel(level); serveBall(); state='serving'; updateStats(); hideOverlay();
+  document.getElementById('hintText').textContent = isPractice() ? '🎯 Practice: move the paddle — the dashed line shows the launch angle. Drop the ball? No penalty, a new one is served.' : '👆 Drag, move your mouse, or use the arrow keys — then tap / press Space to launch.';
+  hintShown=true;
+  try{ refreshModeNote(); }catch(e){}
+}
+function startPractice(){
+  selectedMode='practice'; syncModeUI(); refreshModeNote(); refreshDiffNote();
+  startRun();
+}
+function launch(){
+  var anyStuck=false;
+  balls.forEach(function(b){ if(b.stuck){ b.stuck=false; var sp=ballSpeed(); var a=(Math.random()*0.5+0.35)*(Math.random()<0.5?-1:1); b.dx=Math.sin(a)*sp; b.dy=-Math.cos(a)*sp; anyStuck=true; }});
+  if(anyStuck){ state='playing'; if(hintShown){ document.getElementById('hintText').textContent= isPractice() ? '🎯 Practice tip: hit with the paddle edge for a sharp angle, centre for straight up. No rush — untimed.' : 'Nice — keep it bouncing. Edge hits give sharper angles.'; hintShown=false; } }
+}
+function loseBall(){
+  paddle.wideUntil=0; slowUntil=0; drops=[];
+  if(isPractice()){
+    serveBall(); state='serving'; sfx.lose(); updateStats();
+    document.getElementById('hintText').textContent='🎯 Practice: ball dropped — no penalty. New ball served. Watch the aim guide and launch again.';
+    return;
+  }
+  if(lives>1){ lives--; serveBall(); state='serving'; sfx.lose(); updateStats();
+    showOverlay('Ball lost', (lives)+' ball'+(lives===1?'':'s')+' left. Next one\'s on the paddle — launch when ready.','▶ Launch ball','Score '+score.toLocaleString());
+  } else {
+    lives=0; state='gameover'; sfx.over(); saveBest(); updateStats();
+    showOverlay('Game over','You cleared '+level+' level'+(level===1?'':'s')+' run — final wall reached Level '+level+'.', '↺ Play again','Final score '+score.toLocaleString()+' · Best '+best.toLocaleString());
+  }
+}
+function nextLevel(){
+  if(isPractice()){
+    level++; sfx.level();
+    buildLevel(level); serveBall(); state='serving'; updateStats();
+    showOverlay('Practice — Level '+(level-1)+' cleared!','Nice work — no bonus in Practice, just keep learning the wall. Level '+level+': '+bricks.length+' bricks at the same steady pace.','▶ Launch ball','Practice · Bricks smashed '+practiceBricks);
+    return;
+  }
+  var bonus=500+(lives-1)*100; score+=bonus; saveBest();
+  level++; sfx.level();
+  buildLevel(level); serveBall(); state='serving'; updateStats();
+  showOverlay('Level '+(level-1)+' cleared!','Bonus +'+bonus.toLocaleString()+' points. Level '+level+': '+bricks.length+' bricks, ball a touch faster.','▶ Launch ball','Score '+score.toLocaleString()+' · Best '+best.toLocaleString());
+}
+
+/* ---------- Update ---------- */
+function step(dt){
+  effectsActive();
+  // paddle movement
+  var move=0;
+  if(keys.left) move-=1; if(keys.right) move+=1; move+=touchDir;
+  if(move!==0){ paddle.x+=move*paddle.speed*(dt/16.7); pointerX=null; }
+  else if(pointerX!==null){ paddle.x += ((pointerX-paddle.w/2)-paddle.x)*0.35; }
+  paddle.x=Math.max(6,Math.min(W-paddle.w-6,paddle.x));
+
+  var now=performance.now();
+  var slowFactor = now<slowUntil ? 0.7 : 1;
+
+  balls.forEach(function(b){
+    if(b.stuck){ b.x=paddle.x+paddle.w/2; b.y=paddle.y-b.r-2; return; }
+    // normalise speed toward target (keeps slow effect smooth)
+    var cur=Math.sqrt(b.dx*b.dx+b.dy*b.dy), target=ballSpeed()*slowFactor;
+    if(cur>0 && Math.abs(cur-target)>0.05){ b.dx*=target/cur; b.dy*=target/cur; }
+    b.x+=b.dx*(dt/16.7); b.y+=b.dy*(dt/16.7);
+    // walls
+    if(b.x-b.r<4){ b.x=4+b.r; b.dx=Math.abs(b.dx); sfx.wall(); }
+    if(b.x+b.r>W-4){ b.x=W-4-b.r; b.dx=-Math.abs(b.dx); sfx.wall(); }
+    if(b.y-b.r<4){ b.y=4+b.r; b.dy=Math.abs(b.dy); sfx.wall(); }
+    // paddle
+    if(b.dy>0 && b.y+b.r>=paddle.y && b.y+b.r<=paddle.y+paddle.h+8 && b.x>=paddle.x-b.r && b.x<=paddle.x+paddle.w+b.r){
+      var rel=((b.x-(paddle.x+paddle.w/2))/(paddle.w/2)); rel=Math.max(-1,Math.min(1,rel));
+      var angle=rel*1.05; var sp=Math.sqrt(b.dx*b.dx+b.dy*b.dy);
+      b.dx=Math.sin(angle)*sp; b.dy=-Math.cos(angle)*sp;
+      b.y=paddle.y-b.r-1; combo=0; sfx.paddle();
+    }
+    // bricks
+    for(var i=0;i<bricks.length;i++){
+      var br=bricks[i]; if(!br.alive) continue;
+      if(b.x+b.r>br.x && b.x-b.r<br.x+br.w && b.y+b.r>br.y && b.y-b.r<br.y+br.h){
+        // decide bounce side by overlap
+        var overlapL=(b.x+b.r)-br.x, overlapR=(br.x+br.w)-(b.x-b.r), overlapT=(b.y+b.r)-br.y, overlapB=(br.y+br.h)-(b.y-b.r);
+        var minO=Math.min(overlapL,overlapR,overlapT,overlapB);
+        if(minO===overlapT||minO===overlapB) b.dy*=-1; else b.dx*=-1;
+        // enforce min vertical angle
+        var sp2=Math.sqrt(b.dx*b.dx+b.dy*b.dy);
+        if(Math.abs(b.dy)<sp2*0.28){ b.dy=(b.dy<0?-1:1)*sp2*0.28; var sx=Math.sqrt(Math.max(sp2*sp2-b.dy*b.dy,0)); b.dx=(b.dx<0?-1:1)*sx; }
+        br.hp--;
+        if(br.hp<=0){
+          br.alive=false; combo++; bricksSmashedThisLevel++;
+          var st=rowStyle(br.row); var pts=st.pts; var dbl=(combo%5===0);
+          if(dbl) pts*=2;
+          if(isPractice()){ practiceBricks++; } else { score+=pts; }
+          sfx.brick(combo);
+          maybeDrop(br.x+br.w/2, br.y+br.h/2);
+          saveBest();
+        } else { sfx.crack(); }
+        updateStats();
+        break;
+      }
+    }
+  });
+  // remove dropped balls
+  var before=balls.length;
+  balls=balls.filter(function(b){ return b.y-b.r<=H+20; });
+  if(state==='playing' && balls.length===0){ loseBall(); return; }
+  if(before!==balls.length) updateStats();
+  // drops
+  drops=drops.filter(function(d){
+    d.y+=d.vy*(dt/16.7);
+    if(d.y+d.r>=paddle.y && d.y<=paddle.y+paddle.h && d.x>=paddle.x-d.r && d.x<=paddle.x+paddle.w+d.r){ applyPower(d.k); return false; }
+    return d.y-d.r<H;
+  });
+  // level clear
+  if(state==='playing' && bricks.every(function(b){return !b.alive;})){ nextLevel(); }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  // field
+  ctx.fillStyle='#101418'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#2a2f36'; ctx.lineWidth=4; ctx.strokeRect(2,2,W-4,H-4);
+  // bricks
+  bricks.forEach(function(br){
+    if(!br.alive) return;
+    var st=rowStyle(br.row);
+    ctx.fillStyle = br.maxHp>1 && br.hp===br.maxHp ? st.dark : st.fill;
+    roundRect(br.x,br.y,br.w,br.h,4); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.20)'; roundRect(br.x,br.y,br.w,Math.max(5,br.h*0.38),4); ctx.fill();
+    if(br.maxHp>1){ ctx.strokeStyle= br.hp===1 ? 'rgba(255,255,255,.85)' : '#101418'; ctx.lineWidth= br.hp===1?2:3; roundRect(br.x+1.5,br.y+1.5,br.w-3,br.h-3,3); ctx.stroke();
+      if(br.hp===1){ ctx.strokeStyle='rgba(16,20,24,.55)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(br.x+6,br.y+br.h-4); ctx.lineTo(br.x+br.w/2,br.y+5); ctx.lineTo(br.x+br.w-6,br.y+br.h-5); ctx.stroke(); } }
+  });
+  // drops
+  drops.forEach(function(d){
+    ctx.beginPath(); ctx.arc(d.x,d.y,d.r,0,Math.PI*2); ctx.fillStyle=d.color; ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.7)'; ctx.lineWidth=2; ctx.stroke();
+    ctx.fillStyle='#fff'; ctx.font='700 13px "IBM Plex Mono",monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(d.k,d.x,d.y+1);
+  });
+  // paddle
+  var now=performance.now();
+  ctx.fillStyle = now<paddle.wideUntil ? '#0f766e' : '#f2efe6';
+  roundRect(paddle.x,paddle.y,paddle.w,paddle.h,7); ctx.fill();
+  ctx.fillStyle = now<paddle.wideUntil ? 'rgba(255,255,255,.35)' : 'rgba(16,20,24,.18)';
+  roundRect(paddle.x,paddle.y,paddle.w,5,3); ctx.fill();
+  // balls
+  balls.forEach(function(b){
+    ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fillStyle='#ffd23e'; ctx.fill();
+    ctx.strokeStyle='#b97e14'; ctx.lineWidth=2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(b.x-2.5,b.y-2.5,2.2,0,Math.PI*2); ctx.fillStyle='rgba(255,255,255,.85)'; ctx.fill();
+  });
+  // practice hints: aim guide + trajectory preview + label
+  if(isPractice()){
+    ctx.fillStyle='rgba(15,118,110,.92)'; ctx.font='700 12px "IBM Plex Mono",monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('● PRACTICE — NO SCORE', 14, 10);
+    balls.forEach(function(b){
+      ctx.save(); ctx.strokeStyle='rgba(45,212,191,.95)'; ctx.lineWidth=2.5; ctx.setLineDash([8,7]);
+      ctx.beginPath(); ctx.moveTo(b.x,b.y);
+      if(b.stuck){
+        // guide at a gentle 28° angle toward centre-top
+        var gx=b.x, gy=b.y, gdx=0.48, gdy=-1, steps=0;
+        while(steps<260){ gx+=gdx*6; gy+=gdy*6; steps++; if(gx<14||gx>W-14){ gdx*=-1; gx+=gdx*6; } if(gy<18) break; }
+        ctx.lineTo(gx,gy);
+      } else if(state==='playing'){
+        var px=b.x, py=b.y, pdx=b.dx, pdy=b.dy, s2=0;
+        while(s2<180){ px+=pdx*1.6; py+=pdy*1.6; s2++; if(px<12||px>W-12) pdx*=-1; if(py<12) pdy=Math.abs(pdy); if(py>paddle.y) break; }
+        ctx.lineTo(px,py);
+      }
+      ctx.stroke(); ctx.restore();
+      if(b.stuck){ ctx.fillStyle='rgba(242,239,230,.9)'; ctx.font='600 12px system-ui,sans-serif'; ctx.textAlign='center'; ctx.fillText('aim guide — launch when ready', b.x, b.y-28); }
+    });
+  }
+  // combo indicator
+  if(combo>=3 && state==='playing' && !isPractice()){
+    ctx.fillStyle='rgba(242,239,230,.92)'; ctx.font='600 14px "IBM Plex Mono",monospace'; ctx.textAlign='right'; ctx.textBaseline='top';
+    ctx.fillText('COMBO ×'+combo+'  ·  every 5th = double', W-14, 10);
+  }
+  if(state==='paused'){
+    ctx.fillStyle='rgba(10,12,14,.55)'; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle='#f5f1e6'; ctx.font='700 34px "Chakra Petch",sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('PAUSED', W/2, H/2);
+  }
+}
+function roundRect(x,y,w,h,r){ r=Math.min(r,w/2,h/2); ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+function loop(ts){
+  if(!lastTime) lastTime=ts;
+  var dt=Math.min(ts-lastTime,50); lastTime=ts;
+  if(state==='playing'||state==='serving') step(dt);
+  draw();
+  rafId=requestAnimationFrame(loop);
+}
+
+/* ---------- Input ---------- */
+function canvasPos(clientX){
+  var rect=canvas.getBoundingClientRect();
+  return (clientX-rect.left)/rect.width*W;
+}
+canvas.addEventListener('mousemove',function(e){ pointerX=canvasPos(e.clientX); });
+canvas.addEventListener('touchstart',function(e){ pointerX=canvasPos(e.touches[0].clientX); if(state==='serving') launch(); },{passive:true});
+canvas.addEventListener('touchmove',function(e){ pointerX=canvasPos(e.touches[0].clientX); e.preventDefault(); },{passive:false});
+canvas.addEventListener('click',function(){ if(state==='serving') launch(); });
+document.addEventListener('keydown',function(e){
+  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A'){ keys.left=true; e.preventDefault(); }
+  if(e.key==='ArrowRight'||e.key==='d'||e.key==='D'){ keys.right=true; e.preventDefault(); }
+  if(e.key===' '){ e.preventDefault(); if(state==='serving') launch(); else if(state==='playing'||state==='paused') togglePause(); }
+  if(e.key==='p'||e.key==='P'){ if(state==='playing'||state==='paused') togglePause(); }
+});
+document.addEventListener('keyup',function(e){
+  if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A') keys.left=false;
+  if(e.key==='ArrowRight'||e.key==='d'||e.key==='D') keys.right=false;
+});
+function bindHold(id,dir){
+  var el=document.getElementById(id);
+  var on=function(e){ e.preventDefault(); touchDir=dir; if(state==='serving') launch(); };
+  var off=function(){ if(touchDir===dir) touchDir=0; };
+  el.addEventListener('touchstart',on,{passive:false}); el.addEventListener('mousedown',on);
+  ['touchend','touchcancel','mouseup','mouseleave'].forEach(function(ev){ el.addEventListener(ev,off); });
+}
+bindHold('touchLeft',-1); bindHold('touchRight',1);
+
+function togglePause(){
+  if(state==='playing'){ state='paused'; document.getElementById('btnPause').textContent='▶ Resume'; }
+  else if(state==='paused'){ state='playing'; document.getElementById('btnPause').textContent='⏸ Pause'; }
+}
+document.getElementById('btnPause').addEventListener('click',function(){ if(state==='playing'||state==='paused') togglePause(); });
+document.getElementById('btnNew').addEventListener('click',function(){ document.getElementById('btnPause').textContent='⏸ Pause'; startRun(); canvas.focus(); });
+document.getElementById('btnPracticeMain').addEventListener('click',function(){ document.getElementById('btnPause').textContent='⏸ Pause'; startPractice(); canvas.focus(); });
+document.getElementById('btnExitPractice').addEventListener('click',function(){ selectedMode='play'; syncModeUI(); refreshModeNote(); document.getElementById('btnPause').textContent='⏸ Pause'; startRun(); canvas.focus(); });
+ovPrimary.addEventListener('click',function(){
+  if(state==='gameover'||state==='ready'){ if(state==='ready' && !isPractice()){ /* keep selected mode */ } startRun(); launch(); }
+  else if(state==='serving'){ hideOverlay(); launch(); }
+  canvas.focus();
+});
+var ovPracticeBtn=document.getElementById('ovPractice');
+if(ovPracticeBtn) ovPracticeBtn.addEventListener('click',function(){
+  // If already in a practice serving overlay (e.g. level clear), just launch; otherwise start a fresh practice round
+  if(isPractice() && state==='serving'){ hideOverlay(); launch(); }
+  else { startPractice(); launch(); }
+  canvas.focus();
+});
+document.addEventListener('visibilitychange',function(){ if(document.hidden && state==='playing') togglePause(); });
+
+/* difficulty segmented */
+var diffNote=document.getElementById('diffNote');
+function refreshDiffNote(){
+  var d=DIFFS[selectedDiff];
+  var when = (selectedDiff!==activeDiff && (state==='playing'||state==='paused'||state==='serving'))
+    ? ' Applies on your next new game — current run stays on '+DIFFS[activeDiff].label+'.'
+    : ' Changes apply on your next new game.';
+  diffNote.innerHTML='<strong>'+d.label+'</strong> · '+d.note+when;
+}
+document.querySelectorAll('.seg button[data-diff]').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    document.querySelectorAll('.seg button[data-diff]').forEach(function(b){ b.setAttribute('aria-pressed','false'); });
+    btn.setAttribute('aria-pressed','true'); selectedDiff=btn.getAttribute('data-diff');
+    refreshDiffNote();
+  });
+});
+
+/* mode segmented (Play / Practice) */
+var modeNote=document.getElementById('modeNote');
+function syncModeUI(){
+  document.querySelectorAll('.seg button[data-mode]').forEach(function(b){ b.setAttribute('aria-pressed', String(b.getAttribute('data-mode')===selectedMode)); });
+}
+function refreshModeNote(){
+  var when = (selectedMode!==activeMode && (state==='playing'||state==='paused'||state==='serving'))
+    ? ' Applies on your next new game — current round stays in '+ (activeMode==='practice'?'Practice':'Play') +'. Tap New game to switch now.'
+    : '';
+  if(selectedMode==='practice'){
+    modeNote.innerHTML='<strong>Practice</strong> · No score saved · unlimited balls (∞) · hints &amp; aim guide on · steady slower ball · untimed.'+when;
+  } else {
+    modeNote.innerHTML='<strong>Play mode</strong> · Score counts and your best is saved. Switch to <strong>Practice</strong> for a no-pressure round: no score saved, no game over, hints and an aim guide on, and a steady slower ball — great for warming up or learning angles.'+when;
+  }
+  // Overlay practice button label follows state
+  var pb=document.getElementById('ovPractice'); if(pb) pb.textContent = isPractice() ? '🎯 Practice — launch' : '🎯 Practice round';
+}
+document.querySelectorAll('.seg button[data-mode]').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    selectedMode=btn.getAttribute('data-mode'); syncModeUI(); refreshModeNote(); refreshDiffNote();
+  });
+});
+
+/* sound */
+var btnSound=document.getElementById('btnSound');
+btnSound.addEventListener('click',function(){
+  soundOn=!soundOn; btnSound.setAttribute('aria-pressed',String(soundOn));
+  btnSound.textContent= soundOn? '🔊 Sound on':'🔇 Sound off';
+  if(soundOn) sfx.paddle();
+});
+
+/* modals */
+function openModal(id){ document.getElementById(id).hidden=false; }
+function closeModal(id){ document.getElementById(id).hidden=true; }
+document.getElementById('btnHow').addEventListener('click',function(){ openModal('modalHow'); });
+document.getElementById('ovHow').addEventListener('click',function(){ openModal('modalHow'); });
+document.getElementById('btnRules').addEventListener('click',function(){ openModal('modalRules'); });
+
+/* feedback */
+var FEEDBACK_KEY='holos-arcade-feedback';
+var fbRating=0, fbTag='Suggestion';
+var fbStatus=document.getElementById('fbStatus');
+var fbComment=document.getElementById('fbComment');
+var starBtns=document.querySelectorAll('.stars button[data-star]');
+function paintStars(){
+  starBtns.forEach(function(b){ b.setAttribute('aria-pressed', String(parseInt(b.getAttribute('data-star'),10)<=fbRating)); });
+}
+starBtns.forEach(function(b){
+  b.addEventListener('click',function(){ fbRating=parseInt(b.getAttribute('data-star'),10); paintStars(); fbStatus.textContent=''; });
+});
+var tagBtns=document.querySelectorAll('[data-tag]');
+tagBtns.forEach(function(b){
+  b.addEventListener('click',function(){
+    tagBtns.forEach(function(x){ x.setAttribute('aria-pressed','false'); });
+    b.setAttribute('aria-pressed','true'); fbTag=b.getAttribute('data-tag');
+  });
+});
+document.getElementById('btnFeedback').addEventListener('click',function(){ openModal('modalFeedback'); });
+document.getElementById('btnSendFeedback').addEventListener('click',function(){
+  var text=fbComment.value.trim();
+  if(!fbRating && !text){ fbStatus.textContent='Pick a star rating or write a comment first.'; return; }
+  var entry={game:'breakout', rating:fbRating, text:text, tag:fbTag, timestamp:new Date().toISOString()};
+  try{
+    var all=[]; try{ all=JSON.parse(localStorage.getItem(FEEDBACK_KEY)||'[]'); if(!Array.isArray(all)) all=[]; }catch(e){ all=[]; }
+    all.push(entry); localStorage.setItem(FEEDBACK_KEY, JSON.stringify(all));
+  }catch(e){
+    fbStatus.textContent='Sorry — feedback could not be saved on this device.';
+    return;
+  }
+  fbStatus.textContent='Thanks!';
+  fbRating=0; paintStars(); fbComment.value='';
+  setTimeout(function(){ closeModal('modalFeedback'); fbStatus.textContent=''; }, 900);
+});
+document.querySelectorAll('[data-close]').forEach(function(el){ el.addEventListener('click',function(){ closeModal(el.getAttribute('data-close')); }); });
+document.querySelectorAll('.modal-backdrop').forEach(function(bd){ bd.addEventListener('click',function(e){ if(e.target===bd) bd.hidden=true; }); });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ document.querySelectorAll('.modal-backdrop').forEach(function(bd){ bd.hidden=true; }); } });
+
+/* init */
+buildLevel(1); serveBall(); updateStats();
+elBest.firstChild.textContent=best.toLocaleString()+' ';
+try{ syncModeUI(); refreshModeNote(); }catch(e){}
+showOverlay('Ready?','Move the paddle to bounce the ball into the wall. Clear every brick to advance. Normal difficulty — 3 balls. New: try a Practice round — no score, no game over, hints and an aim guide on.','▶ Start game');
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

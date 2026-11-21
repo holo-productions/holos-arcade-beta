@@ -1,0 +1,1059 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Spades — Partnerships vs AI</title>
+<style>
+  :root{
+    --bg:#f3efe6; --panel:#fffdf7; --ink:#1c2420; --muted:#5c665f; --line:#ddd5c2;
+    --felt:#1e5c43; --felt2:#174a36; --felt-line:#2f7a58;
+    --gold:#c9a227; --gold-ink:#3a2f05;
+    --red:#b4232a; --black:#1f2937;
+    --card:#fffef9; --card-line:#d8d2c0;
+    --accent:#1e5c43; --accent-ink:#fff;
+    --chip:#eef3ee;
+    --shadow:0 10px 28px rgba(20,30,25,.14);
+    --radius:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#121613; --panel:#1b201c; --ink:#eef0e9; --muted:#a7b0a6; --line:#333a34; --chip:#242b25; --card:#fdfcf6; --shadow:0 10px 28px rgba(0,0,0,.45); }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family: ui-sans-system, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:var(--bg); color:var(--ink); line-height:1.45;}
+  button,select{font:inherit}
+  button,[role="button"],select,summary{min-height:44px}
+  .wrap{max-width:980px;margin:0 auto;padding:14px 14px 28px}
+  /* Score bar */
+  .scorebar{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch;margin-bottom:12px}
+  .teambox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;box-shadow:var(--shadow)}
+  .teambox.you{border-top:4px solid var(--gold)}
+  .teambox.opp{border-top:4px solid #7a4a3a}
+  .teambox .tname{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .teambox .tscore{font-family:Georgia, 'Times New Roman', serif;font-size:34px;line-height:1;font-weight:700;margin:2px 0}
+  .teambox .tsub{font-size:13px;color:var(--muted)}
+  .centerbox{display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:center;text-align:center}
+  .pill{background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+  .pill strong{font-size:15px}
+  select, .btn{border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:10px 16px;font-weight:700;cursor:pointer}
+  .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .btn.gold{background:var(--gold);color:var(--gold-ink);border-color:#a9871d}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn.small{padding:8px 14px;min-height:40px;font-size:14px}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:12px}
+  .hintbar{display:none;align-items:center;gap:10px;justify-content:center;background:#fff7d6;border:1px solid #e3cf7a;color:#4a3d05;border-radius:12px;padding:8px 12px;font-size:14px;margin:-4px auto 12px;max-width:520px;text-align:center}
+  .hintbar.show{display:flex}
+  .hintbar button{border:none;background:transparent;color:inherit;font-weight:800;cursor:pointer;min-height:32px;padding:4px 8px;border-radius:8px;text-decoration:underline}
+  .hintbar .hintclose{text-decoration:none;font-size:16px;line-height:1}
+  @media (prefers-color-scheme: dark){ .hintbar{background:#2e2a12;color:#ffe9a8;border-color:#6b5f22} }
+  .practicebar{display:none;align-items:center;gap:10px;justify-content:center;background:#e8f5e9;border:1px solid #a5d6a7;color:#1b4d2e;border-radius:12px;padding:8px 12px;font-size:14px;margin:-4px auto 12px;max-width:640px;text-align:center}
+  .practicebar.show{display:flex}
+  .practicebar button{border:none;background:transparent;color:inherit;font-weight:800;cursor:pointer;min-height:32px;padding:4px 8px;border-radius:8px;text-decoration:underline;white-space:nowrap}
+  @media (prefers-color-scheme: dark){ .practicebar{background:#1e3524;color:#b9e4c2;border-color:#35573d} }
+  /* Table */
+  .table{background:radial-gradient(ellipse at center, var(--felt) 0%, var(--felt2) 78%);border:10px solid #5b3d26;border-radius:28px;padding:14px 10px 12px;color:#eef6f0;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .table::before{content:"";position:absolute;inset:10px;border:1.5px solid rgba(255,255,255,.14);border-radius:18px;pointer-events:none}
+  .seatrow{display:flex;justify-content:center}
+  .seat{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:132px}
+  .seat .avatar{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:22px;background:rgba(255,255,255,.14);border:2px solid rgba(255,255,255,.35)}
+  .seat.active .avatar{border-color:var(--gold);background:rgba(201,162,39,.28);box-shadow:0 0 0 4px rgba(201,162,39,.25)}
+  .seat .sname{font-weight:800;font-size:14px}
+  .seat .smeta{font-size:12px;opacity:.92;background:rgba(0,0,0,.22);border-radius:999px;padding:3px 9px}
+  .midrow{display:grid;grid-template-columns:92px 1fr 92px;gap:6px;align-items:center;margin:8px 0}
+  .seat.side{min-width:0}
+  .seat.side .avatar{width:40px;height:40px;font-size:19px}
+  .trickzone{min-height:132px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+  .trickcards{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;min-height:76px;align-items:center}
+  .statusline{text-align:center;font-size:14px;min-height:22px;font-weight:600;padding:0 8px}
+  .statusline .hint{font-weight:400;opacity:.9;font-size:13px}
+  /* Mini cards in trick */
+  .pcard{width:54px;height:76px;background:var(--card);border:1px solid var(--card-line);border-radius:9px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 4px 10px rgba(0,0,0,.25);color:var(--black);position:relative}
+  .pcard .r{font-weight:800;font-size:18px;line-height:1}
+  .pcard .s{font-size:22px;line-height:1}
+  .pcard.red{color:var(--red)}
+  .pcard .who{position:absolute;bottom:-18px;left:0;right:0;text-align:center;font-size:10px;color:#eef6f0;font-weight:700}
+  .pcard.winner{outline:3px solid var(--gold);outline-offset:1px}
+  .pcard.empty{background:rgba(255,255,255,.08);border:1.5px dashed rgba(255,255,255,.35);box-shadow:none;color:rgba(255,255,255,.6);font-size:12px;font-weight:700}
+  /* Hand */
+  .handwrap{margin-top:14px}
+  .handlabel{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .handlabel h2{font-family:Georgia,serif;font-size:19px;margin:0}
+  .hand{display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
+  .hcard{width:56px;height:82px;background:var(--card);border:1.5px solid var(--card-line);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--black);padding:4px 2px;box-shadow:0 3px 8px rgba(20,30,25,.12);transition:transform .08s ease, box-shadow .08s ease}
+  .hcard .r{font-weight:800;font-size:19px;line-height:1}
+  .hcard .s{font-size:26px;line-height:1.05}
+  .hcard .suitname{font-size:9px;letter-spacing:.04em;text-transform:uppercase;opacity:.65;font-weight:700}
+  .hcard.red{color:var(--red)}
+  .hcard.playable{border-color:var(--gold);box-shadow:0 0 0 2px rgba(201,162,39,.45), 0 6px 14px rgba(20,30,25,.16)}
+  .hcard.playable:hover,.hcard.playable:active{transform:translateY(-6px)}
+  .hcard.dim{opacity:.42;cursor:not-allowed}
+  .hcard:disabled{cursor:not-allowed}
+  /* Panels */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow);margin-top:14px}
+  .panel h2,.panel h3{font-family:Georgia,serif;margin:0 0 8px}
+  .panel p{margin:0 0 8px}
+  .bidgrid{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  .bidbtn{min-width:48px;padding:10px 6px;border-radius:12px;border:1.5px solid var(--line);background:var(--chip);font-weight:800;cursor:pointer;font-size:16px}
+  .bidbtn.sel{background:var(--gold);border-color:#a9871d;color:var(--gold-ink)}
+  .bidbtn.nil.sel{background:#2b2118;color:#ffe9a8;border-color:#2b2118}
+  .bidtable{width:100%;border-collapse:collapse;font-size:14px}
+  .bidtable th,.bidtable td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}
+  .bidtable th{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+  .scoretable{width:100%;border-collapse:collapse;font-size:14px}
+  .scoretable th,.scoretable td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right}
+  .scoretable th:first-child,.scoretable td:first-child{text-align:left}
+  .notice{background:#fff7d6;border:1px solid #e3cf7a;color:#4a3d05;border-radius:12px;padding:10px 12px;font-size:14px}
+  @media (prefers-color-scheme: dark){ .notice{background:#2e2a12;color:#ffe9a8;border-color:#6b5f22} }
+  .muted{color:var(--muted);font-size:14px}
+  .bests{display:flex;gap:8px;flex-wrap:wrap}
+  .beststat{background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:13px}
+  .beststat strong{display:block;font-size:18px}
+  /* Modal */
+  .overlay{position:fixed;inset:0;background:rgba(10,14,12,.62);display:none;align-items:flex-end;justify-content:center;padding:0;z-index:50}
+  .overlay.open{display:flex}
+  .sheet{background:var(--panel);color:var(--ink);width:100%;max-width:680px;max-height:88vh;overflow:auto;border-radius:20px 20px 0 0;padding:20px 18px 26px}
+  @media(min-width:640px){ .overlay{align-items:center;padding:18px} .sheet{border-radius:20px} }
+  .sheet h2{font-family:Georgia,serif;margin:0 0 6px;font-size:24px}
+  .sheet h3{margin:16px 0 6px;font-size:16px}
+  .sheet ul{margin:6px 0 10px;padding-left:20px}
+  .sheet li{margin-bottom:5px}
+  .walkdots{display:flex;gap:6px;justify-content:center;margin:14px 0 4px}
+  .walkdots span{width:9px;height:9px;border-radius:50%;background:var(--line)}
+  .walkdots span.on{background:var(--gold)}
+  /* Feedback */
+  .stars{display:flex;gap:6px;margin:8px 0 4px;flex-wrap:wrap}
+  .starbtn{width:48px;height:48px;border-radius:12px;border:1.5px solid var(--line);background:var(--chip);font-size:24px;line-height:1;cursor:pointer;display:grid;place-items:center;color:#9a8a2a}
+  .starbtn[aria-pressed="true"]{background:var(--gold);border-color:#a9871d;color:var(--gold-ink)}
+  .tagrow{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  .tagbtn{border-radius:999px;border:1.5px solid var(--line);background:var(--chip);color:var(--ink);padding:8px 14px;font-weight:700;cursor:pointer;min-height:40px}
+  .tagbtn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .fbtextarea{width:100%;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);padding:10px 12px;font:inherit;resize:vertical;min-height:96px}
+  .fbthanks{display:none;background:#e8f5e9;border:1px solid #a5d6a7;color:#1b4d2e;border-radius:12px;padding:10px 12px;font-weight:700;margin-top:12px}
+  .fbthanks.show{display:block}
+  @media (prefers-color-scheme: dark){ .fbthanks{background:#1e3524;color:#b9e4c2;border-color:#35573d} }
+  footer{margin-top:22px;border-top:1px solid var(--line);padding-top:14px;text-align:center;color:var(--muted);font-size:14px}
+  footer a{color:var(--accent);font-weight:700}
+  @media (prefers-color-scheme: dark){ footer a{color:#8fd0ae} }
+  @media(max-width:560px){
+    .scorebar{grid-template-columns:1fr 1fr}
+    .centerbox{grid-column:1/-1;order:3;flex-direction:row;flex-wrap:wrap}
+    .teambox .tscore{font-size:28px}
+    .hcard{width:50px;height:74px}
+    .hcard .r{font-size:17px}.hcard .s{font-size:23px}
+    .pcard{width:48px;height:68px}
+    .midrow{grid-template-columns:74px 1fr 74px}
+    .seat{min-width:110px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="top">
+
+  <!-- Score bar -->
+  <div class="scorebar" aria-label="Scores">
+    <div class="teambox you">
+      <div class="tname">You &amp; Partner</div>
+      <div class="tscore" id="scoreYou">0</div>
+      <div class="tsub" id="subYou">Bags: 0 · Bid: — · Tricks: 0</div>
+    </div>
+    <div class="centerbox">
+      <span class="pill" id="targetPill">First to <strong>500</strong></span>
+      <span class="pill" id="handPill">Hand 1</span>
+      <span class="pill" id="bagPill">🛍️ Bags carry — 10 bags = −100</span>
+    </div>
+    <div class="teambox opp">
+      <div class="tname">West &amp; East (AI)</div>
+      <div class="tscore" id="scoreOpp">0</div>
+      <div class="tsub" id="subOpp">Bags: 0 · Bid: — · Tricks: 0</div>
+    </div>
+  </div>
+
+  <div style="text-align:center;margin:-4px 0 12px"><span class="pill">Play money — no real gambling</span></div>
+
+  <div class="controls">
+    <label class="pill" for="diffSel">Difficulty
+      <select id="diffSel" aria-label="Difficulty" style="border:none;background:transparent;font-weight:800;color:inherit;min-height:32px">
+        <option value="easy">Easy</option>
+        <option value="normal" selected>Normal</option>
+        <option value="hard">Hard</option>
+      </select>
+    </label>
+    <button class="btn small" id="practiceBtn" type="button">🎓 Practice round</button>
+    <button class="btn small" id="howBtn" type="button">📖 How to play</button>
+    <button class="btn small" id="rulesBtn" type="button">📜 Rules</button>
+    <button class="btn small" id="walkBtn" type="button">👋 Walkthrough</button>
+    <button class="btn small" id="feedbackBtn" type="button">💬 Feedback</button>
+    <button class="btn small" id="newBtn" type="button">↻ New game</button>
+  </div>
+  <p class="muted" id="diffDesc" style="text-align:center;margin:-4px 0 12px" aria-live="polite"></p>
+
+  <div class="practicebar" id="practiceBar" role="note">
+    <span>🎓 <strong>Practice round</strong> — one friendly hand to learn the ropes. Nothing counts: no race to 500, no bests saved, no bags carried over.</span>
+    <button type="button" id="exitPractice">Play a real game ▶</button>
+  </div>
+
+  <div class="hintbar" id="hintBar" role="note">
+    <span>New here? <button type="button" id="hintHow">Tap How to play</button> for a 20-second tour — or just start playing.</span>
+    <button type="button" class="hintclose" id="hintClose" aria-label="Dismiss hint">✕</button>
+  </div>
+
+  <!-- Table -->
+  <section class="table" aria-label="Card table">
+    <div class="seatrow">
+      <div class="seat" id="seat2">
+        <div class="avatar" aria-hidden="true">🧑‍🤝‍🧑</div>
+        <div class="sname">Partner (North)</div>
+        <div class="smeta" id="meta2">Waiting…</div>
+      </div>
+    </div>
+    <div class="midrow">
+      <div class="seat side" id="seat1">
+        <div class="avatar" aria-hidden="true">🤠</div>
+        <div class="sname">West</div>
+        <div class="smeta" id="meta1">AI</div>
+      </div>
+      <div class="trickzone">
+        <div class="trickcards" id="trickCards" aria-live="polite"></div>
+        <div class="statusline" id="statusLine">Dealing…</div>
+      </div>
+      <div class="seat side" id="seat3">
+        <div class="avatar" aria-hidden="true">🦊</div>
+        <div class="sname">East</div>
+        <div class="smeta" id="meta3">AI</div>
+      </div>
+    </div>
+    <div class="seatrow">
+      <div class="seat" id="seat0">
+        <div class="avatar" aria-hidden="true">⭐</div>
+        <div class="sname">You (South)</div>
+        <div class="smeta" id="meta0">Good luck!</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Bidding panel -->
+  <section class="panel" id="bidPanel" hidden>
+    <h2>Your bid</h2>
+    <p class="muted" id="bidContext">How many tricks will you take? Your bid adds to your partner's bid — together you must make the total. <strong>Nil (0)</strong> is a solo gamble: take no tricks at all for +100, or −100 if you take even one.</p>
+    <div class="bidgrid" id="bidGrid" role="group" aria-label="Choose your bid"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="btn gold" id="confirmBid" type="button" disabled>Confirm bid</button>
+      <span class="muted" id="bidHint">Pick a number, then confirm.</span>
+    </div>
+    <div id="bidSoFar" style="margin-top:12px"></div>
+  </section>
+
+  <!-- Hand -->
+  <section class="handwrap" id="handWrap">
+    <div class="handlabel">
+      <h2>Your hand</h2>
+      <span class="muted" id="handHint">Spades are trump. Follow suit if you can.</span>
+    </div>
+    <div class="hand" id="handEl"></div>
+  </section>
+
+  <!-- Hand result / game result -->
+  <section class="panel" id="resultPanel" hidden></section>
+
+  <!-- Bests + history -->
+  <section class="panel" aria-label="Your bests and hand history">
+    <h3>Your bests <span class="muted" style="font-family:inherit;font-weight:400">(saved on this device)</span></h3>
+    <div class="bests" id="bestsEl"></div>
+    <h3 style="margin-top:16px">Hand history</h3>
+    <div id="historyEl"><p class="muted">No hands finished yet. Scores for every hand will appear here.</p></div>
+  </section>
+
+  <footer>
+    <p>Part of the arcade from <a href="#top" id="rffLink">Ridiculously Fit and Fed</a> · Play-money only — no real gambling.<br>
+    <span class="muted">Text chat policy for live rooms (when they arrive): no bullying, word filter + mute / block / report, zero tolerance.</span></p>
+  </footer>
+</div>
+
+<!-- How to play modal -->
+<div class="overlay" id="howOverlay" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+  <div class="sheet">
+    <h2 id="howTitle">How to play Spades</h2>
+    <p><strong>The game in 20 seconds:</strong> You and your partner (North) play against West &amp; East. Each hand you bid how many of the 13 tricks you'll win, then play cards to make it. First team to <strong>500 points</strong> wins.</p>
+    <h3>1 · Bid</h3>
+    <ul>
+      <li>Look at your 13 cards and tap a bid: 1–13 tricks, or <strong>Nil (0)</strong> if you think you can take none at all.</li>
+      <li>Your bid adds to your partner's — together you have to make the total.</li>
+    </ul>
+    <h3>2 · Play</h3>
+    <ul>
+      <li>Tap a glowing card to play it. You must <strong>follow suit</strong> if you can — the game only lights up legal cards.</li>
+      <li><strong>♠ Spades are trump</strong> and beat every other suit. The trick winner leads the next trick.</li>
+    </ul>
+    <h3>3 · Score</h3>
+    <ul>
+      <li>Make your team bid to score; miss it and you lose points. Extra tricks ("bags") add up — every 10 bags cost −100, so don't get greedy.</li>
+    </ul>
+    <h3>🎓 Practice round</h3>
+    <ul>
+      <li>Tap <strong>🎓 Practice round</strong> any time for a single no-pressure hand — great for a first game or testing a brave Nil bid. You'll still see the full scoring breakdown at the end, but nothing is recorded: no points race, no bests, no bags carried over.</li>
+    </ul>
+    <h3>Quick tips</h3>
+    <ul>
+      <li>Count aces and kings as likely tricks, plus long spades.</li>
+      <li>If your partner bid Nil, lead high cards to cover them so they can duck underneath.</li>
+    </ul>
+    <p class="muted">Want the fine print — full scoring, the Nil rules, bags, and how the game is won? That's all on the <strong>Rules</strong> page.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      <button class="btn primary" id="howClose" type="button">Got it — let's play</button>
+      <button class="btn" id="howRules" type="button">📜 Read the full rules</button>
+      <button class="btn" id="howWalk" type="button">Start the walkthrough instead</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rules modal -->
+<div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="sheet">
+    <h2 id="rulesTitle">Spades — full rules</h2>
+    <p>Four players in two fixed partnerships: <strong>You (South) &amp; Partner (North)</strong> against <strong>West &amp; East</strong>. Partners sit across from each other and combine their bids and tricks. A standard 52-card deck is used; cards rank 2 (low) to Ace (high), and <strong>♠ spades are always trump</strong>.</p>
+    <h3>Setup &amp; deal</h3>
+    <ul>
+      <li>Each player is dealt <strong>13 cards</strong>. The dealer rotates one seat to the left after every hand.</li>
+      <li>Bidding starts with the player to the dealer's left and goes around the table once — no passing, no changing your bid.</li>
+      <li>The player to the dealer's left also leads the first trick of the hand.</li>
+    </ul>
+    <h3>Bidding</h3>
+    <ul>
+      <li>Each player bids the number of tricks they personally expect to win: <strong>1–13</strong>, or <strong>Nil</strong>.</li>
+      <li>The two partners' bids are added together into one team contract. Example: you bid 4, your partner bids 3 → your team must win at least 7 of the 13 tricks.</li>
+      <li><strong>Nil (bid 0):</strong> a solo side-bet that <em>you personally</em> will win zero tricks in the whole hand. It does not change your partner's bid, and your partner plays normally.</li>
+      <li>There is no Blind Nil in this version — you always bid after seeing your cards.</li>
+    </ul>
+    <h3>Playing tricks</h3>
+    <ul>
+      <li>A hand is <strong>13 tricks</strong>. The leader plays any legal card; play continues clockwise.</li>
+      <li>Every player must <strong>follow suit</strong> — play a card of the suit led — if they hold one. Only when you are out of that suit may you play something else.</li>
+      <li>The highest card of the suit led wins the trick, <strong>unless</strong> a spade is played: any spade beats any card of another suit, and the highest spade wins if more than one is played.</li>
+      <li>The winner of each trick leads the next one.</li>
+    </ul>
+    <h3>Special rule — breaking spades</h3>
+    <ul>
+      <li>Spades cannot be <strong>led</strong> until they are <strong>broken</strong>: someone who is out of the suit led has discarded a spade on an earlier trick.</li>
+      <li>The one exception: if spades are the only cards left in your hand, you may lead one.</li>
+      <li>Playing a spade when you are void in the suit led (trumping in) is always allowed — that's what breaks them.</li>
+    </ul>
+    <h3>Scoring</h3>
+    <ul>
+      <li><strong>Made the contract:</strong> score <strong>10 points per bid trick</strong>, plus <strong>1 point per overtrick</strong> (each trick won beyond the bid). Example: bid 7, win 9 → 70 + 2 = 72.</li>
+      <li><strong>Set (missed the contract):</strong> score <strong>−10 points per bid trick</strong>, and no points for tricks won. Example: bid 7, win 6 → −70.</li>
+      <li><strong>Nil made</strong> (zero tricks taken): <strong>+100</strong> to your team. <strong>Nil failed</strong> (took 1 or more tricks): <strong>−100</strong>. Nil is scored separately, on top of your partner's contract result — a failed Nil's tricks still count toward the team contract.</li>
+      <li>If both partners bid Nil, each Nil is scored on its own (+100 or −100 each) and there is no team contract.</li>
+    </ul>
+    <h3>Bags 🛍️</h3>
+    <ul>
+      <li>Every overtrick is a <strong>bag</strong>. Bags carry over from hand to hand — they are not reset when a hand ends.</li>
+      <li>Every time a team's running bag total reaches <strong>10</strong>, that team loses <strong>100 points</strong> and 10 bags are removed from its count. This can happen more than once in a game.</li>
+      <li>Tricks taken by a player whose Nil failed are <em>not</em> bags for the Nil itself, but they do count toward the team contract and any overtricks there still become bags.</li>
+    </ul>
+    <h3>Winning the game</h3>
+    <ul>
+      <li>The first team to reach <strong>500 points or more</strong> at the end of a hand wins the game. Scores are only finalised at the end of a hand — passing 500 mid-hand doesn't end anything.</li>
+      <li>If <strong>both</strong> teams pass 500 on the same hand, the higher score wins.</li>
+      <li>If both teams pass 500 with <strong>exactly equal</strong> scores, another hand is played to break the tie.</li>
+    </ul>
+    <h3>Difficulty (AI only — the rules above never change)</h3>
+    <ul>
+      <li><strong>Easy:</strong> AI bids loosely and sometimes wastes high cards.</li>
+      <li><strong>Normal:</strong> solid AI — follows suit smartly and protects Nil bids.</li>
+      <li><strong>Hard:</strong> AI counts the trump, sets up bag traps, and bids Nil only with a truly weak hand.</li>
+    </ul>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      <button class="btn primary" id="rulesClose" type="button">Close rules</button>
+      <button class="btn" id="rulesHow" type="button">📖 Back to How to play</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback modal -->
+<div class="overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+  <div class="sheet">
+    <h2 id="feedbackTitle">Feedback</h2>
+    <p class="muted">Tell us what you think of Spades. Your note is saved on this device only.</p>
+    <h3 style="margin-top:14px">How would you rate it?</h3>
+    <div class="stars" id="fbStars" role="group" aria-label="Rating 1 to 5 stars">
+      <button type="button" class="starbtn" data-rating="1" aria-pressed="false" aria-label="1 star">☆</button>
+      <button type="button" class="starbtn" data-rating="2" aria-pressed="false" aria-label="2 stars">☆</button>
+      <button type="button" class="starbtn" data-rating="3" aria-pressed="false" aria-label="3 stars">☆</button>
+      <button type="button" class="starbtn" data-rating="4" aria-pressed="false" aria-label="4 stars">☆</button>
+      <button type="button" class="starbtn" data-rating="5" aria-pressed="false" aria-label="5 stars">☆</button>
+    </div>
+    <p class="muted" id="fbRatingLabel" aria-live="polite">Tap a star to rate.</p>
+    <h3>Tag <span style="font-weight:400;color:var(--muted);font-size:14px">(optional)</span></h3>
+    <div class="tagrow" id="fbTags" role="group" aria-label="Feedback tag">
+      <button type="button" class="tagbtn" data-tag="Bug" aria-pressed="false">🐛 Bug</button>
+      <button type="button" class="tagbtn" data-tag="Suggestion" aria-pressed="false">💡 Suggestion</button>
+      <button type="button" class="tagbtn" data-tag="Other" aria-pressed="false">Other</button>
+    </div>
+    <h3><label for="fbText">Your comment</label></h3>
+    <textarea class="fbtextarea" id="fbText" placeholder="What did you like? What could be better?" maxlength="1000"></textarea>
+    <div class="fbthanks" id="fbThanks" role="status">Thanks! Your feedback has been saved. 💙</div>
+    <p class="muted" style="margin-top:12px">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      <button class="btn primary" id="fbSave" type="button">Save feedback</button>
+      <button class="btn" id="fbClose" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Walkthrough modal -->
+<div class="overlay" id="walkOverlay" role="dialog" aria-modal="true" aria-labelledby="walkTitle">
+  <div class="sheet">
+    <h2 id="walkTitle">Walkthrough</h2>
+    <div id="walkBody"></div>
+    <div class="walkdots" id="walkDots"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+      <button class="btn" id="walkSkip" type="button">Skip</button>
+      <button class="btn primary" id="walkNext" type="button" style="margin-left:auto">Next →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+// ---------- Constants & helpers ----------
+var SUITS = [
+  {k:'S', sym:'♠', name:'Spades', red:false},
+  {k:'H', sym:'♥', name:'Hearts', red:true},
+  {k:'D', sym:'♦', name:'Diamonds', red:true},
+  {k:'C', sym:'♣', name:'Clubs', red:false}
+];
+var RANKS = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+function suitOf(c){ return SUITS.find(function(s){return s.k===c.s;}); }
+function $(id){ return document.getElementById(id); }
+function delay(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+var NAMES = ['You','West','Partner','East'];
+var TEAM_OF = [0,1,0,1]; // team 0 = You+Partner, team 1 = West+East
+
+// ---------- Bests (localStorage) ----------
+var BESTS_KEY='spades_bests_v1';
+var bests={played:0,won:0,bestMargin:0,totalBags:0,handsPlayed:0};
+try{ var raw=localStorage.getItem(BESTS_KEY); if(raw){ var p=JSON.parse(raw); for(var kk in p) bests[kk]=p[kk]; } }catch(e){}
+function saveBests(){ try{ localStorage.setItem(BESTS_KEY, JSON.stringify(bests)); }catch(e){} renderBests(); }
+function renderBests(){
+  var wr = bests.played? Math.round(100*bests.won/bests.played) : 0;
+  $('bestsEl').innerHTML =
+    '<div class="beststat">Games played<strong>'+bests.played+'</strong></div>'+
+    '<div class="beststat">Games won<strong>'+bests.won+' ('+wr+'%)</strong></div>'+
+    '<div class="beststat">Best winning margin<strong>'+(bests.bestMargin||'—')+'</strong></div>'+
+    '<div class="beststat">Hands played<strong>'+bests.handsPlayed+'</strong></div>'+
+    '<div class="beststat">Career bags taken<strong>'+bests.totalBags+'</strong></div>';
+}
+
+// ---------- Game state ----------
+var G=null;
+function newGameState(){
+  return {
+    scores:[0,0], bags:[0,0], handNum:1, dealer:3, // dealer starts East so You's left... bidding starts left of dealer
+    hands:[[],[],[],[]], bids:[null,null,null,null], nilBid:[false,false,false,false],
+    tricksWon:[0,0,0,0], trick:[], leader:0, turn:0, spadesBroken:false,
+    phase:'idle', selectedBid:null, history:[], gameOver:false, trickNo:1, practice:false
+  };
+}
+function buildDeck(){
+  var d=[]; SUITS.forEach(function(s){ RANKS.forEach(function(r,i){ d.push({s:s.k, r:r, v:i+2}); }); }); return d;
+}
+function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function sortHand(h){
+  var order={S:0,H:1,C:2,D:3};
+  h.sort(function(a,b){ if(order[a.s]!==order[b.s]) return order[a.s]-order[b.s]; return b.v-a.v; });
+}
+function difficulty(){ return $('diffSel').value; }
+
+// ---------- AI bidding ----------
+function evaluateHand(hand){
+  // Returns expected tricks (float)
+  var pts=0;
+  var bySuit={S:[],H:[],D:[],C:[]};
+  hand.forEach(function(c){ bySuit[c.s].push(c); });
+  ['S','H','D','C'].forEach(function(sk){
+    var cards=bySuit[sk].slice().sort(function(a,b){return b.v-a.v;});
+    cards.forEach(function(c,idx){
+      if(c.v===14) pts+=1;                       // Ace
+      else if(c.v===13) pts+= (cards.length>=2?0.8:0.35); // King
+      else if(c.v===12) pts+= (cards.length>=3?0.4:0.1);  // Queen
+    });
+    if(sk==='S'){
+      if(cards.length>4) pts+=(cards.length-4)*0.55; // long trump
+      if(cards.length>=3) pts+=0.25;
+    }
+  });
+  // Short-suit ruffing potential when holding trump
+  var spades=bySuit.S.length;
+  ['H','D','C'].forEach(function(sk){
+    if(bySuit[sk].length===0 && spades>=2) pts+=0.7;
+    else if(bySuit[sk].length===1 && spades>=3) pts+=0.35;
+  });
+  return pts;
+}
+function canNil(hand){
+  // Weak hand: no aces, no kings, no high spades, no long suit danger
+  var bySuit={S:[],H:[],D:[],C:[]};
+  hand.forEach(function(c){ bySuit[c.s].push(c); });
+  for(var i=0;i<hand.length;i++){ if(hand[i].v>=13) return false; } // A or K kills nil
+  if(bySuit.S.some(function(c){return c.v>=12;})) return false;
+  if(bySuit.S.length>=4) return false;
+  var suits=['H','D','C','S'];
+  for(var j=0;j<suits.length;j++){
+    var cs=bySuit[suits[j]];
+    if(cs.length>=5 && cs.some(function(c){return c.v>=11;})) return false;
+  }
+  return evaluateHand(hand) <= 1.6;
+}
+function aiBid(player){
+  var hand=G.hands[player];
+  var diff=difficulty();
+  var est=evaluateHand(hand);
+  if(canNil(hand)){
+    var nilChance = diff==='hard'?0.55 : diff==='normal'?0.4 : 0.3;
+    if(Math.random()<nilChance) return 0;
+  }
+  var noise = diff==='easy'? (Math.random()*1.6-0.8) : diff==='normal'? (Math.random()*0.8-0.4) : (Math.random()*0.4-0.2);
+  var bid=Math.round(est+noise);
+  if(diff==='easy' && Math.random()<0.12) bid+= (Math.random()<0.5?-1:1);
+  return Math.max(1, Math.min(10, bid));
+}
+
+// ---------- AI play ----------
+function legalCards(player){
+  var hand=G.hands[player];
+  if(G.trick.length===0){
+    var nonSpades=hand.filter(function(c){return c.s!=='S';});
+    if(!G.spadesBroken && nonSpades.length>0) return nonSpades;
+    return hand.slice();
+  }
+  var led=G.trick[0].card.s;
+  var follow=hand.filter(function(c){return c.s===led;});
+  return follow.length? follow : hand.slice();
+}
+function trickWinnerSoFar(){
+  var led=G.trick[0].card.s; var best=G.trick[0];
+  G.trick.forEach(function(t){
+    if(t.card.s==='S' && best.card.s!=='S') best=t;
+    else if(t.card.s===best.card.s && t.card.v>best.card.v) best=t;
+    else if(t.card.s===led && best.card.s===led && t.card.v>best.card.v) best=t;
+  });
+  return best;
+}
+function lowest(cards){ return cards.slice().sort(function(a,b){return a.v-b.v;})[0]; }
+function highest(cards){ return cards.slice().sort(function(a,b){return b.v-a.v;})[0]; }
+function aiPlay(player){
+  var diff=difficulty();
+  var legal=legalCards(player);
+  if(legal.length===1) return legal[0];
+  // Easy mistakes
+  if(diff==='easy' && Math.random()<0.28) return legal[Math.floor(Math.random()*legal.length)];
+
+  var partner=(player+2)%4;
+  var partnerNil = G.nilBid[partner] && G.tricksWon[partner]===0;
+  var myNil = G.nilBid[player] && G.tricksWon[player]===0;
+
+  // --- Playing Nil: shed high cards early on other suits, duck everything ---
+  if(myNil){
+    if(G.trick.length===0) return highest(legal); // lead highest non-spade to shed it (can't lead spade if unbroken anyway)
+    var ledN=G.trick[0].card.s;
+    var followN=legal.filter(function(c){return c.s===ledN;});
+    if(followN.length){
+      var winN=trickWinnerSoFar();
+      var under=followN.filter(function(c){ return !(winN.card.s===ledN && c.v>winN.card.v) && c.s!== 'S'; });
+      // play highest card that still loses
+      var safe=followN.filter(function(c){return c.v<winN.card.v || winN.card.s==='S';});
+      if(safe.length) return highest(safe);
+      return lowest(followN);
+    }
+    // Void: dump highest non-spade, avoid trumping in (trumping wins the trick = nil dead, but if void we must not play spade unless only spades)
+    var nonS=legal.filter(function(c){return c.s!=='S';});
+    if(nonS.length) return highest(nonS);
+    return lowest(legal); // only spades left — lowest, likely loses unless led... will probably break nil; unavoidable
+  }
+
+  // --- Protecting partner's Nil: win tricks cheaply, lead high ---
+  if(partnerNil){
+    if(G.trick.length===0){
+      var nonSL=legal.filter(function(c){return c.s!=='S';});
+      return highest(nonSL.length?nonSL:legal); // lead top card so partner can duck under
+    }
+    var winP=trickWinnerSoFar();
+    var partnerPlayed=G.trick.some(function(t){return t.player===partner;});
+    var partnerWinning = winP.player===partner;
+    if(partnerWinning){
+      // Overtake partner to save their nil if we can
+      var ledP=G.trick[0].card.s;
+      var beaters=legal.filter(function(c){ return (c.s===ledP && winP.card.s===ledP && c.v>winP.card.v) || (c.s==='S' && winP.card.s!==ledP); });
+      if(beaters.length){
+        var cheap=beaters.slice().sort(function(a,b){return a.v-b.v;});
+        var nonTrump=cheap.filter(function(c){return c.s!=='S';});
+        return nonTrump.length?nonTrump[0]:cheap[0];
+      }
+      return lowest(legal);
+    }
+    // Partner hasn't won it; try to win it ourselves if partner still to play or already ducked
+    return playToWin(player, legal, false);
+  }
+
+  // --- Normal play ---
+  if(G.trick.length===0){
+    // Lead: prefer ace/king of a side suit; on Hard, lead low from long suit sometimes
+    var nonS=legal.filter(function(c){return c.s!=='S';});
+    var pool=nonS.length?nonS:legal;
+    var aces=pool.filter(function(c){return c.v===14;});
+    if(aces.length) return aces[0];
+    var kings=pool.filter(function(c){return c.v===13;});
+    if(kings.length && diff!=='easy') return kings[0];
+    if(diff==='hard') return lowest(pool);
+    return pool[Math.floor(Math.random()*pool.length)];
+  }
+  return playToWin(player, legal, true);
+}
+function playToWin(player, legal, normal){
+  var diff=difficulty();
+  var win=trickWinnerSoFar();
+  var partner=(player+2)%4;
+  var lastToPlay = G.trick.length===3;
+  var led=G.trick[0].card.s;
+  var partnerWinning = win.player===partner;
+  var teamTricks = G.tricksWon[player]+G.tricksWon[partner];
+  var teamBid = teamBidOf(TEAM_OF[player]);
+  var stillNeeds = teamBid!==null && teamTricks < teamBid;
+  // Check if an opponent is on Nil and currently losing — don't steal their losing trick unnecessarily? Actually stealing is fine.
+  if(partnerWinning && !lastToPlay){
+    // Don't overtake partner unless we still desperately need tricks and partner's card is shaky (low winner, opponents behind)
+    var shaky = win.card.s===led && win.card.v<=11;
+    if(!shaky || !stillNeeds) return lowest(legal);
+  }
+  if(partnerWinning && lastToPlay) return lowest(legal);
+  // Try to win cheaply
+  var beaters=legal.filter(function(c){
+    if(win.card.s==='S') return c.s==='S' && c.v>win.card.v;
+    if(c.s==='S') return true;
+    return c.s===led && c.v>win.card.v;
+  });
+  if(beaters.length){
+    beaters.sort(function(a,b){ return (a.s==='S'?1:0)-(b.s==='S'?1:0) || a.v-b.v; });
+    // Prefer cheapest non-trump beater, else cheapest trump
+    var nonT=beaters.filter(function(c){return c.s!=='S';});
+    if(nonT.length) return nonT[0];
+    // Trump in: on last seat or when needed; if opponents' nil is at stake, trump happily
+    if(lastToPlay || stillNeeds || diff==='hard') return beaters[0];
+    if(Math.random()<0.6) return beaters[0];
+    return lowest(legal);
+  }
+  // Can't win: shed lowest, but shed high side cards before low trump
+  var nonS=legal.filter(function(c){return c.s!=='S';});
+  if(lastToPlay && nonS.length){
+    // dump highest useless side card to clear hand (hard play)
+    if(diff==='hard') return highest(nonS);
+    return lowest(nonS.length?nonS:legal);
+  }
+  return lowest(legal);
+}
+function teamBidOf(team){
+  var a = team===0? [0,2]:[1,3];
+  if(G.bids[a[0]]===null || G.bids[a[1]]===null) return null;
+  var sum=0; a.forEach(function(p){ if(!G.nilBid[p]) sum+=G.bids[p]; });
+  return sum;
+}
+
+// ---------- Rendering ----------
+function cardHTML(c, cls){
+  var s=suitOf(c);
+  return '<div class="pcard '+(s.red?'red':'')+' '+(cls||'')+'"><span class="r">'+c.r+'</span><span class="s">'+s.sym+'</span></div>';
+}
+function renderScores(){
+  $('scoreYou').textContent=G.scores[0];
+  $('scoreOpp').textContent=G.scores[1];
+  var b0=teamBidOf(0), b1=teamBidOf(1);
+  var t0=G.tricksWon[0]+G.tricksWon[2], t1=G.tricksWon[1]+G.tricksWon[3];
+  $('subYou').textContent='Bags: '+G.bags[0]+' · Bid: '+(b0===null?'—':b0+(nilNote(0)))+' · Tricks: '+t0;
+  $('subOpp').textContent='Bags: '+G.bags[1]+' · Bid: '+(b1===null?'—':b1+(nilNote(1)))+' · Tricks: '+t1;
+  $('handPill').textContent= G.practice? ('Practice · Trick '+Math.min(G.trickNo,13)+' of 13') : ('Hand '+G.handNum+' · Trick '+Math.min(G.trickNo,13)+' of 13');
+}
+function nilNote(team){
+  var ps= team===0?[0,2]:[1,3];
+  var n=ps.filter(function(p){return G.nilBid[p];});
+  return n.length? ' + Nil ('+n.map(function(p){return NAMES[p];}).join(', ')+')' : '';
+}
+function renderSeats(activePlayer){
+  for(var p=0;p<4;p++){
+    var seat=$('seat'+p); if(seat) seat.classList.toggle('active', activePlayer===p);
+    var meta=$('meta'+p); if(!meta) continue;
+    var parts=[];
+    if(G.bids[p]!==null) parts.push(G.nilBid[p]?'Bid: Nil':('Bid: '+G.bids[p]));
+    else if(G.phase==='bidding') parts.push('Bidding…');
+    parts.push('Tricks: '+G.tricksWon[p]);
+    if(p!==0) parts.push('🂠 '+G.hands[p].length);
+    meta.textContent=parts.join(' · ');
+  }
+}
+function renderTrick(winnerPlayer){
+  var el=$('trickCards');
+  if(G.trick.length===0){ el.innerHTML='<div class="pcard empty">Trick<br>area</div>'; return; }
+  el.innerHTML=G.trick.map(function(t){
+    var s=suitOf(t.card);
+    var winCls = (winnerPlayer===t.player)?'winner':'';
+    return '<div style="padding-bottom:18px"><div class="pcard '+(s.red?'red':'')+' '+winCls+'"><span class="r">'+t.card.r+'</span><span class="s">'+s.sym+'</span><span class="who">'+NAMES[t.player]+'</span></div></div>';
+  }).join('');
+}
+function renderHand(){
+  var el=$('handEl');
+  var myTurn = G.phase==='playing' && G.turn===0;
+  var legal = myTurn? legalCards(0):[];
+  el.innerHTML='';
+  G.hands[0].forEach(function(c){
+    var s=suitOf(c);
+    var btn=document.createElement('button');
+    btn.type='button';
+    var isLegal = legal.some(function(l){return l.s===c.s&&l.v===c.v;});
+    btn.className='hcard '+(s.red?'red':'')+(myTurn?(isLegal?' playable':' dim'):'');
+    btn.disabled=!myTurn||!isLegal;
+    btn.setAttribute('aria-label', c.r+' of '+s.name+(isLegal?' — tap to play':''));
+    btn.innerHTML='<span class="r">'+c.r+'</span><span class="s">'+s.sym+'</span><span class="suitname">'+s.name+'</span>';
+    if(isLegal) btn.addEventListener('click', function(){ humanPlay(c); });
+    el.appendChild(btn);
+  });
+  $('handHint').textContent = myTurn? hintForHuman() : (G.phase==='bidding'?'Bidding first — then your cards unlock.':'Spades are trump. Follow suit if you can.');
+}
+function hintForHuman(){
+  if(G.nilBid[0] && G.tricksWon[0]===0) return '⚠️ You bid Nil — you must take ZERO tricks. Duck everything!';
+  if(G.nilBid[2] && G.tricksWon[2]===0) return '🛡️ Your partner bid Nil — lead high and cover them so they can duck.';
+  if(G.trick.length===0) return G.spadesBroken? 'Your lead — spades are broken, you may lead one.' : 'Your lead — spades aren\'t broken yet, so lead another suit.';
+  var led=G.trick[0].card.s; var s=suitOf({s:led});
+  var has=G.hands[0].some(function(c){return c.s===led;});
+  return has? ('Follow suit: play a '+s.name.slice(0,-1).toLowerCase()+' if you can.') : ('You\'re out of '+s.name.toLowerCase()+' — you may trump with a spade or discard.');
+}
+function setStatus(html){ $('statusLine').innerHTML=html; }
+function renderAll(active){ renderScores(); renderSeats(active); renderTrick(); renderHand(); }
+
+// ---------- Flow ----------
+function startGame(practice){
+  G=newGameState();
+  G.practice=!!practice;
+  $('resultPanel').hidden=true;
+  $('practiceBar').classList.toggle('show', G.practice);
+  $('targetPill').innerHTML= G.practice? '🎓 Practice round' : 'First to <strong>500</strong>';
+  $('practiceBtn').classList.toggle('primary', G.practice);
+  $('practiceBtn').textContent= G.practice? '🎓 Practice round (on)' : '🎓 Practice round';
+  renderBests();
+  startHand();
+}
+function startHand(){
+  var deck=shuffle(buildDeck());
+  G.hands=[[],[],[],[]];
+  for(var i=0;i<52;i++) G.hands[i%4].push(deck[i]);
+  G.hands.forEach(sortHand);
+  G.bids=[null,null,null,null]; G.nilBid=[false,false,false,false];
+  G.tricksWon=[0,0,0,0]; G.trick=[]; G.spadesBroken=false; G.trickNo=1;
+  G.leader=(G.dealer+1)%4; G.turn=G.leader;
+  G.phase='bidding';
+  $('resultPanel').hidden=true;
+  $('bidPanel').hidden=true;
+  renderAll(-1);
+  setStatus((G.practice?'🎓 Practice hand dealt — take your time, nothing counts. ':'Hand '+G.handNum+' dealt. ')+'<span class="hint">'+(G.leader===0?'You bid':NAMES[G.leader]+' bids')+' first — bidding goes around the table.</span>');
+  runBidding(G.leader);
+}
+async function runBidding(startPlayer){
+  var order=[]; for(var i=0;i<4;i++) order.push((startPlayer+i)%4);
+  for(var k=0;k<order.length;k++){
+    var p=order[k];
+    renderSeats(p);
+    if(p===0){
+      var b=await humanBid(order);
+      G.bids[0]=b; G.nilBid[0]=(b===0);
+      setStatus('You bid <strong>'+(b===0?'Nil':b)+'</strong>.');
+    } else {
+      await delay(650);
+      var ab=aiBid(p); G.bids[p]=ab; G.nilBid[p]=(ab===0);
+      setStatus(NAMES[p]+' bids <strong>'+(ab===0?'Nil':ab)+'</strong>.');
+    }
+    renderAll(-1);
+  }
+  var b0=teamBidOf(0), b1=teamBidOf(1);
+  setStatus('Bids in — You &amp; Partner need <strong>'+b0+'</strong>'+(nilNote(0)?' (plus Nil)':'')+', West &amp; East need <strong>'+b1+'</strong>. '+NAMES[G.leader]+' leads.');
+  await delay(1100);
+  G.phase='playing'; G.turn=G.leader;
+  renderAll(G.turn);
+  if(G.turn!==0) aiTurnLoop();
+}
+function humanBid(orderSoFar){
+  return new Promise(function(resolve){
+    $('bidPanel').hidden=false;
+    G.selectedBid=null;
+    var grid=$('bidGrid'); grid.innerHTML='';
+    var vals=[0,1,2,3,4,5,6,7,8,9,10,11,12,13];
+    vals.forEach(function(v){
+      var b=document.createElement('button'); b.type='button';
+      b.className='bidbtn'+(v===0?' nil':''); b.textContent= v===0?'Nil':v;
+      b.setAttribute('aria-label', v===0?'Bid Nil':'Bid '+v);
+      b.addEventListener('click', function(){
+        G.selectedBid=v;
+        grid.querySelectorAll('.bidbtn').forEach(function(x){x.classList.remove('sel');});
+        b.classList.add('sel');
+        $('confirmBid').disabled=false;
+        $('bidHint').textContent= v===0? 'Nil: take no tricks at all. +100 if you pull it off, −100 if you take one.' : ('You\'re bidding '+v+' tricks for yourself.');
+      });
+      grid.appendChild(b);
+    });
+    // Show bids so far
+    var rows=orderSoFar.filter(function(p){return G.bids[p]!==null;}).map(function(p){
+      return '<tr><td>'+NAMES[p]+'</td><td><strong>'+(G.nilBid[p]?'Nil':G.bids[p])+'</strong></td></tr>';
+    }).join('');
+    $('bidSoFar').innerHTML= rows? '<table class="bidtable"><tr><th>Player</th><th>Bid</th></tr>'+rows+'</table>' : '<p class="muted">You bid first this hand — no bids in yet.</p>';
+    // Suggest a bid based on hand strength
+    var est=Math.max(1,Math.round(evaluateHand(G.hands[0])));
+    $('bidContext').innerHTML='How many tricks will <strong>you</strong> take? Your bid adds to your partner\'s bid. A rough guide from your hand: about <strong>'+est+'</strong> tricks look likely. <strong>Nil (0)</strong> = take none at all for +100 / −100.';
+    $('confirmBid').onclick=function(){
+      $('bidPanel').hidden=true;
+      resolve(G.selectedBid===null?est:G.selectedBid);
+    };
+    $('bidPanel').scrollIntoView({behavior:'smooth', block:'nearest'});
+  });
+}
+async function aiTurnLoop(){
+  while(G && G.phase==='playing' && G.turn!==0){
+    renderAll(G.turn);
+    await delay(750);
+    if(!G || G.phase!=='playing') return;
+    var p=G.turn;
+    var card=aiPlay(p);
+    playCard(p, card);
+    if(G.phase!=='playing') return;
+  }
+  renderAll(G.turn);
+}
+function humanPlay(card){
+  if(G.phase!=='playing'||G.turn!==0) return;
+  playCard(0, card);
+  if(G.phase==='playing' && G.turn!==0) aiTurnLoop();
+}
+function playCard(player, card){
+  var idx=G.hands[player].findIndex(function(c){return c.s===card.s&&c.v===card.v;});
+  if(idx<0) return;
+  G.hands[player].splice(idx,1);
+  if(card.s==='S' && G.trick.length>0 && G.trick[0].card.s!=='S') G.spadesBroken=true;
+  if(card.s==='S' && G.trick.length===0 && !G.spadesBroken){
+    // Leading a spade breaks spades (only legal if only spades remain)
+    G.spadesBroken=true;
+  }
+  G.trick.push({player:player, card:card});
+  G.turn=(player+1)%4;
+  renderAll(G.turn);
+  if(G.trick.length===4) finishTrick();
+  else if(G.trick[0]) setStatus(NAMES[player]+' played '+card.r+suitOf(card).sym+'. <span class="hint">'+(G.turn===0?'Your turn.':'')+'</span>');
+}
+async function finishTrick(){
+  var win=trickWinnerSoFar();
+  G.tricksWon[win.player]++;
+  renderTrick(win.player); renderScores(); renderSeats(-1);
+  setStatus('<strong>'+NAMES[win.player]+'</strong> takes the trick with '+win.card.r+suitOf(win.card).sym+'.');
+  G.phase='trickpause';
+  await delay(1250);
+  if(!G) return;
+  G.trick=[]; G.trickNo++;
+  G.leader=win.player; G.turn=win.player;
+  if(G.hands[0].length===0 && G.hands[1].length===0){ endHand(); return; }
+  G.phase='playing';
+  renderAll(G.turn);
+  setStatus(NAMES[G.turn]+' leads trick '+G.trickNo+'.'+(G.turn===0?' <span class="hint">Tap a glowing card to play it.</span>':''));
+  if(G.turn!==0) aiTurnLoop();
+}
+
+// ---------- Scoring ----------
+function scoreTeam(team){
+  var ps= team===0?[0,2]:[1,3];
+  var bid=0, nilDelta=0, nilNotes=[];
+  ps.forEach(function(p){
+    if(G.nilBid[p]){
+      if(G.tricksWon[p]===0){ nilDelta+=100; nilNotes.push(NAMES[p]+' made Nil (+100)'); }
+      else { nilDelta-=100; nilNotes.push(NAMES[p]+' failed Nil (−100, took '+G.tricksWon[p]+')'); }
+    } else bid+=G.bids[p];
+  });
+  var tricks=ps.reduce(function(a,p){return a+G.tricksWon[p];},0);
+  var contractDelta=0, bagsEarned=0, note='';
+  if(bid>0){
+    if(tricks>=bid){ bagsEarned=tricks-bid; contractDelta=bid*10+bagsEarned; note='Made '+bid+' bid with '+tricks+' tricks ('+bagsEarned+' bag'+(bagsEarned===1?'':'s')+')'; }
+    else { contractDelta=-bid*10; note='Set! Bid '+bid+', took only '+tricks+' (−'+(bid*10)+')'; }
+  } else note='Both partners bid Nil';
+  // Bags & penalty
+  var newBags=G.bags[team]+bagsEarned;
+  var penalty=0;
+  while(newBags>=10){ newBags-=10; penalty+=100; }
+  return {bid:bid, tricks:tricks, delta:contractDelta+nilDelta-penalty, bagsEarned:bagsEarned, newBags:newBags, penalty:penalty, note:note, nilNotes:nilNotes};
+}
+function endHand(){
+  G.phase='handEnd';
+  var r0=scoreTeam(0), r1=scoreTeam(1);
+  G.scores[0]+=r0.delta; G.scores[1]+=r1.delta;
+  G.bags[0]=r0.newBags; G.bags[1]=r1.newBags;
+  if(!G.practice){
+    bests.handsPlayed++; bests.totalBags+=r0.bagsEarned; saveBests();
+    G.history.push({hand:G.handNum, r0:r0, r1:r1, s0:G.scores[0], s1:G.scores[1]});
+    renderHistory();
+  }
+  renderAll(-1);
+  var gameWinner=null;
+  if(G.scores[0]>=500 || G.scores[1]>=500){
+    if(G.scores[0]!==G.scores[1]) gameWinner= G.scores[0]>G.scores[1]?0:1;
+  }
+  var panel=$('resultPanel'); panel.hidden=false;
+  function teamBlock(title, r, score, bags){
+    return '<h3>'+title+' — '+(r.delta>=0?'+':'')+r.delta+' pts</h3><p>'+r.note+'.'+(r.nilNotes.length?' '+r.nilNotes.join('. ')+'.':'')+(r.penalty?' Bag penalty: −'+r.penalty+' (hit 10 bags).':'')+'</p><p class="muted">Score now <strong>'+score+'</strong> · Bags carried: '+bags+'</p>';
+  }
+  if(G.practice){
+    G.phase='gameEnd';
+    setStatus('🎓 Practice hand done — here\'s how it would have scored. Nothing was recorded.');
+    panel.innerHTML='<h2>🎓 Practice hand — how it scored</h2>'+
+      '<p>That was just for learning, so <strong>nothing was recorded</strong>: no points toward 500, no bags carried into a real game, and your bests and hand history are untouched. In a real game, this hand would have scored:</p>'+
+      teamBlock('You &amp; Partner', r0, G.scores[0], G.bags[0]) + teamBlock('West &amp; East', r1, G.scores[1], G.bags[1])+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn gold" id="practiceAgainBtn" type="button">🎓 Another practice hand</button><button class="btn primary" id="realGameBtn" type="button">▶ Play a real game (first to 500)</button></div>';
+    panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+    $('practiceAgainBtn').addEventListener('click', function(){ startGame(true); });
+    $('realGameBtn').addEventListener('click', function(){ startGame(false); });
+    return;
+  }
+  if(gameWinner!==null){
+    G.gameOver=true; G.phase='gameEnd';
+    if(gameWinner===0){ bests.won++; bests.bestMargin=Math.max(bests.bestMargin, G.scores[0]-G.scores[1]); }
+    bests.played++; saveBests();
+    setStatus(gameWinner===0?'🏆 You win the game!':'West & East win the game.');
+    panel.innerHTML='<h2>'+(gameWinner===0?'🏆 You &amp; Partner win!':'West &amp; East win this one')+'</h2>'+
+      '<p>Final score: <strong>'+G.scores[0]+' – '+G.scores[1]+'</strong> after '+G.handNum+' hands.</p>'+
+      teamBlock('You &amp; Partner', r0, G.scores[0], G.bags[0]) + teamBlock('West &amp; East', r1, G.scores[1], G.bags[1])+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn primary" id="againBtn" type="button">▶ Play again (rematch)</button></div>';
+  } else {
+    setStatus('Hand '+G.handNum+' scored. '+(G.scores[0]>=400||G.scores[1]>=400?'Someone is closing in on 500…':'First to 500 wins.'));
+    panel.innerHTML='<h2>Hand '+G.handNum+' — scoring</h2>'+
+      teamBlock('You &amp; Partner', r0, G.scores[0], G.bags[0]) + teamBlock('West &amp; East', r1, G.scores[1], G.bags[1])+
+      ((G.scores[0]>=500&&G.scores[1]>=500)?'<div class="notice">Both teams passed 500 with equal scores — one more hand decides it.</div>':'')+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn primary" id="nextHandBtn" type="button">▶ Deal hand '+(G.handNum+1)+'</button></div>';
+  }
+  panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+  var nb=$('nextHandBtn'); if(nb) nb.addEventListener('click', function(){ G.handNum++; G.dealer=(G.dealer+1)%4; panel.hidden=true; startHand(); });
+  var ab=$('againBtn'); if(ab) ab.addEventListener('click', startGame);
+}
+function renderHistory(){
+  if(!G.history.length) return;
+  var rows=G.history.slice().reverse().map(function(h){
+    return '<tr><td>Hand '+h.hand+'</td><td>'+(h.r0.delta>=0?'+':'')+h.r0.delta+' (bid '+h.r0.bid+', took '+h.r0.tricks+')</td><td>'+(h.r1.delta>=0?'+':'')+h.r1.delta+' (bid '+h.r1.bid+', took '+h.r1.tricks+')</td><td><strong>'+h.s0+' – '+h.s1+'</strong></td></tr>';
+  }).join('');
+  $('historyEl').innerHTML='<div style="overflow-x:auto"><table class="scoretable"><tr><th>Hand</th><th>You &amp; Partner</th><th>West &amp; East</th><th>Running score</th></tr>'+rows+'</table></div>';
+}
+
+// ---------- Tutorial / walkthrough ----------
+var WALK=[
+  {t:'👋 Welcome to Spades!', b:'<p>You play with a partner — <strong>Partner (North)</strong>, across the table — against West &amp; East, both played by the computer.</p><p>Every hand has two parts: <strong>bid</strong> how many tricks you\'ll win, then <strong>play</strong> 13 tricks to make it. First team to <strong>500</strong> wins the game.</p>'},
+  {t:'🃏 Step 1 — Your hand', b:'<p>Your 13 cards sit at the bottom of the screen, sorted by suit with <strong>♠ spades first</strong> — spades are always trump, so they beat every other suit.</p><p>Count your likely winners: aces almost always win, kings usually do, and extra spades are gold.</p>'},
+  {t:'🎯 Step 2 — Bidding', b:'<p>When it\'s your turn to bid, tap a number and confirm. The game even shows a rough guide from your hand strength.</p><p>Feeling brave with a terrible hand? Bid <strong>Nil</strong> — take zero tricks for a 100-point bonus (or −100 if you slip).</p>'},
+  {t:'▶️ Step 3 — Playing a trick', b:'<p>The leader plays a card to the middle. You must <strong>follow suit</strong> if you can — the game only lights up cards you\'re allowed to play, so just tap a glowing card.</p><p>Highest card of the suit led wins, unless someone trumps it with a spade. Trick winner leads next.</p>'},
+  {t:'🛍️ Step 4 — Bags &amp; scoring', b:'<p>Make your team bid: <strong>10 points per bid trick + 1 per extra trick</strong>. Those extras are <em>bags</em> — fun now, but every 10 bags cost you <strong>−100</strong>, so don\'t get greedy near the end.</p><p>Miss your bid and you lose 10 per bid trick. That\'s everything — good luck!</p>'}
+];
+var walkIdx=0;
+function openWalk(){ walkIdx=0; showWalk(); $('walkOverlay').classList.add('open'); }
+function showWalk(){
+  var s=WALK[walkIdx];
+  $('walkTitle').textContent=s.t;
+  $('walkBody').innerHTML=s.b;
+  $('walkDots').innerHTML=WALK.map(function(_,i){return '<span class="'+(i===walkIdx?'on':'')+'"></span>';}).join('');
+  $('walkNext').textContent= walkIdx===WALK.length-1?'Start playing ▶':'Next →';
+}
+function closeWalk(){ $('walkOverlay').classList.remove('open'); try{ localStorage.setItem('spades_walkthrough_done','1'); }catch(e){} }
+
+// ---------- Wiring ----------
+// ---------- One-time "new here?" hint (non-blocking, dismissible) ----------
+var HINT_KEY='spades_hint_seen_v1';
+function hintSeen(){ try{ return !!localStorage.getItem(HINT_KEY); }catch(e){ return true; } }
+function dismissHint(){ $('hintBar').classList.remove('show'); try{ localStorage.setItem(HINT_KEY,'1'); }catch(e){} }
+if(!hintSeen()) $('hintBar').classList.add('show');
+$('hintClose').addEventListener('click', dismissHint);
+$('hintHow').addEventListener('click', function(){ dismissHint(); $('howOverlay').classList.add('open'); });
+
+$('howBtn').addEventListener('click', function(){ dismissHint(); $('howOverlay').classList.add('open'); });
+$('howClose').addEventListener('click', function(){ $('howOverlay').classList.remove('open'); });
+$('howRules').addEventListener('click', function(){ $('howOverlay').classList.remove('open'); $('rulesOverlay').classList.add('open'); });
+$('howWalk').addEventListener('click', function(){ $('howOverlay').classList.remove('open'); openWalk(); });
+$('rulesBtn').addEventListener('click', function(){ dismissHint(); $('rulesOverlay').classList.add('open'); });
+$('rulesClose').addEventListener('click', function(){ $('rulesOverlay').classList.remove('open'); });
+$('rulesHow').addEventListener('click', function(){ $('rulesOverlay').classList.remove('open'); $('howOverlay').classList.add('open'); });
+$('walkBtn').addEventListener('click', function(){ dismissHint(); openWalk(); });
+$('walkSkip').addEventListener('click', closeWalk);
+$('walkNext').addEventListener('click', function(){ if(walkIdx<WALK.length-1){ walkIdx++; showWalk(); } else closeWalk(); });
+$('newBtn').addEventListener('click', function(){ if(confirmInPage()) startGame(G && G.practice); });
+$('practiceBtn').addEventListener('click', function(){ dismissHint(); startGame(true); });
+$('exitPractice').addEventListener('click', function(){ startGame(false); });
+function confirmInPage(){ return true; } // New game restarts immediately — scores reset, bests kept
+var DIFF_KEY='spades_difficulty_v1';
+var DIFF_DESCS={
+  easy:'Easy — relaxed AI: loose bids and the odd wasted high card. A friendly way to learn the game.',
+  normal:'Normal — solid AI: sensible bids, smart following, and it protects Nil bids.',
+  hard:'Hard — sharp AI: counts the trump, sets bag traps, and bids Nil only with a truly weak hand.'
+};
+function renderDiffDesc(){ $('diffDesc').textContent=DIFF_DESCS[difficulty()]||''; }
+try{ var savedDiff=localStorage.getItem(DIFF_KEY); if(savedDiff && DIFF_DESCS[savedDiff]) $('diffSel').value=savedDiff; }catch(e){}
+renderDiffDesc();
+$('diffSel').addEventListener('change', function(){ try{ localStorage.setItem(DIFF_KEY, difficulty()); }catch(e){} renderDiffDesc(); setStatus('Difficulty set to <strong>'+$('diffSel').selectedOptions[0].text+'</strong> — it applies to the AI from the next decision. Your pick is remembered for next time.'); });
+$('rffLink').addEventListener('click', function(e){ e.preventDefault(); window.scrollTo({top:0,behavior:'smooth'}); });
+
+// ---------- Feedback (standard — saved on this device only) ----------
+var FB_KEY='holos-arcade-feedback';
+var fbRating=0, fbTag='';
+function fbRenderStars(){
+  var btns=$('fbStars').querySelectorAll('.starbtn');
+  btns.forEach(function(b){
+    var r=parseInt(b.getAttribute('data-rating'),10);
+    var on=r<=fbRating;
+    b.setAttribute('aria-pressed', on?'true':'false');
+    b.textContent= on?'★':'☆';
+  });
+  var labels=['Tap a star to rate.','1 star — not for me','2 stars — needs work','3 stars — okay','4 stars — good','5 stars — love it!'];
+  $('fbRatingLabel').textContent=labels[fbRating]||labels[0];
+}
+function fbRenderTags(){
+  var btns=$('fbTags').querySelectorAll('.tagbtn');
+  btns.forEach(function(b){ b.setAttribute('aria-pressed', b.getAttribute('data-tag')===fbTag?'true':'false'); });
+}
+function openFeedback(){
+  fbRating=0; fbTag=''; $('fbText').value=''; $('fbThanks').classList.remove('show');
+  fbRenderStars(); fbRenderTags();
+  $('feedbackOverlay').classList.add('open');
+}
+function closeFeedback(){ $('feedbackOverlay').classList.remove('open'); }
+$('feedbackBtn').addEventListener('click', function(){ dismissHint(); openFeedback(); });
+$('fbClose').addEventListener('click', closeFeedback);
+$('feedbackOverlay').addEventListener('click', function(e){ if(e.target===$('feedbackOverlay')) closeFeedback(); });
+$('fbStars').addEventListener('click', function(e){
+  var b=e.target.closest('.starbtn'); if(!b) return;
+  fbRating=parseInt(b.getAttribute('data-rating'),10)||0; fbRenderStars();
+});
+$('fbTags').addEventListener('click', function(e){
+  var b=e.target.closest('.tagbtn'); if(!b) return;
+  var t=b.getAttribute('data-tag');
+  fbTag=(fbTag===t)?'':t; fbRenderTags();
+});
+$('fbSave').addEventListener('click', function(){
+  var record={game:'spades', rating:fbRating, text:($('fbText').value||'').trim(), tag:fbTag, timestamp:new Date().toISOString()};
+  try{
+    var arr=[]; var raw=localStorage.getItem(FB_KEY);
+    if(raw){ var parsed=JSON.parse(raw); if(Array.isArray(parsed)) arr=parsed; }
+    arr.push(record); localStorage.setItem(FB_KEY, JSON.stringify(arr));
+  }catch(e){}
+  $('fbThanks').classList.add('show');
+  fbRating=0; fbTag=''; $('fbText').value=''; fbRenderStars(); fbRenderTags();
+  setTimeout(closeFeedback, 1400);
+});
+
+// ---------- Boot ----------
+// Tutorial is opt-in only: nothing opens on its own. First-time players
+// just get the small dismissible "New here?" hint above the table.
+renderBests();
+startGame();
+})();
+</script>
+</body>
+</html>

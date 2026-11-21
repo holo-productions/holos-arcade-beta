@@ -1,0 +1,856 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Dice Roll</title>
+<style>
+  :root{
+    --bg:#eef2ec; --panel:#ffffff; --panel2:#f4f6f1; --ink:#1c2a1e; --muted:#5b6b5e;
+    --line:#d7ded3; --felt:#1e5c3a; --felt2:#17492d; --gold:#c8962e; --gold-ink:#7a5a12;
+    --accent:#1e5c3a; --accent-ink:#fff; --die:#ffffff; --die-ink:#1c2a1e; --die-line:#c9cfc4;
+    --held:#ffe9a8; --held-line:#c8962e; --good:#1e7a3a; --bad:#b33a2b; --preview:#7a8a7d;
+    --shadow:0 10px 28px rgba(20,40,25,.14); --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#101711; --panel:#1a241c; --panel2:#212d23; --ink:#eef3ec; --muted:#a7b5a8;
+      --line:#334335; --felt:#14532d; --felt2:#0f4021; --gold:#e0aa3e; --gold-ink:#f0cd7e;
+      --accent:#2f8a52; --die:#f7f7f2; --die-ink:#1c2a1e; --die-line:#9aa392;
+      --held:#5c4a12; --held-line:#e0aa3e; --preview:#93a695; --shadow:0 10px 28px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:Georgia,'Times New Roman',serif;line-height:1.45}
+  button{font-family:inherit;cursor:pointer;min-height:44px}
+  .wrap{max-width:1020px;margin:0 auto;padding:16px 14px 40px}
+  header.top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between;margin:6px 0 14px}
+  h1{font-size:2.1rem;margin:0;letter-spacing:.01em;line-height:1.05}
+  .sub{color:var(--muted);font-size:.98rem;margin-top:4px;max-width:560px}
+  .top-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:10px 18px;font-size:.95rem;font-weight:700}
+  .btn.primary{background:var(--felt);border-color:var(--felt);color:#fff}
+  .btn.gold{background:var(--gold);border-color:var(--gold);color:#1c1a08}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn:active{transform:translateY(1px)}
+  .stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-size:.88rem}
+  .stat b{font-size:1.05rem}
+  .stat span{color:var(--muted)}
+  /* Difficulty */
+  .diffbar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-bottom:14px}
+  .diff-label{font-weight:800;font-size:.92rem}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--panel2)}
+  .seg button{border:none;background:transparent;color:var(--muted);padding:9px 20px;font-size:.93rem;font-weight:700;min-height:44px}
+  .seg button.on{background:var(--felt);color:#fff}
+  .seg button:focus-visible{outline:3px solid var(--gold);outline-offset:-3px}
+  .diff-note{color:var(--muted);font-size:.88rem;flex:1 1 240px}
+  /* Practice */
+  .practicebar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 14px;margin-bottom:14px}
+  .practicebar.on{border-color:var(--gold);background:var(--held)}
+  .practice-label{font-weight:800;font-size:.92rem}
+  .practice-note{color:var(--muted);font-size:.88rem;flex:1 1 240px}
+  .practicebar.on .practice-note{color:var(--ink)}
+  .coach{margin-top:12px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.35);border-radius:10px;padding:10px 14px;font-size:.93rem;text-align:left;line-height:1.5}
+  .coach b{color:#ffe9a8}
+  .practice-badge{display:inline-block;background:var(--gold);color:#1c1a08;border-radius:999px;padding:2px 10px;font-size:.78rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;vertical-align:middle;margin-left:8px}
+  /* Table */
+  .table{background:linear-gradient(180deg,var(--felt),var(--felt2));border-radius:20px;padding:18px 16px 16px;box-shadow:var(--shadow);color:#fff}
+  .turnbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+  .turn-pill{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);border-radius:999px;padding:7px 14px;font-weight:700;font-size:.95rem}
+  .turn-pill.ai{background:var(--gold);color:#1c1a08;border-color:var(--gold)}
+  .rolls{font-size:.92rem;opacity:.95}
+  .rolls b{font-size:1.1rem}
+  .dice-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:20px 0 6px;min-height:76px}
+  .die{width:68px;height:68px;background:var(--die);color:var(--die-ink);border:2px solid var(--die-line);border-radius:14px;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:9px;cursor:pointer;position:relative;transition:transform .12s, background .12s, border-color .12s;flex:0 0 auto}
+  .die:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+  .die.held{background:var(--held);border-color:var(--held-line);transform:translateY(-6px)}
+  .die.empty{opacity:.35;cursor:default}
+  .die.rolling{animation:shake .45s ease-in-out}
+  @keyframes shake{0%{transform:rotate(0) translateY(0)}25%{transform:rotate(-9deg) translateY(-6px)}50%{transform:rotate(8deg) translateY(2px)}75%{transform:rotate(-5deg) translateY(-3px)}100%{transform:rotate(0)}}
+  @media (prefers-reduced-motion: reduce){.die.rolling{animation:none}}
+  .pip{width:11px;height:11px;border-radius:50%;background:var(--die-ink);place-self:center;visibility:hidden}
+  .pip.on{visibility:visible}
+  .held-label{text-align:center;font-size:.82rem;opacity:.9;min-height:1.2em}
+  .table-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+  .roll-btn{font-size:1.08rem;padding:12px 34px}
+  .hint{text-align:center;font-size:.88rem;opacity:.92;margin-top:10px;min-height:1.3em}
+  /* Scorecards */
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+  @media (max-width:720px){.cards{grid-template-columns:1fr}.die{width:60px;height:60px}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
+  .card.active{outline:3px solid var(--gold);outline-offset:1px}
+  .card-head{display:flex;justify-content:space-between;align-items:baseline;padding:12px 14px 8px;border-bottom:2px solid var(--line)}
+  .card-head h2{margin:0;font-size:1.12rem}
+  .card-head .total{font-weight:800;font-size:1.25rem}
+  .card-head .who{font-size:.8rem;color:var(--muted);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  table.score{width:100%;border-collapse:collapse;font-size:.93rem}
+  table.score th,table.score td{padding:7px 12px;text-align:left;border-bottom:1px solid var(--line)}
+  table.score td.val,table.score th.val{text-align:right;font-variant-numeric:tabular-nums;width:76px}
+  table.score tr.section td{background:var(--panel2);font-weight:800;font-size:.78rem;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+  table.score tr.pickable{cursor:pointer}
+  table.score tr.pickable:hover td,table.score tr.pickable:focus-visible td{background:var(--panel2)}
+  table.score tr.pickable td.val{color:var(--preview);font-style:italic}
+  table.score tr.filled td.val{font-weight:800;font-style:normal;color:var(--ink)}
+  table.score tr.big td{font-weight:800}
+  table.score tr.big td.val{font-size:1.05rem}
+  .howto{font-size:.78rem;color:var(--muted);font-weight:400}
+  /* Modal */
+  .overlay{position:fixed;inset:0;background:rgba(8,14,9,.62);display:none;align-items:flex-end;justify-content:center;z-index:50;padding:0}
+  .overlay.open{display:flex}
+  @media (min-width:640px){.overlay{align-items:center;padding:20px}}
+  .sheet{background:var(--panel);color:var(--ink);width:100%;max-width:560px;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:22px 20px 26px}
+  @media (min-width:640px){.sheet{border-radius:18px}}
+  .sheet h2{margin:0 0 6px;font-size:1.4rem}
+  .sheet h3{margin:18px 0 6px;font-size:1.02rem}
+  .sheet p,.sheet li{font-size:.95rem}
+  .sheet ol,.sheet ul{padding-left:20px;margin:6px 0}
+  .sheet li{margin:5px 0}
+  .sheet .close-row{display:flex;gap:8px;margin-top:20px;flex-wrap:wrap}
+  /* Feedback */
+  .stars{display:flex;gap:6px;margin:10px 0 4px}
+  .stars button{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:10px;font-size:1.5rem;line-height:1;padding:10px 0;min-height:48px;color:var(--muted)}
+  .stars button.on{background:var(--held);border-color:var(--held-line);color:var(--gold-ink)}
+  .stars button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+  .fb-label{display:block;font-weight:700;font-size:.92rem;margin:14px 0 6px}
+  .fb-text{width:100%;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font-family:inherit;font-size:.95rem;padding:10px 12px;min-height:96px;resize:vertical}
+  .fb-text:focus-visible{outline:3px solid var(--gold);outline-offset:1px}
+  .fb-tags{display:flex;width:100%}
+  .fb-tags button{flex:1;padding:9px 8px}
+  .fb-terms{color:var(--muted);font-size:.82rem;margin-top:10px}
+  .fb-done{display:none;text-align:center;padding:14px 0 4px}
+  .fb-done .big{font-size:1.3rem;font-weight:800}
+  .result-big{font-size:2rem;font-weight:800;text-align:center;margin:10px 0 2px}
+  .result-sub{text-align:center;color:var(--muted)}
+  .final-scores{display:flex;gap:10px;justify-content:center;margin:16px 0;flex-wrap:wrap}
+  .final-box{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 20px;text-align:center;min-width:120px}
+  .final-box b{display:block;font-size:1.5rem}
+  footer{margin-top:22px;color:var(--muted);font-size:.85rem;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>🎲 Dice Roll</h1>
+      <div class="sub">The classic five-dice game. Roll, hold, and fill all 13 boxes on your scorecard — you against the computer, Nova. Highest total wins.</div>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="howBtn" type="button">How to play</button>
+      <button class="btn" id="rulesBtn" type="button">Rules</button>
+      <button class="btn" id="feedbackBtn" type="button">💬 Feedback</button>
+      <button class="btn" id="newBtn" type="button">New game</button>
+    </div>
+  </header>
+  <div id="newHint" style="display:none;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:10px;padding:9px 14px;font-size:.9rem;margin-bottom:12px">👋 New here? Tap <strong>How to play</strong> for a quick walkthrough, or <strong>Rules</strong> for the full scoring table. <button type="button" id="hintDismiss" style="background:none;border:none;color:var(--muted);font-weight:700;min-height:36px;padding:4px 8px">Dismiss</button></div>
+
+  <div class="stats" aria-label="Your records">
+    <div class="stat"><span>Best score&nbsp;</span><b id="statBest">—</b></div>
+    <div class="stat"><span>Games&nbsp;</span><b id="statGames">0</b></div>
+    <div class="stat"><span>Wins&nbsp;</span><b id="statWins">0</b></div>
+    <div class="stat"><span>Five of a Kind&nbsp;</span><b id="statYat">0</b></div>
+  </div>
+
+  <div class="practicebar" id="practiceBar">
+    <span class="practice-label">🎓 Practice round</span>
+    <button class="btn" id="practiceBtn" type="button" aria-pressed="false">Start practice</button>
+    <span class="practice-note" id="practiceNote">Learn the ropes with coach hints on, no timer, and nothing saved to your records.</span>
+  </div>
+
+  <div class="diffbar">
+    <span class="diff-label" id="diffLabel">Difficulty</span>
+    <div class="seg" id="diffSeg" role="group" aria-labelledby="diffLabel">
+      <button type="button" data-diff="easy" aria-pressed="false">Easy</button>
+      <button type="button" data-diff="normal" aria-pressed="true" class="on">Normal</button>
+      <button type="button" data-diff="hard" aria-pressed="false">Hard</button>
+    </div>
+    <span class="diff-note" id="diffNote">Nova plays a solid, greedy game: all 3 rolls, pair and straight holds, strong box picks.</span>
+  </div>
+
+  <section class="table" aria-label="Dice table">
+    <div class="turnbar">
+      <div class="turn-pill" id="turnPill">Your turn</div>
+      <div class="rolls">Rolls left: <b id="rollsLeft">3</b> &nbsp;·&nbsp; Round <b id="roundNum">1</b> of 13</div>
+    </div>
+    <div class="dice-row" id="diceRow" role="group" aria-label="Dice — tap a die to hold it"></div>
+    <div class="held-label" id="heldLabel">Tap Roll to start your turn</div>
+    <div class="table-actions">
+      <button class="btn gold roll-btn" id="rollBtn" type="button">🎲 Roll dice</button>
+    </div>
+    <div class="hint" id="hint">You get 3 rolls per turn. Tap dice to hold them between rolls, then tap a score box to lock it in.</div>
+    <div class="coach" id="coachHint" hidden></div>
+  </section>
+
+  <div class="cards">
+    <section class="card active" id="playerCard" aria-label="Your scorecard">
+      <div class="card-head"><div><div class="who">You</div><h2>Your scorecard</h2></div><div class="total" id="playerTotal">0</div></div>
+      <table class="score"><tbody id="playerBody"></tbody></table>
+    </section>
+    <section class="card" id="aiCard" aria-label="Nova's scorecard">
+      <div class="card-head"><div><div class="who">Computer · <span id="aiDiff">Normal</span></div><h2>Nova 🤖</h2></div><div class="total" id="aiTotal">0</div></div>
+      <table class="score"><tbody id="aiBody"></tbody></table>
+    </section>
+  </div>
+
+  <footer>Dice Roll · Part of the games arcade · Play money only — no real gambling. Scores and bests are saved on this device.</footer>
+</div>
+
+<!-- Tutorial / How to play -->
+<div class="overlay" id="howOverlay" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+  <div class="sheet">
+    <h2 id="howTitle">How to play Dice Roll</h2>
+    <p>Fill all <strong>13 boxes</strong> on your scorecard, one per turn. Beat Nova's total to win.</p>
+    <h3>Your turn, step by step</h3>
+    <ol>
+      <li><strong>Roll</strong> — tap <em>Roll dice</em>. You get up to <strong>3 rolls</strong> per turn.</li>
+      <li><strong>Hold</strong> — tap any die to hold it (it turns gold and stays). Tap again to release it. Held dice don't re-roll.</li>
+      <li><strong>Score</strong> — when you're happy (or out of rolls), tap a <strong>score box</strong> on your card. The grey number is what that box would score right now. Once tapped, it's locked for the game.</li>
+    </ol>
+    <h3>The boxes</h3>
+    <ul>
+      <li><strong>Ones – Sixes (upper section):</strong> add up only the dice showing that number. Score <strong>63+</strong> across the upper section for a <strong>+35 bonus</strong>.</li>
+      <li><strong>Three / Four of a Kind:</strong> add up <em>all five</em> dice if you have 3 / 4 the same.</li>
+      <li><strong>Full House (25):</strong> three of one number + a pair of another.</li>
+      <li><strong>Small Straight (30):</strong> any run of four, like 2-3-4-5. <strong>Large Straight (40):</strong> a run of five.</li>
+      <li><strong>Five of a Kind (50):</strong> all five dice the same — the big one!</li>
+      <li><strong>Chance:</strong> add up all five dice, no combo needed. A good home for a roll that fits nowhere else.</li>
+    </ul>
+    <h3>Tips</h3>
+    <ul>
+      <li>Stuck with a bad roll? Score a <strong>0</strong> in a box you were unlikely to fill anyway — Five of a Kind is the usual sacrifice.</li>
+      <li>Chase the upper bonus early: three 6s (18) beats chasing a straight most turns.</li>
+      <li><strong>Pick your match:</strong> set <strong>Difficulty</strong> above the table — Easy while you learn, Normal for the classic game, Hard when you want a real test. You can change it mid-game; it applies from Nova's next turn.</li>
+      <li><strong>Practice round:</strong> tap <strong>Start practice</strong> above the table for a full game with a coach hint under the dice on every turn — what to hold, and your best box right now. No timer, and practice games never change your Best score, Games, Wins, or Five of a Kind records.</li>
+      <li>Nova plays a solid, greedy game — she'll grab straights and full houses when she sees them.</li>
+    </ul>
+    <div class="close-row">
+      <button class="btn primary" id="howClose" type="button">Got it — let's play</button>
+    </div>
+  </div>
+</div>
+
+<!-- Full rules -->
+<div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="sheet">
+    <h2 id="rulesTitle">Dice Roll — Full rules</h2>
+    <h3>Goal &amp; win condition</h3>
+    <p>The game lasts <strong>13 rounds</strong>. Each round, you and Nova each take one turn and must fill exactly one score box. When all 13 boxes on both cards are filled, the <strong>higher total wins</strong>. Equal totals are a tie. There is no elimination and no way to lose early — every turn must end by scoring, even if that score is 0.</p>
+    <h3>Turn rules</h3>
+    <ul>
+      <li>Each turn allows <strong>up to 3 rolls</strong> of five dice. The first roll rolls all five.</li>
+      <li>Between rolls you may <strong>hold any number of dice</strong> and re-roll the rest. Held dice can be released before the next roll.</li>
+      <li>You may score after the 1st, 2nd, or 3rd roll. Scoring ends the turn immediately.</li>
+      <li>Each box can be used <strong>once only</strong>. A box scored at 0 is spent, just like any other score.</li>
+    </ul>
+    <h3>Scoring table</h3>
+    <ul>
+      <li><strong>Ones / Twos / Threes / Fours / Fives / Sixes:</strong> sum of the dice showing that face only.</li>
+      <li><strong>Upper bonus:</strong> if your six upper boxes total <strong>63 or more</strong>, add <strong>+35</strong>. (63 is exactly three of each face.)</li>
+      <li><strong>Three of a Kind:</strong> at least three dice the same → sum of <em>all five</em> dice, otherwise 0.</li>
+      <li><strong>Four of a Kind:</strong> at least four dice the same → sum of <em>all five</em> dice, otherwise 0.</li>
+      <li><strong>Full House:</strong> exactly three of one face plus a pair of another → <strong>25</strong>. Five of a Kind also scores 25 here.</li>
+      <li><strong>Small Straight:</strong> any run of four sequential dice (1-2-3-4, 2-3-4-5, or 3-4-5-6) → <strong>30</strong>. Duplicate dice don't break a run.</li>
+      <li><strong>Large Straight:</strong> a run of five (1-2-3-4-5 or 2-3-4-5-6) → <strong>40</strong>.</li>
+      <li><strong>Five of a Kind:</strong> all five dice the same → <strong>50</strong>.</li>
+      <li><strong>Chance:</strong> sum of all five dice, no combination required.</li>
+    </ul>
+    <h3>Special rules in this version</h3>
+    <ul>
+      <li><strong>No joker / bonus Five of a Kind rules:</strong> rolling a second Five of a Kind scores normally in any open box (50 in Five of a Kind only if that box is still open; otherwise it counts as its dice in other boxes, e.g. 25 as a Full House or the face total in the upper section). There is no +100 bonus.</li>
+      <li><strong>Forced scoring:</strong> if no box fits your roll, you must still choose a box and take 0 — you cannot pass.</li>
+      <li><strong>Nova (AI):</strong> plays by the same one-box-per-turn rules and picks her box when her rolls run out. How sharply she plays depends on the difficulty setting.</li>
+      <li><strong>Difficulty</strong> (set above the table; change it any time — it applies from Nova's next turn; your records are shared across all three):
+        <ul>
+          <li><strong>Easy:</strong> Nova takes only <strong>2 rolls</strong> per turn, holds only toward her most common number, and sometimes scores a box that isn't her best.</li>
+          <li><strong>Normal:</strong> Nova takes all <strong>3 rolls</strong>, holds toward pairs and straights, and picks a strong box with light strategy.</li>
+          <li><strong>Hard:</strong> Nova takes all 3 rolls but <strong>banks a premium hand early</strong> (a straight, full house, four of a kind, or four of a face) instead of risking it; she chases the +35 upper bonus, protects Chance and Five of a Kind, holds her two highest dice when nothing is paired, and sacrifices her least valuable box when forced to take 0.</li>
+        </ul>
+      </li>
+      <li><strong>Practice round</strong> (toggle above the table): a full 13-round game against Nova with coach hints and no timer. Practice results are <strong>not</strong> saved — they never change your records below.</li>
+      <li><strong>Records:</strong> best score, games, wins, and Five of a Kind count are kept on this device only.</li>
+    </ul>
+    <div class="close-row">
+      <button class="btn primary" id="rulesClose" type="button">Close rules</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback -->
+<div class="overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+  <div class="sheet">
+    <h2 id="feedbackTitle">💬 Feedback</h2>
+    <div id="fbForm">
+      <p>Tell us how Dice Roll is playing — what you love, what's frustrating, and what you'd change.</p>
+      <span class="fb-label" id="fbRatingLabel">Your rating</span>
+      <div class="stars" id="fbStars" role="group" aria-labelledby="fbRatingLabel">
+        <button type="button" data-star="1" aria-label="1 star — poor">★</button>
+        <button type="button" data-star="2" aria-label="2 stars">★</button>
+        <button type="button" data-star="3" aria-label="3 stars — okay">★</button>
+        <button type="button" data-star="4" aria-label="4 stars">★</button>
+        <button type="button" data-star="5" aria-label="5 stars — love it">★</button>
+      </div>
+      <span class="fb-label" id="fbTagLabel">What's this about? <span style="font-weight:400;color:var(--muted)">(optional)</span></span>
+      <div class="seg fb-tags" id="fbTags" role="group" aria-labelledby="fbTagLabel">
+        <button type="button" data-tag="Bug" aria-pressed="false">Bug</button>
+        <button type="button" data-tag="Suggestion" aria-pressed="false">Suggestion</button>
+        <button type="button" data-tag="Other" aria-pressed="false">Other</button>
+      </div>
+      <label class="fb-label" for="fbText">Your comment</label>
+      <textarea class="fb-text" id="fbText" maxlength="1000" placeholder="What should we know? (optional if you rated above)"></textarea>
+      <p class="fb-terms">Feedback follows the same Terms &amp; Conditions as the games: no personal info needed — please don't include any — keep it clean (moderation rules apply), and feedback may be used to improve the games. Saved on this device for now.</p>
+      <div class="close-row">
+        <button class="btn primary" id="fbSubmit" type="button">Save feedback</button>
+        <button class="btn" id="fbCancel" type="button">Cancel</button>
+      </div>
+      <p id="fbError" style="display:none;color:var(--bad);font-size:.9rem;margin:10px 0 0">Please tap a star rating or write a comment first.</p>
+    </div>
+    <div class="fb-done" id="fbDone">
+      <div class="big">Thanks! 💚</div>
+      <p>Your feedback was saved on this device. It helps make the game better.</p>
+      <div class="close-row" style="justify-content:center">
+        <button class="btn primary" id="fbDoneClose" type="button">Back to the game</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay" id="endOverlay" role="dialog" aria-modal="true" aria-labelledby="endTitle">
+  <div class="sheet">
+    <h2 id="endTitle" style="text-align:center">Game over</h2>
+    <div class="result-big" id="endResult">You win! 🏆</div>
+    <div class="result-sub" id="endSub"></div>
+    <div class="final-scores">
+      <div class="final-box">You<b id="endPlayer">0</b></div>
+      <div class="final-box">Nova<b id="endAi">0</b></div>
+    </div>
+    <div class="close-row" style="justify-content:center">
+      <button class="btn gold" id="rematchBtn" type="button">↻ Rematch</button>
+      <button class="btn" id="endClose" type="button">View scorecards</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var CATS=[
+ {id:'ones',label:'Ones',how:'Total of 1s',sec:'upper'},
+ {id:'twos',label:'Twos',how:'Total of 2s',sec:'upper'},
+ {id:'threes',label:'Threes',how:'Total of 3s',sec:'upper'},
+ {id:'fours',label:'Fours',how:'Total of 4s',sec:'upper'},
+ {id:'fives',label:'Fives',how:'Total of 5s',sec:'upper'},
+ {id:'sixes',label:'Sixes',how:'Total of 6s',sec:'upper'},
+ {id:'threeKind',label:'Three of a Kind',how:'Total of all dice',sec:'lower'},
+ {id:'fourKind',label:'Four of a Kind',how:'Total of all dice',sec:'lower'},
+ {id:'fullHouse',label:'Full House',how:'Scores 25',sec:'lower'},
+ {id:'smallStraight',label:'Small Straight',how:'Scores 30',sec:'lower'},
+ {id:'largeStraight',label:'Large Straight',how:'Scores 40',sec:'lower'},
+ {id:'fiveKind',label:'Five of a Kind',how:'Scores 50',sec:'lower'},
+ {id:'chance',label:'Chance',how:'Total of all dice',sec:'lower'}
+];
+function counts(dice){var c=[0,0,0,0,0,0,0];for(var i=0;i<dice.length;i++)c[dice[i]]++;return c;}
+function sum(dice){var s=0;for(var i=0;i<dice.length;i++)s+=dice[i];return s;}
+function hasRun(set,n,start){for(var s=start;s<=7-n;s++){var ok=true;for(var k=0;k<n;k++){if(set.indexOf(s+k)===-1){ok=false;break;}}if(ok)return true;}return false;}
+function scoreFor(id,dice){
+  var c=counts(dice),s=sum(dice),i;
+  switch(id){
+    case 'ones':return c[1]*1; case 'twos':return c[2]*2; case 'threes':return c[3]*3;
+    case 'fours':return c[4]*4; case 'fives':return c[5]*5; case 'sixes':return c[6]*6;
+    case 'threeKind':for(i=1;i<=6;i++)if(c[i]>=3)return s;return 0;
+    case 'fourKind':for(i=1;i<=6;i++)if(c[i]>=4)return s;return 0;
+    case 'fullHouse':var has3=false,has2=false;for(i=1;i<=6;i++){if(c[i]===3)has3=true;if(c[i]===2)has2=true;if(c[i]===5)return 25;}return (has3&&has2)?25:0;
+    case 'smallStraight':return hasRun(dice,4,1)?30:0;
+    case 'largeStraight':return hasRun(dice,5,1)?40:0;
+    case 'fiveKind':for(i=1;i<=6;i++)if(c[i]===5)return 50;return 0;
+    case 'chance':return s;
+  }return 0;
+}
+function totals(scores){
+  var up=0,low=0,i;
+  for(i=0;i<6;i++)if(scores[CATS[i].id]!=null)up+=scores[CATS[i].id];
+  for(i=6;i<13;i++)if(scores[CATS[i].id]!=null)low+=scores[CATS[i].id];
+  var bonus=up>=63?35:0;
+  return {upper:up,bonus:bonus,lower:low,total:up+bonus+low};
+}
+function emptyScores(){var o={};CATS.forEach(function(c){o[c.id]=null;});return o;}
+
+/* ---------- difficulty ---------- */
+var DIFF='normal';
+try{var savedDiff=localStorage.getItem('dice-roll-difficulty');if(savedDiff==='easy'||savedDiff==='normal'||savedDiff==='hard')DIFF=savedDiff;}catch(e){}
+var DIFF_NAMES={easy:'Easy',normal:'Normal',hard:'Hard'};
+var DIFF_NOTES={
+  easy:'Nova plays casually: 2 rolls a turn, simple holds, and the odd loose pick. Great while you learn.',
+  normal:'Nova plays a solid, greedy game: all 3 rolls, pair and straight holds, strong box picks.',
+  hard:'Nova plays sharp: banks premium hands early, chases the +35 upper bonus, and protects her best boxes.'
+};
+function renderDiff(){
+  var btns=document.querySelectorAll('#diffSeg button');
+  for(var i=0;i<btns.length;i++){
+    var on=btns[i].getAttribute('data-diff')===DIFF;
+    btns[i].classList.toggle('on',on);
+    btns[i].setAttribute('aria-pressed',on?'true':'false');
+  }
+  document.getElementById('diffNote').textContent=DIFF_NOTES[DIFF];
+  var ad=document.getElementById('aiDiff');if(ad)ad.textContent=DIFF_NAMES[DIFF];
+}
+
+/* ---------- practice mode ---------- */
+var PRACTICE=false;
+function bestBoxFor(scores){
+  var best=null,bestVal=-1;
+  CATS.forEach(function(cat){
+    if(scores[cat.id]!=null)return;
+    var v=scoreFor(cat.id,S.dice);
+    if(v>bestVal){bestVal=v;best=cat;}
+  });
+  return best?{cat:best,val:bestVal}:null;
+}
+function holdAdvice(){
+  var c=counts(S.dice),bestFace=1,bestCount=0,i;
+  for(i=1;i<=6;i++)if(c[i]>bestCount){bestCount=c[i];bestFace=i;}
+  var uniq=[];S.dice.forEach(function(d){if(uniq.indexOf(d)===-1)uniq.push(d);});uniq.sort(function(a,b){return a-b;});
+  for(var s=1;s<=3;s++){
+    var w=[s,s+1,s+2,s+3];
+    var have=w.filter(function(x){return uniq.indexOf(x)>-1;});
+    if(have.length>=3&&bestCount<=2)return 'Hold the '+have.join(', ')+' — you are one die from a Small Straight (30).';
+  }
+  if(bestCount>=3)return 'Hold all the '+bestFace+'s ('+bestCount+' of them) and re-roll the rest — a kind or upper-section score is close.';
+  if(bestCount===2)return 'Hold the pair of '+bestFace+'s and re-roll the other three dice.';
+  var hi=Math.max.apply(null,S.dice);
+  return 'No pairs yet — hold your highest die ('+hi+') and re-roll the rest.';
+}
+function renderPractice(){
+  var bar=document.getElementById('practiceBar');
+  var btn=document.getElementById('practiceBtn');
+  bar.classList.toggle('on',PRACTICE);
+  btn.textContent=PRACTICE?'Exit practice':'Start practice';
+  btn.setAttribute('aria-pressed',PRACTICE?'true':'false');
+  btn.classList.toggle('gold',PRACTICE);
+  document.getElementById('practiceNote').textContent=PRACTICE
+    ? 'Practice is ON: coach hints below the dice, no timer, and this game will not change your Best score, Games, Wins, or Five of a Kind records.'
+    : 'Learn the ropes with coach hints on, no timer, and nothing saved to your records.';
+  var coach=document.getElementById('coachHint');
+  if(!PRACTICE){coach.hidden=true;coach.innerHTML='';return;}
+  coach.hidden=false;
+  if(S.over){coach.innerHTML='<b>Coach:</b> Practice complete — that one didn\u2019t count toward your records. Exit practice when you\u2019re ready to play for real.';return;}
+  if(S.turn!=='player'){coach.innerHTML='<b>Coach:</b> Watch Nova\u2019s card while she plays — notice which boxes she fills and what she leaves open.';return;}
+  if(!S.rolled){coach.innerHTML='<b>Coach:</b> No rush — there\u2019s no timer in practice. Tap <b>Roll dice</b> when you\u2019re ready, then tap dice to hold the ones you want to keep.';return;}
+  var best=bestBoxFor(S.player);
+  var bestTxt=best?(' Best box right now: <b>'+best.cat.label+'</b> for <b>'+best.val+'</b>.'):'';
+  if(S.rollsLeft>0){
+    coach.innerHTML='<b>Coach:</b> '+holdAdvice()+bestTxt+' You can score now or use your remaining roll'+(S.rollsLeft===1?'':'s')+' first.';
+  }else{
+    coach.innerHTML='<b>Coach:</b> Out of rolls — tap a score box to lock it in.'+bestTxt+(best&&best.val===0?' Scoring 0 here spends this box, so pick one you are least likely to fill later (Five of a Kind is the usual sacrifice).':'');
+  }
+}
+
+/* ---------- state ---------- */
+var S;
+function newGame(){
+  S={dice:[0,0,0,0,0],held:[false,false,false,false,false],rollsLeft:3,rolled:false,
+     turn:'player',round:1,player:emptyScores(),ai:emptyScores(),over:false,busy:false,practice:PRACTICE};
+  render();
+}
+function loadStats(){
+  try{return JSON.parse(localStorage.getItem('dice-roll-stats')||'{}');}catch(e){return {};}
+}
+function saveStats(patch){
+  var st=loadStats();for(var k in patch)st[k]=patch[k];
+  try{localStorage.setItem('dice-roll-stats',JSON.stringify(st));}catch(e){}
+  renderStats();
+}
+function renderStats(){
+  var st=loadStats();
+  document.getElementById('statBest').textContent=st.best!=null?st.best:'—';
+  document.getElementById('statGames').textContent=st.games||0;
+  document.getElementById('statWins').textContent=st.wins||0;
+  document.getElementById('statYat').textContent=st.fiveKinds||0;
+}
+
+/* ---------- rendering ---------- */
+var PIPS={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+function dieEl(val,idx){
+  var d=document.createElement('button');d.type='button';
+  d.className='die'+(S.held[idx]?' held':'')+(val===0?' empty':'');
+  d.setAttribute('aria-label', val===0?'Not rolled yet':('Die showing '+val+(S.held[idx]?', held':'')));
+  for(var p=0;p<9;p++){var pip=document.createElement('span');pip.className='pip'+(val>0&&PIPS[val].indexOf(p)>-1?' on':'');d.appendChild(pip);}
+  d.addEventListener('click',function(){toggleHold(idx);});
+  return d;
+}
+function renderDice(rollingIdx){
+  var row=document.getElementById('diceRow');row.innerHTML='';
+  S.dice.forEach(function(v,i){
+    var el=dieEl(v,i);
+    if(rollingIdx&&rollingIdx.indexOf(i)>-1)el.classList.add('rolling');
+    row.appendChild(el);
+  });
+  document.getElementById('heldLabel').textContent=
+    !S.rolled ? (S.turn==='player'?'Tap Roll to start your turn':'Nova is playing…') :
+    S.turn==='ai' ? 'Nova is playing…' :
+    (S.held.some(Boolean)? S.held.filter(Boolean).length+' die/dice held — tap a held die to release it' : 'Tap dice to hold them, then roll again or score');
+}
+function buildCard(bodyId,scores,isPlayer){
+  var body=document.getElementById(bodyId);body.innerHTML='';
+  var t=totals(scores);
+  function row(cat){
+    var tr=document.createElement('tr');
+    var filled=scores[cat.id]!=null;
+    var canPick=isPlayer&&S.turn==='player'&&S.rolled&&!filled&&!S.over&&!S.busy;
+    tr.className=(filled?'filled':'')+(canPick?' pickable':'');
+    var preview=(!filled&&S.rolled&&(isPlayer?S.turn==='player':true))?scoreFor(cat.id,S.dice):null;
+    // only show live previews on the active player's card
+    if(isPlayer&&S.turn!=='player')preview=null;
+    if(!isPlayer&&S.turn!=='ai')preview=null;
+    tr.innerHTML='<td>'+cat.label+' <span class="howto">'+cat.how+'</span></td><td class="val">'+
+      (filled?scores[cat.id]:(preview!=null?preview:''))+'</td>';
+    if(canPick){tr.tabIndex=0;tr.setAttribute('role','button');
+      tr.setAttribute('aria-label','Score '+scoreFor(cat.id,S.dice)+' in '+cat.label);
+      var pick=function(){playerScore(cat.id);};
+      tr.addEventListener('click',pick);
+      tr.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();pick();}});
+    }
+    body.appendChild(tr);
+  }
+  var secU=document.createElement('tr');secU.className='section';secU.innerHTML='<td colspan="2">Upper section</td>';body.appendChild(secU);
+  CATS.slice(0,6).forEach(row);
+  var sub=document.createElement('tr');sub.innerHTML='<td>Upper subtotal</td><td class="val">'+t.upper+' / 63</td>';body.appendChild(sub);
+  var bon=document.createElement('tr');bon.innerHTML='<td>Bonus <span class="howto">63+ scores +35</span></td><td class="val">'+(t.bonus||(t.upper>=63?35:0))+'</td>';body.appendChild(bon);
+  var secL=document.createElement('tr');secL.className='section';secL.innerHTML='<td colspan="2">Lower section</td>';body.appendChild(secL);
+  CATS.slice(6).forEach(row);
+  var tot=document.createElement('tr');tot.className='big';tot.innerHTML='<td>Total</td><td class="val">'+t.total+'</td>';body.appendChild(tot);
+}
+function render(){
+  renderDice();
+  buildCard('playerBody',S.player,true);
+  buildCard('aiBody',S.ai,false);
+  document.getElementById('playerTotal').textContent=totals(S.player).total;
+  document.getElementById('aiTotal').textContent=totals(S.ai).total;
+  document.getElementById('rollsLeft').textContent=S.rollsLeft;
+  document.getElementById('roundNum').textContent=Math.min(S.round,13);
+  var pill=document.getElementById('turnPill');
+  pill.textContent=(S.over?'Game over':(S.turn==='player'?'Your turn':'Nova\u2019s turn 🤖'))+(S.practice?' · 🎓 Practice':'');
+  pill.className='turn-pill'+(S.turn==='ai'&&!S.over?' ai':'');
+  document.getElementById('playerCard').classList.toggle('active',S.turn==='player'&&!S.over);
+  document.getElementById('aiCard').classList.toggle('active',S.turn==='ai'&&!S.over);
+  var rb=document.getElementById('rollBtn');
+  rb.disabled=!(S.turn==='player'&&!S.over&&!S.busy&&S.rollsLeft>0);
+  rb.textContent=S.turn==='ai'?'🤖 Nova is rolling…':(S.rollsLeft===3?'🎲 Roll dice':(S.rollsLeft>0?'🎲 Roll again ('+S.rollsLeft+' left)':'No rolls left — pick a box'));
+  document.getElementById('hint').textContent=
+    S.over?'Game over — tap Rematch or New game to play again.':
+    S.turn==='ai'?'Nova is rolling… watch her card fill in.':
+    !S.rolled?'You get 3 rolls per turn. Tap dice to hold them between rolls, then tap a score box to lock it in.':
+    S.rollsLeft>0?'Tap dice to hold them, roll again, or tap a score box on your card to lock it in.':
+    'Out of rolls — tap a score box on your card to end your turn.';
+  renderStats();
+  renderDiff();
+  renderPractice();
+}
+
+/* ---------- player actions ---------- */
+function rollDice(){
+  var idx=[];
+  for(var i=0;i<5;i++){if(!S.held[i]){S.dice[i]=1+Math.floor(Math.random()*6);idx.push(i);}}
+  S.rollsLeft--;S.rolled=true;
+  renderDice(idx);buildCard('playerBody',S.player,true);buildCard('aiBody',S.ai,false);
+  setTimeout(render,480);
+  // refresh counters immediately
+  document.getElementById('rollsLeft').textContent=S.rollsLeft;
+  var rb=document.getElementById('rollBtn');
+  rb.disabled=!(S.turn==='player'&&S.rollsLeft>0);
+  rb.textContent=S.rollsLeft>0?'🎲 Roll again ('+S.rollsLeft+' left)':'No rolls left — pick a box';
+}
+function toggleHold(i){
+  if(S.turn!=='player'||!S.rolled||S.over||S.busy)return;
+  if(S.dice[i]===0)return;
+  S.held[i]=!S.held[i];render();
+}
+function playerScore(id){
+  if(S.turn!=='player'||!S.rolled||S.player[id]!=null||S.busy)return;
+  var v=scoreFor(id,S.dice);
+  S.player[id]=v;
+  if(id==='fiveKind'&&v===50&&!S.practice){var st=loadStats();saveStats({fiveKinds:(st.fiveKinds||0)+1});}
+  endTurn();
+}
+function endTurn(){
+  S.dice=[0,0,0,0,0];S.held=[false,false,false,false,false];S.rollsLeft=3;S.rolled=false;
+  if(S.turn==='player'){S.turn='ai';render();S.busy=true;setTimeout(aiTurn,700);}
+  else{
+    S.turn='player';S.round++;
+    if(S.round>13){finishGame();return;}
+    S.busy=false;render();
+  }
+}
+
+/* ---------- AI ---------- */
+function aiChooseHolds(){
+  // Hold toward the most promising pattern: most common face, or a straight run.
+  var c=counts(S.dice),bestFace=1,bestCount=0,i;
+  for(i=1;i<=6;i++)if(c[i]>bestCount){bestCount=c[i];bestFace=i;}
+  var uniq=[];S.dice.forEach(function(d){if(uniq.indexOf(d)===-1)uniq.push(d);});uniq.sort();
+  // straight chase: if 4 distinct in a run window, hold those
+  var runFaces=null;
+  for(var s=1;s<=3;s++){var w=[s,s+1,s+2,s+3];var have=w.filter(function(x){return uniq.indexOf(x)>-1;});
+    if(have.length>=3&&bestCount<=2){runFaces=have;}}
+  S.held=S.dice.map(function(d){
+    if(runFaces)return runFaces.indexOf(d)>-1;
+    return d===bestFace;
+  });
+  // dedupe straight holds: keep one of each face
+  if(runFaces){var seen={};S.held=S.dice.map(function(d,i){if(S.held[i]){if(seen[d])return false;seen[d]=true;return true;}return false;});}
+}
+function aiPickCategory(){
+  var best=null,bestVal=-1;
+  CATS.forEach(function(cat){
+    if(S.ai[cat.id]!=null)return;
+    var v=scoreFor(cat.id,S.dice);
+    var w=v;
+    if(cat.id==='fiveKind')w=v*1.4;
+    if(cat.id==='largeStraight')w=v*1.2;
+    if(cat.id==='fullHouse')w=v*1.15;
+    if(cat.sec==='upper'){var face=CATS.indexOf(cat)+1;if(v>=face*3)w+=6;} // chase bonus
+    if(cat.id==='chance'&&v<18)w-=4; // save chance
+    if(w>bestVal){bestVal=w;best=cat.id;}
+  });
+  return best;
+}
+/* --- Easy Nova: holds only toward her most common number --- */
+function aiChooseHoldsEasy(){
+  var c=counts(S.dice),bestFace=1,bestCount=0,i;
+  for(i=1;i<=6;i++)if(c[i]>bestCount){bestCount=c[i];bestFace=i;}
+  if(bestCount<=1){ // nothing paired: keep only the single highest die
+    var hi=Math.max.apply(null,S.dice),kept=false;
+    S.held=S.dice.map(function(d){if(d===hi&&!kept){kept=true;return true;}return false;});
+  }else{
+    S.held=S.dice.map(function(d){return d===bestFace;});
+  }
+}
+/* --- Hard Nova: triples and runs first, otherwise keep the two highest dice --- */
+function aiChooseHoldsHard(){
+  var c=counts(S.dice),bestFace=1,bestCount=0,i;
+  for(i=1;i<=6;i++)if(c[i]>bestCount){bestCount=c[i];bestFace=i;}
+  if(bestCount>=3){S.held=S.dice.map(function(d){return d===bestFace;});return;}
+  var uniq=[];S.dice.forEach(function(d){if(uniq.indexOf(d)===-1)uniq.push(d);});uniq.sort(function(a,b){return a-b;});
+  var runFaces=null;
+  for(var s=1;s<=3;s++){var w=[s,s+1,s+2,s+3];var have=w.filter(function(x){return uniq.indexOf(x)>-1;});
+    if(have.length>=3)runFaces=have;}
+  if(runFaces&&bestCount<=2){
+    var seen={};
+    S.held=S.dice.map(function(d){if(runFaces.indexOf(d)>-1&&!seen[d]){seen[d]=true;return true;}return false;});
+    return;
+  }
+  if(bestCount===2){S.held=S.dice.map(function(d){return d===bestFace;});return;}
+  // all distinct, no run in reach: keep the two highest for upper / Chance value
+  var sorted=S.dice.slice().sort(function(a,b){return b-a;});
+  var keep=[sorted[0],sorted[1]],used=[false,false];
+  S.held=S.dice.map(function(d){for(var k=0;k<2;k++){if(!used[k]&&keep[k]===d){used[k]=true;return true;}}return false;});
+}
+/* --- Easy Nova: best raw score, but a loose random pick fairly often --- */
+function aiPickEasy(){
+  var open=CATS.filter(function(cat){return S.ai[cat.id]==null;});
+  if(Math.random()<0.35)return open[Math.floor(Math.random()*open.length)].id;
+  var best=null,bestVal=-1;
+  open.forEach(function(cat){var v=scoreFor(cat.id,S.dice);if(v>bestVal){bestVal=v;best=cat.id;}});
+  return best;
+}
+/* --- Hard Nova: value minus opportunity cost, bonus chase, cheap sacrifices --- */
+var AI_EV={ones:2,twos:4,threes:6,fours:8,fives:10,sixes:12,threeKind:18,fourKind:12,fullHouse:9,smallStraight:12,largeStraight:8,fiveKind:2,chance:22};
+function aiPickHard(){
+  var t=totals(S.ai);
+  var openCount=CATS.filter(function(c){return S.ai[c.id]==null;}).length;
+  var best=null,bestW=-1e9;
+  CATS.forEach(function(cat){
+    if(S.ai[cat.id]!=null)return;
+    var v=scoreFor(cat.id,S.dice),w;
+    if(v===0){
+      w=-AI_EV[cat.id];               // sacrifice the least valuable open box
+      if(cat.id==='chance')w-=30;     // never throw Chance away for 0
+    }else{
+      w=v-0.35*AI_EV[cat.id];         // what this box could be worth later
+      if(cat.sec==='upper'&&t.upper<63){
+        if(t.upper+v>=63)w+=20;       // crossing 63 banks the +35 bonus
+        else w+=v*0.35;               // steady progress toward it
+      }
+      if(cat.id==='chance'&&v<20&&openCount>4)w-=12; // protect Chance early
+      if(cat.id==='fiveKind')w+=8;
+    }
+    if(w>bestW){bestW=w;best=cat.id;}
+  });
+  return best;
+}
+/* --- Hard Nova banks these hands instead of risking another roll --- */
+function aiHasPremium(){
+  for(var i=0;i<CATS.length;i++){
+    var cat=CATS[i];if(S.ai[cat.id]!=null)continue;
+    var v=scoreFor(cat.id,S.dice);
+    if(cat.id==='fiveKind'&&v===50)return true;
+    if(cat.id==='largeStraight'&&v===40)return true;
+    if(cat.id==='fullHouse'&&v===25)return true;
+    if(cat.id==='fourKind'&&v>=24)return true;
+    if(cat.sec==='upper'&&v>=(CATS.indexOf(cat)+1)*4)return true; // four of the face
+  }
+  return false;
+}
+function aiRollUnheld(){
+  S.dice=S.dice.map(function(d,i){return S.held[i]?d:1+Math.floor(Math.random()*6);});
+}
+function aiFinishTurn(){
+  var id=DIFF==='easy'?aiPickEasy():(DIFF==='hard'?aiPickHard():aiPickCategory());
+  S.ai[id]=scoreFor(id,S.dice);
+  S.busy=false;endTurn();
+}
+function aiTurn(){
+  if(S.over)return;
+  S.dice=S.dice.map(function(){return 1+Math.floor(Math.random()*6);});
+  S.rolled=true;S.rollsLeft=2;render();
+  setTimeout(function(){
+    if(DIFF==='easy')aiChooseHoldsEasy();
+    else if(DIFF==='hard')aiChooseHoldsHard();
+    else aiChooseHolds();
+    aiRollUnheld();
+    if(DIFF==='easy'){ // Easy Nova stops after 2 rolls
+      S.rollsLeft=0;S.held=[false,false,false,false,false];render();
+      setTimeout(aiFinishTurn,650);
+      return;
+    }
+    S.rollsLeft=1;render();
+    setTimeout(function(){
+      if(DIFF==='hard'&&aiHasPremium()){ // bank it, don't risk it
+        S.rollsLeft=0;S.held=[false,false,false,false,false];render();
+        setTimeout(aiFinishTurn,650);
+        return;
+      }
+      if(DIFF==='hard')aiChooseHoldsHard();else aiChooseHolds();
+      aiRollUnheld();
+      S.rollsLeft=0;S.held=[false,false,false,false,false];render();
+      setTimeout(aiFinishTurn,650);
+    },650);
+  },650);
+}
+
+/* ---------- finish ---------- */
+function finishGame(){
+  S.over=true;S.turn='player';render();
+  var p=totals(S.player).total,a=totals(S.ai).total;
+  if(!S.practice){
+    var st=loadStats();
+    saveStats({games:(st.games||0)+1,
+      wins:(st.wins||0)+(p>a?1:0),
+      best:st.best==null?p:Math.max(st.best,p)});
+  }
+  document.getElementById('endPlayer').textContent=p;
+  document.getElementById('endAi').textContent=a;
+  var res=document.getElementById('endResult'),sub=document.getElementById('endSub');
+  if(p>a){res.textContent='You win! 🏆';sub.textContent='You beat Nova by '+(p-a)+' points. '+(p>=300?'Over 300 — that\u2019s an elite score!':'Tap Rematch to run it back.');}
+  else if(a>p){res.textContent='Nova wins 🤖';sub.textContent='Nova takes it by '+(a-p)+' points. The dice owe you one — rematch?';}
+  else{res.textContent='It\u2019s a tie!';sub.textContent='Dead even at '+p+'. Only a rematch settles this.';}
+  if(S.practice){
+    document.getElementById('endTitle').textContent='Practice over';
+    sub.textContent+=' 🎓 Practice round — nothing was added to your records.';
+  }else{
+    document.getElementById('endTitle').textContent='Game over';
+  }
+  document.getElementById('endOverlay').classList.add('open');
+}
+
+/* ---------- wiring ---------- */
+document.getElementById('diffSeg').addEventListener('click',function(e){
+  var b=e.target;while(b&&b.tagName!=='BUTTON')b=b.parentNode;
+  if(!b)return;
+  DIFF=b.getAttribute('data-diff');
+  try{localStorage.setItem('dice-roll-difficulty',DIFF);}catch(err){}
+  renderDiff();
+});
+document.getElementById('practiceBtn').addEventListener('click',function(){
+  PRACTICE=!PRACTICE;
+  document.getElementById('endOverlay').classList.remove('open');
+  newGame(); // fresh game in the chosen mode; a practice game never touches your records
+});
+document.getElementById('rollBtn').addEventListener('click',function(){if(S.turn==='player'&&S.rollsLeft>0&&!S.busy)rollDice();});
+document.getElementById('newBtn').addEventListener('click',function(){document.getElementById('endOverlay').classList.remove('open');newGame();});
+document.getElementById('rematchBtn').addEventListener('click',function(){document.getElementById('endOverlay').classList.remove('open');newGame();});
+document.getElementById('endClose').addEventListener('click',function(){document.getElementById('endOverlay').classList.remove('open');});
+var how=document.getElementById('howOverlay');
+function markSeen(){try{localStorage.setItem('dice-roll-seen-how','1');}catch(e){} var h=document.getElementById('newHint');if(h)h.style.display='none';}
+document.getElementById('howBtn').addEventListener('click',function(){how.classList.add('open');markSeen();});
+document.getElementById('howClose').addEventListener('click',function(){how.classList.remove('open');});
+how.addEventListener('click',function(e){if(e.target===how)how.classList.remove('open');});
+var rules=document.getElementById('rulesOverlay');
+document.getElementById('rulesBtn').addEventListener('click',function(){rules.classList.add('open');markSeen();});
+document.getElementById('rulesClose').addEventListener('click',function(){rules.classList.remove('open');});
+rules.addEventListener('click',function(e){if(e.target===rules)rules.classList.remove('open');});
+document.getElementById('hintDismiss').addEventListener('click',markSeen);
+
+/* ---------- feedback ---------- */
+var fbOverlay=document.getElementById('feedbackOverlay');
+var fbRating=0;
+var fbTag='';
+function renderFbTags(){
+  var btns=document.querySelectorAll('#fbTags button');
+  for(var i=0;i<btns.length;i++){
+    var on=btns[i].getAttribute('data-tag')===fbTag;
+    btns[i].classList.toggle('on',on);
+    btns[i].setAttribute('aria-pressed',on?'true':'false');
+  }
+}
+function renderFbStars(){
+  var btns=document.querySelectorAll('#fbStars button');
+  for(var i=0;i<btns.length;i++){
+    var on=parseInt(btns[i].getAttribute('data-star'),10)<=fbRating;
+    btns[i].classList.toggle('on',on);
+    btns[i].setAttribute('aria-pressed',on?'true':'false');
+  }
+}
+function openFeedback(){
+  fbRating=0;renderFbStars();
+  fbTag='';renderFbTags();
+  document.getElementById('fbText').value='';
+  document.getElementById('fbError').style.display='none';
+  document.getElementById('fbForm').style.display='block';
+  document.getElementById('fbDone').style.display='none';
+  fbOverlay.classList.add('open');
+}
+function closeFeedback(){fbOverlay.classList.remove('open');}
+document.getElementById('feedbackBtn').addEventListener('click',openFeedback);
+document.getElementById('fbCancel').addEventListener('click',closeFeedback);
+document.getElementById('fbDoneClose').addEventListener('click',closeFeedback);
+fbOverlay.addEventListener('click',function(e){if(e.target===fbOverlay)closeFeedback();});
+document.getElementById('fbStars').addEventListener('click',function(e){
+  var b=e.target;while(b&&b.tagName!=='BUTTON')b=b.parentNode;
+  if(!b)return;
+  fbRating=parseInt(b.getAttribute('data-star'),10)||0;
+  renderFbStars();
+  document.getElementById('fbError').style.display='none';
+});
+document.getElementById('fbTags').addEventListener('click',function(e){
+  var b=e.target;while(b&&b.tagName!=='BUTTON')b=b.parentNode;
+  if(!b)return;
+  var t=b.getAttribute('data-tag');
+  fbTag=(fbTag===t)?'':t; // tap again to clear
+  renderFbTags();
+});
+document.getElementById('fbSubmit').addEventListener('click',function(){
+  var text=document.getElementById('fbText').value.trim();
+  if(!fbRating&&!text){document.getElementById('fbError').style.display='block';return;}
+  var entry={game:'dice-roll',rating:fbRating,text:text,tag:fbTag||null,timestamp:new Date().toISOString()};
+  try{
+    var list=JSON.parse(localStorage.getItem('holos-arcade-feedback')||'[]');
+    if(!Array.isArray(list))list=[];
+    list.push(entry);
+    localStorage.setItem('holos-arcade-feedback',JSON.stringify(list));
+  }catch(e){}
+  document.getElementById('fbForm').style.display='none';
+  document.getElementById('fbDone').style.display='block';
+});
+
+newGame();
+/* Tutorial is opt-in only: never auto-open. Show a small one-time hint instead. */
+var seen=false;try{seen=!!localStorage.getItem('dice-roll-seen-how');}catch(e){}
+if(!seen)document.getElementById('newHint').style.display='block';
+})();
+</script>
+</body>
+</html>

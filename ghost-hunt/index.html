@@ -1,0 +1,835 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Ghost Hunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#eef0fa; --surface:#ffffff; --surface2:#e3e6f7; --ink:#232038; --muted:#5b5678;
+    --line:#c9cde8; --plum:#5b3a8e; --plum-deep:#3d2766; --amber:#f5a623; --amber-soft:#ffe3a3;
+    --teal:#159a8c; --teal-soft:#c9f2ec; --pink:#ef6aa5; --gold:#ffcf3f;
+    --shadow:0 10px 28px rgba(35,32,56,.16);
+    --radius:18px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#12101f; --surface:#1e1b33; --surface2:#282344; --ink:#f2f0ff; --muted:#b6b0d9;
+      --line:#3a3560; --plum:#a582e8; --plum-deep:#c9b6ff; --amber:#ffb84d; --amber-soft:#4a3512;
+      --teal:#3ec9b8; --teal-soft:#123c38; --pink:#ff8fbe; --gold:#ffd94d;
+      --shadow:0 10px 28px rgba(0,0,0,.45);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Nunito",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    background:var(--bg); color:var(--ink);
+    -webkit-tap-highlight-color:transparent;
+  }
+  button,select{font-family:inherit}
+  button,[role="button"],select,summary,a.btnlike{min-height:44px}
+  .wrap{max-width:860px;margin:0 auto;padding:14px 14px 28px}
+
+  /* ---------- Header / scoreboard ---------- */
+  .topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .logo{display:flex;align-items:center;gap:10px;margin-right:auto}
+  .logo svg{width:42px;height:42px;flex:none}
+  .logo h1{font-family:"Fredoka",sans-serif;font-size:1.65rem;line-height:1;margin:0;color:var(--plum-deep);letter-spacing:.2px}
+  @media (prefers-color-scheme: dark){ .logo h1{color:var(--plum-deep)} }
+  .logo p{margin:2px 0 0;font-size:.82rem;font-weight:800;color:var(--muted)}
+  .pill{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:var(--surface);border:2px solid var(--line);border-radius:14px;
+    padding:5px 12px;min-width:74px;box-shadow:0 2px 0 var(--line);
+  }
+  .pill .lab{font-size:.64rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .pill .val{font-family:"Fredoka",sans-serif;font-size:1.25rem;line-height:1.1}
+  .pill.timewarn .val{color:#e23d3d}
+  .pill.timewarn{border-color:#e23d3d;animation:pulse .6s infinite alternate}
+  @keyframes pulse{from{transform:scale(1)}to{transform:scale(1.05)}}
+
+  /* ---------- Controls ---------- */
+  .controls{
+    display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;
+    background:var(--surface);border:2px solid var(--line);border-radius:var(--radius);
+    padding:10px;margin-bottom:12px;box-shadow:var(--shadow);
+  }
+  .ctl-group{display:flex;flex-direction:column;gap:4px}
+  .ctl-group label{font-size:.66rem;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding-left:4px}
+  select{
+    font-size:1rem;font-weight:800;color:var(--ink);background:var(--surface2);
+    border:2px solid var(--line);border-radius:12px;padding:8px 10px;cursor:pointer;
+  }
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    font-size:.98rem;font-weight:900;color:var(--ink);background:var(--surface2);
+    border:2px solid var(--line);border-radius:12px;padding:9px 14px;cursor:pointer;
+    box-shadow:0 2px 0 var(--line);user-select:none;text-decoration:none;
+  }
+  .btn:active{transform:translateY(2px);box-shadow:none}
+  .btn.primary{background:var(--amber);border-color:#c77f0a;color:#3a2703;box-shadow:0 3px 0 #c77f0a;font-size:1.05rem;padding:9px 20px}
+  .btn.teal{background:var(--teal);border-color:#0d6e64;color:#fff;box-shadow:0 3px 0 #0d6e64}
+  .btn.on{background:var(--plum);border-color:var(--plum-deep);color:#fff;box-shadow:0 3px 0 var(--plum-deep)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn .dot{width:10px;height:10px;border-radius:50%;background:currentColor;opacity:.35;flex:none}
+  .btn.on .dot{opacity:1;background:var(--gold)}
+  .controls .spacer{flex:1}
+  .btnrow{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+
+  /* ---------- Play area ---------- */
+  .stage-shell{position:relative;border-radius:22px;overflow:hidden;box-shadow:var(--shadow);border:3px solid var(--plum-deep)}
+  .stage{
+    position:relative;width:100%;height:min(62vh,540px);min-height:340px;
+    background:#191430;overflow:hidden;touch-action:none;cursor:none;
+    user-select:none;-webkit-user-select:none;
+  }
+  @media (max-width:560px){ .stage{height:58vh;min-height:320px} }
+
+  /* Room decor (only seen through the beam) */
+  .room{position:absolute;inset:0;background:
+    radial-gradient(ellipse 90% 55% at 50% 108%, #2c2150 0%, rgba(44,33,80,0) 60%),
+    linear-gradient(#241b45 0 68%, #17102e 68% 100%);}
+  .floorline{position:absolute;left:0;right:0;top:68%;height:4px;background:#0f0a22}
+  .window{position:absolute;top:7%;left:6%;width:104px;height:132px;border:6px solid #0f0a22;border-radius:10px 10px 4px 4px;background:#cfe6ff;overflow:hidden}
+  .window::before{content:"";position:absolute;inset:0;background:
+    linear-gradient(transparent 47%, #0f0a22 47% 53%, transparent 53%),
+    linear-gradient(90deg, transparent 47%, #0f0a22 47% 53%, transparent 53%)}
+  .moon{position:absolute;top:12px;right:12px;width:30px;height:30px;border-radius:50%;background:#fff6cf;box-shadow:0 0 18px #fff2b0}
+  .shelf{position:absolute;top:16%;right:5%;width:150px;height:12px;background:#0f0a22;border-radius:4px}
+  .shelf i{position:absolute;bottom:12px;width:16px;border-radius:3px 3px 0 0;background:#7a5fb5}
+  .shelf i:nth-child(1){left:8px;height:44px;background:#e2725b}
+  .shelf i:nth-child(2){left:28px;height:36px;background:#3ec9b8}
+  .shelf i:nth-child(3){left:48px;height:48px;background:#f5a623}
+  .shelf i:nth-child(4){left:70px;height:34px;background:#ef6aa5}
+  .shelf i:nth-child(5){left:92px;height:42px;background:#7a5fb5}
+  .shelf i:nth-child(6){left:114px;height:38px;background:#5b8def}
+  .sofa{position:absolute;bottom:9%;left:5%;width:170px;height:64px;background:#4a3577;border-radius:16px 16px 8px 8px}
+  .sofa::before{content:"";position:absolute;top:-22px;left:0;right:0;height:34px;background:#553f88;border-radius:16px 16px 0 0}
+  .sofa::after{content:"";position:absolute;top:-8px;left:-14px;right:-14px;height:44px;border-radius:14px;background:#3c2a63;z-index:-1}
+  .pumpkin{position:absolute;bottom:8.5%;right:7%;width:64px;height:50px;background:#e07b24;border-radius:50%/58%}
+  .pumpkin::before{content:"";position:absolute;top:-9px;left:50%;margin-left:-5px;width:10px;height:12px;background:#4c7a3f;border-radius:4px}
+  .pumpkin .face{position:absolute;inset:0}
+  .pumpkin .face::before{content:"";position:absolute;top:16px;left:13px;width:9px;height:9px;background:#2a1503;clip-path:polygon(50% 0,100% 100%,0 100%)}
+  .pumpkin .face::after{content:"";position:absolute;top:16px;right:13px;width:9px;height:9px;background:#2a1503;clip-path:polygon(50% 0,100% 100%,0 100%)}
+  .pumpkin .mouth{position:absolute;bottom:11px;left:50%;margin-left:-14px;width:28px;height:10px;background:#2a1503;border-radius:0 0 14px 14px}
+  .rug{position:absolute;bottom:3.5%;left:50%;margin-left:-130px;width:260px;height:34px;background:#33255e;border-radius:50%}
+  .portrait{position:absolute;top:9%;left:44%;width:64px;height:80px;border:6px solid #8a6d1f;background:#6d5ba8;border-radius:6px}
+  .portrait::after{content:"";position:absolute;top:16px;left:50%;margin-left:-13px;width:26px;height:26px;border-radius:50%;background:#efe9ff}
+  .plant{position:absolute;bottom:9%;left:47%;width:34px;height:30px;background:#8a4b2a;border-radius:4px 4px 12px 12px}
+  .plant::before{content:"";position:absolute;bottom:24px;left:50%;margin-left:-22px;width:44px;height:36px;background:#3f9e63;border-radius:50% 50% 50% 50%/70% 70% 40% 40%}
+  .stars{position:absolute;inset:0;background-image:radial-gradient(2px 2px at 20% 30%, #fff8 50%, transparent 51%),radial-gradient(2px 2px at 70% 18%, #fff7 50%, transparent 51%),radial-gradient(1.6px 1.6px at 86% 44%, #fff6 50%, transparent 51%),radial-gradient(1.6px 1.6px at 36% 12%, #fff6 50%, transparent 51%)}
+
+  /* Ghosts */
+  .ghost{position:absolute;width:64px;height:76px;margin:-38px 0 0 -32px;z-index:3;pointer-events:none;will-change:left,top,transform}
+  .ghost .body{width:100%;height:100%;filter:drop-shadow(0 4px 6px rgba(0,0,0,.35));transition:transform .15s}
+  .ghost.revealed .body{animation:wiggle .5s infinite alternate ease-in-out}
+  @keyframes wiggle{from{transform:rotate(-4deg) scale(1.04)}to{transform:rotate(4deg) scale(1.1)}}
+  .ghost.caught{transition:transform .35s ease-in,opacity .35s ease-in;transform:scale(1.7) rotate(14deg)!important;opacity:0}
+  .ghost.golden .body{filter:drop-shadow(0 0 12px #ffd94d) drop-shadow(0 4px 6px rgba(0,0,0,.35))}
+  .ghost .zzz{position:absolute;top:-14px;right:-4px;font-family:"Fredoka";font-size:.8rem;color:#cfd6ff;opacity:0}
+  .ghost.sleepy .zzz{opacity:.9;animation:floatz 1.6s infinite}
+  @keyframes floatz{0%{transform:translateY(0);opacity:0}30%{opacity:.9}100%{transform:translateY(-14px);opacity:0}}
+
+  /* Darkness + beam */
+  .darkness{position:absolute;inset:0;z-index:5;pointer-events:none;
+    background:radial-gradient(circle var(--br,120px) at var(--lx,50%) var(--ly,45%),
+      rgba(6,4,20,0) 0%, rgba(6,4,20,0) 55%,
+      rgba(6,4,20,.55) 82%, rgba(5,3,18,.965) 100%);}
+  .beamring{position:absolute;z-index:6;width:calc(var(--br,120px)*2);height:calc(var(--br,120px)*2);
+    margin:calc(var(--br,120px)*-1) 0 0 calc(var(--br,120px)*-1);border-radius:50%;pointer-events:none;
+    border:3px solid rgba(255,214,110,.55);box-shadow:0 0 34px 8px rgba(255,190,60,.22) inset,0 0 22px rgba(255,190,60,.25);
+    left:var(--lx,50%);top:var(--ly,45%);}
+  .beamcore{position:absolute;z-index:6;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;
+    background:radial-gradient(circle,#fff8d6 0 35%, rgba(255,220,120,.0) 70%);pointer-events:none;left:var(--lx,50%);top:var(--ly,45%)}
+  .hintglow{position:absolute;z-index:4;width:70px;height:70px;margin:-35px 0 0 -35px;border-radius:50%;pointer-events:none;
+    background:radial-gradient(circle, rgba(160,130,255,.5), rgba(160,130,255,0) 70%);opacity:0;transition:opacity .3s}
+  .hintglow.show{opacity:1}
+
+  .floatscore{position:absolute;z-index:8;font-family:"Fredoka";font-size:1.3rem;color:var(--gold);
+    text-shadow:0 2px 0 #7a4d00,0 0 12px rgba(255,200,60,.6);pointer-events:none;animation:rise .8s ease-out forwards}
+  @keyframes rise{from{transform:translateY(0);opacity:1}to{transform:translateY(-52px);opacity:0}}
+  .flash{position:absolute;inset:0;z-index:7;background:radial-gradient(circle at var(--lx,50%) var(--ly,45%), rgba(255,240,190,.85), rgba(255,240,190,0) 45%);opacity:0;pointer-events:none}
+  .flash.go{animation:flasha .28s ease-out}
+  @keyframes flasha{0%{opacity:0}25%{opacity:1}100%{opacity:0}}
+
+  /* Stage overlays */
+  .overlay{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:20px;background:rgba(10,7,28,.72);backdrop-filter:blur(2px);color:#f4f1ff}
+  .overlay[hidden]{display:none}
+  .overlay h2{font-family:"Fredoka";font-size:2rem;margin:0 0 6px;color:#ffd97a;text-shadow:0 3px 0 rgba(0,0,0,.35)}
+  .overlay p{margin:0 0 14px;max-width:420px;font-weight:700;line-height:1.45;color:#dcd7ff}
+  .overlay .bigscore{font-family:"Fredoka";font-size:3rem;line-height:1;color:#fff}
+  .overlay .substats{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:10px 0 16px}
+  .overlay .chip{background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.25);border-radius:999px;padding:6px 14px;font-weight:900;font-size:.9rem}
+  .overlay .chip b{color:#ffd97a}
+  .newbest{background:#ffd94d;color:#4a3200;border-radius:999px;padding:5px 14px;font-weight:900;margin-bottom:10px;animation:pulse .5s infinite alternate}
+
+  .stage-msg{position:absolute;z-index:9;top:10px;left:50%;transform:translateX(-50%);pointer-events:none;
+    background:rgba(12,9,32,.82);color:#ffe9a8;border:2px solid rgba(255,217,122,.5);border-radius:999px;
+    padding:6px 16px;font-weight:900;font-size:.92rem;white-space:nowrap;max-width:92%;overflow:hidden;text-overflow:ellipsis}
+  .stage-msg[hidden]{display:none}
+  .combo{position:absolute;z-index:9;bottom:12px;left:12px;pointer-events:none;font-family:"Fredoka";
+    color:#fff;background:rgba(239,106,165,.9);border-radius:999px;padding:5px 14px;font-size:1rem;box-shadow:0 3px 0 rgba(0,0,0,.3)}
+  .combo[hidden]{display:none}
+
+  /* ---------- Under-stage info ---------- */
+  .infogrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px}
+  @media (max-width:640px){ .infogrid{grid-template-columns:1fr} }
+  .card{background:var(--surface);border:2px solid var(--line);border-radius:var(--radius);padding:12px 14px;box-shadow:var(--shadow)}
+  .card h3{font-family:"Fredoka";margin:0 0 6px;font-size:1.02rem;color:var(--plum-deep)}
+  .card p,.card li{font-size:.92rem;font-weight:700;color:var(--muted);line-height:1.45}
+  .card ul{margin:0;padding-left:18px}
+  .card p{margin:0}
+  .bestrow{display:flex;justify-content:space-between;font-weight:900;padding:3px 0;border-bottom:1px dashed var(--line)}
+  .bestrow:last-child{border-bottom:none}
+  .bestrow span:last-child{color:var(--plum-deep);font-family:"Fredoka"}
+
+  footer{margin-top:18px;text-align:center}
+  footer .rff{background:var(--surface);border:2px solid var(--line);border-radius:var(--radius);padding:14px;box-shadow:var(--shadow)}
+  footer p{margin:0;font-weight:800;color:var(--muted);font-size:.95rem}
+  footer a{color:var(--plum);font-weight:900}
+  footer a{display:inline-flex;align-items:center;min-height:36px;padding:2px 4px}
+
+  /* ---------- Modals ---------- */
+  .modalback{position:fixed;inset:0;z-index:50;background:rgba(8,6,24,.66);display:flex;align-items:flex-end;justify-content:center;padding:0}
+  .modalback[hidden]{display:none}
+  @media (min-width:640px){ .modalback{align-items:center;padding:18px} }
+  .modal{background:var(--surface);color:var(--ink);width:100%;max-width:560px;max-height:88vh;overflow:auto;
+    border-radius:22px 22px 0 0;padding:20px 20px 26px;box-shadow:var(--shadow)}
+  @media (min-width:640px){ .modal{border-radius:22px} }
+  .modal h2{font-family:"Fredoka";margin:0 0 4px;font-size:1.5rem;color:var(--plum-deep)}
+  .modal h3{font-family:"Fredoka";margin:16px 0 4px;font-size:1.05rem;color:var(--plum-deep)}
+  .modal p,.modal li{font-weight:700;color:var(--muted);line-height:1.5;font-size:.96rem}
+  .modal ul,.modal ol{padding-left:20px;margin:6px 0}
+  .modal .xrow{display:flex;align-items:flex-start;gap:10px}
+  .modal .xrow h2{flex:1}
+  .xbtn{flex:none;width:44px;height:44px;border-radius:12px;border:2px solid var(--line);background:var(--surface2);
+    font-size:1.15rem;font-weight:900;cursor:pointer;color:var(--ink)}
+  table.diff{width:100%;border-collapse:collapse;font-size:.92rem;font-weight:800;color:var(--muted)}
+  table.diff th,table.diff td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:left}
+  table.diff th{color:var(--ink)}
+  .tutstep{text-align:center;padding:8px 0 2px}
+  .tutstep .art{font-size:3rem;line-height:1.2}
+  .tutstep h3{margin-top:6px}
+  .tutnav{display:flex;gap:8px;justify-content:space-between;margin-top:16px}
+  .tutdots{display:flex;gap:6px;justify-content:center;margin-top:12px}
+  .tutdots i{width:10px;height:10px;border-radius:50%;background:var(--line)}
+  .tutdots i.cur{background:var(--plum)}
+  textarea{width:100%;min-height:110px;border:2px solid var(--line);border-radius:12px;padding:10px;
+    font-family:inherit;font-size:1rem;font-weight:700;color:var(--ink);background:var(--surface);resize:vertical}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(80px);z-index:60;
+    background:var(--plum-deep);color:#fff;font-weight:900;padding:12px 20px;border-radius:999px;
+    box-shadow:var(--shadow);transition:transform .3s;max-width:92vw;text-align:center}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  @media (prefers-reduced-motion: reduce){
+    .ghost.revealed .body,.pill.timewarn,.newbest{animation:none}
+    .floatscore{animation-duration:.01s}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Scoreboard -->
+  <div class="topbar">
+    <div class="logo">
+      <svg viewBox="0 0 64 72" aria-hidden="true"><path d="M32 4C18 4 8 15 8 30v30c0 3 4 4 6 2l4-4 4 4c2 2 4 2 6 0l4-4 4 4c2 2 4 2 6 0l4-4 4 4c2 2 6 1 6-2V30C56 15 46 4 32 4Z" fill="#f4f1ff" stroke="#5b3a8e" stroke-width="3"/><circle cx="24" cy="30" r="3.6" fill="#232038"/><circle cx="40" cy="30" r="3.6" fill="#232038"/><path d="M25 42q7 6 14 0" stroke="#232038" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="17" cy="38" r="4" fill="#ffb9d5" opacity=".8"/><circle cx="47" cy="38" r="4" fill="#ffb9d5" opacity=".8"/></svg>
+      <div>
+        <h1>Ghost Hunt</h1>
+        <p>Shine your flashlight. Catch the friendly ghosts!</p>
+      </div>
+    </div>
+    <div class="pill"><span class="lab">Score</span><span class="val" id="scoreVal">0</span></div>
+    <div class="pill" id="timePill"><span class="lab">Time</span><span class="val" id="timeVal">60</span></div>
+    <div class="pill"><span class="lab">Caught</span><span class="val" id="caughtVal">0</span></div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="ctl-group">
+      <label for="diffSel">Difficulty · saved</label>
+      <select id="diffSel" aria-label="Difficulty">
+        <option value="easy">🟢 Easy — big light, chill ghosts</option>
+        <option value="medium" selected>🟡 Medium — classic hunt</option>
+        <option value="hard">🔴 Hard — small light, speedy ghosts</option>
+      </select>
+    </div>
+    <div class="btnrow">
+      <button class="btn" id="practiceBtn" aria-pressed="false"><span class="dot"></span>Practice mode</button>
+      <button class="btn" id="soundBtn" aria-pressed="true"><span class="dot"></span>Sound</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="btnrow">
+      <button class="btn primary" id="startBtn">▶ Start hunt</button>
+      <button class="btn" id="pauseBtn" disabled>⏸ Pause</button>
+    </div>
+    <div class="btnrow" style="width:100%">
+      <button class="btn teal" id="tutBtn">🎓 How to play (Tutorial)</button>
+      <button class="btn" id="rulesBtn">📜 Rules</button>
+      <button class="btn" id="feedbackBtn">💬 Feedback</button>
+    </div>
+  </div>
+
+  <!-- Stage -->
+  <div class="stage-shell">
+    <div class="stage" id="stage" role="application" aria-label="Ghost hunt play area. Move your finger or mouse to aim the flashlight, tap a revealed ghost to catch it.">
+      <div class="room">
+        <div class="stars"></div>
+        <div class="window"><div class="moon"></div></div>
+        <div class="portrait"></div>
+        <div class="shelf"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="floorline"></div>
+        <div class="rug"></div>
+        <div class="sofa"></div>
+        <div class="plant"></div>
+        <div class="pumpkin"><div class="face"></div><div class="mouth"></div></div>
+      </div>
+      <div id="ghostLayer"></div>
+      <div id="hintLayer"></div>
+      <div class="darkness" id="darkness"></div>
+      <div class="beamring" id="beamring"></div>
+      <div class="beamcore"></div>
+      <div class="flash" id="flash"></div>
+      <div class="stage-msg" id="stageMsg" hidden>Move to aim your flashlight 🔦</div>
+      <div class="combo" id="comboBadge" hidden>Combo ×2!</div>
+
+      <div class="overlay" id="startOverlay">
+        <h2>Ready to hunt? 👻</h2>
+        <p>The haunted house is full of friendly ghosts hiding in the dark. Sweep your flashlight around to reveal them — then tap a ghost while it's lit up to catch it!</p>
+        <button class="btn primary" id="overlayStartBtn" style="font-size:1.15rem;padding:12px 28px">🔦 Start hunting</button>
+        <p style="margin-top:12px;font-size:.85rem">New here? Tap <b>How to play</b> up top for a quick tutorial — or just dive in.</p>
+      </div>
+
+      <div class="overlay" id="endOverlay" hidden>
+        <h2 id="endTitle">Time's up! 🎉</h2>
+        <div class="newbest" id="newBestBadge" hidden>⭐ New best score!</div>
+        <div class="bigscore" id="endScore">0</div>
+        <div class="substats">
+          <span class="chip">Ghosts caught <b id="endCaught">0</b></span>
+          <span class="chip">Best combo <b id="endCombo">×1</b></span>
+          <span class="chip">Golden ghosts <b id="endGolden">0</b></span>
+        </div>
+        <p id="endMsg">Great hunting!</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+          <button class="btn primary" id="againBtn">↻ Hunt again</button>
+          <button class="btn" id="endPracticeBtn">Practice instead</button>
+        </div>
+      </div>
+
+      <div class="overlay" id="pauseOverlay" hidden>
+        <h2>Paused ⏸</h2>
+        <p>The ghosts are holding very, very still…</p>
+        <button class="btn primary" id="resumeBtn">▶ Keep hunting</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Info cards -->
+  <div class="infogrid">
+    <div class="card">
+      <h3>🏆 Your best scores</h3>
+      <div class="bestrow"><span>🟢 Easy</span><span id="bestEasy">—</span></div>
+      <div class="bestrow"><span>🟡 Medium</span><span id="bestMedium">—</span></div>
+      <div class="bestrow"><span>🔴 Hard</span><span id="bestHard">—</span></div>
+      <p style="margin-top:6px;font-size:.8rem">Saved on this device. Practice games don't count.</p>
+    </div>
+    <div class="card">
+      <h3>👻 Meet the ghosts</h3>
+      <ul>
+        <li><b>Regular ghost</b> — 10 points. Friendly, a bit wiggly.</li>
+        <li><b>Golden ghost</b> — 50 points! Rare and sparkly. Grab it fast.</li>
+        <li><b>Shy ghost</b> — 20 points. Dashes away from your light.</li>
+        <li><b>Sleepy ghost</b> — 15 points. Barely moves. Easy catch!</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>⚡ Combos</h3>
+      <p>Catch ghosts quickly one after another to build a combo. Every catch in a row raises your multiplier up to <b>×5</b> — points pile up fast. Miss your timing and the combo resets. In Practice mode there are no timers and no pressure: ghosts glow with hints so you can learn the ropes.</p>
+    </div>
+  </div>
+
+  <footer>
+    <div class="rff">
+      <p>More ridiculous health &amp; fitness fun: <a href="https://instagram.com/ridiculouslyfitandfed" target="_blank" rel="noopener">Ridiculously Fit and Fed</a></p>
+    </div>
+  </footer>
+</div>
+
+<!-- Tutorial modal -->
+<div class="modalback" id="tutModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+    <div class="xrow"><h2 id="tutTitle">How to play 🎓</h2><button class="xbtn" data-close="tutModal" aria-label="Close tutorial">✕</button></div>
+    <div class="tutstep" id="tutStep"></div>
+    <div class="tutdots" id="tutDots"></div>
+    <div class="tutnav">
+      <button class="btn" id="tutPrev">← Back</button>
+      <button class="btn primary" id="tutNext">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rules modal -->
+<div class="modalback" id="rulesModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <div class="xrow"><h2 id="rulesTitle">Rules 📜</h2><button class="xbtn" data-close="rulesModal" aria-label="Close rules">✕</button></div>
+    <h3>The goal</h3>
+    <p>Ghosts hide in the dark haunted house. Your flashlight is the only light — a ghost can only be caught while your beam is shining on it. Catch as many as you can before time runs out!</p>
+    <h3>How to play</h3>
+    <ul>
+      <li><b>Move</b> your mouse, or drag your finger, to aim the flashlight.</li>
+      <li><b>Tap / click</b> a ghost while it's lit up to catch it.</li>
+      <li>Ghosts in the dark can't be caught — tapping in the dark does nothing (no penalties, promise).</li>
+    </ul>
+    <h3>Scoring</h3>
+    <ul>
+      <li>Regular ghost: <b>10 pts</b> · Sleepy ghost: <b>15 pts</b> · Shy ghost: <b>20 pts</b> · Golden ghost: <b>50 pts</b></li>
+      <li>Quick back-to-back catches build a <b>combo multiplier</b> (×2, ×3, ×4, up to ×5) applied to every catch.</li>
+      <li>The combo resets if you go about 2.5 seconds without a catch.</li>
+    </ul>
+    <h3>Difficulties</h3>
+    <table class="diff">
+      <tr><th></th><th>Time</th><th>Ghosts</th><th>Light size</th><th>Speed</th></tr>
+      <tr><td>🟢 Easy</td><td>75s</td><td>5</td><td>Big</td><td>Gentle</td></tr>
+      <tr><td>🟡 Medium</td><td>60s</td><td>7</td><td>Medium</td><td>Brisk</td></tr>
+      <tr><td>🔴 Hard</td><td>45s</td><td>9</td><td>Small</td><td>Speedy</td></tr>
+    </table>
+    <p>Your difficulty choice is saved on this device, along with your best score for each level.</p>
+    <h3>Practice mode</h3>
+    <p>No clock, no score saved, slower ghosts, and hint glows show you where ghosts are hiding. Perfect for learning — or for little hunters.</p>
+    <h3>Good sportsmanship</h3>
+    <p>All ghosts here are friendly and love being caught — it's the highlight of their afterlife. Fun-spooky only, never scary-gory. 👻</p>
+    <div style="margin-top:16px"><button class="btn primary" data-close="rulesModal" style="width:100%">Got it — let's hunt!</button></div>
+  </div>
+</div>
+
+<!-- Feedback modal -->
+<div class="modalback" id="feedbackModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+    <div class="xrow"><h2 id="fbTitle">Feedback 💬</h2><button class="xbtn" data-close="feedbackModal" aria-label="Close feedback">✕</button></div>
+    <p>Tell us what you loved, what felt too hard or too easy, or your idea for a new ghost. Your note opens in your email app — nothing is sent until you hit send there.</p>
+    <label for="fbText" style="font-weight:900;font-size:.85rem;display:block;margin:10px 0 6px">Your feedback</label>
+    <textarea id="fbText" placeholder="e.g. The golden ghost is my favourite! Could there be a pumpkin ghost?"></textarea>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      <button class="btn primary" id="fbSend">✉️ Send via email</button>
+      <button class="btn" id="fbCopy">📋 Copy text</button>
+    </div>
+    <p style="margin-top:12px;font-size:.85rem">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+
+/* ---------- Saved settings (localStorage) ---------- */
+var store = {
+  get:function(k,d){ try{ var v = localStorage.getItem("ghosthunt_"+k); return v===null? d : v; }catch(e){ return d; } },
+  set:function(k,v){ try{ localStorage.setItem("ghosthunt_"+k, v); }catch(e){} }
+};
+
+var DIFFS = {
+  easy:   { time:75, count:5, radius:140, speed:0.55, label:"Easy" },
+  medium: { time:60, count:7, radius:112, speed:0.9,  label:"Medium" },
+  hard:   { time:45, count:9, radius:86,  speed:1.3,  label:"Hard" }
+};
+var diffSel = $("diffSel");
+var savedDiff = store.get("difficulty","medium");
+if(!DIFFS[savedDiff]) savedDiff = "medium";
+diffSel.value = savedDiff;
+
+var soundOn = store.get("sound","on") === "on";
+
+/* ---------- Audio (synthesized, no files) ---------- */
+var actx = null;
+function beep(freq, dur, type, vol, slideTo){
+  if(!soundOn) return;
+  try{
+    if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+    if(actx.state === "suspended") actx.resume();
+    var o = actx.createOscillator(), g = actx.createGain();
+    o.type = type||"sine"; o.frequency.setValueAtTime(freq, actx.currentTime);
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, actx.currentTime + dur);
+    g.gain.setValueAtTime(vol||0.12, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + dur);
+    o.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + dur);
+  }catch(e){}
+}
+function sndCatch(golden){ golden ? beep(880,.22,"triangle",.14,1560) : beep(620,.14,"triangle",.11,940); }
+function sndStart(){ beep(440,.12,"sine",.1); setTimeout(function(){beep(660,.12,"sine",.1);},110); setTimeout(function(){beep(880,.18,"sine",.1);},220); }
+function sndEnd(){ beep(880,.15,"sine",.1); setTimeout(function(){beep(660,.15,"sine",.1);},140); setTimeout(function(){beep(520,.3,"sine",.1);},280); }
+function sndTick(){ beep(1050,.05,"square",.04); }
+
+/* ---------- Ghost artwork (inline SVG, friendly not gory) ---------- */
+function ghostSVG(fill, cheek){
+  return '<svg class="body" viewBox="0 0 64 76" aria-hidden="true">'
+    + '<path d="M32 3C18 3 8 14 8 29v34c0 3 4 4 6 2l4-4 4 4c2 2 4 2 6 0l4-4 4 4c2 2 4 2 6 0l4-4 4 4c2 2 6 1 6-2V29C56 14 46 3 32 3Z" fill="'+fill+'"/>'
+    + '<circle cx="24" cy="29" r="3.6" fill="#2b2547"/><circle cx="40" cy="29" r="3.6" fill="#2b2547"/>'
+    + '<path d="M25 41q7 6 14 0" stroke="#2b2547" stroke-width="3" fill="none" stroke-linecap="round"/>'
+    + '<circle cx="16.5" cy="37" r="4" fill="'+cheek+'" opacity=".85"/><circle cx="47.5" cy="37" r="4" fill="'+cheek+'" opacity=".85"/>'
+    + '</svg>';
+}
+var TYPES = [
+  { kind:"regular", pts:10, fill:"#f4f1ff", cheek:"#ffb9d5", weight:62, speedMul:1 },
+  { kind:"sleepy",  pts:15, fill:"#cfe8ff", cheek:"#a9c8ff", weight:14, speedMul:0.35 },
+  { kind:"shy",     pts:20, fill:"#d9f7e8", cheek:"#8fe3bb", weight:16, speedMul:1.25 },
+  { kind:"golden",  pts:50, fill:"#ffe066", cheek:"#ffb84d", weight:8,  speedMul:1.1 }
+];
+function pickType(){
+  var total = 0, i; for(i=0;i<TYPES.length;i++) total += TYPES[i].weight;
+  var r = Math.random()*total;
+  for(i=0;i<TYPES.length;i++){ r -= TYPES[i].weight; if(r<=0) return TYPES[i]; }
+  return TYPES[0];
+}
+
+/* ---------- Game state ---------- */
+var stage = $("stage"), ghostLayer = $("ghostLayer"), hintLayer = $("hintLayer");
+var state = {
+  playing:false, paused:false, practice:false,
+  score:0, caught:0, goldenCaught:0,
+  combo:1, bestCombo:1, lastCatchAt:0,
+  timeLeft:0, ghosts:[], raf:null, lastFrame:0, timerInt:null,
+  lightX:0, lightY:0, lightInit:false, hintAt:0
+};
+function diff(){ return DIFFS[diffSel.value]; }
+function beamRadius(){ return state.practice ? Math.max(diff().radius, 150) : diff().radius; }
+
+function stageSize(){ var r = stage.getBoundingClientRect(); return { w:r.width, h:r.height }; }
+
+function setLight(clientX, clientY){
+  var r = stage.getBoundingClientRect();
+  state.lightX = clientX - r.left; state.lightY = clientY - r.top;
+  state.lightInit = true;
+  stage.style.setProperty("--lx", state.lightX + "px");
+  stage.style.setProperty("--ly", state.lightY + "px");
+  stage.style.setProperty("--br", beamRadius() + "px");
+}
+function centerLight(){
+  var s = stageSize();
+  stage.style.setProperty("--lx", (s.w/2) + "px");
+  stage.style.setProperty("--ly", (s.h*0.45) + "px");
+  stage.style.setProperty("--br", beamRadius() + "px");
+  state.lightX = s.w/2; state.lightY = s.h*0.45; state.lightInit = true;
+}
+
+/* ---------- Ghosts ---------- */
+function spawnGhost(){
+  var s = stageSize(), t = pickType();
+  var el = document.createElement("div");
+  el.className = "ghost" + (t.kind==="golden" ? " golden" : "") + (t.kind==="sleepy" ? " sleepy" : "");
+  el.innerHTML = ghostSVG(t.fill, t.cheek) + (t.kind==="sleepy" ? '<span class="zzz">z z</span>' : '');
+  ghostLayer.appendChild(el);
+  var hint = document.createElement("div");
+  hint.className = "hintglow"; hintLayer.appendChild(hint);
+  var g = {
+    el:el, hint:hint, type:t,
+    x: 50 + Math.random()*(s.w-100), y: 50 + Math.random()*(s.h-110),
+    vx:(Math.random()*2-1), vy:(Math.random()*2-1),
+    caught:false, revealed:false
+  };
+  var m = Math.hypot(g.vx,g.vy)||1; g.vx/=m; g.vy/=m;
+  state.ghosts.push(g);
+  placeGhost(g);
+  return g;
+}
+function placeGhost(g){
+  g.el.style.left = g.x + "px"; g.el.style.top = g.y + "px";
+  g.hint.style.left = g.x + "px"; g.hint.style.top = g.y + "px";
+}
+function clearGhosts(){
+  state.ghosts.forEach(function(g){ g.el.remove(); g.hint.remove(); });
+  state.ghosts = [];
+}
+
+function stepGhosts(dt){
+  var s = stageSize(), r = beamRadius(), now = performance.now();
+  state.ghosts.forEach(function(g){
+    if(g.caught) return;
+    var sp = diff().speed * g.type.speedMul * (state.practice ? 0.55 : 1);
+    var dx = g.x - state.lightX, dy = g.y - state.lightY;
+    var dist = Math.hypot(dx,dy);
+    g.revealed = state.lightInit && dist < r;
+    g.el.classList.toggle("revealed", g.revealed);
+    if(g.type.kind==="shy" && g.revealed && dist > 1){
+      /* shy ghosts scoot away from the light */
+      g.vx += (dx/dist)*0.09; g.vy += (dy/dist)*0.09;
+      var m = Math.hypot(g.vx,g.vy)||1; g.vx/=m; g.vy/=m;
+    }
+    if(Math.random() < 0.006){ g.vx += (Math.random()*2-1)*0.7; g.vy += (Math.random()*2-1)*0.7;
+      var m2 = Math.hypot(g.vx,g.vy)||1; g.vx/=m2; g.vy/=m2; }
+    g.x += g.vx * sp * dt * 0.11;
+    g.y += g.vy * sp * dt * 0.11;
+    if(g.x < 36){ g.x = 36; g.vx = Math.abs(g.vx); }
+    if(g.x > s.w-36){ g.x = s.w-36; g.vx = -Math.abs(g.vx); }
+    if(g.y < 42){ g.y = 42; g.vy = Math.abs(g.vy); }
+    if(g.y > s.h-44){ g.y = s.h-44; g.vy = -Math.abs(g.vy); }
+    placeGhost(g);
+  });
+  /* Practice hints: pulse a glow on hidden ghosts every ~2.4s */
+  if(state.practice && now - state.hintAt > 2400){
+    state.hintAt = now;
+    state.ghosts.forEach(function(g){
+      if(!g.caught && !g.revealed){
+        g.hint.classList.add("show");
+        setTimeout(function(){ g.hint.classList.remove("show"); }, 700);
+      }
+    });
+  }
+}
+
+function frame(ts){
+  if(!state.playing || state.paused) return;
+  var dt = Math.min(50, ts - (state.lastFrame||ts)); state.lastFrame = ts;
+  stepGhosts(dt);
+  state.raf = requestAnimationFrame(frame);
+}
+
+/* ---------- Catching ---------- */
+function tryCatch(clientX, clientY){
+  setLight(clientX, clientY);
+  if(!state.playing || state.paused) return;
+  var r = stage.getBoundingClientRect();
+  var px = clientX - r.left, py = clientY - r.top;
+  var best = null, bestD = 1e9;
+  state.ghosts.forEach(function(g){
+    if(g.caught || !g.revealed) return;
+    var d = Math.hypot(g.x-px, g.y-py);
+    if(d < 52 && d < bestD){ best = g; bestD = d; }
+  });
+  if(!best) return;
+  best.caught = true;
+  best.el.classList.add("caught");
+  best.hint.remove();
+  var now = performance.now();
+  if(now - state.lastCatchAt < 2500) state.combo = Math.min(5, state.combo + 1); else state.combo = 1;
+  state.lastCatchAt = now;
+  state.bestCombo = Math.max(state.bestCombo, state.combo);
+  var gained = best.type.pts * state.combo;
+  if(!state.practice) state.score += gained;
+  state.caught++;
+  if(best.type.kind==="golden") state.goldenCaught++;
+  sndCatch(best.type.kind==="golden");
+  var f = $("flash"); f.classList.remove("go"); void f.offsetWidth; f.classList.add("go");
+  var fs = document.createElement("div");
+  fs.className = "floatscore"; fs.textContent = "+" + gained;
+  fs.style.left = (best.x-16) + "px"; fs.style.top = (best.y-56) + "px";
+  stage.appendChild(fs); setTimeout(function(){ fs.remove(); }, 850);
+  var g = best;
+  setTimeout(function(){
+    g.el.remove();
+    var idx = state.ghosts.indexOf(g); if(idx>=0) state.ghosts.splice(idx,1);
+    if(state.playing) spawnGhost();
+  }, 360);
+  updateHUD();
+  var cb = $("comboBadge");
+  if(state.combo >= 2){ cb.hidden = false; cb.textContent = "Combo ×" + state.combo + "!"; }
+}
+
+/* ---------- HUD / flow ---------- */
+function updateHUD(){
+  $("scoreVal").textContent = state.practice ? "—" : state.score;
+  $("caughtVal").textContent = state.caught;
+  $("timeVal").textContent = state.practice ? "∞" : Math.max(0, Math.ceil(state.timeLeft));
+  $("timePill").classList.toggle("timewarn", state.playing && !state.practice && state.timeLeft <= 10);
+}
+function showMsg(text, sticky){
+  var m = $("stageMsg"); m.textContent = text; m.hidden = false;
+  if(!sticky){ clearTimeout(showMsg._t); showMsg._t = setTimeout(function(){ m.hidden = true; }, 2600); }
+}
+function hideMsg(){ $("stageMsg").hidden = true; }
+
+function startGame(){
+  clearGhosts();
+  state.score = 0; state.caught = 0; state.goldenCaught = 0;
+  state.combo = 1; state.bestCombo = 1; state.lastCatchAt = 0;
+  state.timeLeft = diff().time;
+  state.playing = true; state.paused = false;
+  $("startOverlay").hidden = true; $("endOverlay").hidden = true; $("pauseOverlay").hidden = true;
+  $("comboBadge").hidden = true;
+  $("startBtn").textContent = "↻ Restart";
+  $("pauseBtn").disabled = false; $("pauseBtn").textContent = "⏸ Pause";
+  centerLight();
+  var n = diff().count, i;
+  for(i=0;i<n;i++) spawnGhost();
+  updateHUD();
+  sndStart();
+  showMsg(state.practice ? "Practice: no clock — find the glowing hints! 🔦" : "Catch the ghosts before time runs out! 👻");
+  clearInterval(state.timerInt);
+  if(!state.practice){
+    state.timerInt = setInterval(function(){
+      if(!state.playing || state.paused) return;
+      state.timeLeft -= 1;
+      if(state.timeLeft <= 5 && state.timeLeft > 0) sndTick();
+      updateHUD();
+      if(state.timeLeft <= 0) endGame();
+    }, 1000);
+  }
+  cancelAnimationFrame(state.raf); state.lastFrame = 0;
+  state.raf = requestAnimationFrame(frame);
+}
+function endGame(){
+  state.playing = false;
+  clearInterval(state.timerInt); cancelAnimationFrame(state.raf);
+  $("pauseBtn").disabled = true;
+  sndEnd();
+  var key = "best_" + diffSel.value;
+  var prev = parseInt(store.get(key,""), 10);
+  var isBest = isNaN(prev) || state.score > prev;
+  if(isBest) store.set(key, String(state.score));
+  renderBests();
+  $("endScore").textContent = state.score;
+  $("endCaught").textContent = state.caught;
+  $("endCombo").textContent = "×" + state.bestCombo;
+  $("endGolden").textContent = state.goldenCaught;
+  $("newBestBadge").hidden = !isBest;
+  $("endTitle").textContent = state.caught >= 20 ? "Ghost-catching legend! 🏆" : state.caught >= 12 ? "Time's up! 🎉" : state.caught >= 5 ? "Time's up! 🎉" : "Time's up! 🌙";
+  $("endMsg").textContent = state.caught >= 20 ? "The ghosts are asking for YOUR autograph now."
+    : state.caught >= 12 ? "Superb hunting! The house feels much less haunted."
+    : state.caught >= 5 ? "Great hunting! The ghosts will be back tomorrow night…"
+    : "Good start! Try Practice mode to learn where they hide.";
+  $("endOverlay").hidden = false;
+  hideMsg();
+}
+function togglePause(){
+  if(!state.playing) return;
+  state.paused = !state.paused;
+  $("pauseOverlay").hidden = !state.paused;
+  $("pauseBtn").textContent = state.paused ? "▶ Resume" : "⏸ Pause";
+  if(!state.paused){ state.lastFrame = 0; state.raf = requestAnimationFrame(frame); }
+}
+function renderBests(){
+  ["easy","medium","hard"].forEach(function(k){
+    var v = store.get("best_"+k, "");
+    var el = $("best" + k.charAt(0).toUpperCase() + k.slice(1));
+    el.textContent = v === "" ? "—" : v + " pts";
+  });
+}
+
+/* ---------- Input ---------- */
+stage.addEventListener("pointermove", function(e){ setLight(e.clientX, e.clientY); });
+stage.addEventListener("pointerdown", function(e){
+  if(e.target.closest("button")) return;
+  tryCatch(e.clientX, e.clientY);
+});
+stage.addEventListener("touchmove", function(e){ e.preventDefault(); }, { passive:false });
+
+$("startBtn").addEventListener("click", startGame);
+$("overlayStartBtn").addEventListener("click", startGame);
+$("againBtn").addEventListener("click", startGame);
+$("pauseBtn").addEventListener("click", togglePause);
+$("resumeBtn").addEventListener("click", togglePause);
+$("endPracticeBtn").addEventListener("click", function(){
+  if(!state.practice) $("practiceBtn").click();
+  startGame();
+});
+
+diffSel.addEventListener("change", function(){
+  store.set("difficulty", diffSel.value);
+  toast("Difficulty saved: " + diff().label + " ✓");
+  centerLight();
+  if(state.playing) startGame(); else { state.timeLeft = diff().time; updateHUD(); }
+});
+
+var practiceBtn = $("practiceBtn");
+function setPractice(on){
+  state.practice = on;
+  practiceBtn.classList.toggle("on", on);
+  practiceBtn.setAttribute("aria-pressed", on ? "true" : "false");
+  centerLight(); updateHUD();
+  if(state.playing) startGame();
+}
+practiceBtn.addEventListener("click", function(){
+  setPractice(!state.practice);
+  toast(state.practice ? "Practice mode ON — no clock, hint glows, no score saved 🕯️" : "Practice mode OFF — real hunts count! 👻");
+});
+
+var soundBtn = $("soundBtn");
+function renderSound(){ soundBtn.classList.toggle("on", soundOn); soundBtn.setAttribute("aria-pressed", soundOn?"true":"false"); }
+soundBtn.addEventListener("click", function(){
+  soundOn = !soundOn; store.set("sound", soundOn ? "on" : "off"); renderSound();
+  if(soundOn) sndStart();
+});
+renderSound();
+
+/* ---------- Modals ---------- */
+function openModal(id){ $(id).hidden = false; }
+function closeModal(id){ $(id).hidden = true; }
+document.querySelectorAll("[data-close]").forEach(function(b){
+  b.addEventListener("click", function(){ closeModal(b.getAttribute("data-close")); });
+});
+document.querySelectorAll(".modalback").forEach(function(m){
+  m.addEventListener("click", function(e){ if(e.target === m) m.hidden = true; });
+});
+document.addEventListener("keydown", function(e){
+  if(e.key === "Escape") document.querySelectorAll(".modalback").forEach(function(m){ m.hidden = true; });
+  if(e.key === " " && state.playing && document.activeElement === document.body){ e.preventDefault(); togglePause(); }
+});
+$("rulesBtn").addEventListener("click", function(){ openModal("rulesModal"); });
+
+/* ---------- Tutorial (opt-in) ---------- */
+var TUT = [
+  { art:"🔦", title:"1. Aim your flashlight", text:"Move your mouse — or drag your finger on a phone — to sweep the flashlight beam around the dark house. Ghosts are invisible until the light finds them!" },
+  { art:"👻", title:"2. Reveal a ghost", text:"When your beam shines on a ghost, it lights up and wiggles. Different ghosts are worth different points — the sparkly golden one is worth 50!" },
+  { art:"👆", title:"3. Tap to catch it", text:"Tap or click right on a lit-up ghost to catch it. Catching ghosts quickly in a row builds a combo multiplier up to ×5. Shy ghosts dash away from the light, so be sneaky!" },
+  { art:"🕯️", title:"4. Practise any time", text:"Turn on Practice mode for no clock, slower ghosts and hint glows that show where ghosts hide. Your difficulty and best scores are saved automatically. Good hunting!" }
+];
+var tutIdx = 0;
+function renderTut(){
+  var s = TUT[tutIdx];
+  $("tutStep").innerHTML = '<div class="art">'+s.art+'</div><h3>'+s.title+'</h3><p>'+s.text+'</p>';
+  $("tutDots").innerHTML = TUT.map(function(_,i){ return '<i class="'+(i===tutIdx?"cur":"")+'"></i>'; }).join("");
+  $("tutPrev").disabled = tutIdx === 0;
+  $("tutNext").textContent = tutIdx === TUT.length-1 ? "Done — let's play! ✓" : "Next →";
+}
+$("tutBtn").addEventListener("click", function(){ tutIdx = 0; renderTut(); openModal("tutModal"); });
+$("tutPrev").addEventListener("click", function(){ if(tutIdx>0){ tutIdx--; renderTut(); } });
+$("tutNext").addEventListener("click", function(){
+  if(tutIdx < TUT.length-1){ tutIdx++; renderTut(); }
+  else { closeModal("tutModal"); if(!state.playing) startGame(); }
+});
+
+/* ---------- Feedback ---------- */
+$("feedbackBtn").addEventListener("click", function(){ openModal("feedbackModal"); });
+$("fbSend").addEventListener("click", function(){
+  var txt = $("fbText").value.trim() || "(no message written)";
+  /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+  try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "ghost-hunt", rating: (typeof fbRating!=="undefined"?fbRating:0), text: txt||"", tag: "", mode: "real", level: "", difficulty: "", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+  var a = document.createElement("a");
+  a.href = "mailto:?subject=" + encodeURIComponent("Ghost Hunt feedback")
+    + "&body=" + encodeURIComponent(txt + "\n\n— sent from the Ghost Hunt game");
+  document.body.appendChild(a); a.click(); a.remove();
+});
+$("fbCopy").addEventListener("click", function(){
+  var txt = $("fbText").value;
+  function done(){ toast("Feedback copied — paste it anywhere 📋"); }
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(done, function(){ fallback(); }); }
+  else fallback();
+  function fallback(){ var t = $("fbText"); t.select(); try{ document.execCommand("copy"); }catch(e){} done(); }
+});
+
+/* ---------- Toast ---------- */
+var toastTimer = null;
+function toast(msg){
+  var t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 2800);
+}
+
+/* ---------- Init ---------- */
+renderBests();
+state.timeLeft = diff().time;
+updateHUD();
+centerLight();
+window.addEventListener("resize", centerLight);
+})();
+</script>
+</body>
+</html>

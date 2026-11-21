@@ -1,0 +1,1466 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Whack-a-Mole</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;700;800;900&display=swap" rel="stylesheet" />
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2.25rem; }
+
+      :root {
+        --bg: #eaf6e3;
+        --bg-deep: #d7eec9;
+        --panel: #fffdf4;
+        --panel-edge: #e3d9bd;
+        --ink: #2e2a1c;
+        --ink-soft: #6b6350;
+        --grass: #69b455;
+        --grass-dark: #4c9440;
+        --grass-light: #8fce7d;
+        --dirt: #8a5a33;
+        --dirt-dark: #6f4525;
+        --pit: #3d2a18;
+        --accent: #e4572e;
+        --accent-dark: #c7431f;
+        --gold: #f2b705;
+        --gold-dark: #c78f04;
+        --good: #2e9e5b;
+        --bad: #d43d2a;
+        --shadow: 0 6px 0 rgba(46, 42, 28, .14);
+        --hole-shadow: rgba(46,42,28,.18);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #131f16;
+          --bg-deep: #0e1810;
+          --panel: #1e2b20;
+          --panel-edge: #33463a;
+          --ink: #eef5e6;
+          --ink-soft: #a9bfa5;
+          --grass: #3d7a36;
+          --grass-dark: #2e5f2a;
+          --grass-light: #4f9147;
+          --dirt: #7a4e2a;
+          --dirt-dark: #5f3c1f;
+          --pit: #17100a;
+          --accent: #f0683c;
+          --accent-dark: #d14f27;
+          --shadow: 0 6px 0 rgba(0,0,0,.35);
+          --hole-shadow: rgba(0,0,0,.4);
+        }
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Nunito", system-ui, sans-serif;
+        background:
+          radial-gradient(ellipse 90% 40% at 50% -10%, var(--bg-deep), transparent),
+          var(--bg);
+        color: var(--ink);
+        min-height: 100vh;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .wrap { max-width: 620px; margin: 0 auto; padding: 14px 14px 34px; }
+
+      /* ---------- Top bar ---------- */
+      .topbar {
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .topbar .group { display: flex; gap: 8px; flex-wrap: wrap; }
+      .btn {
+        font-family: "Fredoka", "Nunito", sans-serif; font-weight: 600; font-size: .95rem;
+        border: 2px solid var(--panel-edge); background: var(--panel); color: var(--ink);
+        border-radius: 999px; padding: 8px 16px; cursor: pointer; min-height: 2.5rem;
+        display: inline-flex; align-items: center; gap: 7px; line-height: 1;
+        transition: transform .06s ease, background .15s ease;
+      }
+      .btn:hover { background: var(--bg-deep); }
+      .btn:active { transform: translateY(2px); }
+      .btn:focus-visible, .hole:focus-visible, .seg button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+      .btn.primary {
+        background: var(--accent); border-color: var(--accent-dark); color: #fff;
+        box-shadow: 0 4px 0 var(--accent-dark); font-size: 1.05rem; padding: 10px 24px;
+      }
+      .btn.primary:active { box-shadow: 0 1px 0 var(--accent-dark); }
+      .btn.icon { padding: 8px 12px; }
+      .btn svg { width: 18px; height: 18px; flex: none; }
+      .btn[disabled] { opacity: .45; cursor: default; transform: none; }
+
+      /* ---------- HUD ---------- */
+      .hud {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 10px;
+      }
+      .stat {
+        background: var(--panel); border: 2px solid var(--panel-edge); border-radius: 14px;
+        padding: 7px 6px 5px; text-align: center; box-shadow: var(--shadow);
+      }
+      .stat .label { font-size: .66rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-soft); }
+      .stat .value { font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 1.45rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+      .stat .value small { font-size: .85rem; color: var(--gold-dark); font-weight: 700; }
+      .stat.time-danger .value { color: var(--bad); animation: pulse .5s ease infinite alternate; }
+      @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.12); } }
+
+      .timerbar {
+        height: 12px; border-radius: 999px; background: var(--panel); border: 2px solid var(--panel-edge);
+        overflow: hidden; margin-bottom: 12px;
+      }
+      .timerbar > div {
+        height: 100%; width: 100%; border-radius: 999px;
+        background: repeating-linear-gradient(45deg, var(--gold) 0 14px, #e3a804 14px 28px);
+        transition: width .1s linear;
+      }
+      .timerbar.low > div { background: repeating-linear-gradient(45deg, var(--bad) 0 14px, #b02f1f 14px 28px); }
+
+      /* ---------- Difficulty ---------- */
+      .diffrow { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+      .diffrow .dlabel { font-weight: 900; font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); }
+      .seg { display: inline-flex; background: var(--panel); border: 2px solid var(--panel-edge); border-radius: 999px; padding: 3px; gap: 2px; }
+      .seg button {
+        font-family: "Fredoka", sans-serif; font-weight: 600; font-size: .92rem;
+        border: 0; background: transparent; color: var(--ink-soft); border-radius: 999px;
+        padding: 6px 16px; cursor: pointer; min-height: 2.25rem;
+      }
+      .seg button[aria-pressed="true"] { background: var(--grass); color: #fff; }
+      .seg button[disabled] { opacity: .5; cursor: default; }
+      .target-note { font-size: .85rem; color: var(--ink-soft); font-weight: 700; }
+      .btn.practice-end { background: var(--gold); border-color: var(--gold-dark); color: #4a3400; box-shadow: 0 4px 0 var(--gold-dark); }
+      .btn.practice-end:active { box-shadow: 0 1px 0 var(--gold-dark); }
+      .board.practice { box-shadow: inset 0 0 0 3px rgba(0,0,0,.08), inset 0 0 0 6px var(--gold), var(--shadow); }
+      .practice-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: var(--gold); color: #4a3400; font-weight: 900; font-size: .78rem;
+        letter-spacing: .06em; text-transform: uppercase; border-radius: 999px; padding: 4px 11px;
+      }
+      .timerbar.practice > div { background: repeating-linear-gradient(45deg, var(--grass-light) 0 14px, var(--grass) 14px 28px); }
+
+      /* ---------- Board ---------- */
+      .board {
+        position: relative;
+        background:
+          radial-gradient(circle at 18% 22%, var(--grass-light) 0 6px, transparent 7px),
+          radial-gradient(circle at 82% 64%, var(--grass-light) 0 5px, transparent 6px),
+          radial-gradient(circle at 60% 12%, var(--grass-light) 0 4px, transparent 5px),
+          linear-gradient(160deg, var(--grass) 0%, var(--grass-dark) 100%);
+        border-radius: 22px; padding: 16px 12px 10px;
+        box-shadow: inset 0 0 0 3px rgba(0,0,0,.08), var(--shadow);
+        cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44' viewBox='0 0 44 44'%3E%3Cg transform='rotate(-30 22 22)'%3E%3Crect x='19' y='16' width='6' height='24' rx='3' fill='%238a5a33'/%3E%3Crect x='10' y='2' width='24' height='16' rx='5' fill='%23c98d4b'/%3E%3Crect x='10' y='2' width='24' height='6' rx='3' fill='%23e0aa63'/%3E%3C/g%3E%3C/svg%3E") 22 6, pointer;
+        user-select: none; touch-action: manipulation;
+      }
+      .board.shake { animation: shake .3s ease; }
+      @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-7px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-4px); }
+      }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 8px; }
+      .hole {
+        position: relative; border: 0; background: transparent; padding: 0; cursor: inherit;
+        height: clamp(104px, 26vw, 138px); border-radius: 16px; min-height: 104px;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .hole .num {
+        position: absolute; top: 2px; left: 8px; z-index: 4;
+        font-family: "Fredoka", sans-serif; font-weight: 600; font-size: .72rem;
+        color: rgba(255,255,255,.55);
+      }
+      .pit {
+        position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%);
+        width: 78%; height: 26px; border-radius: 50%;
+        background: radial-gradient(ellipse at 50% 40%, #241708 0%, var(--pit) 62%, rgba(0,0,0,0) 100%);
+        z-index: 1;
+      }
+      .char-clip {
+        position: absolute; left: 0; right: 0; top: 0; bottom: 24px; overflow: hidden; z-index: 2;
+      }
+      .char {
+        position: absolute; left: 50%; bottom: -4px; width: 76%; max-width: 104px;
+        transform: translate(-50%, 88%);
+        transition: transform .13s cubic-bezier(.34, 1.4, .64, 1);
+        pointer-events: none;
+      }
+      .hole.up .char { transform: translate(-50%, 4%); }
+      .hole.bonked .char { transform: translate(-50%, 16%) scaleY(.68); transition: transform .07s ease; }
+      .char svg { display: block; width: 100%; height: auto; }
+      .char .eyes-x { display: none; }
+      .hole.bonked .char .eyes-x { display: block; }
+      .hole.bonked .char .eyes-open { display: none; }
+      .mound {
+        position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%);
+        width: 96%; height: 40px; z-index: 3; pointer-events: none;
+      }
+      .mound svg { display: block; width: 100%; height: 100%; }
+      .board.idle .hole { cursor: inherit; }
+
+      .pop {
+        position: absolute; z-index: 20; pointer-events: none;
+        font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 1.25rem;
+        color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.35), 0 0 10px rgba(0,0,0,.2);
+        transform: translate(-50%, -50%);
+        animation: rise .75s ease-out forwards; white-space: nowrap;
+      }
+      .pop.gold { color: var(--gold); font-size: 1.5rem; }
+      .pop.bad { color: #ff8a76; }
+      .pop.time { color: #aee9ff; }
+      @keyframes rise {
+        0% { opacity: 0; transform: translate(-50%, -30%) scale(.7); }
+        15% { opacity: 1; transform: translate(-50%, -60%) scale(1.12); }
+        100% { opacity: 0; transform: translate(-50%, -190%) scale(1); }
+      }
+      .burst {
+        position: absolute; z-index: 19; pointer-events: none; width: 54px; height: 54px;
+        transform: translate(-50%, -50%); animation: burst .35s ease-out forwards;
+      }
+      @keyframes burst { from { opacity: 1; transform: translate(-50%,-50%) scale(.5) rotate(0deg); } to { opacity: 0; transform: translate(-50%,-50%) scale(1.25) rotate(24deg); } }
+
+      .board-cover {
+        position: absolute; inset: 0; z-index: 30; border-radius: 22px;
+        background: rgba(20, 30, 16, .55); backdrop-filter: blur(2px);
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+        text-align: center; padding: 20px; color: #fff;
+        pointer-events: none;
+      }
+      .board-cover .btn { pointer-events: auto; }
+      .board-cover[hidden] { display: none; }
+      .board-cover .big { font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 1.9rem; line-height: 1.1; }
+      .board-cover p { margin: 0; font-weight: 700; opacity: .92; max-width: 340px; }
+      .board-cover .btn { margin-top: 6px; }
+
+      .hint { text-align: center; color: var(--ink-soft); font-weight: 700; font-size: .88rem; margin: 12px 4px 0; }
+      .hint kbd {
+        font-family: "Nunito", sans-serif; font-weight: 900; background: var(--panel);
+        border: 1.5px solid var(--panel-edge); border-bottom-width: 3px; border-radius: 6px; padding: 0 6px; font-size: .8rem;
+      }
+      @media (hover: none) { .hint .kbd-note { display: none; } }
+
+      /* ---------- Modals ---------- */
+      .overlay {
+        position: fixed; inset: 0; z-index: 60; background: rgba(15, 22, 12, .6);
+        display: flex; align-items: flex-end; justify-content: center; padding: 0;
+      }
+      .overlay[hidden] { display: none; }
+      .sheet {
+        background: var(--panel); color: var(--ink); width: 100%; max-width: 620px; max-height: 88vh;
+        overflow-y: auto; border-radius: 22px 22px 0 0; padding: 20px 20px 28px;
+        border: 2px solid var(--panel-edge); border-bottom: 0;
+        animation: sheetup .22s ease;
+      }
+      @media (min-width: 640px) {
+        .overlay { align-items: center; padding: 18px; }
+        .sheet { border-radius: 22px; border-bottom: 2px solid var(--panel-edge); }
+      }
+      @keyframes sheetup { from { transform: translateY(18px); opacity: 0; } to { transform: none; opacity: 1; } }
+      .sheet h2 { font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 1.5rem; margin: 0 0 4px; }
+      .sheet h3 { font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 1.08rem; margin: 20px 0 6px; }
+      .sheet p, .sheet li { line-height: 1.5; font-size: .97rem; }
+      .sheet ul, .sheet ol { margin: 6px 0; padding-left: 22px; }
+      .sheet li { margin: 4px 0; }
+      .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+      .close-x {
+        flex: none; width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--panel-edge);
+        background: var(--bg); color: var(--ink); font-size: 1.15rem; font-weight: 900; cursor: pointer; line-height: 1;
+      }
+      table.scoring { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: .95rem; }
+      table.scoring th, table.scoring td { text-align: left; padding: 7px 8px; border-bottom: 1.5px solid var(--panel-edge); vertical-align: top; }
+      table.scoring th { font-family: "Fredoka", sans-serif; font-weight: 600; }
+      table.scoring td.pts { font-weight: 900; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: -2px; margin-right: 7px; border: 2px solid rgba(0,0,0,.18); }
+      .step { display: flex; gap: 12px; margin: 12px 0; align-items: flex-start; }
+      .step .n {
+        flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--grass); color: #fff;
+        font-family: "Fredoka", sans-serif; font-weight: 700; display: flex; align-items: center; justify-content: center;
+      }
+      .step p { margin: 3px 0 0; }
+
+      /* Results */
+      .result-hero { text-align: center; padding: 6px 0 2px; }
+      .result-hero .rank { font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 1.65rem; line-height: 1.15; }
+      .result-hero .final { font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 3rem; line-height: 1; margin: 4px 0 2px; }
+      .result-hero .final small { font-size: 1rem; color: var(--ink-soft); font-family: "Nunito", sans-serif; font-weight: 800; }
+      .newbest {
+        display: inline-block; background: var(--gold); color: #4a3400; font-weight: 900; font-size: .82rem;
+        border-radius: 999px; padding: 4px 12px; margin-top: 6px; letter-spacing: .04em;
+      }
+      .winline { font-weight: 800; margin-top: 8px; }
+      .winline.won { color: var(--good); }
+      .winline.lost { color: var(--ink-soft); }
+      .result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 16px 0 6px; }
+      .result-grid .stat .value { font-size: 1.2rem; }
+      .sheet .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+      .sheet .actions .btn { flex: 1; justify-content: center; }
+
+      /* ---------- Build list ---------- */
+      .buildlist { margin-top: 28px; }
+      .buildlist-head h2 { font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 1.65rem; margin: 0 0 4px; line-height: 1.15; }
+      .buildlist-head p { margin: 0; color: var(--ink-soft); font-weight: 700; line-height: 1.5; font-size: .95rem; }
+      .build-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0; }
+      .standards {
+        background: var(--panel); border: 2px solid var(--panel-edge); border-radius: 16px;
+        padding: 14px 16px; box-shadow: var(--shadow); margin-bottom: 16px;
+      }
+      .standards h3 { font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 1.05rem; margin: 0 0 8px; }
+      .standards ul { list-style: none; margin: 0; padding: 0; }
+      .standards li { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; line-height: 1.45; font-size: .94rem; font-weight: 700; }
+      .standards li + li { border-top: 1.5px solid var(--panel-edge); }
+      .standards .check {
+        flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--good); color: #fff;
+        display: flex; align-items: center; justify-content: center; font-size: .8rem; font-weight: 900; margin-top: 1px;
+      }
+      .standards li span:last-child { color: var(--ink); }
+      .standards li small { display: block; color: var(--ink-soft); font-weight: 700; }
+      .filterrow { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
+      .filterrow button {
+        font-family: "Fredoka", sans-serif; font-weight: 600; font-size: .88rem;
+        border: 2px solid var(--panel-edge); background: var(--panel); color: var(--ink-soft);
+        border-radius: 999px; padding: 6px 14px; cursor: pointer;
+      }
+      .filterrow button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+      .game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 10px; }
+      .game-card {
+        background: var(--panel); border: 2px solid var(--panel-edge); border-radius: 16px;
+        padding: 14px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px;
+      }
+      .game-card.playable { border-color: var(--grass); }
+      .game-card .tile {
+        width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center;
+        font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 1.05rem; color: #fff; background: var(--grass-dark);
+      }
+      .game-card h3 { font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 1.08rem; margin: 0; line-height: 1.2; }
+      .game-card p { margin: 0; font-size: .88rem; line-height: 1.45; color: var(--ink-soft); font-weight: 700; flex: 1; }
+      .badges { display: flex; flex-wrap: wrap; gap: 5px; }
+      .badge { font-size: .7rem; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; border-radius: 999px; padding: 3px 9px; background: var(--bg-deep); color: var(--ink); }
+      .badge.live { background: var(--good); color: #fff; }
+      .badge.queued { background: var(--gold); color: #4a3400; }
+      .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+      .card-actions .btn { flex: 1; justify-content: center; padding: 7px 8px; font-size: .85rem; min-height: 2.25rem; white-space: nowrap; }
+      .card-actions .btn.play { background: var(--accent); border-color: var(--accent-dark); color: #fff; box-shadow: 0 3px 0 var(--accent-dark); flex-basis: 100%; }
+      .earlier { margin-top: 20px; }
+      .earlier h3 { font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 1.05rem; margin: 0 0 4px; }
+      .earlier p { margin: 0 0 8px; color: var(--ink-soft); font-weight: 700; font-size: .9rem; line-height: 1.5; }
+      .chip-group { margin-bottom: 12px; }
+      .chip-group .glabel { font-size: .72rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 6px; }
+      .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+      .chip { font-size: .84rem; font-weight: 800; background: var(--panel); border: 1.5px solid var(--panel-edge); border-radius: 999px; padding: 4px 11px; }
+      .hub-note {
+        margin-top: 16px; background: var(--bg-deep); border-radius: 14px; padding: 12px 14px;
+        font-size: .9rem; font-weight: 700; line-height: 1.5; color: var(--ink);
+      }
+      .game-detail .mode-line { font-weight: 800; color: var(--ink-soft); margin: 0 0 6px; }
+
+      /* ---------- Feedback ---------- */
+      .feedback-intro { margin: 2px 0 4px; color: var(--ink-soft); font-weight: 700; line-height: 1.5; }
+      .feedback-field { margin-top: 16px; }
+      .feedback-field > label, .feedback-field .flabel { display: block; font-family: "Fredoka", sans-serif; font-weight: 600; font-size: 1rem; margin-bottom: 8px; }
+      .star-row { display: flex; gap: 6px; flex-wrap: wrap; }
+      .star-btn {
+        width: 52px; height: 52px; min-height: 52px; border-radius: 14px; cursor: pointer;
+        border: 2px solid var(--panel-edge); background: var(--bg); color: var(--ink-soft);
+        font-size: 1.65rem; line-height: 1; display: flex; align-items: center; justify-content: center;
+        transition: transform .06s ease, background .15s ease, border-color .15s ease;
+      }
+      .star-btn:active { transform: translateY(2px); }
+      .star-btn:focus-visible, .feedback-tags button:focus-visible, .feedback-text:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+      .star-btn.active { background: var(--gold); border-color: var(--gold-dark); color: #4a3400; }
+      .star-rating-note { font-size: .88rem; font-weight: 800; color: var(--ink-soft); margin-top: 6px; min-height: 1.2em; }
+      .feedback-text {
+        width: 100%; min-height: 96px; resize: vertical; font-family: "Nunito", sans-serif; font-size: .97rem; line-height: 1.5;
+        border: 2px solid var(--panel-edge); border-radius: 14px; padding: 10px 12px;
+        background: var(--bg); color: var(--ink);
+      }
+      .feedback-text::placeholder { color: var(--ink-soft); }
+      .feedback-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+      .feedback-tags button {
+        font-family: "Fredoka", sans-serif; font-weight: 600; font-size: .92rem;
+        border: 2px solid var(--panel-edge); background: var(--panel); color: var(--ink-soft);
+        border-radius: 999px; padding: 7px 16px; cursor: pointer; min-height: 2.5rem;
+      }
+      .feedback-tags button[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+      .feedback-terms { color: var(--ink-soft); font-weight: 700; font-size: .85rem; line-height: 1.5; margin: 10px 0 0; }
+      .feedback-error { color: var(--bad); font-weight: 800; font-size: .9rem; margin-top: 10px; min-height: 1.25em; }
+      .feedback-thanks { text-align: center; padding: 28px 8px 10px; }
+      .feedback-thanks .thanks-big { font-family: "Fredoka", sans-serif; font-weight: 700; font-size: 2rem; line-height: 1.1; margin: 0 0 6px; }
+      .feedback-thanks p { margin: 0; color: var(--ink-soft); font-weight: 700; line-height: 1.5; }
+      .feedback-footer { margin-top: 22px; text-align: center; }
+      .feedback-footer .btn { min-width: 180px; justify-content: center; }
+
+      @media (prefers-reduced-motion: reduce) {
+        .char, .pop, .burst, .sheet { animation: none !important; transition: none !important; }
+        .board.shake { animation: none; }
+        .stat.time-danger .value { animation: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+
+      <div class="topbar">
+        <div class="group">
+          <button class="btn primary" id="startBtn" type="button">Start game</button>
+          <button class="btn practice-end" id="endPracticeBtn" type="button" hidden>End practice</button>
+          <button class="btn" id="resetBtn" type="button" disabled>Reset</button>
+        </div>
+        <div class="group">
+          <button class="btn" id="howBtn" type="button">How to play</button>
+          <button class="btn" id="rulesBtn" type="button">Rules</button>
+          <button class="btn" id="feedbackBtn" type="button">Feedback</button>
+          <button class="btn icon" id="soundBtn" type="button" aria-pressed="true" aria-label="Sound on">
+            <svg id="soundOnIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.2 6a9 9 0 0 1 0 12"/></svg>
+            <svg id="soundOffIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="display:none"><path d="M11 5 6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><line x1="16" y1="9" x2="22" y2="15"/><line x1="22" y1="9" x2="16" y2="15"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="hud" aria-live="off">
+        <div class="stat"><div class="label">Score</div><div class="value" id="scoreVal">0</div></div>
+        <div class="stat" id="timeStat"><div class="label" id="timeLabel">Time</div><div class="value" id="timeVal">60</div></div>
+        <div class="stat"><div class="label">Combo</div><div class="value"><span id="comboVal">0</span> <small id="multVal">×1</small></div></div>
+        <div class="stat"><div class="label">Best</div><div class="value" id="bestVal">0</div></div>
+      </div>
+
+      <div class="timerbar" id="timerBar"><div id="timerFill"></div></div>
+
+      <div class="diffrow">
+        <span class="dlabel" id="modeLabel">Round</span>
+        <div class="seg" id="modeSeg" role="group" aria-labelledby="modeLabel">
+          <button type="button" data-mode="timed" aria-pressed="true">Timed · 60s</button>
+          <button type="button" data-mode="practice" aria-pressed="false">Practice</button>
+        </div>
+        <span class="target-note" id="modeNote">Race the clock — beat the target, chase a best score.</span>
+      </div>
+
+      <div class="diffrow">
+        <span class="dlabel" id="diffLabel">Difficulty</span>
+        <div class="seg" id="diffSeg" role="group" aria-labelledby="diffLabel">
+          <button type="button" data-diff="easy" aria-pressed="false">Easy</button>
+          <button type="button" data-diff="normal" aria-pressed="true">Normal</button>
+          <button type="button" data-diff="hard" aria-pressed="false">Hard</button>
+        </div>
+        <span class="target-note" id="targetNote">Target to win: 500 pts</span>
+      </div>
+
+      <div class="board idle" id="board">
+        <div class="grid" id="grid"></div>
+        <div class="board-cover" id="boardCover">
+          <div class="big">Ready to whack?</div>
+          <p id="coverText">Moles pop up for 60 seconds. Bonk them before they duck — and keep your mallet off the bombs.</p>
+          <button class="btn primary" id="coverStartBtn" type="button">Start game</button>
+          <button class="btn" id="coverPracticeBtn" type="button">Practice round — no clock</button>
+        </div>
+      </div>
+
+      <p class="hint">Golden moles are worth the most. Bombs cost you points and your combo. New to the garden? Start with a <strong>Practice round</strong> — no clock, gentler pace, and it never touches your best score.
+        <span class="kbd-note">Keyboard: <kbd>1</kbd>–<kbd>9</kbd> whack a hole, <kbd>Space</kbd> starts or pauses.</span>
+      </p>
+
+      <!-- Arcade build list -->
+      <section class="buildlist" aria-labelledby="buildListTitle">
+        <div class="buildlist-head">
+          <h2 id="buildListTitle">Arcade build list</h2>
+          <p>Batch 3 adds 13 games. Whack-a-Mole is playable above — the other 12 are queued to the same standards, ready for the hub.</p>
+        </div>
+
+        <div class="build-stats" aria-label="Build list totals">
+          <div class="stat"><div class="label">Total in list</div><div class="value">40</div></div>
+          <div class="stat"><div class="label">Added in batch 3</div><div class="value">13</div></div>
+          <div class="stat"><div class="label">Playable here</div><div class="value">1</div></div>
+        </div>
+
+        <div class="standards">
+          <h3>Locked standards — every game in the list</h3>
+          <ul>
+            <li><span class="check" aria-hidden="true">✓</span><span>Tutorial is opt-in only<small>Every game has a “How to play” button. No forced first-run walkthrough for well-known games — at most a small one-time hint.</small></span></li>
+            <li><span class="check" aria-hidden="true">✓</span><span>Rules are separate from the tutorial<small>Every game has its own “Rules” button / page with full rules: scoring, special rules, and win conditions.</small></span></li>
+            <li><span class="check" aria-hidden="true">✓</span><span>Vs AI or single-player, as fits<small>Arcade and puzzle games are single-player; opponent games ship vs AI first, with live rooms later.</small></span></li>
+            <li><span class="check" aria-hidden="true">✓</span><span>Difficulty settings on every game<small>Easy / Normal / Hard (or the game's equivalent), picked before you start and locked during play. Best scores are kept separately for each difficulty.</small></span></li>
+            <li><span class="check" aria-hidden="true">✓</span><span>Best scores saved on this device<small>Each game keeps its own local bests (localStorage), per mode or difficulty where it has them.</small></span></li>
+            <li><span class="check" aria-hidden="true">✓</span><span>Wired for the hub<small>Every game is listed as a hub card with its mode, category, and status, so the arcade hub can link straight to it.</small></span></li>
+            <li><span class="check" aria-hidden="true">✓</span><span>Feedback button on every game<small>Every game has a visible “Feedback” button (header + footer) opening a short form — star rating, comment, and an optional Bug / Suggestion / Other tag — saved on this device.</small></span></li>
+          </ul>
+        </div>
+
+        <div class="filterrow" role="group" aria-label="Filter build list by category">
+          <button type="button" data-filter="all" aria-pressed="true">All 13</button>
+          <button type="button" data-filter="arcade" aria-pressed="false">Arcade &amp; action</button>
+          <button type="button" data-filter="puzzle" aria-pressed="false">Puzzle</button>
+          <button type="button" data-filter="word-quiz" aria-pressed="false">Word &amp; quiz</button>
+        </div>
+
+        <div class="game-grid" id="gameGrid"></div>
+
+        <div class="earlier">
+          <h3>Already on the list — batches 1 &amp; 2 (27 games)</h3>
+          <p>These were added earlier and follow the same Tutorial + Rules standards.</p>
+          <div class="chip-group">
+            <div class="glabel">Card games · vs AI · 10</div>
+            <div class="chips">
+              <span class="chip">Euchre</span><span class="chip">Cribbage</span><span class="chip">Blackjack</span><span class="chip">Hearts</span><span class="chip">Spades</span><span class="chip">Crazy Eights</span><span class="chip">Go Fish</span><span class="chip">War</span><span class="chip">Gin Rummy</span><span class="chip">Solitaire pack</span>
+            </div>
+          </div>
+          <div class="chip-group">
+            <div class="glabel">Board &amp; classics · vs AI / single-player · 17</div>
+            <div class="chips">
+              <span class="chip">Backgammon</span><span class="chip">Chess</span><span class="chip">Checkers</span><span class="chip">Connect Four</span><span class="chip">Battleship</span><span class="chip">Reversi</span><span class="chip">Dominoes</span><span class="chip">Mancala</span><span class="chip">Ludo</span><span class="chip">Dice game</span><span class="chip">Bingo</span><span class="chip">Snakes &amp; Ladders</span><span class="chip">Sudoku</span><span class="chip">Minesweeper</span><span class="chip">Memory Match</span><span class="chip">Word Search</span><span class="chip">Hangman</span>
+            </div>
+          </div>
+        </div>
+
+        <p class="hub-note"><strong>Hub wiring:</strong> Whack-a-Mole links from its hub card directly to the game at the top of this page. Each queued game above already carries its hub title, category, mode, and its How to play + Rules content — tap either button on any card to preview exactly what will ship in that game.</p>
+      </section>
+
+      <div class="feedback-footer">
+        <button class="btn" id="feedbackBtnFooter" type="button">Feedback</button>
+      </div>
+    </div>
+
+    <!-- How to play (tutorial) -->
+    <div class="overlay" id="howOverlay" hidden>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+        <div class="sheet-head">
+          <h2 id="howTitle">How to play</h2>
+          <button class="close-x" type="button" data-close aria-label="Close">✕</button>
+        </div>
+        <div class="step"><div class="n">1</div><p><strong>Pick a round and a difficulty.</strong> <strong>Timed</strong> gives you 60 seconds to beat the target. <strong>Practice</strong> has no clock at all — moles pop up a little slower and stay up longer, you play as long as you like, and you tap <strong>End practice</strong> when you're done. Practice scores never count toward your best. Then press <strong>Start game</strong> (or <strong>Practice round</strong> on the board). Round and difficulty lock while you play and can be changed between rounds.</p></div>
+        <div class="step"><div class="n">2</div><p><strong>Whack the moles.</strong> Tap or click a mole (or press its number key, 1–9) before it ducks back down. Each bonk scores points.</p></div>
+        <div class="step"><div class="n">3</div><p><strong>Build a combo.</strong> Consecutive bonks without a miss raise your score multiplier — up to ×3. One miss, one empty hole, or one bomb resets it.</p></div>
+        <div class="step"><div class="n">4</div><p><strong>Mind the specials.</strong> Golden moles are rare, fast and worth 50. Clock moles add +3 seconds. Bombs are <em>not</em> moles — leave them alone or lose 25 points.</p></div>
+        <div class="step"><div class="n">5</div><p><strong>Beat the target</strong> for your difficulty, shown above the board, before time runs out to win the round — and chase a new best score. Your best is saved separately for each difficulty.</p></div>
+        <div class="actions">
+          <button class="btn primary" type="button" data-close>Got it</button>
+          <button class="btn" type="button" id="howToRules">Read the full rules</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rules -->
+    <div class="overlay" id="rulesOverlay" hidden>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+        <div class="sheet-head">
+          <h2 id="rulesTitle">Rules</h2>
+          <button class="close-x" type="button" data-close aria-label="Close">✕</button>
+        </div>
+
+        <h3>Objective</h3>
+        <p>Score as many points as you can in <strong>60 seconds</strong> by whacking moles as they pop out of the nine holes. The moles get faster the longer the round runs. Reach the target score for your difficulty before the clock runs out to win the round.</p>
+
+        <h3>Practice round</h3>
+        <p>Pick <strong>Practice</strong> above the board for a no-pressure warm-up. There is <strong>no clock and no target</strong> — moles stay up about a third longer and appear at a gentler pace, and the round only ends when you tap <strong>End practice</strong>. Scoring, combos and bomb penalties work exactly as in a timed round so you can learn them, clock moles score points only (there is no time to add), and your practice score is <strong>never saved as a best score</strong> and can't win or lose the round. Your summary at the end is just for you.</p>
+
+        <h3>Scoring</h3>
+        <table class="scoring">
+          <tr><th>Target</th><th>Points</th><th>Notes</th></tr>
+          <tr><td><span class="swatch" style="background:#8a6242"></span>Mole</td><td class="pts">10 × multiplier</td><td>The standard garden pest.</td></tr>
+          <tr><td><span class="swatch" style="background:#f2b705"></span>Golden mole</td><td class="pts">50 × multiplier</td><td>Rare, and ducks away about 40% faster than a normal mole.</td></tr>
+          <tr><td><span class="swatch" style="background:#7ec8e3"></span>Clock mole</td><td class="pts">5 × multiplier, +3 sec</td><td>Adds 3 seconds to the clock. Time can never exceed 60 seconds.</td></tr>
+          <tr><td><span class="swatch" style="background:#3a3a3f"></span>Bomb</td><td class="pts">−25</td><td>Not a mole. Whacking one costs 25 points (never below 0) and resets your combo.</td></tr>
+          <tr><td>Empty hole / miss</td><td class="pts">0</td><td>No points lost, but your combo resets to zero.</td></tr>
+        </table>
+
+        <h3>Combo multiplier</h3>
+        <ul>
+          <li>Every successful bonk adds 1 to your combo.</li>
+          <li>Combo 0–4: <strong>×1</strong> · Combo 5–11: <strong>×2</strong> · Combo 12+: <strong>×3</strong>.</li>
+          <li>The multiplier applies to mole, golden mole and clock mole points — never to the bomb penalty.</li>
+          <li>Your combo resets to zero when you whack an empty hole, whack a bomb, or tap the grass.</li>
+        </ul>
+
+        <h3>Special rules</h3>
+        <ul>
+          <li>A mole that ducks away on its own costs nothing — no penalty, and your combo survives.</li>
+          <li>Only one whack counts per pop-up: a bonked mole is gone, and whacking its hole again counts as a miss.</li>
+          <li>Speed ramps up during the round: moles stay up for less time and appear more often in the final seconds.</li>
+          <li>Pausing freezes the clock and every mole exactly where it is.</li>
+        </ul>
+
+        <h3>Difficulty</h3>
+        <p>Pick <strong>Easy</strong>, <strong>Normal</strong> or <strong>Hard</strong> above the board before you start. Difficulty sets how long moles stay up, how fast new ones appear, how many can be up at once, and the target score. It locks while a round is running — change it between rounds. Your best score is saved separately for each difficulty.</p>
+        <table class="scoring">
+          <tr><th>Difficulty</th><th>Moles at once</th><th>Target to win</th></tr>
+          <tr><td>Easy</td><td>Up to 2</td><td class="pts">300 pts</td></tr>
+          <tr><td>Normal</td><td>Up to 2, then 3 late</td><td class="pts">500 pts</td></tr>
+          <tr><td>Hard</td><td>Up to 3</td><td class="pts">700 pts</td></tr>
+        </table>
+        <p>Bombs and golden moles appear more often at higher difficulties.</p>
+
+        <h3>Winning &amp; ranks</h3>
+        <p>The round ends when the clock reaches zero. You <strong>win</strong> if your score meets the target for your difficulty; either way your score stands, and your best score for each difficulty is saved on this device.</p>
+        <table class="scoring">
+          <tr><th>Final score</th><th>Rank</th></tr>
+          <tr><td class="pts">0–199</td><td>Garden Rookie</td></tr>
+          <tr><td class="pts">200–399</td><td>Mole Spotter</td></tr>
+          <tr><td class="pts">400–649</td><td>Hammer Hand</td></tr>
+          <tr><td class="pts">650–899</td><td>Mole Menace</td></tr>
+          <tr><td class="pts">900+</td><td>Whack Master</td></tr>
+        </table>
+
+        <div class="actions">
+          <button class="btn primary" type="button" data-close>Back to the garden</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Build-list game detail: How to play / Rules preview -->
+    <div class="overlay" id="gameOverlay" hidden>
+      <div class="sheet game-detail" role="dialog" aria-modal="true" aria-labelledby="gameOverlayTitle">
+        <div class="sheet-head">
+          <h2 id="gameOverlayTitle">Game</h2>
+          <button class="close-x" type="button" data-close aria-label="Close">✕</button>
+        </div>
+        <p class="mode-line" id="gameOverlayMeta"></p>
+        <div id="gameOverlayBody"></div>
+        <div class="actions">
+          <button class="btn primary" type="button" data-close>Back to build list</button>
+          <button class="btn" type="button" id="gameOverlayToggle">See the other page</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results -->
+    <div class="overlay" id="resultOverlay" hidden>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="resultRank">
+        <div class="sheet-head">
+          <h2 id="resultTitle">Time's up!</h2>
+          <button class="close-x" type="button" data-close aria-label="Close">✕</button>
+        </div>
+        <div class="result-hero">
+          <div class="rank" id="resultRank">Mole Spotter</div>
+          <div class="final"><span id="resultScore">0</span> <small>points</small></div>
+          <div><span class="newbest" id="newBestBadge" hidden>NEW BEST!</span></div>
+          <div class="winline" id="winLine"></div>
+          <div class="winline" id="diffLine" style="color:var(--ink-soft); font-size:.9rem; margin-top:2px;"></div>
+        </div>
+        <div class="result-grid">
+          <div class="stat"><div class="label">Moles hit</div><div class="value" id="resHits">0</div></div>
+          <div class="stat"><div class="label">Accuracy</div><div class="value" id="resAcc">0%</div></div>
+          <div class="stat"><div class="label">Best combo</div><div class="value" id="resCombo">0</div></div>
+          <div class="stat"><div class="label">Golden</div><div class="value" id="resGold">0</div></div>
+          <div class="stat"><div class="label">Bombs hit</div><div class="value" id="resBombs">0</div></div>
+          <div class="stat"><div class="label">Best score</div><div class="value" id="resBest">0</div></div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" type="button" id="againBtn">Play again</button>
+          <button class="btn" type="button" data-close>Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback -->
+    <div class="overlay" id="feedbackOverlay" hidden>
+      <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+        <div class="sheet-head">
+          <h2 id="feedbackTitle">Feedback</h2>
+          <button class="close-x" type="button" data-close aria-label="Close">✕</button>
+        </div>
+        <div id="feedbackFormWrap">
+          <p class="feedback-intro">How was Whack-a-Mole? Your feedback is saved on this device only.</p>
+
+          <div class="feedback-field">
+            <span class="flabel" id="feedbackRatingLabel">Your rating</span>
+            <div class="star-row" role="group" aria-labelledby="feedbackRatingLabel" id="feedbackStars">
+              <button class="star-btn" type="button" data-rating="1" aria-pressed="false" aria-label="1 star">★</button>
+              <button class="star-btn" type="button" data-rating="2" aria-pressed="false" aria-label="2 stars">★</button>
+              <button class="star-btn" type="button" data-rating="3" aria-pressed="false" aria-label="3 stars">★</button>
+              <button class="star-btn" type="button" data-rating="4" aria-pressed="false" aria-label="4 stars">★</button>
+              <button class="star-btn" type="button" data-rating="5" aria-pressed="false" aria-label="5 stars">★</button>
+            </div>
+            <div class="star-rating-note" id="feedbackRatingNote" aria-live="polite"></div>
+          </div>
+
+          <div class="feedback-field">
+            <label for="feedbackText">Comment</label>
+            <textarea class="feedback-text" id="feedbackText" placeholder="What did you like? What could be better?" maxlength="1000"></textarea>
+          </div>
+
+          <div class="feedback-field">
+            <span class="flabel" id="feedbackTagLabel">Tag <span style="color:var(--ink-soft); font-family:Nunito,sans-serif; font-weight:700; font-size:.88rem;">(optional)</span></span>
+            <div class="feedback-tags" role="group" aria-labelledby="feedbackTagLabel" id="feedbackTags">
+              <button type="button" data-tag="Bug" aria-pressed="false">Bug</button>
+              <button type="button" data-tag="Suggestion" aria-pressed="false">Suggestion</button>
+              <button type="button" data-tag="Other" aria-pressed="false">Other</button>
+            </div>
+          </div>
+
+          <p class="feedback-terms">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+
+          <div class="feedback-error" id="feedbackError" aria-live="polite"></div>
+
+          <div class="actions">
+            <button class="btn primary" type="button" id="feedbackSaveBtn">Save feedback</button>
+            <button class="btn" type="button" data-close>Cancel</button>
+          </div>
+        </div>
+        <div class="feedback-thanks" id="feedbackThanks" hidden role="status">
+          <p class="thanks-big">Thanks!</p>
+          <p>Your feedback has been saved.</p>
+          <div class="actions" style="justify-content:center;">
+            <button class="btn primary" type="button" data-close>Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        /* ---------- Character art (inline SVG) ---------- */
+        function moleSVG(gold, clock) {
+          var fur = gold ? "#e8a90c" : "#8a6242";
+          var furDark = gold ? "#c78f04" : "#6f4c2f";
+          var belly = gold ? "#f7cd54" : "#c9a37e";
+          var crown = gold
+            ? '<path d="M32 16 L40 4 L50 14 L60 4 L68 16 L64 24 L36 24 Z" fill="#f2b705" stroke="#c78f04" stroke-width="2.5" stroke-linejoin="round"/>'
+            : "";
+          var badge = clock
+            ? '<g><circle cx="82" cy="80" r="14" fill="#fff" stroke="#4a7a96" stroke-width="3.5"/><line x1="82" y1="80" x2="82" y2="70" stroke="#4a7a96" stroke-width="3" stroke-linecap="round"/><line x1="82" y1="80" x2="89" y2="84" stroke="#4a7a96" stroke-width="3" stroke-linecap="round"/></g>'
+            : "";
+          return '<svg viewBox="0 0 100 104" aria-hidden="true">'
+            + crown
+            + '<ellipse cx="22" cy="52" rx="9" ry="13" fill="' + furDark + '" transform="rotate(-18 22 52)"/>'
+            + '<ellipse cx="78" cy="52" rx="9" ry="13" fill="' + furDark + '" transform="rotate(18 78 52)"/>'
+            + '<ellipse cx="50" cy="66" rx="33" ry="38" fill="' + fur + '"/>'
+            + '<ellipse cx="50" cy="80" rx="19" ry="21" fill="' + belly + '"/>'
+            + '<g class="eyes-open"><circle cx="37" cy="48" r="4.4" fill="#241708"/><circle cx="63" cy="48" r="4.4" fill="#241708"/><circle cx="38.5" cy="46.5" r="1.5" fill="#fff"/><circle cx="64.5" cy="46.5" r="1.5" fill="#fff"/></g>'
+            + '<g class="eyes-x" stroke="#241708" stroke-width="3.4" stroke-linecap="round"><line x1="31" y1="42" x2="43" y2="54"/><line x1="43" y1="42" x2="31" y2="54"/><line x1="57" y1="42" x2="69" y2="54"/><line x1="69" y1="42" x2="57" y2="54"/></g>'
+            + '<ellipse cx="50" cy="58" rx="8.5" ry="6" fill="#e88ca0"/>'
+            + '<rect x="44.5" y="63" width="11" height="9" rx="2" fill="#fff" stroke="#d8cbb2" stroke-width="1.4"/>'
+            + '<line x1="50" y1="63" x2="50" y2="72" stroke="#d8cbb2" stroke-width="1.4"/>'
+            + badge
+            + "</svg>";
+        }
+        var BOMB_SVG = '<svg viewBox="0 0 100 104" aria-hidden="true">'
+          + '<path d="M58 22 C 64 10, 76 8, 84 12" fill="none" stroke="#6b6350" stroke-width="5" stroke-linecap="round"/>'
+          + '<g fill="#f2b705"><path d="M86 2 L89 10 L97 8 L91 14 L96 21 L87 19 L84 27 L81 19 L72 20 L78 13 L73 6 L82 8 Z"/></g>'
+          + '<rect x="42" y="18" width="17" height="10" rx="3" fill="#55555c"/>'
+          + '<circle cx="50" cy="66" r="36" fill="#3a3a3f"/>'
+          + '<ellipse cx="37" cy="52" rx="10" ry="7" fill="#5c5c64" transform="rotate(-24 37 52)"/>'
+          + '<g class="eyes-open"><circle cx="38" cy="64" r="4" fill="#fff"/><circle cx="62" cy="64" r="4" fill="#fff"/></g>'
+          + '<g class="eyes-x" stroke="#fff" stroke-width="3.2" stroke-linecap="round"><line x1="32" y1="58" x2="44" y2="70"/><line x1="44" y1="58" x2="32" y2="70"/><line x1="56" y1="58" x2="68" y2="70"/><line x1="68" y1="58" x2="56" y2="70"/></g>'
+          + '<path d="M40 84 Q50 78 60 84" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>'
+          + "</svg>";
+        var MOUND_SVG = '<svg viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true">'
+          + '<path d="M2 40 C 8 14, 30 4, 60 4 C 90 4, 112 14, 118 40 Z" fill="#8a5a33"/>'
+          + '<path d="M2 40 C 8 14, 30 4, 60 4 C 90 4, 112 14, 118 40 L 118 40 L 2 40 Z" fill="none"/>'
+          + '<ellipse cx="34" cy="26" rx="7" ry="3.4" fill="#6f4525"/>'
+          + '<ellipse cx="82" cy="20" rx="9" ry="4" fill="#6f4525"/>'
+          + '<ellipse cx="58" cy="31" rx="6" ry="2.8" fill="#a06a3c"/>'
+          + '<ellipse cx="95" cy="32" rx="5" ry="2.4" fill="#a06a3c"/>'
+          + "</svg>";
+        var BURST_SVG = '<svg viewBox="0 0 60 60" aria-hidden="true"><path d="M30 2 L35 20 L54 12 L40 26 L58 30 L40 34 L54 48 L35 40 L30 58 L25 40 L6 48 L20 34 L2 30 L20 26 L6 12 L25 20 Z" fill="#f2b705" stroke="#c78f04" stroke-width="2" stroke-linejoin="round"/></svg>';
+
+        /* ---------- Config ---------- */
+        var ROUND_MS = 60000;
+        var DIFFS = {
+          easy:   { upStart: 1150, upEnd: 850,  spawnStart: 950, spawnEnd: 700, maxActive: 2, maxActiveLate: 2, bomb: 0.06, gold: 0.06, clock: 0.03, target: 300 },
+          normal: { upStart: 950,  upEnd: 620,  spawnStart: 760, spawnEnd: 520, maxActive: 2, maxActiveLate: 3, bomb: 0.10, gold: 0.08, clock: 0.04, target: 500 },
+          hard:   { upStart: 760,  upEnd: 470,  spawnStart: 620, spawnEnd: 400, maxActive: 3, maxActiveLate: 3, bomb: 0.14, gold: 0.10, clock: 0.04, target: 700 }
+        };
+        var BASE_POINTS = { mole: 10, gold: 50, clock: 5, bomb: -25 };
+
+        /* ---------- DOM ---------- */
+        var board = document.getElementById("board");
+        var grid = document.getElementById("grid");
+        var cover = document.getElementById("boardCover");
+        var startBtn = document.getElementById("startBtn");
+        var coverStartBtn = document.getElementById("coverStartBtn");
+        var resetBtn = document.getElementById("resetBtn");
+        var scoreVal = document.getElementById("scoreVal");
+        var timeVal = document.getElementById("timeVal");
+        var timeStat = document.getElementById("timeStat");
+        var comboVal = document.getElementById("comboVal");
+        var multVal = document.getElementById("multVal");
+        var bestVal = document.getElementById("bestVal");
+        var timerBar = document.getElementById("timerBar");
+        var timerFill = document.getElementById("timerFill");
+        var targetNote = document.getElementById("targetNote");
+        var modeNote = document.getElementById("modeNote");
+        var timeLabel = document.getElementById("timeLabel");
+        var segBtns = Array.prototype.slice.call(document.querySelectorAll("#diffSeg button"));
+        var modeBtns = Array.prototype.slice.call(document.querySelectorAll("#modeSeg button"));
+        var endPracticeBtn = document.getElementById("endPracticeBtn");
+        var coverPracticeBtn = document.getElementById("coverPracticeBtn");
+        var coverText = document.getElementById("coverText");
+        var soundBtn = document.getElementById("soundBtn");
+
+        var holeEls = [];
+        for (var i = 0; i < 9; i++) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "hole";
+          b.setAttribute("aria-label", "Hole " + (i + 1));
+          b.innerHTML = '<span class="num">' + (i + 1) + '</span>'
+            + '<span class="char-clip"><span class="char"></span></span>'
+            + '<span class="pit"></span>'
+            + '<span class="mound">' + MOUND_SVG + "</span>";
+          b.dataset.index = i;
+          grid.appendChild(b);
+          holeEls.push(b);
+        }
+
+        /* ---------- State ---------- */
+        var S = {
+          phase: "idle", /* idle | running | paused | over */
+          mode: "timed", /* timed | practice */
+          diff: "normal",
+          score: 0, combo: 0, maxCombo: 0,
+          hits: 0, misses: 0, golds: 0, bombs: 0, whacks: 0,
+          endAt: 0, nextSpawnAt: 0, pauseStart: 0,
+          holes: [], raf: 0, lastWholeSec: -1,
+          sound: true
+        };
+        for (var j = 0; j < 9; j++) S.holes.push({ type: null, expiresAt: 0 });
+
+        /* ---------- Best scores (localStorage, per brief) ---------- */
+        function bestKey(d) { return "whackamole_best_" + d; }
+        function getBest(d) {
+          try { return parseInt(localStorage.getItem(bestKey(d)), 10) || 0; } catch (e) { return 0; }
+        }
+        function setBest(d, v) {
+          try { localStorage.setItem(bestKey(d), String(v)); } catch (e) { /* private mode */ }
+        }
+
+        /* ---------- Sound (WebAudio, synthesized) ---------- */
+        var AC = null;
+        function ac() {
+          if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; } }
+          if (AC && AC.state === "suspended") AC.resume();
+          return AC;
+        }
+        function tone(freqA, freqB, dur, type, gain) {
+          if (!S.sound) return;
+          var ctx = ac(); if (!ctx) return;
+          var t = ctx.currentTime;
+          var o = ctx.createOscillator(), g = ctx.createGain();
+          o.type = type || "sine";
+          o.frequency.setValueAtTime(freqA, t);
+          o.frequency.exponentialRampToValueAtTime(Math.max(freqB, 1), t + dur);
+          g.gain.setValueAtTime(gain || 0.18, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+          o.connect(g); g.connect(ctx.destination);
+          o.start(t); o.stop(t + dur + 0.02);
+        }
+        function sndBonk() { tone(520, 90, 0.12, "square", 0.14); }
+        function sndGold() { tone(880, 880, 0.09, "sine", 0.16); setTimeout(function () { tone(1318, 1318, 0.14, "sine", 0.16); }, 70); }
+        function sndClock() { tone(660, 990, 0.12, "sine", 0.15); }
+        function sndBomb() { tone(160, 40, 0.32, "sawtooth", 0.22); }
+        function sndMiss() { tone(200, 140, 0.07, "sine", 0.06); }
+        function sndEnd() { tone(523, 523, 0.12, "sine", 0.15); setTimeout(function () { tone(659, 659, 0.12, "sine", 0.15); }, 120); setTimeout(function () { tone(784, 784, 0.2, "sine", 0.15); }, 240); }
+
+        /* ---------- Helpers ---------- */
+        function lerp(a, b, t) { return a + (b - a) * t; }
+        function multiplier() { return S.combo >= 12 ? 3 : (S.combo >= 5 ? 2 : 1); }
+        function rankFor(score) {
+          if (score >= 900) return "Whack Master";
+          if (score >= 650) return "Mole Menace";
+          if (score >= 400) return "Hammer Hand";
+          if (score >= 200) return "Mole Spotter";
+          return "Garden Rookie";
+        }
+        function cfg() { return DIFFS[S.diff]; }
+        function isPractice() { return S.mode === "practice"; }
+
+        function updateHUD() {
+          scoreVal.textContent = S.score;
+          comboVal.textContent = S.combo;
+          multVal.textContent = "×" + multiplier();
+          bestVal.textContent = getBest(S.diff);
+        }
+        function updateClock(now) {
+          if (isPractice()) {
+            timeVal.textContent = "∞";
+            timerFill.style.width = "100%";
+            timeStat.classList.remove("time-danger");
+            timerBar.classList.remove("low");
+            return;
+          }
+          var remain = Math.max(0, S.endAt - now);
+          var secs = Math.ceil(remain / 1000);
+          timeVal.textContent = secs;
+          timerFill.style.width = (remain / ROUND_MS * 100) + "%";
+          var low = remain <= 10000 && S.phase === "running";
+          timeStat.classList.toggle("time-danger", low);
+          timerBar.classList.toggle("low", low);
+          if (low && secs !== S.lastWholeSec && secs <= 5 && secs > 0) tone(980, 980, 0.06, "sine", 0.08);
+          S.lastWholeSec = secs;
+        }
+
+        function setChar(i, type) {
+          var charEl = holeEls[i].querySelector(".char");
+          if (type === "bomb") charEl.innerHTML = BOMB_SVG;
+          else if (type === "gold") charEl.innerHTML = moleSVG(true, false);
+          else if (type === "clock") charEl.innerHTML = moleSVG(false, true);
+          else if (type === "mole") charEl.innerHTML = moleSVG(false, false);
+          else charEl.innerHTML = "";
+        }
+        function clearHole(i) {
+          S.holes[i].type = null;
+          S.holes[i].expiresAt = 0;
+          holeEls[i].classList.remove("up", "bonked");
+        }
+        function activeCount() {
+          var n = 0;
+          for (var k = 0; k < 9; k++) if (S.holes[k].type) n++;
+          return n;
+        }
+
+        function spawn(now) {
+          var c = cfg();
+          var progress = isPractice() ? 0.25 : 1 - Math.max(0, S.endAt - now) / ROUND_MS;
+          var maxA = progress > 0.6 ? c.maxActiveLate : c.maxActive;
+          if (activeCount() >= maxA) return;
+          var empty = [];
+          for (var k = 0; k < 9; k++) if (!S.holes[k].type) empty.push(k);
+          if (!empty.length) return;
+          var idx = empty[Math.floor(Math.random() * empty.length)];
+          var roll = Math.random();
+          var type = "mole";
+          if (roll < c.bomb) type = "bomb";
+          else if (roll < c.bomb + c.gold) type = "gold";
+          else if (roll < c.bomb + c.gold + c.clock) type = "clock";
+          var up = lerp(c.upStart, c.upEnd, progress);
+          if (isPractice()) up *= 1.35;
+          if (type === "gold") up *= 0.6;
+          if (type === "bomb") up *= 0.9;
+          S.holes[idx].type = type;
+          S.holes[idx].expiresAt = now + up;
+          setChar(idx, type);
+          holeEls[idx].classList.add("up");
+        }
+
+        function popAt(holeEl, text, cls) {
+          var br = board.getBoundingClientRect();
+          var hr = holeEl.getBoundingClientRect();
+          var s = document.createElement("span");
+          s.className = "pop" + (cls ? " " + cls : "");
+          s.textContent = text;
+          s.style.left = (hr.left - br.left + hr.width / 2) + "px";
+          s.style.top = (hr.top - br.top + hr.height * 0.28) + "px";
+          board.appendChild(s);
+          setTimeout(function () { s.remove(); }, 780);
+          var burst = document.createElement("span");
+          burst.className = "burst";
+          burst.innerHTML = BURST_SVG;
+          burst.style.left = s.style.left;
+          burst.style.top = s.style.top;
+          board.appendChild(burst);
+          setTimeout(function () { burst.remove(); }, 380);
+        }
+
+        /* ---------- Game flow ---------- */
+        function tick() {
+          if (S.phase !== "running") return;
+          var now = performance.now();
+          if (!isPractice() && now >= S.endAt) { endGame(); return; }
+          for (var k = 0; k < 9; k++) {
+            if (S.holes[k].type && now >= S.holes[k].expiresAt) clearHole(k);
+          }
+          if (now >= S.nextSpawnAt) {
+            spawn(now);
+            var c = cfg();
+            var progress = isPractice() ? 0.25 : 1 - Math.max(0, S.endAt - now) / ROUND_MS;
+            var interval = lerp(c.spawnStart, c.spawnEnd, progress) * (0.75 + Math.random() * 0.5);
+            if (isPractice()) interval *= 1.15;
+            S.nextSpawnAt = now + interval;
+          }
+          updateClock(now);
+          S.raf = requestAnimationFrame(tick);
+        }
+
+        function startGame() {
+          ac(); /* unlock audio on gesture */
+          S.score = 0; S.combo = 0; S.maxCombo = 0;
+          S.hits = 0; S.misses = 0; S.golds = 0; S.bombs = 0; S.whacks = 0;
+          S.lastWholeSec = -1;
+          for (var k = 0; k < 9; k++) clearHole(k);
+          var now = performance.now();
+          S.endAt = isPractice() ? Infinity : now + ROUND_MS;
+          S.nextSpawnAt = now + 250;
+          S.phase = "running";
+          cover.hidden = true;
+          board.classList.remove("idle");
+          board.classList.toggle("practice", isPractice());
+          timerBar.classList.toggle("practice", isPractice());
+          startBtn.textContent = "Pause";
+          resetBtn.disabled = false;
+          endPracticeBtn.hidden = !isPractice();
+          setSegEnabled(false);
+          updateHUD();
+          updateClock(now);
+          cancelAnimationFrame(S.raf);
+          S.raf = requestAnimationFrame(tick);
+        }
+        function endPractice() {
+          if (!isPractice() || (S.phase !== "running" && S.phase !== "paused")) return;
+          endGame();
+        }
+
+        function pauseGame() {
+          if (S.phase !== "running") return;
+          S.phase = "paused";
+          S.pauseStart = performance.now();
+          cancelAnimationFrame(S.raf);
+          startBtn.textContent = "Resume";
+          cover.querySelector(".big").textContent = isPractice() ? "Practice paused" : "Paused";
+          coverText.textContent = isPractice()
+            ? "No clock, no worries. Resume when you're ready, or end the practice from the top bar."
+            : "The moles are holding their breath. Resume when you're ready.";
+          coverStartBtn.textContent = "Resume";
+          coverPracticeBtn.hidden = true;
+          cover.hidden = false;
+        }
+        function resumeGame() {
+          if (S.phase !== "paused") return;
+          var shift = performance.now() - S.pauseStart;
+          if (!isPractice()) S.endAt += shift;
+          S.nextSpawnAt += shift;
+          for (var k = 0; k < 9; k++) if (S.holes[k].type) S.holes[k].expiresAt += shift;
+          S.phase = "running";
+          cover.hidden = true;
+          startBtn.textContent = "Pause";
+          S.raf = requestAnimationFrame(tick);
+        }
+        function resetGame() {
+          cancelAnimationFrame(S.raf);
+          S.phase = "idle";
+          S.score = 0; S.combo = 0; S.maxCombo = 0;
+          S.hits = 0; S.misses = 0; S.golds = 0; S.bombs = 0; S.whacks = 0;
+          for (var k = 0; k < 9; k++) clearHole(k);
+          resetBtn.disabled = true;
+          setSegEnabled(true);
+          endPracticeBtn.hidden = true;
+          board.classList.add("idle");
+          board.classList.remove("practice");
+          timerBar.classList.remove("practice");
+          coverPracticeBtn.hidden = false;
+          cover.querySelector(".big").textContent = "Ready to whack?";
+          cover.hidden = false;
+          timeStat.classList.remove("time-danger");
+          timerBar.classList.remove("low");
+          applyModeUI();
+          updateHUD();
+        }
+
+        function endGame() {
+          S.phase = "over";
+          cancelAnimationFrame(S.raf);
+          for (var k = 0; k < 9; k++) clearHole(k);
+          var practice = isPractice();
+          cover.hidden = true;
+          coverPracticeBtn.hidden = false;
+          timeVal.textContent = practice ? "∞" : "0";
+          timerFill.style.width = practice ? "100%" : "0%";
+          startBtn.textContent = practice ? "Start practice" : "Start game";
+          endPracticeBtn.hidden = true;
+          setSegEnabled(true);
+          sndEnd();
+          var prevBest = getBest(S.diff);
+          var isNewBest = !practice && S.score > prevBest;
+          if (isNewBest) setBest(S.diff, S.score);
+          updateHUD();
+
+          var c = cfg();
+          var won = S.score >= c.target;
+          document.getElementById("resultTitle").textContent = practice ? "Practice done!" : "Time's up!";
+          document.getElementById("resultRank").textContent = rankFor(S.score);
+          document.getElementById("resultScore").textContent = S.score;
+          document.getElementById("newBestBadge").hidden = !isNewBest;
+          var wl = document.getElementById("winLine");
+          if (practice) {
+            wl.className = "winline";
+            wl.textContent = "Nice warm-up! Practice scores never count toward your best — ready for a timed round?";
+          } else {
+            wl.className = "winline " + (won ? "won" : "lost");
+            wl.textContent = won
+              ? "Target smashed — you hit " + c.target + " points and won the round!"
+              : "Target was " + c.target + " points — " + (c.target - S.score) + " short. So close!";
+          }
+          document.getElementById("diffLine").textContent = (practice ? "Practice round · " : "Played on ")
+            + S.diff.charAt(0).toUpperCase() + S.diff.slice(1) + " difficulty"
+            + (practice ? " · no clock, no target" : "");
+          document.getElementById("resHits").textContent = S.hits;
+          var acc = S.whacks > 0 ? Math.round(S.hits / S.whacks * 100) : 0;
+          document.getElementById("resAcc").textContent = acc + "%";
+          document.getElementById("resCombo").textContent = S.maxCombo;
+          document.getElementById("resGold").textContent = S.golds;
+          document.getElementById("resBombs").textContent = S.bombs;
+          document.getElementById("resBest").textContent = getBest(S.diff);
+          openOverlay("resultOverlay");
+        }
+
+        /* ---------- Whacking ---------- */
+        function whack(i) {
+          if (S.phase !== "running") return;
+          var hole = S.holes[i];
+          var el = holeEls[i];
+          S.whacks++;
+          if (!hole.type) {
+            S.misses++;
+            S.combo = 0;
+            sndMiss();
+            updateHUD();
+            return;
+          }
+          var type = hole.type;
+          var mult = multiplier();
+          if (type === "bomb") {
+            S.bombs++;
+            S.score = Math.max(0, S.score + BASE_POINTS.bomb);
+            S.combo = 0;
+            sndBomb();
+            popAt(el, "−25", "bad");
+            board.classList.remove("shake");
+            void board.offsetWidth;
+            board.classList.add("shake");
+          } else {
+            S.combo++;
+            S.maxCombo = Math.max(S.maxCombo, S.combo);
+            mult = multiplier();
+            var pts = BASE_POINTS[type] * mult;
+            S.score += pts;
+            S.hits++;
+            if (type === "gold") { S.golds++; sndGold(); popAt(el, "+" + pts, "gold"); }
+            else if (type === "clock") {
+              sndClock();
+              if (isPractice()) {
+                popAt(el, "+" + pts, "time");
+              } else {
+                S.endAt = Math.min(S.endAt + 3000, performance.now() + ROUND_MS);
+                popAt(el, "+" + pts + " · +3s", "time");
+              }
+            } else { sndBonk(); popAt(el, "+" + pts, ""); }
+          }
+          el.classList.add("bonked");
+          hole.type = null;
+          hole.expiresAt = 0;
+          setTimeout(function () { el.classList.remove("up", "bonked"); }, 130);
+          updateHUD();
+        }
+
+        grid.addEventListener("pointerdown", function (e) {
+          var btn = e.target.closest(".hole");
+          if (!btn) return;
+          e.preventDefault();
+          whack(parseInt(btn.dataset.index, 10));
+        });
+        board.addEventListener("pointerdown", function (e) {
+          if (S.phase !== "running") return;
+          if (!e.target.closest(".hole") && !e.target.closest(".board-cover")) {
+            S.whacks++;
+            S.misses++;
+            if (S.combo > 0) { S.combo = 0; sndMiss(); updateHUD(); }
+          }
+        });
+
+        /* ---------- Controls ---------- */
+        function setSegEnabled(on) {
+          segBtns.forEach(function (b) { b.disabled = !on; });
+          modeBtns.forEach(function (b) { b.disabled = !on; });
+        }
+        function applyModeUI() {
+          var p = isPractice();
+          modeBtns.forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.mode === S.mode ? "true" : "false"); });
+          modeNote.textContent = p
+            ? "No clock, no target — warm up for as long as you like."
+            : "Race the clock — beat the target, chase a best score.";
+          targetNote.textContent = p
+            ? "No target in practice — scores don't count"
+            : "Target to win: " + DIFFS[S.diff].target + " pts";
+          timeLabel.textContent = p ? "Practice" : "Time";
+          if (S.phase === "idle" || S.phase === "over") {
+            timeVal.textContent = p ? "∞" : "60";
+            timerFill.style.width = "100%";
+            startBtn.textContent = p ? "Start practice" : "Start game";
+            coverStartBtn.textContent = p ? "Start practice" : "Start game";
+            coverText.textContent = p
+              ? "No clock, no target, no pressure. Moles pop up at a gentle pace — bonk away for as long as you like, then tap End practice when you're done."
+              : "Moles pop up for 60 seconds. Bonk them before they duck — and keep your mallet off the bombs.";
+          }
+        }
+        function setMode(m) {
+          S.mode = m;
+          applyModeUI();
+        }
+        function setDiff(d) {
+          S.diff = d;
+          segBtns.forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.diff === d ? "true" : "false"); });
+          applyModeUI();
+          updateHUD();
+        }
+        segBtns.forEach(function (b) {
+          b.addEventListener("click", function () { if (S.phase === "idle" || S.phase === "over") setDiff(b.dataset.diff); });
+        });
+        modeBtns.forEach(function (b) {
+          b.addEventListener("click", function () { if (S.phase === "idle" || S.phase === "over") setMode(b.dataset.mode); });
+        });
+        coverPracticeBtn.addEventListener("click", function () {
+          if (S.phase === "idle" || S.phase === "over") { setMode("practice"); startGame(); }
+        });
+        endPracticeBtn.addEventListener("click", endPractice);
+
+        function onStartPressed() {
+          if (S.phase === "running") pauseGame();
+          else if (S.phase === "paused") resumeGame();
+          else startGame();
+        }
+        startBtn.addEventListener("click", onStartPressed);
+        coverStartBtn.addEventListener("click", onStartPressed);
+        resetBtn.addEventListener("click", resetGame);
+        document.getElementById("againBtn").addEventListener("click", function () {
+          closeOverlay("resultOverlay");
+          startGame();
+        });
+
+        soundBtn.addEventListener("click", function () {
+          S.sound = !S.sound;
+          soundBtn.setAttribute("aria-pressed", S.sound ? "true" : "false");
+          soundBtn.setAttribute("aria-label", S.sound ? "Sound on" : "Sound off");
+          document.getElementById("soundOnIcon").style.display = S.sound ? "" : "none";
+          document.getElementById("soundOffIcon").style.display = S.sound ? "none" : "";
+          if (S.sound) sndBonk();
+        });
+
+        document.addEventListener("keydown", function (e) {
+          var anyOverlay = !document.getElementById("howOverlay").hidden
+            || !document.getElementById("rulesOverlay").hidden
+            || !document.getElementById("resultOverlay").hidden
+            || !document.getElementById("gameOverlay").hidden
+            || !document.getElementById("feedbackOverlay").hidden;
+          if (e.key === "Escape") {
+            ["howOverlay", "rulesOverlay", "resultOverlay", "gameOverlay", "feedbackOverlay"].forEach(closeOverlay);
+            return;
+          }
+          if (anyOverlay) return;
+          if (e.key >= "1" && e.key <= "9") whack(parseInt(e.key, 10) - 1);
+          else if (e.code === "Space") { e.preventDefault(); onStartPressed(); }
+        });
+
+        /* ---------- Overlays ---------- */
+        var lastFocus = null;
+        function openOverlay(id) {
+          lastFocus = document.activeElement;
+          document.getElementById(id).hidden = false;
+          var sheet = document.getElementById(id).querySelector(".sheet");
+          var focusable = sheet.querySelector("button");
+          if (focusable) focusable.focus();
+        }
+        function closeOverlay(id) {
+          var ov = document.getElementById(id);
+          if (ov.hidden) return;
+          ov.hidden = true;
+          if (lastFocus && lastFocus.focus) lastFocus.focus();
+        }
+        document.getElementById("howBtn").addEventListener("click", function () { openOverlay("howOverlay"); });
+        document.getElementById("rulesBtn").addEventListener("click", function () { openOverlay("rulesOverlay"); });
+
+        /* ---------- Feedback (standard — all games) ---------- */
+        var FEEDBACK_KEY = "holos-arcade-feedback";
+        var feedbackRating = 0;
+        var feedbackTag = "";
+        var feedbackThanksTimer = 0;
+        var starBtns = Array.prototype.slice.call(document.querySelectorAll("#feedbackStars .star-btn"));
+        var tagBtns = Array.prototype.slice.call(document.querySelectorAll("#feedbackTags button"));
+        var feedbackTextEl = document.getElementById("feedbackText");
+        var feedbackErrorEl = document.getElementById("feedbackError");
+        var feedbackRatingNoteEl = document.getElementById("feedbackRatingNote");
+        var RATING_LABELS = ["", "1 star", "2 stars", "3 stars", "4 stars", "5 stars"];
+
+        function renderFeedbackStars() {
+          starBtns.forEach(function (b) {
+            var v = parseInt(b.dataset.rating, 10);
+            var on = v <= feedbackRating;
+            b.classList.toggle("active", on);
+            b.setAttribute("aria-pressed", v === feedbackRating ? "true" : "false");
+          });
+          feedbackRatingNoteEl.textContent = feedbackRating ? RATING_LABELS[feedbackRating] + " selected" : "";
+        }
+        function renderFeedbackTags() {
+          tagBtns.forEach(function (b) {
+            b.setAttribute("aria-pressed", b.dataset.tag === feedbackTag ? "true" : "false");
+          });
+        }
+        function resetFeedbackForm() {
+          feedbackRating = 0;
+          feedbackTag = "";
+          if (feedbackTextEl) feedbackTextEl.value = "";
+          if (feedbackErrorEl) feedbackErrorEl.textContent = "";
+          document.getElementById("feedbackFormWrap").hidden = false;
+          document.getElementById("feedbackThanks").hidden = true;
+          if (feedbackThanksTimer) { clearTimeout(feedbackThanksTimer); feedbackThanksTimer = 0; }
+          renderFeedbackStars();
+          renderFeedbackTags();
+        }
+        function openFeedback() {
+          resetFeedbackForm();
+          openOverlay("feedbackOverlay");
+        }
+        starBtns.forEach(function (b) {
+          b.addEventListener("click", function () {
+            feedbackRating = parseInt(b.dataset.rating, 10);
+            feedbackErrorEl.textContent = "";
+            renderFeedbackStars();
+          });
+        });
+        tagBtns.forEach(function (b) {
+          b.addEventListener("click", function () {
+            feedbackTag = (feedbackTag === b.dataset.tag) ? "" : b.dataset.tag;
+            renderFeedbackTags();
+          });
+        });
+        document.getElementById("feedbackBtn").addEventListener("click", openFeedback);
+        document.getElementById("feedbackBtnFooter").addEventListener("click", openFeedback);
+        document.getElementById("feedbackSaveBtn").addEventListener("click", function () {
+          if (!feedbackRating) {
+            feedbackErrorEl.textContent = "Please pick a star rating first.";
+            return;
+          }
+          var record = {
+            game: "whack-a-mole",
+            rating: feedbackRating,
+            text: feedbackTextEl.value.trim(),
+            tag: feedbackTag,
+            timestamp: new Date().toISOString()
+          };
+          try {
+            var raw = localStorage.getItem(FEEDBACK_KEY);
+            var arr = raw ? JSON.parse(raw) : [];
+            if (!Array.isArray(arr)) arr = [];
+            arr.push(record);
+            localStorage.setItem(FEEDBACK_KEY, JSON.stringify(arr));
+          } catch (e) { /* storage unavailable — still thank the player */ }
+          feedbackErrorEl.textContent = "";
+          document.getElementById("feedbackFormWrap").hidden = true;
+          document.getElementById("feedbackThanks").hidden = false;
+          var thanksDone = document.querySelector("#feedbackThanks [data-close]");
+          if (thanksDone) thanksDone.focus();
+          feedbackThanksTimer = setTimeout(function () { closeOverlay("feedbackOverlay"); }, 2200);
+        });
+        document.getElementById("howToRules").addEventListener("click", function () {
+          closeOverlay("howOverlay");
+          openOverlay("rulesOverlay");
+        });
+        Array.prototype.forEach.call(document.querySelectorAll("[data-close]"), function (btn) {
+          btn.addEventListener("click", function () {
+            var ov = btn.closest(".overlay");
+            if (ov) closeOverlay(ov.id);
+          });
+        });
+        Array.prototype.forEach.call(document.querySelectorAll(".overlay"), function (ov) {
+          ov.addEventListener("pointerdown", function (e) { if (e.target === ov) closeOverlay(ov.id); });
+        });
+
+        /* ---------- Build list: Batch 3 (13 games) ---------- */
+        var GAMES = [
+          { id: "snake", initials: "Sn", color: "#2e9e5b", name: "Snake", cat: "arcade", catLabel: "Arcade & action", mode: "Single-player", status: "queued", desc: "Eat, grow, and don't bite yourself. Speed ramps as your snake gets longer.", how: ["Steer with arrow keys, WASD, or swipe.", "Eat food to grow and score — each piece makes you a little faster.", "Plan ahead: the walls and your own tail end the run."], objective: "Grow the longest snake you can and score as many points as possible before you crash.", scoring: "Food: 10 pts each. Bonus food (timed, occasional): 50 pts. No penalty for missing bonus food.", special: "Speed increases with length. Wrapping / wall behaviour is set before the run (classic walls = crash; wrap mode = pass through).", win: "Endless game — there is no final win. A run ends on a crash; your length and score are your result, and your best score is saved on this device." },
+          { id: "block-drop", initials: "Bd", color: "#7a5fb5", name: "Block Drop", cat: "puzzle", catLabel: "Puzzle", mode: "Single-player", status: "queued", desc: "Tetris-style falling blocks. Fill rows to clear them and chase a high score.", how: ["Move and rotate falling pieces to fit them together.", "Complete a full horizontal row to clear it.", "Use Hold and the Next preview to plan — the drop speeds up as you level."], objective: "Stack falling pieces, clear lines, and survive as long as you can as the speed rises.", scoring: "1 line: 100 × level · 2 lines: 300 × level · 3 lines: 500 × level · 4 lines: 800 × level. Soft / hard drop: 1 / 2 pts per cell.", special: "Level rises every 10 lines cleared. Game ends when a new piece cannot enter the board.", win: "Endless game — no final win. Your score, lines, and level are your result; best score is saved on this device." },
+          { id: "breakout", initials: "Br", color: "#e4572e", name: "Breakout", cat: "arcade", catLabel: "Arcade & action", mode: "Single-player", status: "queued", desc: "Bounce the ball, smash every brick, and don't let it slip past your paddle.", how: ["Move the paddle with mouse, touch, or arrow keys.", "Bounce the ball into bricks to break them.", "Catch falling power-ups — and keep the ball in play. You have 3 lives."], objective: "Clear every brick on the board with the ball and paddle.", scoring: "Brick: 10–50 pts by row (higher rows worth more). Level clear bonus: 250 pts. Extra life at set score milestones where shown in-game.", special: "Some bricks take 2 hits. Power-ups can widen the paddle, add balls, or slow the ball. The ball speeds up as bricks break.", win: "Clear the board to advance to the next, faster level. The game ends when you run out of lives; best score is saved on this device." },
+          { id: "2048", initials: "20", color: "#c78f04", name: "2048", cat: "puzzle", catLabel: "Puzzle", mode: "Single-player", status: "queued", desc: "Slide and merge numbered tiles. Combine your way to the 2048 tile.", how: ["Swipe or use arrow keys to slide all tiles one way.", "Tiles with the same number merge into one double tile.", "A new tile appears after every move — don't let the board fill up."], objective: "Merge tiles to create the 2048 tile.", scoring: "Every merge scores the value of the new tile (merging two 64s scores 128). Score is the sum of all merges.", special: "New tiles are mostly 2s, sometimes 4s. Undo is not part of the standard rules for this build.", win: "You win when you create the 2048 tile — you may keep playing for a higher score. The game ends when no move is possible; best score and best tile are saved on this device." },
+          { id: "match-3", initials: "M3", color: "#d14f7a", name: "Match-3", cat: "puzzle", catLabel: "Puzzle", mode: "Single-player", status: "queued", desc: "Swap gems to line up three or more. Cascades, specials, and move targets.", how: ["Swap two neighbouring pieces to make a line of 3 or more.", "Matches clear, pieces fall, and chain reactions score extra.", "Make lines of 4 or 5 to create special pieces."], objective: "Reach the level's score or collection target before you run out of moves.", scoring: "3-match: 60 pts · 4-match: 120 pts · 5-match: 200 pts, multiplied by cascade depth (×1, ×2, ×3…). Special-piece clears score for every piece they remove.", special: "Only swaps that make a match are allowed. Levels state their target and move limit before you start.", win: "Meet the target within the move limit to clear the level and advance. Fail the target and you retry the level; best score per level is saved on this device." },
+          { id: "mahjong-solitaire", initials: "Mj", color: "#2e7d6b", name: "Mahjong Solitaire", cat: "puzzle", catLabel: "Puzzle", mode: "Single-player", status: "queued", desc: "Match identical free tiles and peel the whole layout away, pair by pair.", how: ["Tap two identical tiles to remove them as a pair.", "A tile is only playable when it is free — nothing on top, and a long side open.", "Work from the top and edges in; use Hint sparingly if you get stuck."], objective: "Remove every tile from the layout by matching pairs.", scoring: "Pair: 20 pts. Speed bonus for fast clears and a bonus for finishing with hints unused, both shown on the results screen.", special: "Seasons and flowers are unique sets — any two within the same set match. Shuffle / hint availability is shown per layout.", win: "Clear all tiles to win the layout. If no moves remain, the layout is lost and you can retry or reshuffle where allowed; best time and best score are saved on this device." },
+          { id: "nonogram", initials: "No", color: "#3a6ea5", name: "Nonogram", cat: "puzzle", catLabel: "Puzzle", mode: "Single-player", status: "queued", desc: "Picture logic: use the number clues to reveal the hidden image, cell by cell.", how: ["Read the clues: each number is a run of filled cells in that row or column, in order.", "Fill cells you are sure of, and mark the rest with an X.", "Cross-check rows against columns until the picture appears."], objective: "Fill exactly the right cells to reveal the picture hidden in the grid.", scoring: "Puzzle games are scored on completion and time, not points. Mistake checks, where enabled, are limited per puzzle as shown in-game.", special: "Runs are separated by at least one empty cell. Grid sizes vary (starting at 5×5 and growing).", win: "Complete the picture with no errors to win the puzzle and unlock the next. Best time per puzzle is saved on this device." },
+          { id: "simon", initials: "Si", color: "#b7791f", name: "Simon", cat: "arcade", catLabel: "Arcade & action", mode: "Single-player", status: "queued", desc: "Watch the colours, listen to the tones, repeat the sequence — one longer every round.", how: ["Watch and listen as the game plays a sequence.", "Repeat it back by tapping the pads in the same order.", "Each round adds one more step. One mistake ends the run in standard mode."], objective: "Repeat the longest colour-and-tone sequence you can.", scoring: "10 pts per correctly repeated step. Round bonus: round number × 10 on completing a round.", special: "Standard mode: one mistake ends the game. If a practice / retry mode is offered, it is labelled before you start and does not count toward the standard best.", win: "Endless game — no final win. Your result is the longest sequence completed; best round and best score are saved on this device." },
+          { id: "whack-a-mole", initials: "Wa", color: "#4c9440", name: "Whack-a-Mole", cat: "arcade", catLabel: "Arcade & action", mode: "Single-player", status: "live", desc: "The game at the top of this page. 60 seconds, combos, golden moles — and bombs.", how: ["Pick a difficulty, press Start, and whack moles before they duck.", "Build combos to raise your multiplier up to ×3.", "Golden moles are worth 50, clock moles add time, bombs cost 25 — full steps are in this game's own How to play above."], objective: "Score as many points as you can in 60 seconds and reach the target for your difficulty (Easy 300 · Normal 500 · Hard 700).", scoring: "Mole 10 × multiplier · Golden mole 50 × multiplier · Clock mole 5 × multiplier + 3 sec · Bomb −25. Multiplier: ×1, ×2 from combo 5, ×3 from combo 12.", special: "A miss or a bomb resets your combo. A mole that ducks on its own costs nothing. Full rules are in this game's own Rules page above.", win: "Reach your difficulty's target before time runs out to win the round. Best score per difficulty is saved on this device — this game is playable now, at the top of this page." },
+          { id: "tower-defense", initials: "Td", color: "#6b4f2a", name: "Tower Defense", cat: "arcade", catLabel: "Arcade & action", mode: "Single-player", status: "queued", desc: "Build towers along the path and stop every wave before it reaches your base.", how: ["Place towers with the gold you start with — each type has a different range, rate, and cost.", "Start the wave and earn gold for every enemy stopped.", "Upgrade or sell towers between waves as tougher enemies arrive."], objective: "Stop enemies following the path from reaching your base, wave after wave.", scoring: "Gold and lives are the in-game resources, not points. Score = waves cleared × 100 + enemies stopped × 5 + lives remaining × 50 at the end.", special: "Enemies vary — fast, armoured, and flying types need different towers, as labelled in-game. Towers cannot be placed on the path.", win: "Clear the final wave to win the map. If your lives reach zero, the map is lost. Best wave and best score per map are saved on this device." },
+          { id: "word-scramble", initials: "Ws", color: "#5b7a3a", name: "Word Scramble", cat: "word-quiz", catLabel: "Word & quiz", mode: "Single-player", status: "queued", desc: "Unscramble the letters against the clock. Longer words, bigger scores.", how: ["Read the scrambled letters and type or tap out the word.", "Use the clue if you need it — it costs points.", "Skip only when you must; skipped words score zero."], objective: "Unscramble as many words as you can correctly before time runs out.", scoring: "Correct word: 10 pts per letter. Time bonus for fast answers as shown in-game. Using a clue halves that word's points; a skip scores 0.", special: "Answers are single words, shown with a short clue. Letter case does not matter.", win: "There is no pass mark in endless / timed mode — your score is your result. In level mode, the target is shown before you start. Best score is saved on this device." },
+          { id: "math-quiz", initials: "Mq", color: "#3a6ea5", name: "Math Quiz", cat: "word-quiz", catLabel: "Word & quiz", mode: "Single-player", status: "queued", desc: "Quick-fire arithmetic. Pick a level, beat the clock, and keep your streak alive.", how: ["Answer each question before its timer runs out.", "Pick a difficulty — it sets the number size and operations included.", "Streaks earn bonus points, so protect them."], objective: "Answer as many questions correctly as you can in the round.", scoring: "Correct: 100 pts + time bonus. Streak bonus: +25 pts per streak step from the 3rd correct answer in a row. Wrong answer: 0 and the streak resets.", special: "Operations by level: Easy = + and − · Normal = + − × · Hard = + − × ÷ and mixed. Questions are generated, so no two rounds repeat exactly.", win: "Timed mode is score-only — no pass mark. Your result is correct answers, accuracy, and best streak; best score per difficulty is saved on this device." },
+          { id: "flags-quiz", initials: "Fq", color: "#8a4f7a", name: "Flags Quiz", cat: "word-quiz", catLabel: "Word & quiz", mode: "Single-player", status: "queued", desc: "Name the country from its flag. Multiple choice, timed, with streak bonuses.", how: ["Look at the flag and choose from four countries.", "Answer quickly for a time bonus.", "Wrong answers show the correct country, so you learn as you go."], objective: "Identify as many flags correctly as you can in the round.", scoring: "Correct: 100 pts + time bonus. Streak bonus from the 3rd correct answer in a row. Wrong answer: 0 and the streak resets.", special: "Question sets can be world-wide or by region, chosen before the round. Each flag appears at most once per round.", win: "Score-only — no pass mark. Your result is correct answers and accuracy; best score per set is saved on this device." }
+        ];
+
+        /* Difficulty spec per game — arcade standard: Easy / Normal / Hard (or equivalent), picked before play */
+        var GAME_DIFFS = {
+          "snake": "Easy / Normal / Hard — sets the starting speed and how quickly speed ramps up as your snake grows. Best score is saved per difficulty.",
+          "block-drop": "Easy / Normal / Hard — sets the starting drop speed and how fast the level-up pace rises. Best score is saved per difficulty.",
+          "breakout": "Easy / Normal / Hard — sets ball speed and paddle width (wider paddle on Easy). Best score is saved per difficulty.",
+          "2048": "Easy / Normal / Hard — Easy uses a roomier 5×5 grid, Normal the classic 4×4, Hard the 4×4 grid with a 4096 target tile. Best score and best tile are saved per difficulty.",
+          "match-3": "Easy / Normal / Hard — sets the move limit for each level's target (more moves on Easy, fewer on Hard). Best score per level is saved per difficulty.",
+          "mahjong-solitaire": "Easy / Normal / Hard — sets layout size and how many hints and shuffles you get. Best time and score are saved per difficulty.",
+          "nonogram": "Easy / Normal / Hard — sets grid size (5×5, 10×10, 15×15) and how many mistake checks you get. Best time is saved per difficulty.",
+          "simon": "Easy / Normal / Hard — sets how fast the sequence plays back and how long you get to answer. Best round and score are saved per difficulty.",
+          "whack-a-mole": "Easy / Normal / Hard — playable now, above the board on this page: sets mole speed, how many moles can be up at once, and the target score (300 / 500 / 700). Best score is saved per difficulty.",
+          "tower-defense": "Easy / Normal / Hard — sets your starting gold and lives, and how tough each wave is. Best wave and score per map are saved per difficulty.",
+          "word-scramble": "Easy / Normal / Hard — sets word length and how much time you get per round. Best score is saved per difficulty.",
+          "math-quiz": "Easy / Normal / Hard — picked before the round: Easy is + and −, Normal adds ×, Hard adds ÷ and mixed questions, with bigger numbers at each step. Best score is saved per difficulty.",
+          "flags-quiz": "Easy / Normal / Hard — sets the time you get per flag and how wide the country pool is (one region on Easy, worldwide on Hard). Best score is saved per difficulty."
+        };
+
+        var gameGrid = document.getElementById("gameGrid");
+        function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+        GAMES.forEach(function (g) {
+          var card = document.createElement("article");
+          card.className = "game-card" + (g.status === "live" ? " playable" : "");
+          card.dataset.cat = g.cat;
+          card.innerHTML = '<div class="tile" style="background:' + g.color + '">' + esc(g.initials) + "</div>"
+            + "<h3>" + esc(g.name) + "</h3>"
+            + "<p>" + esc(g.desc) + "</p>"
+            + '<div class="badges"><span class="badge ' + (g.status === "live" ? "live" : "queued") + '">' + (g.status === "live" ? "Playable now" : "In build queue") + "</span>"
+            + '<span class="badge">' + esc(g.mode) + "</span>"
+            + '<span class="badge">' + esc(g.catLabel) + "</span>"
+            + '<span class="badge">Easy / Normal / Hard</span></div>'
+            + '<div class="card-actions">'
+            + (g.status === "live" ? '<button class="btn play" type="button" data-play="' + g.id + '">Play at top of page</button>' : "")
+            + '<button class="btn" type="button" data-how="' + g.id + '">How to play</button>'
+            + '<button class="btn" type="button" data-rules="' + g.id + '">Rules</button>'
+            + "</div>";
+          gameGrid.appendChild(card);
+        });
+
+        var filterBtns = Array.prototype.slice.call(document.querySelectorAll("[data-filter]"));
+        filterBtns.forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            filterBtns.forEach(function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
+            var f = btn.dataset.filter;
+            Array.prototype.forEach.call(gameGrid.children, function (card) {
+              card.style.display = (f === "all" || card.dataset.cat === f) ? "" : "none";
+            });
+          });
+        });
+
+        var currentGame = null, currentView = "how";
+        function renderGameOverlay() {
+          if (!currentGame) return;
+          var g = currentGame;
+          document.getElementById("gameOverlayTitle").textContent = g.name + (currentView === "how" ? " — How to play" : " — Rules");
+          document.getElementById("gameOverlayMeta").textContent = g.mode + " · " + g.catLabel + " · " + (g.status === "live" ? "Playable now on this page" : "In build queue") + " · Best saved on this device";
+          var body = document.getElementById("gameOverlayBody");
+          if (currentView === "how") {
+            var steps = "";
+            g.how.forEach(function (s, i) { steps += '<div class="step"><div class="n">' + (i + 1) + '</div><p>' + esc(s) + "</p></div>"; });
+            body.innerHTML = steps + '<p style="margin-top:14px">This is the opt-in tutorial for ' + esc(g.name) + ' — it only opens when you tap “How to play”, never automatically.</p>';
+          } else {
+            body.innerHTML = "<h3>Objective</h3><p>" + esc(g.objective) + "</p>"
+              + (GAME_DIFFS[g.id] ? "<h3>Difficulty</h3><p>" + esc(GAME_DIFFS[g.id]) + "</p>" : "")
+              + "<h3>Scoring</h3><p>" + esc(g.scoring) + "</p>"
+              + "<h3>Special rules</h3><p>" + esc(g.special) + "</p>"
+              + "<h3>Win conditions</h3><p>" + esc(g.win) + "</p>";
+          }
+          document.getElementById("gameOverlayToggle").textContent = currentView === "how" ? "Read the full rules" : "Back to How to play";
+        }
+        function openGame(id, view) {
+          for (var i = 0; i < GAMES.length; i++) if (GAMES[i].id === id) currentGame = GAMES[i];
+          currentView = view;
+          renderGameOverlay();
+          openOverlay("gameOverlay");
+        }
+        document.getElementById("gameOverlayToggle").addEventListener("click", function () {
+          currentView = currentView === "how" ? "rules" : "how";
+          renderGameOverlay();
+        });
+        gameGrid.addEventListener("click", function (e) {
+          var howBtn = e.target.closest("[data-how]");
+          var rulesBtn = e.target.closest("[data-rules]");
+          var playBtn = e.target.closest("[data-play]");
+          if (howBtn) openGame(howBtn.dataset.how, "how");
+          else if (rulesBtn) openGame(rulesBtn.dataset.rules, "rules");
+          else if (playBtn) { window.scrollTo({ top: 0, behavior: "smooth" }); startGame(); }
+        });
+
+        /* ---------- Init ---------- */
+        setDiff("normal");
+        updateHUD();
+      })();
+    </script>
+  </body>
+</html>

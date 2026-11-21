@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Tower Defense</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef1ea; --panel:#ffffff; --panel2:#f4f6f0; --ink:#1a241c; --muted:#5c6b5e; --line:#d3dbd0;
+  --accent:#1f7a4d; --accent2:#c67a12; --danger:#c0392b; --gold:#b8860b;
+  --btn:#1a241c; --btn-ink:#fff;
+  --cell:#dfe8d8; --cell-alt:#d3e0cb; --path:#cbb98a; --path-line:#b8a470;
+  --shadow:0 4px 18px rgba(20,40,25,.12);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#111713; --panel:#1b241e; --panel2:#232f27; --ink:#e8efe9; --muted:#9db0a2; --line:#334239;
+    --accent:#3ecf7a; --accent2:#f0a832; --danger:#ff6b5e; --gold:#f0c040;
+    --btn:#e8efe9; --btn-ink:#111713;
+    --cell:#263329; --cell-alt:#2b3a2f; --path:#5a4f35; --path-line:#6b5f42;
+    --shadow:0 4px 18px rgba(0,0,0,.4);
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Barlow",system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+button{font-family:inherit;cursor:pointer;min-height:44px}
+.wrap{max-width:1080px;margin:0 auto;padding:14px 14px 28px}
+h1{font-family:"Barlow Condensed",sans-serif;font-size:34px;letter-spacing:.04em;margin:2px 0 2px;line-height:1;text-transform:uppercase}
+.sub{color:var(--muted);font-size:15px;margin:0 0 12px;max-width:60ch}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;min-width:92px;flex:1}
+.stat b{display:block;font-size:20px;line-height:1;font-family:"Barlow Condensed",sans-serif;letter-spacing:.03em}
+.stat span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.layout{display:grid;grid-template-columns:1fr 300px;gap:12px;align-items:start}
+@media(max-width:820px){.layout{grid-template-columns:1fr}}
+.boardCard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px;box-shadow:var(--shadow)}
+canvas{width:100%;height:auto;display:block;border-radius:8px;background:var(--cell);touch-action:manipulation}
+.controls{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.btn{border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:10px;padding:10px 14px;font-weight:700;font-size:15px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+@media (prefers-color-scheme: dark){.btn.primary{color:#0b140d}}
+.btn.warn{background:var(--danger);border-color:var(--danger);color:#fff}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+.panel h2{font-family:"Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:.05em;font-size:20px;margin:0 0 4px}
+.panel p{color:var(--muted);font-size:14px;margin:0 0 10px;line-height:1.45}
+.shop{display:grid;gap:8px}
+.towerBtn{display:flex;gap:10px;align-items:center;text-align:left;width:100%;background:var(--panel2);border:2px solid var(--line);border-radius:12px;padding:10px;color:var(--ink)}
+.towerBtn.sel{border-color:var(--accent);background:color-mix(in srgb, var(--accent) 12%, var(--panel2))}
+.towerBtn:disabled{opacity:.5}
+.dot{width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:19px;border:2px solid rgba(0,0,0,.18)}
+.towerBtn b{font-size:15px;display:block}
+.towerBtn small{color:var(--muted);font-size:12.5px;line-height:1.3;display:block}
+.cost{margin-left:auto;font-weight:800;color:var(--gold);white-space:nowrap;font-size:14px}
+.selInfo{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+.selInfo h3{margin:0 0 4px;font-size:16px}
+.selInfo p{margin:0 0 8px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.msg{min-height:22px;font-weight:600;font-size:14.5px;margin-top:8px}
+.waveInfo{font-size:13.5px;color:var(--muted);margin-top:6px;line-height:1.45}
+dialog{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:16px;max-width:560px;width:calc(100% - 28px);padding:0;box-shadow:var(--shadow)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+.dlgBody{padding:20px 22px 22px;max-height:78vh;overflow:auto}
+.dlgBody h2{font-family:"Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:.04em;margin:0 0 10px;font-size:26px}
+.dlgBody h3{margin:16px 0 4px;font-size:16px}
+.dlgBody p,.dlgBody li{font-size:15px;line-height:1.55;color:var(--ink)}
+.dlgBody ul{margin:6px 0;padding-left:20px}
+.dlgBody table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0}
+.dlgBody th,.dlgBody td{border:1px solid var(--line);padding:7px 8px;text-align:left}
+.dlgBody th{background:var(--panel2)}
+.banner{display:none;border-radius:12px;padding:12px 14px;font-weight:700;margin-bottom:10px}
+.banner.show{display:block}
+.banner.win{background:#d9f2e2;color:#14532d;border:1px solid #7bc99a}
+.banner.lose{background:#fde3e0;color:#7a1f16;border:1px solid #e89a90}
+@media (prefers-color-scheme: dark){.banner.win{background:#173b26;color:#a7e8bf}.banner.lose{background:#3d1a16;color:#ffb4a8}}
+.foot{color:var(--muted);font-size:13px;margin-top:14px;line-height:1.5}
+.diffBar{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;box-shadow:var(--shadow);margin-bottom:10px}
+.diffBarTop{display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:space-between}
+.diffLabel{font-family:"Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:.05em;font-size:18px;font-weight:700}
+.diffLabel small{display:block;font-family:"Barlow",sans-serif;text-transform:none;letter-spacing:0;font-weight:400;color:var(--muted);font-size:13px;margin-top:2px}
+.diffSeg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:3px;gap:3px}
+.diffSeg button{border:0;background:transparent;color:var(--ink);border-radius:999px;padding:8px 16px;font-weight:700;font-size:14.5px;min-height:40px}
+.diffSeg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+@media (prefers-color-scheme: dark){.diffSeg button[aria-pressed="true"]{color:#0b140d}}
+.diffDesc{color:var(--muted);font-size:13.5px;line-height:1.45;margin:8px 0 0}
+.diffDesc b{color:var(--ink)}
+.fbStars{display:flex;gap:6px;margin:6px 0 4px}
+.fbStars button{border:1px solid var(--line);background:var(--panel2);border-radius:10px;font-size:22px;line-height:1;padding:8px 10px;min-width:48px;color:var(--muted)}
+.fbStars button.on{background:color-mix(in srgb, var(--gold) 22%, var(--panel2));border-color:var(--gold);color:var(--gold)}
+.fbField{margin-top:12px}
+.fbField label{display:block;font-weight:700;font-size:14px;margin-bottom:6px}
+.fbField textarea,.fbField select{width:100%;font:inherit;font-size:15px;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.fbField textarea{min-height:96px;resize:vertical}
+.fbNote{color:var(--muted);font-size:13px;line-height:1.45;margin:12px 0 0}
+.fbThanks{display:none;font-weight:700;color:var(--accent);margin-top:12px}
+.fbThanks.show{display:block}
+.fbStatus{font-size:13.5px;color:var(--danger);min-height:18px;margin-top:8px;font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🏰 Tower Defense</h1>
+  <p class="sub">Build towers along the road, stop every wave before it reaches your base, and survive all 20 waves. Pick a difficulty first, then a tower, then tap a green tile to place it. Want a no-pressure warm-up? Switch to <strong>🧪 Practice Round</strong> — unlimited gold, no lives lost, and nothing counts toward your bests. New here? Tap <strong>How to play</strong> for the tutorial — it's optional, you can jump straight in. Full scoring and win conditions are under <strong>Rules</strong>.</p>
+
+  <div id="banner" class="banner" role="status"></div>
+
+  <div class="diffBar" aria-label="Difficulty">
+    <div class="diffBarTop">
+      <div class="diffLabel">⚙️ Difficulty<small>Free for everyone — pick before you start. Changing it restarts the game.</small></div>
+      <div class="diffSeg" role="group" aria-label="Choose difficulty">
+        <button type="button" data-diff="easy" aria-pressed="false">🌱 Easy</button>
+        <button type="button" data-diff="normal" aria-pressed="true">⚔️ Normal</button>
+        <button type="button" data-diff="hard" aria-pressed="false">🔥 Hard</button>
+      </div>
+    </div>
+    <p class="diffDesc" id="diffDesc"></p>
+    <div class="diffBarTop" style="margin-top:10px">
+      <div class="diffLabel">🎮 Mode<small>Practice is a free warm-up — switching mode restarts the game.</small></div>
+      <div class="diffSeg" role="group" aria-label="Choose mode">
+        <button type="button" data-mode="real" aria-pressed="true">🏆 Real Game</button>
+        <button type="button" data-mode="practice" aria-pressed="false">🧪 Practice Round</button>
+      </div>
+    </div>
+    <p class="diffDesc" id="modeDesc"></p>
+  </div>
+
+  <div class="stats" aria-label="Game status">
+    <div class="stat"><b id="sGold">—</b><span>🪙 Gold</span></div>
+    <div class="stat"><b id="sLives">—</b><span>❤️ Lives</span></div>
+    <div class="stat"><b id="sWave">—</b><span>🌊 Wave</span></div>
+    <div class="stat"><b id="sLeft">—</b><span>👾 Left</span></div>
+    <div class="stat"><b id="sScore">—</b><span>⭐ Score</span></div>
+    <div class="stat"><b id="sDiff">—</b><span>⚙️ Difficulty</span></div>
+    <div class="stat"><b id="sMode">—</b><span>🎮 Mode</span></div>
+    <div class="stat"><b id="sBest">—</b><span>🏆 Best (this difficulty)</span></div>
+  </div>
+
+  <div class="layout">
+    <div class="boardCard">
+      <canvas id="game" width="700" height="450" aria-label="Tower defense board. Tap a tile to place the selected tower."></canvas>
+      <div class="controls">
+        <button class="btn primary" id="btnWave">▶ Start Wave</button>
+        <button class="btn" id="btnPause">⏸ Pause</button>
+        <button class="btn" id="btnSpeed">Speed: 1×</button>
+        <button class="btn" id="btnRestart">↺ Restart</button>
+        <button class="btn" id="btnHow">❓ How to play</button>
+        <button class="btn" id="btnRules">📖 Rules</button>
+        <button class="btn" id="btnFeedback" type="button">💬 Feedback</button>
+      </div>
+      <div class="msg" id="msg" role="status"></div>
+      <div class="waveInfo" id="waveInfo"></div>
+    </div>
+
+    <aside class="panel">
+      <h2>Build a tower</h2>
+      <p>Select a tower, then tap any green tile. Towers can't go on the road or on top of each other.</p>
+      <div class="shop" id="shop"></div>
+      <div class="selInfo" id="selInfo">
+        <h3>No tower selected</h3>
+        <p>Tap a placed tower on the board to upgrade or sell it. Upgrades raise damage and range.</p>
+      </div>
+    </aside>
+  </div>
+
+  <p class="foot">Single-player vs. the waves. Difficulty (Easy / Normal / Hard) is free for everyone — your best wave and best score are saved on this device, separately for each difficulty. Practice Round is just for fun and learning: unlimited gold, leaks cost no lives, and practice scores are never saved to your bests. Tip: Frost + Cannon is a strong combo — slow them down, then splash them.</p>
+</div>
+
+<dialog id="dlgHow" aria-labelledby="howTitle">
+  <div class="dlgBody">
+    <h2 id="howTitle">How to play — Tutorial</h2>
+    <p><em>This tutorial is optional — close it any time and play straight away. Open it again whenever you like with the ❓ How to play button. For scoring, special rules and win conditions, see the separate 📖 Rules.</em></p>
+    <p><strong>Goal:</strong> stop enemies walking the tan road from reaching the right-hand base. If your lives hit 0, the game ends.</p>
+    <h3>Difficulty — pick first</h3>
+    <ul>
+      <li><strong>🌱 Easy:</strong> 300 starting gold, 30 lives, enemies have 30% less health and move a little slower. Score ×0.7. Best for learning.</li>
+      <li><strong>⚔️ Normal:</strong> 200 starting gold, 20 lives, standard enemy health and speed. Score ×1. The way the game was balanced.</li>
+      <li><strong>🔥 Hard:</strong> 150 starting gold, 15 lives, enemies have 40% more health and move faster. Score ×1.5. For experienced defenders.</li>
+      <li>Changing difficulty restarts the game. Your best wave &amp; score are saved separately for each difficulty.</li>
+    </ul>
+    <h3>Step by step</h3>
+    <ul>
+      <li><strong>0. Pick a difficulty</strong> at the top (Easy / Normal / Hard).</li>
+      <li><strong>1. Pick a tower</strong> in the Build panel (right side, or below the board on phones).</li>
+      <li><strong>2. Tap a green tile</strong> to build it there. It costs gold — your starting gold depends on difficulty (see above).</li>
+      <li><strong>3. Press ▶ Start Wave.</strong> Enemies march in; your towers fire on their own.</li>
+      <li><strong>4. Earn gold</strong> for every enemy destroyed, plus a bonus when a wave is cleared.</li>
+      <li><strong>5. Between waves,</strong> build more towers or tap a placed tower to <strong>Upgrade</strong> (stronger, longer range, up to Level 3) or <strong>Sell</strong> it back.</li>
+      <li><strong>6. Survive all 20 waves to win</strong> — then keep going in Endless mode for a higher score.</li>
+    </ul>
+    <h3>🧪 Practice Round — warm up first</h3>
+    <ul>
+      <li>Flip the <strong>Mode</strong> switch at the top to <strong>Practice Round</strong> any time — it restarts the game in practice.</li>
+      <li><strong>Unlimited gold:</strong> build, upgrade and experiment with any tower combo, no saving up.</li>
+      <li><strong>No lives lost:</strong> enemies that reach the base just wave and walk off — the game never ends in practice.</li>
+      <li><strong>Nothing counts:</strong> practice score and waves are shown while you play but are never saved to your 🏆 Best stats.</li>
+      <li>Difficulty still applies in practice, so you can rehearse the exact Hard-mode waves before playing them for real.</li>
+      <li>Switch back to <strong>🏆 Real Game</strong> when you're ready to make it count.</li>
+    </ul>
+    <h3>Handy controls</h3>
+    <ul>
+      <li><strong>Pause</strong> freezes the action. <strong>Speed</strong> toggles 1× / 2× / 3×.</li>
+      <li>Starting the next wave early (while one is still running) is allowed — waves will overlap, so be careful!</li>
+      <li>Hovering / tapping a placed tower shows its range ring.</li>
+    </ul>
+    <div class="row"><button class="btn primary" data-close="dlgHow">Got it — let's play</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgRules" aria-labelledby="rulesTitle">
+  <div class="dlgBody">
+    <h2 id="rulesTitle">Rules</h2>
+    <h3>Difficulty</h3>
+    <table>
+      <tr><th>Difficulty</th><th>Start gold</th><th>Lives</th><th>Enemies</th><th>Score</th></tr>
+      <tr><td>🌱 Easy</td><td>300</td><td>30</td><td>−30% health, ×0.9 speed</td><td>×0.7</td></tr>
+      <tr><td>⚔️ Normal</td><td>200</td><td>20</td><td>Standard health &amp; speed</td><td>×1</td></tr>
+      <tr><td>🔥 Hard</td><td>150</td><td>15</td><td>+40% health, ×1.1 speed</td><td>×1.5</td></tr>
+    </table>
+    <ul>
+      <li>Difficulty is chosen at the top of the page and applies from Wave 1. Changing it restarts the current game.</li>
+      <li>Score multiplier applies to kill points and wave-clear points (rounded). Gold bounties and wave bonuses are the same on every difficulty — Hard is harder because you start with less and enemies are tougher.</li>
+      <li>Best wave and best score are tracked separately per difficulty.</li>
+    </ul>
+    <h3>Win &amp; lose conditions</h3>
+    <ul>
+      <li><strong>Win:</strong> clear Wave 20 with at least 1 life left. After that, Endless mode continues with ever-tougher waves.</li>
+      <li><strong>Lose:</strong> your lives reach 0. Each enemy that reaches the base costs 1 life; Tanks cost 2 lives.</li>
+    </ul>
+    <h3>Towers</h3>
+    <table>
+      <tr><th>Tower</th><th>Cost</th><th>What it does</th></tr>
+      <tr><td>🏹 Arrow</td><td>50</td><td>Cheap, fast shots, medium range. Reliable all-rounder.</td></tr>
+      <tr><td>💣 Cannon</td><td>100</td><td>Slow shots with splash damage to groups.</td></tr>
+      <tr><td>❄️ Frost</td><td>75</td><td>Low damage, slows enemies in range by 45% for 1.2s.</td></tr>
+      <tr><td>🎯 Sniper</td><td>125</td><td>Very long range, heavy damage, slow reload.</td></tr>
+    </table>
+    <ul>
+      <li>Upgrading costs 60% of the tower's base cost (Level 2), then 90% (Level 3, max). Each level: +55% damage, +12% range, slightly faster fire.</li>
+      <li>Selling refunds 70% of everything you've spent on that tower, rounded down.</li>
+      <li>Towers target the enemy furthest along the path within range.</li>
+    </ul>
+    <h3>Enemies</h3>
+    <table>
+      <tr><th>Enemy</th><th>Trait</th></tr>
+      <tr><td>👾 Runner (purple)</td><td>Standard health and speed.</td></tr>
+      <tr><td>⚡ Speeder (orange)</td><td>Fast, low health. Appears from Wave 3.</td></tr>
+      <tr><td>🛡️ Tank (dark red)</td><td>Slow, very high health, costs 2 lives. From Wave 5.</td></tr>
+      <tr><td>🐜 Swarm (green)</td><td>Tiny, very fast in big groups, 1 HP-ish. From Wave 7.</td></tr>
+      <tr><td>👑 Boss (huge, Wave 10 &amp; 20)</td><td>Massive health, slow, costs 5 lives, big gold bounty.</td></tr>
+    </table>
+    <ul>
+      <li>Enemy health grows about 18% per wave. Frost slow does not stack — re-hits just refresh it.</li>
+    </ul>
+    <h3>Scoring &amp; gold</h3>
+    <ul>
+      <li>Score (before difficulty multiplier): +10 per kill (+25 Speeder, +50 Tank, +30 Swarm, +500 Boss), plus +100 × wave number when a wave is cleared. Then multiplied by your difficulty: Easy ×0.7, Normal ×1, Hard ×1.5.</li>
+      <li>Gold: bounty per kill (6–20 by type, 150 for a Boss) + wave-clear bonus of 25 + 2 × wave number — same on every difficulty.</li>
+      <li>Best wave and best score are saved on this device, separately per difficulty, and shown in the 🏆 Best stat.</li>
+    </ul>
+    <h3>Mode &amp; fair play</h3>
+    <ul>
+      <li><strong>Mode:</strong> single-player vs. the waves — there is no opponent player and no wagering. Gold and score are play points only, with no cash value.</li>
+      <li><strong>🧪 Practice Round:</strong> an optional warm-up mode chosen with the Mode switch at the top. Gold is unlimited, leaked enemies cost no lives (so a practice game can't be lost), and practice score/waves are never saved to your bests. Difficulty settings still apply. Switching mode restarts the game.</li>
+      <li><strong>Boss lives:</strong> a Boss that reaches the base costs 5 lives (see Enemies table above).</li>
+      <li><strong>Endless:</strong> after Wave 20 the win is banked; Endless waves keep scaling in health and count toward your best wave and best score.</li>
+    </ul>
+    <div class="row"><button class="btn primary" data-close="dlgRules">Close rules</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgFeedback" aria-labelledby="feedbackTitle">
+  <div class="dlgBody">
+    <h2 id="feedbackTitle">Feedback — Tower Defense</h2>
+    <p>How was this game? Rate it, leave a note, and help decide what gets fixed and built next.</p>
+    <div class="fbField" style="margin-top:4px">
+      <label id="fbRatingLabel">Your rating</label>
+      <div class="fbStars" id="fbStars" role="radiogroup" aria-labelledby="fbRatingLabel">
+        <button type="button" data-star="1" aria-label="1 star">☆</button>
+        <button type="button" data-star="2" aria-label="2 stars">☆</button>
+        <button type="button" data-star="3" aria-label="3 stars">☆</button>
+        <button type="button" data-star="4" aria-label="4 stars">☆</button>
+        <button type="button" data-star="5" aria-label="5 stars">☆</button>
+      </div>
+    </div>
+    <div class="fbField">
+      <label for="fbTag">Tag (optional)</label>
+      <select id="fbTag">
+        <option value="">No tag</option>
+        <option value="Bug">Bug</option>
+        <option value="Suggestion">Suggestion</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+    <div class="fbField">
+      <label for="fbText">Your comment</label>
+      <textarea id="fbText" maxlength="1000" placeholder="Tell us what you think…"></textarea>
+    </div>
+    <p class="fbNote">Feedback follows the same Terms &amp; Conditions as the games: no personal info needed, please keep it clean (moderation rules apply), and feedback may be used to improve the games. Saved on this device only.</p>
+    <p class="fbStatus" id="fbStatus" role="status" aria-live="polite"></p>
+    <p class="fbThanks" id="fbThanks" role="status">Thanks! Your feedback was saved on this device. 💚</p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn primary" id="btnSaveFeedback" type="button">Save feedback</button>
+      <button class="btn" data-close="dlgFeedback" type="button">Close</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(function(){
+"use strict";
+var COLS=14, ROWS=9, CELL=50;
+var canvas=document.getElementById('game'), ctx=canvas.getContext('2d');
+// Path waypoints in grid coords (centres)
+var WAY=[[ -1,2],[4,2],[4,6],[9,6],[9,1],[14,1]];
+// Build path cell set
+var pathSet={};
+function markPath(){
+  for(var i=0;i<WAY.length-1;i++){
+    var a=WAY[i], b=WAY[i+1];
+    var x=a[0], y=a[1];
+    var dx=Math.sign(b[0]-a[0]), dy=Math.sign(b[1]-a[1]);
+    while(x!==b[0]||y!==b[1]){ if(x>=0&&x<COLS&&y>=0&&y<ROWS) pathSet[x+','+y]=true; x+=dx; y+=dy; }
+    if(b[0]>=0&&b[0]<COLS&&b[1]>=0&&b[1]<ROWS) pathSet[b[0]+','+b[1]]=true;
+  }
+}
+markPath();
+var TOWERS={
+  arrow:{name:'Arrow',icon:'🏹',cost:50,range:2.6,dmg:12,rate:2.2,color:'#2e9e5b',desc:'Fast shots, medium range. The reliable all-rounder.'},
+  cannon:{name:'Cannon',icon:'💣',cost:100,range:2.3,dmg:34,rate:0.7,color:'#5b6670',splash:0.9,desc:'Slow shells that splash damage onto groups.'},
+  frost:{name:'Frost',icon:'❄️',cost:75,range:2.4,dmg:4,rate:1.6,color:'#2b8fc7',slow:0.45,slowDur:1.2,desc:'Chills enemies — slows everything it hits by 45%.'},
+  sniper:{name:'Sniper',icon:'🎯',cost:125,range:4.6,dmg:85,rate:0.55,color:'#c0392b',desc:'Huge range and heavy damage, slow to reload.'}
+};
+var ETYPES={
+  runner:{hp:30,speed:1.05,r:13,color:'#7d4fc9',bounty:8,score:10,lives:1,icon:'👾'},
+  speeder:{hp:20,speed:1.85,r:11,color:'#e07b1f',bounty:10,score:25,lives:1,icon:'⚡'},
+  tank:{hp:190,speed:0.55,r:17,color:'#8e2323',bounty:20,score:50,lives:2,icon:'🛡️'},
+  swarm:{hp:10,speed:1.5,r:8,color:'#3f9e2e',bounty:6,score:30,lives:1,icon:'🐜'},
+  boss:{hp:1600,speed:0.42,r:24,color:'#3a3a3a',bounty:150,score:500,lives:5,icon:'👑'}
+};
+var DIFFICULTIES={
+  easy:{key:'easy',name:'Easy',icon:'🌱',gold:300,lives:30,hpMult:0.7,speedMult:0.9,scoreMult:0.7,desc:'<b>🌱 Easy</b> — 300 gold · 30 lives · enemies −30% health, a little slower · Score ×0.7. Learn the road and experiment.'},
+  normal:{key:'normal',name:'Normal',icon:'⚔️',gold:200,lives:20,hpMult:1,speedMult:1,scoreMult:1,desc:'<b>⚔️ Normal</b> — 200 gold · 20 lives · standard enemies · Score ×1. The balanced game.'},
+  hard:{key:'hard',name:'Hard',icon:'🔥',gold:150,lives:15,hpMult:1.4,speedMult:1.1,scoreMult:1.5,desc:'<b>🔥 Hard</b> — 150 gold · 15 lives · enemies +40% health, faster · Score ×1.5. Tight gold, no room for leaks.'}
+};
+var currentDiff='normal';
+try{ var savedDiff=localStorage.getItem('tower-defense-diff'); if(savedDiff && DIFFICULTIES[savedDiff]) currentDiff=savedDiff; }catch(e){}
+var practiceMode=false;
+try{ practiceMode=localStorage.getItem('tower-defense-mode')==='practice'; }catch(e){}
+function diff(){ return DIFFICULTIES[currentDiff]||DIFFICULTIES.normal; }
+var S=null;
+function bestKey(){ return 'tower-defense-best-'+currentDiff; }
+function bests(){
+  var b={wave:0,score:0};
+  try{
+    var raw=localStorage.getItem(bestKey());
+    if(!raw && currentDiff==='normal'){ raw=localStorage.getItem('tower-defense-best'); }
+    if(raw){ var p=JSON.parse(raw); if(p){ b.wave=p.wave||0; b.score=p.score||0; } }
+  }catch(e){}
+  return b;
+}
+function saveBests(){
+  if(S && S.practice) return bests();
+  var b=bests(), changed=false;
+  if(S.wave>b.wave){b.wave=S.wave;changed=true;}
+  if(S.score>b.score){b.score=S.score;changed=true;}
+  if(changed){ try{ localStorage.setItem(bestKey(), JSON.stringify(b)); }catch(e){} }
+  return b;
+}
+function updateDiffUI(){
+  var d=diff();
+  Array.prototype.forEach.call(document.querySelectorAll('[data-diff]'),function(btn){
+    btn.setAttribute('aria-pressed', btn.dataset.diff===currentDiff?'true':'false');
+  });
+  var desc=document.getElementById('diffDesc'); if(desc) desc.innerHTML=d.desc+' Changing difficulty restarts the game — bests are kept per difficulty.';
+  var sd=document.getElementById('sDiff'); if(sd) sd.textContent=d.icon+' '+d.name;
+}
+function updateModeUI(){
+  Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'),function(btn){
+    btn.setAttribute('aria-pressed', (btn.dataset.mode==='practice')===practiceMode?'true':'false');
+  });
+  var md=document.getElementById('modeDesc');
+  if(md) md.innerHTML=practiceMode
+    ? '<b>🧪 Practice Round</b> — unlimited gold, leaks cost no lives, and nothing is saved to your bests. Try wild tower combos, then switch to Real Game when you\'re ready.'
+    : '<b>🏆 Real Game</b> — the full game: gold and lives count, and your best wave &amp; score are saved for this difficulty.';
+  var sm=document.getElementById('sMode'); if(sm) sm.textContent=practiceMode?'🧪 Practice':'🏆 Real';
+}
+function setMode(prac, silent){
+  practiceMode=!!prac;
+  try{ localStorage.setItem('tower-defense-mode', practiceMode?'practice':'real'); }catch(e){}
+  updateModeUI();
+  document.getElementById('btnPause').textContent='⏸ Pause';
+  document.getElementById('btnSpeed').textContent='Speed: 1×';
+  newGame();
+  if(!silent) setMsg(practiceMode?'🧪 Practice Round on — unlimited gold, no lives to lose, nothing counts. Go wild!':'🏆 Real Game — gold, lives and bests all count again. Fresh game started.');
+}
+function setDifficulty(key, silent){
+  if(!DIFFICULTIES[key]) return;
+  currentDiff=key;
+  try{ localStorage.setItem('tower-defense-diff', key); }catch(e){}
+  updateDiffUI();
+  document.getElementById('btnPause').textContent='⏸ Pause';
+  document.getElementById('btnSpeed').textContent='Speed: 1×';
+  newGame();
+  if(!silent) setMsg(practiceMode
+    ? diff().icon+' Difficulty set to '+diff().name+' — fresh Practice Round started (unlimited gold, no lives to lose).'
+    : diff().icon+' Difficulty set to '+diff().name+' — fresh game started. '+diff().gold+' gold, '+diff().lives+' lives.');
+}
+function newGame(){
+  var d=diff();
+  S={gold:d.gold,lives:d.lives,wave:0,score:0,towers:[],enemies:[],shots:[],spawnQueue:[],spawnT:0,
+     running:false,paused:false,speed:1,over:false,won:false,shopSel:'arrow',selTower:null,time:0,diff:currentDiff,practice:practiceMode};
+  hideBanner(); updateDiffUI(); updateModeUI(); updateShop(); updateSel(); setMsg(practiceMode?'🧪 Practice: pick any tower (gold is unlimited), tap a green tile, then press ▶ Start Wave.':'Pick a tower, tap a green tile, then press ▶ Start Wave.');
+  updateWaveInfo(); draw(0); sync();
+}
+function waveComp(w){
+  var q=[], i, n;
+  n=6+Math.floor(w*1.6);
+  for(i=0;i<n;i++) q.push('runner');
+  if(w>=3){ for(i=0;i<Math.floor(w*0.9);i++) q.push('speeder'); }
+  if(w>=5){ for(i=0;i<Math.floor((w-3)*0.55);i++) q.push('tank'); }
+  if(w>=7){ for(i=0;i<Math.floor((w-5)*1.4);i++) q.push('swarm'); }
+  if(w===10||w===20) q.push('boss');
+  // shuffle lightly but keep boss last
+  var boss=q.filter(function(t){return t==='boss';});
+  q=q.filter(function(t){return t!=='boss';});
+  for(i=q.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=q[i]; q[i]=q[j]; q[j]=t; }
+  return q.concat(boss);
+}
+function hpScale(w){ return Math.pow(1.18, w-1); }
+function startWave(){
+  if(S.over) return;
+  S.wave++; S.spawnQueue=waveComp(S.wave); S.spawnT=0; S.running=true;
+  setMsg('Wave '+S.wave+' incoming — '+S.spawnQueue.length+' enemies!');
+  updateWaveInfo(); sync(); saveBests();
+}
+function spawnNext(){
+  var type=S.spawnQueue.shift(); if(!type) return;
+  var base=ETYPES[type];
+  var hp=Math.max(1,Math.round(base.hp*hpScale(S.wave)*diff().hpMult*(type==='boss'?Math.pow(1.25,S.wave/10):1)));
+  S.enemies.push({type:type,hp:hp,maxHp:hp,x:WAY[0][0]*CELL+CELL/2,y:WAY[0][1]*CELL+CELL/2,wp:1,dist:0,slowUntil:0,r:base.r});
+}
+function leak(e){
+  if(S.practice){
+    setMsg(ETYPES[e.type].icon+' An enemy slipped through — no life lost in Practice Round. 🧪');
+    sync();
+    return;
+  }
+  S.lives-=ETYPES[e.type].lives;
+  setMsg(ETYPES[e.type].icon+' An enemy broke through! −'+ETYPES[e.type].lives+' '+(ETYPES[e.type].lives===1?'life':'lives')+'.');
+  if(S.lives<=0){ S.lives=0; S.over=true; S.running=false; showBanner(false); saveBests(); }
+  sync();
+}
+function kill(e){
+  var b=ETYPES[e.type];
+  S.gold+=b.bounty; S.score+=Math.round(b.score*diff().scoreMult);
+}
+function waveClearedCheck(){
+  if(S.running && S.spawnQueue.length===0 && S.enemies.length===0){
+    S.running=false;
+    var bonus=25+2*S.wave; S.gold+=bonus; S.score+=Math.round(100*S.wave*diff().scoreMult);
+    if(S.wave>=20 && !S.won){ S.won=true; showBanner(true); setMsg(S.practice?'🧪 Practice clear — all 20 waves done! Switch to 🏆 Real Game to make it count.':'🏆 You cleared all 20 waves! Endless mode — keep going for score.'); }
+    else setMsg('✅ Wave '+S.wave+' cleared! +'+bonus+' gold bonus. Build up, then start wave '+(S.wave+1)+'.');
+    saveBests(); updateWaveInfo(); sync();
+  }
+}
+function step(dt){
+  S.time+=dt;
+  if(S.spawnQueue.length>0){
+    S.spawnT-=dt;
+    var gap=S.spawnQueue[0]==='tank'?0.9:(S.spawnQueue[0]==='swarm'?0.28:0.55);
+    if(S.spawnT<=0){ spawnNext(); S.spawnT=gap; }
+  }
+  // move enemies
+  for(var i=S.enemies.length-1;i>=0;i--){
+    var e=S.enemies[i], base=ETYPES[e.type];
+    var sp=base.speed*CELL*diff().speedMult*(S.time<e.slowUntil?0.55:1);
+    var target=WAY[e.wp];
+    if(!target){ S.enemies.splice(i,1); leak(e); continue; }
+    var tx=target[0]*CELL+CELL/2, ty=target[1]*CELL+CELL/2;
+    var dx=tx-e.x, dy=ty-e.y, d=Math.hypot(dx,dy), move=sp*dt;
+    if(d<=move){ e.x=tx; e.y=ty; e.dist+=d; e.wp++; if(e.wp>=WAY.length){ S.enemies.splice(i,1); leak(e); } }
+    else { e.x+=dx/d*move; e.y+=dy/d*move; e.dist+=move; }
+  }
+  // towers fire
+  S.towers.forEach(function(t){
+    t.cd-=dt; if(t.cd>0) return;
+    var def=TOWERS[t.type], range=def.range*CELL*(1+0.12*(t.level-1));
+    var best=null;
+    S.enemies.forEach(function(e){ var dd=Math.hypot(e.x-t.x,e.y-t.y); if(dd<=range && (!best||e.dist>best.dist)) best=e; });
+    if(best){
+      t.cd=1/(def.rate*(1+0.12*(t.level-1)));
+      t.angle=Math.atan2(best.y-t.y,best.x-t.x);
+      S.shots.push({x:t.x,y:t.y,target:best,speed:520,dmg:def.dmg*Math.pow(1.55,t.level-1),type:t.type,splash:def.splash?def.splash*CELL:0,slow:def.slow||0,slowDur:def.slowDur||0,color:def.color});
+    } else t.cd=0.08;
+  });
+  // shots
+  for(var j=S.shots.length-1;j>=0;j--){
+    var s=S.shots[j];
+    if(!s.target || s.target.hp<=0 || S.enemies.indexOf(s.target)===-1){ S.shots.splice(j,1); continue; }
+    var ddx=s.target.x-s.x, ddy=s.target.y-s.y, dd=Math.hypot(ddx,ddy), mv=s.speed*dt;
+    if(dd<=mv+ s.target.r){
+      hit(s,s.target); S.shots.splice(j,1);
+    } else { s.x+=ddx/dd*mv; s.y+=ddy/dd*mv; }
+  }
+  // remove dead
+  for(var k=S.enemies.length-1;k>=0;k--){ if(S.enemies[k].hp<=0){ kill(S.enemies[k]); S.enemies.splice(k,1); } }
+  waveClearedCheck();
+}
+function hit(s,e){
+  var targets=[e];
+  if(s.splash){ targets=S.enemies.filter(function(o){return Math.hypot(o.x-e.x,o.y-e.y)<=s.splash;}); }
+  targets.forEach(function(o){
+    o.hp-= (o===e? s.dmg : s.dmg*0.6);
+    if(s.slow) o.slowUntil=S.time+s.slowDur;
+  });
+}
+var dark=window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+function draw(){
+  var cs=getComputedStyle(document.documentElement);
+  var cell=cs.getPropertyValue('--cell').trim()||'#dfe8d8', cellAlt=cs.getPropertyValue('--cell-alt').trim()||'#d3e0cb',
+      path=cs.getPropertyValue('--path').trim()||'#cbb98a';
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  for(var x=0;x<COLS;x++) for(var y=0;y<ROWS;y++){
+    ctx.fillStyle=pathSet[x+','+y]?path:(((x+y)%2===0)?cell:cellAlt);
+    ctx.fillRect(x*CELL,y*CELL,CELL,CELL);
+  }
+  // base
+  ctx.font='30px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🏰',13.5*CELL+CELL/2,1*CELL+CELL/2);
+  ctx.fillText('🚩',0*CELL+14,2*CELL+CELL/2);
+  // hover range for selected tower
+  if(S.selTower){
+    var t=S.selTower, def=TOWERS[t.type], range=def.range*CELL*(1+0.12*(t.level-1));
+    ctx.beginPath(); ctx.arc(t.x,t.y,range,0,Math.PI*2);
+    ctx.fillStyle='rgba(46,158,91,0.13)'; ctx.fill(); ctx.strokeStyle='rgba(46,158,91,0.55)'; ctx.stroke();
+  }
+  // towers
+  S.towers.forEach(function(t){
+    var def=TOWERS[t.type];
+    ctx.beginPath(); ctx.arc(t.x,t.y,19,0,Math.PI*2); ctx.fillStyle=def.color; ctx.fill();
+    ctx.lineWidth=(S.selTower===t)?3:2; ctx.strokeStyle=S.selTower===t?'#ffb400':'rgba(0,0,0,0.25)'; ctx.stroke();
+    ctx.font='19px serif'; ctx.fillText(def.icon,t.x,t.y+1);
+    ctx.font='bold 10px sans-serif'; ctx.fillStyle='#fff';
+    if(t.level>1) ctx.fillText('★'.repeat(t.level-1),t.x,t.y+15);
+    if(t.angle!==undefined){
+      ctx.beginPath(); ctx.moveTo(t.x,t.y); ctx.lineTo(t.x+Math.cos(t.angle)*22,t.y+Math.sin(t.angle)*22);
+      ctx.lineWidth=3; ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.stroke();
+    }
+  });
+  // enemies
+  S.enemies.forEach(function(e){
+    var b=ETYPES[e.type];
+    ctx.beginPath(); ctx.arc(e.x,e.y,e.r,0,Math.PI*2); ctx.fillStyle=b.color; ctx.fill();
+    if(S.time<e.slowUntil){ ctx.lineWidth=3; ctx.strokeStyle='#5ec8f2'; ctx.stroke(); }
+    else { ctx.lineWidth=1.5; ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.stroke(); }
+    ctx.font=(e.r+4)+'px serif'; ctx.fillText(b.icon,e.x,e.y+1);
+    // hp bar
+    var w=e.r*2, pct=Math.max(0,e.hp/e.maxHp);
+    ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(e.x-w/2,e.y-e.r-9,w,5);
+    ctx.fillStyle=pct>0.4?'#3ecf5a':'#e74c3c'; ctx.fillRect(e.x-w/2,e.y-e.r-9,w*pct,5);
+  });
+  // shots
+  S.shots.forEach(function(s){
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.type==='cannon'?5:3.5,0,Math.PI*2); ctx.fillStyle=s.color; ctx.fill();
+  });
+  if(S.paused){ ctx.fillStyle='rgba(0,0,0,0.35)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle='#fff'; ctx.font='bold 34px "Barlow Condensed",sans-serif'; ctx.fillText('⏸ PAUSED',canvas.width/2,canvas.height/2); }
+}
+var lastTs=0;
+function loop(ts){
+  var dt=Math.min(0.05,(ts-lastTs)/1000||0); lastTs=ts;
+  if(S && !S.paused && !S.over){ for(var i=0;i<S.speed;i++) step(dt); }
+  if(S){ draw(); syncThrottled(ts); }
+  requestAnimationFrame(loop);
+}
+var lastSync=0;
+function syncThrottled(ts){ if(ts-lastSync>150){ lastSync=ts; sync(); } }
+function sync(){
+  document.getElementById('sGold').textContent=S.practice?'∞':S.gold;
+  document.getElementById('sLives').textContent=S.practice?'∞':S.lives;
+  document.getElementById('sWave').textContent=S.wave+(S.won?' ∞':' / 20');
+  document.getElementById('sLeft').textContent=S.enemies.length+S.spawnQueue.length;
+  document.getElementById('sScore').textContent=S.score+(S.practice?' (practice)':'');
+  document.getElementById('sDiff').textContent=diff().icon+' '+diff().name;
+  document.getElementById('sMode').textContent=S.practice?'🧪 Practice':'🏆 Real';
+  var b=bests(); document.getElementById('sBest').textContent=S.practice?('W'+b.wave+' · '+b.score):('W'+Math.max(b.wave,S.wave)+' · '+Math.max(b.score,S.score));
+  document.getElementById('btnWave').disabled=S.over;
+  document.getElementById('btnWave').textContent=S.running?'🌊 Wave '+S.wave+' running… (tap for next)':'▶ Start Wave '+(S.wave+1);
+  updateShopAfford();
+}
+function updateWaveInfo(){
+  var next=S.wave+1, comp=waveComp(Math.min(next,40));
+  var counts={}; comp.forEach(function(t){counts[t]=(counts[t]||0)+1;});
+  var parts=Object.keys(counts).map(function(k){return ETYPES[k].icon+' ×'+counts[k];});
+  document.getElementById('waveInfo').textContent=S.over?'Game over. Press ↺ Restart to play again.':
+    'Next up — Wave '+next+': '+parts.join('  ·  ')+'  ('+comp.length+' enemies)';
+}
+function setMsg(t){ document.getElementById('msg').textContent=t; }
+function showBanner(win){
+  var b=document.getElementById('banner');
+  b.className='banner show '+(win?'win':'lose');
+  b.textContent=win?(S.practice?('🧪 Practice victory on '+diff().name+'! You cleared all 20 waves. Practice scores aren\'t saved — switch to 🏆 Real Game and do it for real!')
+                                 :('🏆 Victory on '+diff().name+'! You survived all 20 waves with '+S.lives+' lives left. Score: '+S.score+'. Endless mode continues — how far can you get?'))
+                   :('💥 Base overrun on Wave '+S.wave+' ('+diff().name+'). Final score: '+S.score+'. Press ↺ Restart to try again — try Frost + Cannon near the bends, or drop to an easier difficulty.');
+}
+function hideBanner(){ var b=document.getElementById('banner'); b.className='banner'; b.textContent=''; }
+// Shop
+var shopEl=document.getElementById('shop');
+function updateShop(){
+  shopEl.innerHTML='';
+  Object.keys(TOWERS).forEach(function(key){
+    var d=TOWERS[key];
+    var btn=document.createElement('button');
+    btn.className='towerBtn'+(S.shopSel===key?' sel':''); btn.dataset.key=key;
+    btn.innerHTML='<span class="dot" style="background:'+d.color+'22;border-color:'+d.color+'">'+d.icon+'</span><span><b>'+d.name+' Tower</b><small>'+d.desc+'</small></span><span class="cost">'+d.cost+' 🪙</span>';
+    btn.addEventListener('click',function(){ S.shopSel=key; S.selTower=null; updateShop(); updateSel(); setMsg(d.icon+' '+d.name+' selected — tap a green tile to build ('+d.cost+' gold).'); });
+    shopEl.appendChild(btn);
+  });
+  updateShopAfford();
+}
+function updateShopAfford(){
+  Array.prototype.forEach.call(shopEl.children,function(btn){
+    btn.disabled = !S.practice && S.gold < TOWERS[btn.dataset.key].cost;
+    btn.classList.toggle('sel', S.shopSel===btn.dataset.key);
+  });
+}
+function updateSel(){
+  var el=document.getElementById('selInfo');
+  if(!S.selTower){ el.innerHTML='<h3>No tower selected</h3><p>Tap a placed tower on the board to upgrade or sell it. Upgrades raise damage and range.</p>'; return; }
+  var t=S.selTower, d=TOWERS[t.type];
+  var upCost=t.level>=3?null:Math.round(d.cost*(t.level===1?0.6:0.9));
+  var spent=d.cost; for(var l=1;l<t.level;l++) spent+=Math.round(d.cost*(l===1?0.6:0.9));
+  var refund=Math.floor(spent*0.7);
+  el.innerHTML='<h3>'+d.icon+' '+d.name+' Tower — Level '+t.level+'</h3>'+
+    '<p>Damage '+Math.round(d.dmg*Math.pow(1.55,t.level-1))+' · Range '+(d.range*(1+0.12*(t.level-1))).toFixed(1)+' tiles'+(d.splash?' · Splash':'')+(d.slow?' · Slows 45%':'')+'</p>'+
+    '<div class="row">'+(upCost?'<button class="btn primary" id="btnUp" '+((!S.practice&&S.gold<upCost)?'disabled':'')+'>⬆ Upgrade — '+(S.practice?'free 🧪':upCost+' 🪙')+'</button>':'<span class="btn" aria-disabled="true">⭐ Max level</span>')+
+    '<button class="btn" id="btnSell">Sell — +'+refund+' 🪙</button></div>';
+  var up=document.getElementById('btnUp');
+  if(up) up.addEventListener('click',function(){
+    if(!S.practice){ if(S.gold<upCost) return; S.gold-=upCost; }
+    t.level++; setMsg('⬆ '+d.name+' upgraded to Level '+t.level+'!'); updateSel(); sync();
+  });
+  document.getElementById('btnSell').addEventListener('click',function(){
+    S.gold+=refund; S.towers=S.towers.filter(function(o){return o!==t;}); S.selTower=null;
+    setMsg('Sold '+d.name+' for '+refund+' gold.'); updateSel(); sync();
+  });
+}
+// Board interaction
+function boardPos(evt){
+  var r=canvas.getBoundingClientRect();
+  var cx=(evt.touches?evt.touches[0].clientX:evt.clientX), cy=(evt.touches?evt.touches[0].clientY:evt.clientY);
+  return { gx:Math.floor((cx-r.left)/r.width*COLS), gy:Math.floor((cy-r.top)/r.height*ROWS) };
+}
+canvas.addEventListener('click',function(evt){
+  if(S.over) return;
+  var p=boardPos(evt); if(p.gx<0||p.gx>=COLS||p.gy<0||p.gy>=ROWS) return;
+  var existing=S.towers.filter(function(t){return t.gx===p.gx&&t.gy===p.gy;})[0];
+  if(existing){ S.selTower=existing; S.shopSel=null; updateShop(); updateSel(); return; }
+  if(pathSet[p.gx+','+p.gy]){ setMsg('🚧 That\'s the road — towers go on the green tiles.'); return; }
+  if(!S.shopSel){ setMsg('Pick a tower from the Build panel first.'); return; }
+  var d=TOWERS[S.shopSel];
+  if(!S.practice && S.gold<d.cost){ setMsg('Not enough gold for a '+d.name+' ('+d.cost+' 🪙).'); return; }
+  if(!S.practice) S.gold-=d.cost;
+  var t={type:S.shopSel,gx:p.gx,gy:p.gy,x:p.gx*CELL+CELL/2,y:p.gy*CELL+CELL/2,level:1,cd:0};
+  S.towers.push(t); S.selTower=t;
+  setMsg(d.icon+' '+d.name+' built! Tap it any time to upgrade or sell.');
+  updateSel(); sync();
+});
+// Controls
+document.getElementById('btnWave').addEventListener('click',startWave);
+document.getElementById('btnPause').addEventListener('click',function(){
+  S.paused=!S.paused; this.textContent=S.paused?'▶ Resume':'⏸ Pause';
+});
+document.getElementById('btnSpeed').addEventListener('click',function(){
+  S.speed=S.speed>=3?1:S.speed+1; this.textContent='Speed: '+S.speed+'×';
+});
+document.getElementById('btnRestart').addEventListener('click',function(){
+  document.getElementById('btnPause').textContent='⏸ Pause';
+  document.getElementById('btnSpeed').textContent='Speed: 1×';
+  newGame();
+});
+Array.prototype.forEach.call(document.querySelectorAll('[data-diff]'),function(btn){
+  btn.addEventListener('click',function(){
+    if(btn.dataset.diff===currentDiff && S && S.wave===0 && S.towers.length===0){ updateDiffUI(); return; }
+    setDifficulty(btn.dataset.diff,false);
+  });
+});
+Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'),function(btn){
+  btn.addEventListener('click',function(){
+    var wantPractice=btn.dataset.mode==='practice';
+    if(wantPractice===practiceMode && S && S.wave===0 && S.towers.length===0){ updateModeUI(); return; }
+    setMode(wantPractice,false);
+  });
+});
+document.getElementById('btnHow').addEventListener('click',function(){ document.getElementById('dlgHow').showModal(); });
+document.getElementById('btnRules').addEventListener('click',function(){ document.getElementById('dlgRules').showModal(); });
+// Feedback (standard on all games: rating + comment, saved on this device)
+var fbRating=0;
+var fbStarBtns=Array.prototype.slice.call(document.querySelectorAll('#fbStars [data-star]'));
+function paintFbStars(){
+  fbStarBtns.forEach(function(b){
+    var n=parseInt(b.dataset.star,10);
+    b.textContent=n<=fbRating?'★':'☆';
+    b.classList.toggle('on',n<=fbRating);
+    b.setAttribute('aria-checked',n===fbRating?'true':'false');
+  });
+}
+fbStarBtns.forEach(function(b){
+  b.addEventListener('click',function(){ fbRating=parseInt(b.dataset.star,10); paintFbStars(); document.getElementById('fbStatus').textContent=''; });
+});
+document.getElementById('btnFeedback').addEventListener('click',function(){
+  document.getElementById('fbThanks').classList.remove('show');
+  document.getElementById('fbStatus').textContent='';
+  document.getElementById('dlgFeedback').showModal();
+});
+document.getElementById('btnSaveFeedback').addEventListener('click',function(){
+  var text=document.getElementById('fbText').value.trim();
+  var tag=document.getElementById('fbTag').value||'Other';
+  if(!fbRating && !text){
+    document.getElementById('fbStatus').textContent='Pick a star rating or write a comment first.';
+    return;
+  }
+  var entry={game:'tower-defense',rating:fbRating,text:text,tag:tag,timestamp:new Date().toISOString()};
+  var arr=[];
+  try{ arr=JSON.parse(localStorage.getItem('holos-arcade-feedback')||'[]'); if(!Array.isArray(arr)) arr=[]; }catch(e){ arr=[]; }
+  arr.push(entry);
+  try{ localStorage.setItem('holos-arcade-feedback',JSON.stringify(arr)); }catch(e){}
+  fbRating=0; paintFbStars();
+  document.getElementById('fbText').value='';
+  document.getElementById('fbTag').value='';
+  document.getElementById('fbStatus').textContent='';
+  var th=document.getElementById('fbThanks'); th.classList.add('show');
+  setTimeout(function(){ var d=document.getElementById('dlgFeedback'); if(d.open) d.close(); },1200);
+});
+paintFbStars();
+Array.prototype.forEach.call(document.querySelectorAll('[data-close]'),function(b){
+  b.addEventListener('click',function(){ document.getElementById(b.dataset.close).close(); });
+});
+newGame();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

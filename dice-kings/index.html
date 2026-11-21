@@ -1,0 +1,844 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Dice Kings</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2.25rem; }
+      * { box-sizing: border-box; }
+      :root{
+        --bg:#dfe7d8;
+        --bg-ink:#20301f;
+        --felt:#17603a;
+        --felt-deep:#0f4a2b;
+        --felt-edge:#0a3820;
+        --gold:#c9962e;
+        --gold-bright:#eebd55;
+        --gold-ink:#4a3205;
+        --ivory:#fffdf4;
+        --card:#fffdf6;
+        --ink:#221d10;
+        --ink-soft:#5c5540;
+        --line:#ddd3b8;
+        --line-strong:#c9bb8e;
+        --good:#1d7a3f;
+        --bad:#b3362b;
+        --hint:#8a6d1d;
+        --shadow:0 10px 30px rgba(10,40,20,.25);
+        --radius:14px;
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --bg:#07190e;
+          --bg-ink:#e8e2cc;
+          --felt:#12512f;
+          --felt-deep:#0b3a20;
+          --felt-edge:#062815;
+          --card:#fdfaf0;
+          --shadow:0 10px 30px rgba(0,0,0,.5);
+        }
+      }
+      html{ -webkit-text-size-adjust:100%; }
+      body{
+        margin:0;
+        font-family:"Source Sans 3", system-ui, -apple-system, "Segoe UI", sans-serif;
+        background:var(--bg);
+        color:var(--bg-ink);
+        line-height:1.45;
+      }
+      .wrap{ max-width:1060px; margin:0 auto; padding:14px 14px 30px; }
+
+      /* ---------- top bar ---------- */
+      .topbar{
+        display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
+        padding:6px 2px 12px;
+      }
+      .brand{ display:flex; align-items:center; gap:9px; font-family:"Playfair Display", Georgia, serif; font-weight:800; font-size:1.45rem; letter-spacing:.01em; }
+      .brand svg{ width:30px; height:30px; flex:none; }
+      .top-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+      .btn{
+        font:inherit; font-weight:600; cursor:pointer; border-radius:10px; border:1px solid var(--line-strong);
+        background:var(--card); color:var(--ink); padding:8px 14px; min-height:2.5rem;
+      }
+      .btn:hover{ border-color:var(--gold); }
+      .btn:focus-visible, .die:focus-visible, .score-btn:focus-visible, .seg button:focus-visible{ outline:3px solid var(--gold-bright); outline-offset:2px; }
+      .btn-gold{
+        background:linear-gradient(180deg, var(--gold-bright), var(--gold));
+        border-color:#9a741f; color:var(--gold-ink);
+        box-shadow:0 3px 0 #8a6414, 0 6px 14px rgba(0,0,0,.25);
+      }
+      .btn-gold:active{ transform:translateY(2px); box-shadow:0 1px 0 #8a6414; }
+      .btn-gold:disabled{ opacity:.45; cursor:not-allowed; transform:none; box-shadow:none; }
+      .btn-big{ font-size:1.12rem; padding:12px 26px; border-radius:12px; }
+
+      /* ---------- setup ---------- */
+      .setup{
+        background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:var(--radius);
+        padding:14px 16px; box-shadow:var(--shadow); margin-bottom:16px;
+      }
+      .setup-row{ display:flex; flex-wrap:wrap; gap:14px 22px; align-items:end; }
+      .field{ display:flex; flex-direction:column; gap:6px; }
+      .field > span{ font-size:.82rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-soft); }
+      .seg{ display:inline-flex; background:#efe8d2; border:1px solid var(--line); border-radius:10px; padding:3px; gap:3px; }
+      .seg button{
+        font:inherit; font-weight:600; border:0; background:transparent; color:var(--ink-soft);
+        padding:7px 14px; border-radius:8px; cursor:pointer; min-height:2.25rem;
+      }
+      .seg button[aria-pressed="true"]{ background:var(--felt); color:#fff; box-shadow:0 1px 4px rgba(0,0,0,.25); }
+      .practice-toggle{
+        display:flex; align-items:center; gap:9px; font-weight:600; cursor:pointer;
+        padding:9px 12px; border:1px solid var(--line); border-radius:10px; background:#fbf7e9; min-height:2.75rem;
+      }
+      .practice-toggle input{ width:20px; height:20px; accent-color:var(--felt); }
+      .bests{ margin-top:12px; padding-top:11px; border-top:1px dashed var(--line-strong); font-size:.94rem; color:var(--ink-soft); display:flex; flex-wrap:wrap; gap:6px 20px; }
+      .bests strong{ color:var(--ink); }
+
+      /* ---------- game layout ---------- */
+      .game{ display:grid; grid-template-columns:1fr; gap:16px; align-items:start; }
+      @media (min-width:880px){ .game{ grid-template-columns:minmax(330px,5fr) 7fr; } }
+
+      .felt{
+        background:
+          radial-gradient(120% 90% at 50% 0%, rgba(255,255,255,.10), rgba(255,255,255,0) 55%),
+          linear-gradient(180deg, var(--felt), var(--felt-deep));
+        border:3px solid var(--felt-edge); border-radius:20px; box-shadow:var(--shadow), inset 0 0 0 2px rgba(238,189,85,.35);
+        padding:18px 16px 20px; color:#fdf6dd; text-align:center;
+      }
+      .turn-banner{ font-family:"Playfair Display", Georgia, serif; font-size:1.3rem; font-weight:700; min-height:1.6em; }
+      .round-line{ font-size:.92rem; opacity:.85; margin-top:2px; }
+      .dice-tray{ display:flex; justify-content:center; gap:10px; margin:18px 0 6px; flex-wrap:nowrap; }
+      .die-wrap{ display:flex; flex-direction:column; align-items:center; gap:5px; }
+      .die{
+        width:60px; height:60px; border-radius:13px; border:0; cursor:pointer; padding:8px;
+        background:linear-gradient(145deg, #fffef9, #efe7d0);
+        box-shadow:0 4px 0 #cbbd93, 0 8px 16px rgba(0,0,0,.35);
+        display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
+        transition:transform .15s ease, box-shadow .15s ease;
+      }
+      .die .pip{ width:11px; height:11px; border-radius:50%; background:#26221a; place-self:center; visibility:hidden; }
+      .die .pip.on{ visibility:visible; }
+      .die:disabled{ cursor:default; }
+      .die.held{ transform:translateY(-8px); background:linear-gradient(145deg, #ffeec2, #f3d67f); box-shadow:0 4px 0 #b98f22, 0 10px 18px rgba(0,0,0,.4), 0 0 0 3px var(--gold-bright); }
+      .die.held .pip{ background:#4a3205; }
+      .die-tag{ font-size:.68rem; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--gold-bright); min-height:1em; opacity:0; }
+      .die.held + .die-tag{ opacity:1; }
+      .die.rolling{ animation:tumble .45s ease-in-out infinite; }
+      @keyframes tumble{ 0%{transform:rotate(0deg) translateY(0)} 30%{transform:rotate(-9deg) translateY(-7px)} 60%{transform:rotate(8deg) translateY(2px)} 100%{transform:rotate(0deg) translateY(0)} }
+      @media (prefers-reduced-motion: reduce){ .die.rolling{ animation:none; } }
+      @media (max-width:420px){ .die{ width:52px; height:52px; padding:7px; border-radius:11px; } .die .pip{ width:9px; height:9px; } .dice-tray{ gap:7px; } }
+      .rolls-line{ display:flex; align-items:center; justify-content:center; gap:8px; margin:10px 0 14px; font-weight:600; }
+      .roll-dot{ width:12px; height:12px; border-radius:50%; border:2px solid var(--gold-bright); background:transparent; }
+      .roll-dot.left{ background:var(--gold-bright); }
+      .hint-line{ min-height:1.5em; margin-top:12px; font-size:.98rem; color:#ffe9a8; }
+      .status-line{ min-height:1.5em; margin-top:4px; font-size:.95rem; opacity:.92; }
+
+      /* ---------- scorecard ---------- */
+      .card-panel{ background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+      .card-panel h2{ font-family:"Playfair Display", Georgia, serif; font-size:1.15rem; margin:0; padding:13px 16px 10px; }
+      table.score{ width:100%; border-collapse:collapse; font-size:.98rem; }
+      table.score th, table.score td{ padding:7px 10px; border-top:1px solid var(--line); text-align:right; }
+      table.score th:first-child, table.score td:first-child{ text-align:left; }
+      table.score thead th{ border-top:0; background:#f6efdb; font-size:.8rem; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft); }
+      table.score tr.section-head td{ background:#f1e9d2; font-weight:700; font-size:.82rem; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-soft); padding-top:9px; }
+      table.score tr.total-row td{ font-weight:700; background:#faf5e4; }
+      table.score tr.grand-row td{ font-weight:800; font-size:1.08rem; background:#f3e9c8; border-top:2px solid var(--line-strong); }
+      td.cat-name{ font-weight:600; }
+      td.cat-name .desc{ display:block; font-weight:400; font-size:.78rem; color:var(--ink-soft); }
+      .score-btn{
+        font:inherit; font-weight:700; min-width:52px; min-height:2.25rem; padding:4px 10px; border-radius:8px; cursor:pointer;
+        border:1.5px dashed var(--gold); background:#fff8e2; color:var(--hint);
+      }
+      .score-btn:hover{ background:#ffedb8; border-style:solid; }
+      .score-btn.zero{ color:var(--bad); border-color:#d8a49e; background:#fdf0ee; }
+      .score-fixed{ font-weight:700; padding-right:12px; }
+      .score-cpu{ color:var(--ink-soft); font-weight:600; padding-right:12px; }
+      .just-scored{ animation:flash 1s ease; }
+      @keyframes flash{ 0%{ background:#ffe9a8; } 100%{ background:transparent; } }
+      @media (prefers-reduced-motion: reduce){ .just-scored{ animation:none; } }
+      .leader{ font-size:.85rem; font-weight:700; }
+      .leader.you{ color:var(--good); } .leader.cpu{ color:var(--bad); }
+
+      /* ---------- game over ---------- */
+      .gameover{
+        display:none; margin-top:16px; background:var(--card); color:var(--ink); border:2px solid var(--gold);
+        border-radius:var(--radius); box-shadow:var(--shadow); padding:20px 18px; text-align:center;
+      }
+      .gameover.show{ display:block; }
+      .gameover h2{ font-family:"Playfair Display", Georgia, serif; font-size:1.7rem; margin:0 0 6px; }
+      .final-scores{ display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin:14px 0; }
+      .final-box{ border:1px solid var(--line); border-radius:12px; padding:12px 22px; background:#fbf7e9; min-width:130px; }
+      .final-box .num{ font-family:"Playfair Display", Georgia, serif; font-size:2rem; font-weight:800; }
+      .final-box .who{ font-size:.8rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-soft); }
+      .new-best{ color:var(--good); font-weight:700; }
+
+      /* ---------- dialogs ---------- */
+      dialog{
+        border:1px solid var(--line-strong); border-radius:16px; padding:0; max-width:min(560px, calc(100vw - 28px));
+        background:var(--card); color:var(--ink); box-shadow:0 24px 60px rgba(0,0,0,.4);
+      }
+      dialog::backdrop{ background:rgba(5,25,12,.55); }
+      .dlg-body{ padding:20px 22px 22px; max-height:78vh; overflow:auto; }
+      .dlg-body h2{ font-family:"Playfair Display", Georgia, serif; margin:0 0 10px; font-size:1.4rem; }
+      .dlg-body h3{ margin:16px 0 4px; font-size:1.02rem; }
+      .dlg-body p, .dlg-body li{ font-size:.97rem; }
+      .dlg-body ul{ padding-left:20px; margin:6px 0; }
+      .dlg-actions{ display:flex; gap:8px; justify-content:space-between; align-items:center; margin-top:18px; flex-wrap:wrap; }
+      .dlg-actions .spacer{ flex:1; }
+      .step-dots{ display:flex; gap:6px; }
+      .step-dots i{ width:9px; height:9px; border-radius:50%; background:var(--line-strong); display:block; }
+      .step-dots i.on{ background:var(--gold); }
+      textarea{
+        width:100%; font:inherit; border:1px solid var(--line-strong); border-radius:10px; padding:10px 12px;
+        background:#fffef9; color:var(--ink); min-height:120px; resize:vertical;
+      }
+      .auto-note{ font-size:.86rem; color:var(--ink-soft); background:#f6efdb; border-radius:8px; padding:8px 11px; margin:10px 0; white-space:pre-wrap; word-break:break-word; }
+      .copied{ color:var(--good); font-weight:700; font-size:.9rem; min-height:1.2em; }
+
+      footer{ text-align:center; margin-top:26px; font-family:"Playfair Display", Georgia, serif; font-weight:700; letter-spacing:.04em; opacity:.85; }
+      footer .sub{ font-family:"Source Sans 3", sans-serif; font-weight:400; font-size:.82rem; letter-spacing:0; opacity:.75; margin-top:2px; }
+      .visually-hidden{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+
+      <div class="topbar">
+        <div class="brand">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M6 34 L3 14 L15 24 L24 8 L33 24 L45 14 L42 34 Z" fill="#c9962e" stroke="#8a6414" stroke-width="2" stroke-linejoin="round"/><rect x="6" y="36" width="36" height="5" rx="2" fill="#c9962e" stroke="#8a6414" stroke-width="2"/><circle cx="24" cy="26" r="3" fill="#7a1f1a"/></svg>
+          Dice Kings
+        </div>
+        <div class="top-actions">
+          <button class="btn" id="btnTutorial" type="button">How to play</button>
+          <button class="btn" id="btnRules" type="button">Rules</button>
+          <button class="btn" id="btnFeedback" type="button">Feedback</button>
+        </div>
+      </div>
+
+      <section class="setup" aria-label="Game setup">
+        <div class="setup-row">
+          <div class="field">
+            <span id="modeLabel">Mode</span>
+            <div class="seg" role="group" aria-labelledby="modeLabel">
+              <button type="button" id="modeSolo" aria-pressed="true">Solo score chase</button>
+              <button type="button" id="modeCpu" aria-pressed="false">Vs CPU</button>
+            </div>
+          </div>
+          <div class="field" id="diffField">
+            <span id="diffLabel">CPU difficulty</span>
+            <div class="seg" role="group" aria-labelledby="diffLabel">
+              <button type="button" data-diff="easy" aria-pressed="false">Chill</button>
+              <button type="button" data-diff="normal" aria-pressed="true">Standard</button>
+              <button type="button" data-diff="hard" aria-pressed="false">Sharp</button>
+            </div>
+          </div>
+          <div class="field">
+            <span>Practice</span>
+            <label class="practice-toggle">
+              <input type="checkbox" id="practiceToggle" />
+              Practice mode
+            </label>
+          </div>
+          <div class="field">
+            <span aria-hidden="true">&nbsp;</span>
+            <button class="btn btn-gold btn-big" id="btnNew" type="button">Start new game</button>
+          </div>
+        </div>
+        <div class="bests" id="bestsLine" aria-live="polite"></div>
+      </section>
+
+      <div class="game">
+        <section class="felt" aria-label="Dice table">
+          <div class="turn-banner" id="turnBanner">Ready when you are</div>
+          <div class="round-line" id="roundLine">13 rounds · 5 dice · 3 rolls a turn</div>
+          <div class="dice-tray" id="diceTray" role="group" aria-label="Dice"></div>
+          <div class="rolls-line">
+            <span>Rolls left</span>
+            <span class="roll-dot left" id="dot1"></span>
+            <span class="roll-dot left" id="dot2"></span>
+            <span class="roll-dot left" id="dot3"></span>
+          </div>
+          <button class="btn btn-gold btn-big" id="btnRoll" type="button">Roll the dice</button>
+          <div class="hint-line" id="hintLine"></div>
+          <div class="status-line" id="statusLine" aria-live="polite">Pick a mode and hit <strong>Start new game</strong>.</div>
+        </section>
+
+        <section class="card-panel" aria-label="Scorecard">
+          <h2>Scorecard <span class="leader" id="leaderLine"></span></h2>
+          <table class="score" id="scoreTable">
+            <thead>
+              <tr><th scope="col">Category</th><th scope="col">You</th><th scope="col" id="cpuHead">CPU</th></tr>
+            </thead>
+            <tbody id="scoreBody"></tbody>
+          </table>
+        </section>
+      </div>
+
+      <section class="gameover" id="gameOver" aria-live="polite">
+        <h2 id="goTitle">Game over</h2>
+        <p id="goText"></p>
+        <div class="final-scores" id="finalScores"></div>
+        <p class="new-best" id="goBest"></p>
+        <button class="btn btn-gold btn-big" id="btnAgain" type="button">Play again</button>
+      </section>
+
+      <footer>
+        Ridiculously Fit and Fed
+        <div class="sub">Dice Kings · an original dice game from the arcade</div>
+      </footer>
+    </div>
+
+    <!-- Tutorial -->
+    <dialog id="dlgTutorial" aria-labelledby="tutTitle">
+      <div class="dlg-body">
+        <h2 id="tutTitle">How to play</h2>
+        <div id="tutStep"></div>
+        <div class="dlg-actions">
+          <div class="step-dots" id="tutDots"></div>
+          <span class="spacer"></span>
+          <button class="btn" id="tutBack" type="button">Back</button>
+          <button class="btn btn-gold" id="tutNext" type="button">Next</button>
+          <button class="btn" id="tutClose" type="button">Close</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Rules -->
+    <dialog id="dlgRules" aria-labelledby="rulesTitle">
+      <div class="dlg-body">
+        <h2 id="rulesTitle">Dice Kings — the rules</h2>
+        <p>Dice Kings is a 13-round game of luck and nerve played with five dice. Every round you fill in <strong>one</strong> category on the scorecard. When all 13 are filled, the highest total takes the crown.</p>
+        <h3>Your turn</h3>
+        <ul>
+          <li>Roll all five dice. You get up to <strong>3 rolls</strong> per turn.</li>
+          <li>Between rolls, tap any die to <strong>hold</strong> it (it turns gold). Tap again to release it. Held dice stay put; the rest re-roll.</li>
+          <li>When you're happy — or out of rolls — tap a score on the scorecard to lock it in. That ends your turn. You must score something every turn, even if it's a zero.</li>
+        </ul>
+        <h3>Upper section</h3>
+        <ul>
+          <li><strong>Ones through Sixes:</strong> add up only the dice showing that number.</li>
+          <li><strong>Bonus:</strong> if your upper section totals <strong>63 or more</strong>, you earn a <strong>+35 bonus</strong>. (That's like rolling three of every number.)</li>
+        </ul>
+        <h3>Lower section</h3>
+        <ul>
+          <li><strong>Three of a Kind:</strong> at least three dice the same — score the total of <em>all five</em> dice, otherwise 0.</li>
+          <li><strong>Four of a Kind:</strong> at least four the same — total of all five dice, otherwise 0.</li>
+          <li><strong>Full House:</strong> three of one number + two of another = <strong>25 points</strong>.</li>
+          <li><strong>Small Straight:</strong> any four dice in a row (1-2-3-4, 2-3-4-5, or 3-4-5-6) = <strong>30 points</strong>.</li>
+          <li><strong>Large Straight:</strong> all five in a row = <strong>40 points</strong>.</li>
+          <li><strong>Five of a Kind:</strong> all five dice the same = <strong>50 points</strong>. The crown jewel.</li>
+          <li><strong>Chance:</strong> no pattern needed — just add up all five dice.</li>
+        </ul>
+        <h3>Modes</h3>
+        <ul>
+          <li><strong>Solo score chase:</strong> just you vs the dice. Chase your personal best.</li>
+          <li><strong>Vs CPU:</strong> you and the computer take turns on the same 13 rounds. <em>Chill</em> CPU plays loose, <em>Standard</em> plays a solid game, <em>Sharp</em> hunts the bonus and rarely wastes a big score.</li>
+          <li><strong>Practice mode:</strong> same game, zero pressure. You get a hint for the best score on the table after every roll, and practice games never touch your saved bests.</li>
+        </ul>
+        <div class="dlg-actions">
+          <span class="spacer"></span>
+          <button class="btn btn-gold" id="rulesClose" type="button">Got it</button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- Feedback -->
+    <dialog id="dlgFeedback" aria-labelledby="fbTitle">
+      <div class="dlg-body">
+        <h2 id="fbTitle">Tell me what's up</h2>
+        <p>Something feel off? A score look wrong, a button misbehave, or you've just got an idea to make Dice Kings better? Jot it down — no wrong answers, and you don't need to be fancy about it.</p>
+        <div class="auto-note" id="fbAuto"></div>
+        <label for="fbText" class="visually-hidden">Your feedback</label>
+        <textarea id="fbText" placeholder="What happened? What were you doing when it happened?"></textarea>
+        <div class="dlg-actions">
+          <span class="copied" id="fbCopied"></span>
+          <span class="spacer"></span>
+          <button class="btn" id="fbClose" type="button">Close</button>
+          <button class="btn btn-gold" id="fbCopy" type="button">Copy my feedback</button>
+        </div>
+        <p style="font-size:.86rem; color:var(--ink-soft); margin-bottom:0;">Copy grabs your note plus the game details above, so you can paste it wherever reviews are collected and it's easy to track down.</p>
+      </div>
+    </dialog>
+
+    <script>
+    (function(){
+      "use strict";
+
+      /* ---------------- categories & scoring ---------------- */
+      var CATS = [
+        { id:"ones",   name:"Ones",   section:"upper", face:1, desc:"Total of all 1s" },
+        { id:"twos",   name:"Twos",   section:"upper", face:2, desc:"Total of all 2s" },
+        { id:"threes", name:"Threes", section:"upper", face:3, desc:"Total of all 3s" },
+        { id:"fours",  name:"Fours",  section:"upper", face:4, desc:"Total of all 4s" },
+        { id:"fives",  name:"Fives",  section:"upper", face:5, desc:"Total of all 5s" },
+        { id:"sixes",  name:"Sixes",  section:"upper", face:6, desc:"Total of all 6s" },
+        { id:"threeKind", name:"Three of a Kind", section:"lower", desc:"3 the same → total of all dice" },
+        { id:"fourKind",  name:"Four of a Kind",  section:"lower", desc:"4 the same → total of all dice" },
+        { id:"fullHouse", name:"Full House",      section:"lower", desc:"3 of one + 2 of another → 25" },
+        { id:"smallStraight", name:"Small Straight", section:"lower", desc:"Run of 4 → 30" },
+        { id:"largeStraight", name:"Large Straight", section:"lower", desc:"Run of 5 → 40" },
+        { id:"fiveKind",  name:"Five of a Kind",  section:"lower", desc:"All 5 the same → 50" },
+        { id:"chance",    name:"Chance",          section:"lower", desc:"Total of all dice, no pattern needed" }
+      ];
+      var CATMAP = {}; CATS.forEach(function(c){ CATMAP[c.id]=c; });
+
+      function counts(dice){ var c=[0,0,0,0,0,0,0]; dice.forEach(function(d){ c[d]++; }); return c; }
+      function sum(dice){ return dice.reduce(function(a,b){ return a+b; },0); }
+
+      function scoreFor(id, dice){
+        var c = counts(dice), s = sum(dice), i, uniq;
+        if (CATMAP[id].face) return c[CATMAP[id].face] * CATMAP[id].face;
+        switch(id){
+          case "threeKind": return c.some(function(n){ return n>=3; }) ? s : 0;
+          case "fourKind":  return c.some(function(n){ return n>=4; }) ? s : 0;
+          case "fullHouse": return (c.indexOf(3)>-1 && c.indexOf(2)>-1) || c.indexOf(5)>-1 ? 25 : 0;
+          case "smallStraight":
+            uniq = {}; dice.forEach(function(d){ uniq[d]=1; });
+            return (uniq[1]&&uniq[2]&&uniq[3]&&uniq[4]) || (uniq[2]&&uniq[3]&&uniq[4]&&uniq[5]) || (uniq[3]&&uniq[4]&&uniq[5]&&uniq[6]) ? 30 : 0;
+          case "largeStraight":
+            uniq = {}; dice.forEach(function(d){ uniq[d]=1; });
+            return (uniq[1]&&uniq[2]&&uniq[3]&&uniq[4]&&uniq[5]) || (uniq[2]&&uniq[3]&&uniq[4]&&uniq[5]&&uniq[6]) ? 40 : 0;
+          case "fiveKind": return c.indexOf(5)>-1 ? 50 : 0;
+          case "chance": return s;
+        }
+        return 0;
+      }
+
+      function upperSubtotal(card){ var t=0; CATS.forEach(function(c){ if(c.section==="upper" && card[c.id]!=null) t+=card[c.id]; }); return t; }
+      function upperBonus(card){ return upperSubtotal(card) >= 63 ? 35 : 0; }
+      function lowerTotal(card){ var t=0; CATS.forEach(function(c){ if(c.section==="lower" && card[c.id]!=null) t+=card[c.id]; }); return t; }
+      function grandTotal(card){ return upperSubtotal(card) + upperBonus(card) + lowerTotal(card); }
+      function openCats(card){ return CATS.filter(function(c){ return card[c.id]==null; }); }
+
+      /* ---------------- saved settings & bests ---------------- */
+      var SET_KEY="diceKings.settings.v1", BEST_KEY="diceKings.bests.v1";
+      function loadJSON(k, fb){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):fb; }catch(e){ return fb; } }
+      function saveJSON(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+      var settings = loadJSON(SET_KEY, { mode:"solo", difficulty:"normal", practice:false });
+      var bests = loadJSON(BEST_KEY, { soloBest:null, soloGames:0, cpuBest:null, cpuWins:0, cpuGames:0 });
+
+      /* ---------------- dom ---------------- */
+      function $(id){ return document.getElementById(id); }
+      var tray=$("diceTray"), banner=$("turnBanner"), roundLine=$("roundLine"), hint=$("hintLine"), status=$("statusLine");
+      var btnRoll=$("btnRoll"), scoreBody=$("scoreBody");
+
+      /* dice elements */
+      var PIPS = { 1:[4], 2:[0,8], 3:[0,4,8], 4:[0,2,6,8], 5:[0,2,4,6,8], 6:[0,2,3,5,6,8] };
+      var dieBtns=[];
+      for (var i=0;i<5;i++){
+        var wrap=document.createElement("div"); wrap.className="die-wrap";
+        var b=document.createElement("button"); b.type="button"; b.className="die";
+        b.setAttribute("aria-label","Die "+(i+1));
+        for (var p=0;p<9;p++){ var s=document.createElement("span"); s.className="pip"; b.appendChild(s); }
+        var tag=document.createElement("div"); tag.className="die-tag"; tag.textContent="Held";
+        wrap.appendChild(b); wrap.appendChild(tag); tray.appendChild(wrap);
+        (function(idx, btn){
+          btn.addEventListener("click", function(){ toggleHold(idx); });
+        })(i, b);
+        dieBtns.push(b);
+      }
+      function paintDie(btn, val){
+        var pips = PIPS[val]||[];
+        for (var k=0;k<9;k++) btn.children[k].classList.toggle("on", pips.indexOf(k)>-1);
+        btn.setAttribute("aria-label", btn.getAttribute("aria-label").split(" showing")[0] + " showing " + val);
+      }
+
+      /* ---------------- game state ---------------- */
+      var G = null;
+      function newCard(){ var o={}; CATS.forEach(function(c){ o[c.id]=null; }); return o; }
+      function newGame(){
+        G = {
+          mode: settings.mode, difficulty: settings.difficulty, practice: !!settings.practice,
+          round: 1, turn: "you", dice:[1,2,3,4,5], held:[false,false,false,false,false],
+          rollsLeft: 3, hasRolled:false, busy:false, over:false,
+          you: newCard(), cpu: newCard(), lastScored:null
+        };
+        $("gameOver").classList.remove("show");
+        banner.textContent = "Your move, Your Majesty";
+        status.innerHTML = G.mode==="cpu" ? "You go first. Roll the dice!" : "Roll the dice to start round 1.";
+        hint.textContent = G.practice ? "Practice game — bests stay untouched." : "";
+        renderAll();
+      }
+
+      function renderAll(){ renderDice(); renderRolls(); renderCard(); renderRound(); }
+      function renderRound(){
+        if (!G){ roundLine.textContent="13 rounds · 5 dice · 3 rolls a turn"; return; }
+        roundLine.textContent = "Round " + Math.min(G.round,13) + " of 13" +
+          (G.mode==="cpu" ? (G.turn==="you" ? " · Your turn" : " · CPU's turn") : "") +
+          (G.practice ? " · Practice" : "");
+      }
+      function renderRolls(){
+        var left = G ? G.rollsLeft : 3;
+        [1,2,3].forEach(function(n){ $("dot"+n).classList.toggle("left", n<=left); });
+        btnRoll.disabled = !G || G.busy || G.over || G.turn!=="you" || G.rollsLeft<=0;
+        btnRoll.textContent = !G ? "Roll the dice" : (G.hasRolled ? (G.rollsLeft>0 ? "Roll again" : "No rolls left — pick a score") : "Roll the dice");
+      }
+      function renderDice(){
+        for (var k=0;k<5;k++){
+          paintDie(dieBtns[k], G?G.dice[k]:k+1);
+          dieBtns[k].classList.toggle("held", !!(G && G.held[k]));
+          dieBtns[k].disabled = !G || G.busy || G.over || G.turn!=="you" || !G.hasRolled || G.rollsLeft<=0;
+          dieBtns[k].setAttribute("aria-pressed", (G && G.held[k]) ? "true" : "false");
+        }
+      }
+
+      function renderCard(){
+        var showCpu = G && G.mode==="cpu";
+        $("cpuHead").style.display = showCpu ? "" : "none";
+        var html = "";
+        html += '<tr class="section-head"><td colspan="3">Upper section — 63+ earns a 35-point bonus</td></tr>';
+        CATS.forEach(function(c){
+          if (c.id==="threeKind") html += '<tr class="section-head"><td colspan="3">Lower section</td></tr>';
+          html += rowHtml(c);
+          if (c.id==="sixes"){
+            html += '<tr class="total-row"><td>Upper subtotal</td><td>' + (G?upperSubtotal(G.you):0) + '</td>' +
+              (showCpu ? '<td class="score-cpu">'+upperSubtotal(G.cpu)+'</td>' : '<td style="display:none"></td>') + '</tr>';
+            html += '<tr class="total-row"><td>Upper bonus</td><td>' + (G?upperBonus(G.you):0) + '</td>' +
+              (showCpu ? '<td class="score-cpu">'+upperBonus(G.cpu)+'</td>' : '<td style="display:none"></td>') + '</tr>';
+          }
+        });
+        html += '<tr class="total-row"><td>Lower total</td><td>' + (G?lowerTotal(G.you):0) + '</td>' +
+          (showCpu ? '<td class="score-cpu">'+lowerTotal(G.cpu)+'</td>' : '<td style="display:none"></td>') + '</tr>';
+        html += '<tr class="grand-row"><td>Grand total</td><td>' + (G?grandTotal(G.you):0) + '</td>' +
+          (showCpu ? '<td class="score-cpu">'+grandTotal(G.cpu)+'</td>' : '<td style="display:none"></td>') + '</tr>';
+        scoreBody.innerHTML = html;
+        /* wire score buttons */
+        var btns = scoreBody.querySelectorAll(".score-btn");
+        for (var j=0;j<btns.length;j++){
+          btns[j].addEventListener("click", function(){ playerScore(this.getAttribute("data-cat")); });
+        }
+        /* leader line */
+        var ll = $("leaderLine");
+        if (showCpu && G && !G.over){
+          var d = grandTotal(G.you) - grandTotal(G.cpu);
+          ll.textContent = d>0 ? "· You're up by "+d : (d<0 ? "· CPU is up by "+(-d) : "· All tied up");
+          ll.className = "leader " + (d>=0 ? "you" : "cpu");
+        } else { ll.textContent=""; ll.className="leader"; }
+        renderBests();
+      }
+      function rowHtml(c){
+        var showCpu = G && G.mode==="cpu";
+        var youCell, cpuCell = showCpu ? "" : '<td style="display:none"></td>';
+        var yv = G ? G.you[c.id] : null;
+        if (yv != null){
+          youCell = '<span class="score-fixed' + (G.lastScored==="you:"+c.id ? " just-scored":"") + '">' + yv + '</span>';
+        } else if (G && G.turn==="you" && G.hasRolled && !G.busy && !G.over){
+          var pot = scoreFor(c.id, G.dice);
+          youCell = '<button type="button" class="score-btn' + (pot===0?" zero":"") + '" data-cat="' + c.id + '" aria-label="Score ' + c.name + ' for ' + pot + ' points">' + pot + '</button>';
+        } else {
+          youCell = '<span style="color:var(--ink-soft)">–</span>';
+        }
+        if (showCpu){
+          var cv = G.cpu[c.id];
+          cpuCell = cv != null ? '<span class="score-cpu' + (G.lastScored==="cpu:"+c.id ? " just-scored":"") + '">' + cv + '</span>'
+                               : '<span style="color:var(--ink-soft)">–</span>';
+        }
+        return '<tr><td class="cat-name">' + c.name + '<span class="desc">' + c.desc + '</span></td><td>' + youCell + '</td><td>' + cpuCell + '</td></tr>';
+      }
+
+      function renderBests(){
+        var parts = [];
+        parts.push(bests.soloBest!=null ? "Solo best: <strong>"+bests.soloBest+"</strong>" : "Solo best: <strong>not set yet</strong>");
+        if (bests.cpuGames>0) parts.push("Vs CPU: <strong>"+bests.cpuWins+" wins</strong> in "+bests.cpuGames+" games");
+        if (bests.cpuBest!=null) parts.push("Best vs-CPU score: <strong>"+bests.cpuBest+"</strong>");
+        $("bestsLine").innerHTML = "<span>Your saved bests</span>" + parts.map(function(p){ return "<span>"+p+"</span>"; }).join("");
+      }
+
+      /* ---------------- player actions ---------------- */
+      function toggleHold(idx){
+        if (!G || G.busy || G.over || G.turn!=="you" || !G.hasRolled || G.rollsLeft<=0) return;
+        G.held[idx] = !G.held[idx];
+        renderDice();
+      }
+      function sleep(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+
+      function animateRoll(finalDice, who){
+        return new Promise(function(resolve){
+          var ticks = 0;
+          dieBtns.forEach(function(b,idx){ if (!G.held[idx] || who==="cpu-fresh") b.classList.add("rolling"); });
+          var iv = setInterval(function(){
+            ticks++;
+            for (var k=0;k<5;k++){
+              if (!G.held[k]) paintDie(dieBtns[k], 1+Math.floor(Math.random()*6));
+            }
+            if (ticks>=6){
+              clearInterval(iv);
+              dieBtns.forEach(function(b){ b.classList.remove("rolling"); });
+              resolve();
+            }
+          }, 70);
+        });
+      }
+
+      async function playerRoll(){
+        if (!G || G.busy || G.over || G.turn!=="you" || G.rollsLeft<=0) return;
+        G.busy = true; renderAll();
+        var nd = G.dice.slice();
+        for (var k=0;k<5;k++) if (!G.held[k]) nd[k] = 1+Math.floor(Math.random()*6);
+        await animateRoll(nd, "you");
+        G.dice = nd; G.rollsLeft--; G.hasRolled = true; G.busy = false;
+        status.textContent = G.rollsLeft>0
+          ? "Tap dice to hold them, roll again, or tap a score to lock it in."
+          : "Out of rolls — tap a score on the card to finish your turn.";
+        if (G.dice.every(function(d){ return d===G.dice[0]; }) && scoreFor("fiveKind", G.dice)===50 && G.you.fiveKind==null)
+          hint.textContent = "Five of a Kind! That's the crown jewel — 50 points if you take it.";
+        else if (G.practice) hint.textContent = practiceHint();
+        else hint.textContent = "";
+        renderAll();
+      }
+
+      function practiceHint(){
+        var open = openCats(G.you); if (!open.length) return "";
+        var best = open[0], bv = -1;
+        open.forEach(function(c){ var v=scoreFor(c.id, G.dice); if (v>bv){ bv=v; best=c; } });
+        return "Practice hint: best score on the table right now is " + best.name + " for " + bv + ".";
+      }
+
+      function playerScore(catId){
+        if (!G || G.busy || G.over || G.turn!=="you" || !G.hasRolled) return;
+        if (G.you[catId]!=null) return;
+        var pts = scoreFor(catId, G.dice);
+        G.you[catId] = pts; G.lastScored = "you:"+catId;
+        status.textContent = "You scored " + pts + " in " + CATMAP[catId].name + ".";
+        hint.textContent = "";
+        endTurn();
+      }
+
+      async function endTurn(){
+        G.held = [false,false,false,false,false]; G.hasRolled=false; G.rollsLeft=3;
+        if (G.mode==="cpu" && G.turn==="you"){
+          G.turn = "cpu"; renderAll();
+          await sleep(650);
+          await cpuTurn();
+          if (G.over) return;
+          G.turn = "you"; G.round++;
+          G.lastScored = G.lastScored; /* keep cpu flash until next render cycle passes */
+          banner.textContent = "Your move, Your Majesty";
+          status.textContent = "Round " + G.round + " — roll the dice.";
+          renderAll();
+        } else {
+          G.round++;
+          if (G.round>13){ finishGame(); return; }
+          banner.textContent = "Your move, Your Majesty";
+          status.textContent = "Round " + G.round + " — roll the dice.";
+          renderAll();
+        }
+      }
+
+      /* ---------------- CPU ---------------- */
+      function cpuEffective(c, dice, card){
+        var pts = scoreFor(c.id, dice), v = pts;
+        if (c.section==="upper"){
+          var sub = upperSubtotal(card);
+          if (sub < 63 && sub + pts >= 63) v += 18;            /* crossing the bonus line is huge */
+          if (pts >= c.face*3) v += 3;                          /* on-pace upper score */
+          if (pts === 0) v -= 4;                                /* hate wasting an upper slot */
+        }
+        if (c.id==="fiveKind" && pts===0) v -= 6;
+        if (c.id==="largeStraight" && pts===0) v -= 4;
+        if (c.id==="chance" && pts < 18) v -= 5;                /* don't burn Chance on scraps */
+        return v;
+      }
+      function cpuPick(dice, card, difficulty){
+        var open = openCats(card);
+        var ranked = open.map(function(c){ return { c:c, pts:scoreFor(c.id,dice), eff:cpuEffective(c,dice,card) }; });
+        ranked.sort(function(a,b){ return b.eff - a.eff; });
+        if (difficulty==="easy"){
+          var r = Math.random();
+          if (r < 0.30) return ranked[Math.floor(Math.random()*ranked.length)];
+          if (r < 0.60 && ranked.length>2) return ranked[1+Math.floor(Math.random()*(ranked.length-1))];
+          return ranked[0];
+        }
+        if (difficulty==="normal" && Math.random()<0.12 && ranked.length>1) return ranked[1];
+        return ranked[0];
+      }
+      function cpuHolds(dice, card){
+        /* keep dice that chase the best currently-reachable pattern */
+        var c = counts(dice), held=[false,false,false,false,false];
+        var bestFace=1, bestN=0;
+        for (var f=1;f<=6;f++) if (c[f]>bestN || (c[f]===bestN && f>bestFace)){ bestN=c[f]; bestFace=f; }
+        var uniq = {}; dice.forEach(function(d){ uniq[d]=1; });
+        var run=0, runStart=0;
+        for (var s=1;s<=3;s++){ if (uniq[s]&&uniq[s+1]&&uniq[s+2]){ run=3; runStart=s; } }
+        if (uniq[runStart]&&uniq[runStart+1]&&uniq[runStart+2]&&uniq[runStart+3]) run=4;
+        var straightOpen = card.smallStraight==null || card.largeStraight==null;
+        if (bestN>=3 || !straightOpen || run<3){
+          dice.forEach(function(d,idx){ if (d===bestFace) held[idx]=true; });
+          if (bestN===1){ /* nothing paired: keep the two highest dice */
+            var sorted = dice.map(function(d,idx){ return [d,idx]; }).sort(function(a,b){ return b[0]-a[0]; });
+            held = [false,false,false,false,false]; held[sorted[0][1]]=true;
+          }
+        } else {
+          dice.forEach(function(d,idx){ if (d>=runStart && d<runStart+run) held[idx]=true; });
+        }
+        return held;
+      }
+      async function cpuTurn(){
+        G.busy = true; G.turn="cpu";
+        banner.textContent = "CPU is rolling…";
+        status.textContent = "The CPU takes its turn for round " + G.round + ".";
+        hint.textContent = "";
+        G.held=[false,false,false,false,false]; G.dice=[1,2,3,4,5];
+        renderAll();
+        var rolls = 3;
+        while (rolls > 0){
+          var nd = G.dice.slice();
+          for (var k=0;k<5;k++) if (!G.held[k]) nd[k]=1+Math.floor(Math.random()*6);
+          await animateRoll(nd, rolls===3 ? "cpu-fresh" : "cpu");
+          G.dice = nd; rolls--;
+          renderDice();
+          var bestNow = Math.max.apply(null, openCats(G.cpu).map(function(c){ return scoreFor(c.id, G.dice); }));
+          if (rolls===0 || bestNow>=40 || (bestNow>=25 && rolls===1)) break;
+          G.held = cpuHolds(G.dice, G.cpu);
+          renderDice();
+          await sleep(600);
+        }
+        await sleep(450);
+        var pick = cpuPick(G.dice, G.cpu, G.difficulty);
+        G.cpu[pick.c.id] = pick.pts; G.lastScored = "cpu:"+pick.c.id;
+        G.busy = false;
+        banner.textContent = "CPU scored " + pick.pts + " in " + pick.c.name;
+        status.textContent = "CPU locked in " + pick.c.name + " for " + pick.pts + ".";
+        renderAll();
+        await sleep(900);
+        if (G.round>=13){ finishGame(); }
+      }
+
+      /* ---------------- finish ---------------- */
+      function finishGame(){
+        G.over = true; G.busy=false;
+        var you = grandTotal(G.you), cpu = G.mode==="cpu" ? grandTotal(G.cpu) : null;
+        banner.textContent = "Final scores are in";
+        status.textContent = "That's all 13 rounds. Thanks for playing!";
+        hint.textContent = "";
+        var go = $("gameOver"); go.classList.add("show");
+        var bestMsg = "";
+        if (G.mode==="solo"){
+          $("goTitle").textContent = you>=300 ? "A royal score!" : you>=250 ? "A noble effort!" : you>=200 ? "Solidly in court" : "The crown eludes you… this time";
+          $("goText").textContent = "You finished with " + you + " points." + (G.practice ? " (Practice game — bests untouched.)" : "");
+          $("finalScores").innerHTML = '<div class="final-box"><div class="who">Your final score</div><div class="num">'+you+'</div></div>';
+          if (!G.practice){
+            bests.soloGames++;
+            if (bests.soloBest==null || you>bests.soloBest){ bests.soloBest=you; bestMsg="New personal best!"; }
+            saveJSON(BEST_KEY, bests);
+          }
+        } else {
+          var win = you>cpu, tie = you===cpu;
+          $("goTitle").textContent = win ? "You take the crown!" : tie ? "A royal tie!" : "The CPU keeps the crown";
+          $("goText").textContent = win ? "You beat the CPU by "+(you-cpu)+" points." : tie ? "Dead even — nobody blinks." : "The CPU won by "+(cpu-you)+" points. Rematch?";
+          if (G.practice) $("goText").textContent += " (Practice game — bests untouched.)";
+          $("finalScores").innerHTML =
+            '<div class="final-box"><div class="who">You</div><div class="num">'+you+'</div></div>' +
+            '<div class="final-box"><div class="who">CPU</div><div class="num">'+cpu+'</div></div>';
+          if (!G.practice){
+            bests.cpuGames++; if (win) bests.cpuWins++;
+            if (bests.cpuBest==null || you>bests.cpuBest){ bests.cpuBest=you; bestMsg="New best score against the CPU!"; }
+            saveJSON(BEST_KEY, bests);
+          }
+        }
+        $("goBest").textContent = bestMsg;
+        renderAll();
+        go.scrollIntoView({ behavior:"smooth", block:"nearest" });
+      }
+
+      /* ---------------- setup controls ---------------- */
+      function applySettingsUI(){
+        $("modeSolo").setAttribute("aria-pressed", settings.mode==="solo" ? "true":"false");
+        $("modeCpu").setAttribute("aria-pressed", settings.mode==="cpu" ? "true":"false");
+        $("diffField").style.display = settings.mode==="cpu" ? "" : "none";
+        var db = document.querySelectorAll("[data-diff]");
+        for (var i=0;i<db.length;i++) db[i].setAttribute("aria-pressed", db[i].getAttribute("data-diff")===settings.difficulty ? "true":"false");
+        $("practiceToggle").checked = !!settings.practice;
+      }
+      function settingsChanged(){
+        saveJSON(SET_KEY, settings);
+        applySettingsUI();
+        if (G && !G.over){
+          status.textContent = "Settings saved — they'll apply to your next game. (This game keeps its original setup.)";
+        }
+      }
+      $("modeSolo").addEventListener("click", function(){ settings.mode="solo"; settingsChanged(); });
+      $("modeCpu").addEventListener("click", function(){ settings.mode="cpu"; settingsChanged(); });
+      var diffBtns = document.querySelectorAll("[data-diff]");
+      for (var d=0; d<diffBtns.length; d++){
+        diffBtns[d].addEventListener("click", function(){ settings.difficulty=this.getAttribute("data-diff"); settingsChanged(); });
+      }
+      $("practiceToggle").addEventListener("change", function(){ settings.practice=this.checked; settingsChanged(); });
+      $("btnNew").addEventListener("click", newGame);
+      $("btnAgain").addEventListener("click", function(){ newGame(); window.scrollTo({top:0, behavior:"smooth"}); });
+      btnRoll.addEventListener("click", playerRoll);
+
+      /* ---------------- dialogs ---------------- */
+      function openDlg(id){ var dlg=$(id); if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open",""); }
+      function closeDlg(id){ var dlg=$(id); if (dlg.close) dlg.close(); else dlg.removeAttribute("open"); }
+
+      var TUT = [
+        { t:"Welcome to Dice Kings", b:"<p>Thirteen rounds, five dice, one scorecard. Fill every category once — the biggest total at the end takes the crown.</p><p>This walkthrough is totally optional. Skip it any time with Close.</p>" },
+        { t:"Roll up to 3 times", b:"<p>Hit <strong>Roll the dice</strong> to start your turn. Don't love what you see? You've got two more rolls to fix it.</p>" },
+        { t:"Hold the good ones", b:"<p>Between rolls, tap a die to <strong>hold</strong> it — held dice turn gold and stay put while the rest re-roll. Tap again to let one go.</p>" },
+        { t:"Score to end your turn", b:"<p>When you're happy (or out of rolls), the scorecard shows what each open category is worth with the dice on the table. Tap one to lock it in. Choose carefully — every category can only be used once, and sometimes the smart play is taking a zero somewhere cheap.</p>" },
+        { t:"Chase the bonus", b:"<p>Score 63 or more across Ones through Sixes and you pocket a <strong>35-point bonus</strong>. Roughly three of every number gets you there.</p>" },
+        { t:"Modes & practice", b:"<p><strong>Solo score chase</strong> is you vs your personal best. <strong>Vs CPU</strong> adds a rival on three difficulties. <strong>Practice mode</strong> shows you the best available score after every roll and never touches your saved bests — great for learning the ropes.</p><p>That's everything. Go take the crown.</p>" }
+      ];
+      var tutIdx = 0;
+      function renderTut(){
+        $("tutStep").innerHTML = "<h3 style='margin-top:0'>" + TUT[tutIdx].t + "</h3>" + TUT[tutIdx].b;
+        var dots=""; for (var i=0;i<TUT.length;i++) dots += '<i class="'+(i===tutIdx?"on":"")+'"></i>';
+        $("tutDots").innerHTML = dots;
+        $("tutBack").disabled = tutIdx===0;
+        $("tutNext").textContent = tutIdx===TUT.length-1 ? "Done" : "Next";
+      }
+      $("btnTutorial").addEventListener("click", function(){ tutIdx=0; renderTut(); openDlg("dlgTutorial"); });
+      $("tutBack").addEventListener("click", function(){ if (tutIdx>0){ tutIdx--; renderTut(); } });
+      $("tutNext").addEventListener("click", function(){ if (tutIdx<TUT.length-1){ tutIdx++; renderTut(); } else closeDlg("dlgTutorial"); });
+      $("tutClose").addEventListener("click", function(){ closeDlg("dlgTutorial"); });
+
+      $("btnRules").addEventListener("click", function(){ openDlg("dlgRules"); });
+      $("rulesClose").addEventListener("click", function(){ closeDlg("dlgRules"); });
+
+      $("btnFeedback").addEventListener("click", function(){
+        var auto = "Auto-captured game details:\n" +
+          "Mode: " + (G ? (G.mode==="cpu" ? "Vs CPU ("+G.difficulty+")" : "Solo score chase") : (settings.mode==="cpu" ? "Vs CPU ("+settings.difficulty+")" : "Solo score chase")) + "\n" +
+          "Practice: " + (G ? (G.practice?"on":"off") : (settings.practice?"on":"off")) + "\n" +
+          "Round: " + (G ? Math.min(G.round,13) : "no game started") + " of 13\n" +
+          "Your score so far: " + (G ? grandTotal(G.you) : 0) +
+          (G && G.mode==="cpu" ? "\nCPU score so far: " + grandTotal(G.cpu) : "") + "\n" +
+          "Dice on the table: " + (G ? G.dice.join(", ") : "—") + "\n" +
+          "Screen: " + window.innerWidth + "×" + window.innerHeight;
+        $("fbAuto").textContent = auto;
+        $("fbCopied").textContent = "";
+        openDlg("dlgFeedback");
+        $("fbCopy").onclick = function(){
+          var full = ($("fbText").value.trim() ? $("fbText").value.trim() + "\n\n" : "") + auto;
+          /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+          try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "dice-kings", rating: (typeof fbRating!=="undefined"?fbRating:0), text: $("fbText").value.trim(), tag: "", mode: (typeof settings!=="undefined"&&settings.practice)?"practice":"real", level: "", difficulty: (typeof settings!=="undefined"&&settings.difficulty)||"", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+          function done(){ $("fbCopied").textContent = "Copied — paste it wherever reviews go. Thanks!"; }
+          if (navigator.clipboard && navigator.clipboard.writeText){
+            navigator.clipboard.writeText(full).then(done, function(){ fallback(); });
+          } else fallback();
+          function fallback(){
+            var ta=document.createElement("textarea"); ta.value=full; document.body.appendChild(ta);
+            ta.select(); try{ document.execCommand("copy"); done(); }catch(e){ $("fbCopied").textContent="Copy didn't work — you can select the details above manually."; }
+            document.body.removeChild(ta);
+          }
+        };
+      });
+      $("fbClose").addEventListener("click", function(){ closeDlg("dlgFeedback"); });
+
+      /* ---------------- init ---------------- */
+      applySettingsUI();
+      G = null;
+      renderCard();
+      renderDice();
+      renderRolls();
+      renderBests();
+      dieBtns.forEach(function(b,idx){ paintDie(b, idx+1); });
+    })();
+    </script>
+  </body>
+</html>

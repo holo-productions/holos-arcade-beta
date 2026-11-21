@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Go Fish</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+      :root{
+        --bg:#eef6f4; --panel:#ffffff; --panel2:#e2efec; --ink:#123332; --muted:#4c6a66;
+        --line:#c3d9d4; --accent:#0e7c74; --accent-ink:#ffffff; --coral:#e4572e; --gold:#e9a13b;
+        --table:#0d5c55; --table-edge:#083f3a; --felt:#10776c;
+        --card:#ffffff; --card-ink:#1c2b2a; --red:#c62f3b; --back:#0e7c74; --back2:#0a5a54;
+        --shadow:0 10px 28px rgba(10,50,46,.16);
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --bg:#0a1a19; --panel:#122725; --panel2:#173331; --ink:#e6f2ef; --muted:#9dbcb6;
+          --line:#274843; --accent:#2bb3a3; --accent-ink:#06231f; --coral:#ff7a52; --gold:#f0b45a;
+          --table:#0a3d38; --table-edge:#062723; --felt:#0e5a51;
+          --card:#f4f7f6; --card-ink:#1c2b2a; --red:#c62f3b; --back:#14665e; --back2:#0c4a44;
+          --shadow:0 10px 28px rgba(0,0,0,.45);
+        }
+      }
+      *{box-sizing:border-box}
+      body{margin:0;background:var(--bg);color:var(--ink);font-family:"Public Sans",system-ui,sans-serif;-webkit-text-size-adjust:100%}
+      button,[role="button"],select,summary,input:not([type="checkbox"],[type="radio"]){min-height:2.25rem}
+      .wrap{max-width:880px;margin:0 auto;padding:14px 14px 30px}
+      h1,h2,h3{font-family:"Bricolage Grotesque","Public Sans",sans-serif}
+      .toprow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+      .pill{font-size:12.5px;font-weight:700;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:6px 11px}
+      .spacer{flex:1}
+      .btn{font:inherit;font-weight:700;font-size:14px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:10px;padding:8px 14px;cursor:pointer;min-height:40px}
+      .btn:hover{border-color:var(--accent)}
+      .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+      .btn:disabled{opacity:.45;cursor:default}
+      .seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+      .seg button{font:inherit;font-weight:700;font-size:13.5px;border:0;background:var(--panel);color:var(--muted);padding:8px 12px;cursor:pointer;min-height:40px}
+      .seg button.active{background:var(--accent);color:var(--accent-ink)}
+      .seg-label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
+      .seg-wrap{display:flex;align-items:center;gap:6px}
+      .hud{display:flex;flex-wrap:wrap;gap:8px 18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:9px 14px;font-size:14px;margin-bottom:12px}
+      .hud b{font-weight:800}
+      .hud .yours{color:var(--accent);font-weight:700}
+      /* Table */
+      .table{background:radial-gradient(ellipse at 50% 38%,var(--felt),var(--table) 78%);border:8px solid var(--table-edge);border-radius:26px;padding:16px 12px 18px;box-shadow:var(--shadow);color:#eafaf5}
+      .ai-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+      .seat{background:rgba(0,0,0,.22);border:2px solid transparent;border-radius:16px;padding:10px 12px;min-width:128px;text-align:center;transition:border-color .15s, transform .15s}
+      .seat .avatar{font-size:26px;line-height:1}
+      .seat .pname{font-weight:800;font-size:15px;margin-top:2px}
+      .seat .pcount{font-size:12.5px;opacity:.85}
+      .seat .pbooks{font-size:12.5px;font-weight:700;color:var(--gold)}
+      .seat.turn{border-color:var(--gold)}
+      .seat.askable{border-color:#fff;cursor:pointer;animation:pulse 1.1s ease-in-out infinite}
+      .seat.askable:hover{transform:translateY(-2px)}
+      @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.0)}50%{box-shadow:0 0 0 5px rgba(255,255,255,.22)}}
+      @media (prefers-reduced-motion: reduce){.seat.askable{animation:none}}
+      .backs{display:flex;justify-content:center;margin-top:6px;min-height:34px}
+      .back{width:24px;height:34px;border-radius:4px;background:repeating-linear-gradient(45deg,var(--back) 0 4px,var(--back2) 4px 8px);border:1.5px solid #eafaf5;margin-left:-12px;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+      .back:first-child{margin-left:0}
+      .center{margin:16px auto 4px;text-align:center;max-width:560px}
+      .pond{display:inline-flex;align-items:center;gap:10px;background:rgba(0,0,0,.22);border-radius:12px;padding:8px 16px;font-weight:700;font-size:14.5px}
+      .pond .deckstack{width:30px;height:42px;border-radius:5px;background:repeating-linear-gradient(45deg,var(--back) 0 5px,var(--back2) 5px 10px);border:2px solid #eafaf5;box-shadow:2px 2px 0 rgba(234,250,245,.5)}
+      .msg{margin:12px auto 2px;font-size:16.5px;font-weight:600;min-height:44px;line-height:1.35}
+      .msg .who{color:var(--gold)}
+      .score-row{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:8px}
+      .score-chip{background:rgba(0,0,0,.25);border-radius:999px;padding:4px 11px;font-size:13px;font-weight:700}
+      .score-chip.me{background:var(--gold);color:#3a2703}
+      /* Player area */
+      .you-area{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px 14px 14px}
+      .you-head{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin-bottom:8px}
+      .you-head h2{font-size:19px;margin:0}
+      .you-head .hint{font-size:13.5px;color:var(--muted)}
+      .hand{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;padding:4px 0 2px}
+      .pcard{width:52px;height:74px;border-radius:8px;background:var(--card);color:var(--card-ink);border:1.5px solid #b9cdc9;box-shadow:0 2px 5px rgba(10,50,46,.18);position:relative;cursor:pointer;padding:0;font:inherit;transition:transform .12s, box-shadow .12s}
+      .pcard .r{position:absolute;top:3px;left:6px;font-weight:800;font-size:16px;line-height:1}
+      .pcard .s{position:absolute;top:20px;left:6px;font-size:13px;line-height:1}
+      .pcard .big{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:27px;padding-top:12px}
+      .pcard.red{color:var(--red)}
+      .pcard.sel{transform:translateY(-10px);box-shadow:0 0 0 3px var(--gold),0 8px 14px rgba(10,50,46,.25)}
+      .pcard:disabled{cursor:default;opacity:.92}
+      .bookrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px;font-size:13.5px;color:var(--muted)}
+      .book-chip{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:3px 9px;font-weight:800;color:var(--ink)}
+      .askbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;margin-top:12px;min-height:44px}
+      .askbar .prompt{font-size:15px;font-weight:700}
+      .askbar .prompt b{color:var(--coral)}
+      /* Log + info */
+      details.info{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-top:12px}
+      details.info summary{font-weight:800;cursor:pointer;padding:4px 0}
+      .log-list{margin:6px 0 4px;padding-left:20px;font-size:14px;color:var(--muted);max-height:220px;overflow:auto}
+      .log-list li{margin:3px 0}
+      .pane-footer{margin:24px 0 0;padding-top:14px;border-top:1px solid var(--line);font-size:13.5px;color:var(--muted);text-align:center}
+      .pane-footer a{color:var(--accent);font-weight:700;text-decoration:underline;text-underline-offset:2px;padding:8px 4px;display:inline-block}
+      /* Overlays */
+      .overlay{position:fixed;inset:0;background:rgba(4,26,23,.62);display:flex;align-items:flex-start;justify-content:center;padding:18px 12px;overflow:auto;z-index:50}
+      .overlay[hidden]{display:none}
+      .tut-card{background:var(--panel);color:var(--ink);border-radius:18px;max-width:560px;width:100%;padding:20px;box-shadow:var(--shadow);margin:auto 0}
+      .tut-head{display:flex;gap:12px;align-items:flex-start}
+      .tut-head .tut-icon{font-size:34px}
+      .tut-head h3{margin:0;font-size:21px}
+      .tut-head p{margin:2px 0 0;color:var(--muted);font-size:13.5px}
+      .tut-x{margin-left:auto;font:inherit;font-size:17px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:9px;width:40px;height:40px;cursor:pointer;flex:none}
+      .tut-steps{list-style:none;margin:16px 0 4px;padding:0;display:grid;gap:13px}
+      .tut-steps li{display:flex;gap:11px}
+      .tut-num{flex:none;width:26px;height:26px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;margin-top:1px}
+      .tut-steps li>div>b{display:block;font-size:15.5px}
+      .tut-steps li>div>span{display:block;font-size:14px;color:var(--muted);line-height:1.45;margin-top:1px}
+      .tut-steps li>div>span b{display:inline;font-size:inherit}
+      .tut-foot{margin-top:18px;text-align:center}
+      .tut-go{font:inherit;font-weight:800;font-size:16px;background:var(--accent);color:var(--accent-ink);border:0;border-radius:11px;padding:13px 26px;cursor:pointer;min-height:52px;width:100%}
+      .over-card{text-align:center}
+      .over-card .big-icon{font-size:52px}
+      .over-card h3{font-size:24px;margin:6px 0 4px}
+      .over-card p{color:var(--muted);margin:4px 0;line-height:1.5}
+      .over-card .btn{margin-top:14px;min-height:52px;padding:12px 24px;font-size:16px}
+      .final-books{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:12px 0 2px}
+      .hintbar{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13.5px;color:var(--muted);margin-bottom:10px}
+      .hintbar[hidden]{display:none}
+      .hintbar b{color:var(--ink)}
+      .hintbar button{margin-left:auto;font:inherit;font-weight:700;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:4px 10px;cursor:pointer;min-height:32px}
+      .practice-banner{display:flex;align-items:center;gap:8px;background:var(--panel2);border:1.5px solid var(--gold);border-radius:10px;padding:9px 12px;font-size:13.5px;color:var(--ink);margin-bottom:10px;line-height:1.45}
+      .practice-banner[hidden]{display:none}
+      .practice-banner b{color:var(--ink)}
+      .practice-banner button{margin-left:auto;flex:none;font:inherit;font-weight:700;font-size:13px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:5px 11px;cursor:pointer;min-height:32px}
+      .practice-banner button:hover{border-color:var(--accent)}
+      .practice-tip{margin-top:10px;background:var(--panel2);border:1px dashed var(--gold);border-radius:10px;padding:9px 12px;font-size:14px;line-height:1.5;color:var(--muted)}
+      .practice-tip[hidden]{display:none}
+      .practice-tip b{color:var(--ink)}
+      .table.practice{outline:3px solid var(--gold);outline-offset:-3px}
+      .tut-practice{margin:14px 0 0;font-size:13.5px;color:var(--muted);line-height:1.5;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:9px 12px}
+      .tut-practice b{color:var(--ink)}
+      .rules-body{text-align:left;margin-top:14px;display:grid;gap:14px;font-size:14.5px;line-height:1.55;color:var(--ink)}
+      .rules-body h4{margin:0 0 4px;font-size:15.5px;font-family:"Bricolage Grotesque","Public Sans",sans-serif}
+      .rules-body p{margin:0;color:var(--muted)}
+      .rules-body ul{margin:4px 0 0;padding-left:20px;color:var(--muted)}
+      .rules-body li{margin:3px 0}
+      .rules-body b{color:var(--ink)}
+      /* Feedback */
+      .fb-stars{display:flex;gap:6px;margin:6px 0 2px}
+      .fb-star{font:inherit;font-size:30px;line-height:1;background:var(--panel2);border:1.5px solid var(--line);border-radius:10px;width:52px;height:52px;cursor:pointer;padding:0;filter:grayscale(1);opacity:.55}
+      .fb-star.on{filter:none;opacity:1;border-color:var(--gold);background:var(--panel)}
+      .fb-label{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:14px;display:block}
+      .fb-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+      .fb-tags button{font:inherit;font-weight:700;font-size:13.5px;border:1px solid var(--line);background:var(--panel);color:var(--muted);border-radius:999px;padding:7px 14px;cursor:pointer;min-height:38px}
+      .fb-tags button.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+      .fb-text{width:100%;font:inherit;font-size:15px;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:6px;min-height:96px;resize:vertical}
+      .fb-text:focus{outline:2px solid var(--accent);outline-offset:1px}
+      .fb-thanks{text-align:center;font-size:17px;font-weight:800;color:var(--accent);padding:22px 0 6px}
+      .fb-thanks[hidden]{display:none}
+      .fb-form[hidden]{display:none}
+      @media(max-width:560px){
+        .seat{min-width:104px;padding:8px 8px}
+        .seat .avatar{font-size:22px}
+        .pcard{width:46px;height:66px}
+        .pcard .big{font-size:23px}
+        .msg{font-size:15.5px}
+        .seg button{padding:8px 9px}
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+
+      <div class="toprow">
+        <span class="pill">🐟 Go Fish — the classic asking game</span>
+        <span class="spacer"></span>
+        <div class="seg-wrap">
+          <span class="seg-label" id="modeLabel">Mode</span>
+          <div class="seg" role="group" aria-labelledby="modeLabel">
+            <button type="button" data-mode="play" class="active">▶ Play</button>
+            <button type="button" data-mode="practice">🎓 Practice</button>
+          </div>
+        </div>
+        <div class="seg-wrap">
+          <span class="seg-label" id="oppLabel">Rivals</span>
+          <div class="seg" role="group" aria-labelledby="oppLabel">
+            <button type="button" data-opp="2">2 AI</button>
+            <button type="button" data-opp="3" class="active">3 AI</button>
+          </div>
+        </div>
+        <div class="seg-wrap">
+          <span class="seg-label" id="diffLabel">Difficulty</span>
+          <div class="seg" role="group" aria-labelledby="diffLabel">
+            <button type="button" data-diff="easy">Easy</button>
+            <button type="button" data-diff="normal" class="active">Normal</button>
+            <button type="button" data-diff="hard">Hard</button>
+          </div>
+        </div>
+        <button class="btn" id="howBtn" type="button">❓ How to play</button>
+        <button class="btn" id="rulesBtn" type="button">📖 Rules</button>
+        <button class="btn" id="newGameBtn" type="button">↺ New game</button>
+        <button class="btn" id="feedbackBtn" type="button">💬 Feedback</button>
+      </div>
+
+      <div class="hintbar" id="tutHint" hidden>
+        <span>👋 <b>New here?</b> Tap <b>How to play</b> for a quick walkthrough, or <b>Rules</b> for the full rulebook.</span>
+        <button type="button" id="hintDismiss">Got it</button>
+      </div>
+
+      <div class="hud" aria-label="Your records">
+        <span>🪙 Play money — no real gambling</span>
+        <span>📚 Books: <b id="hudBooks">0</b> of 13</span>
+        <span class="yours">Your best: <b id="hudBest">—</b></span>
+        <span>🏆 Games won <b id="hudWon">0</b></span>
+        <span>🎮 Games played <b id="hudPlayed">0</b></span>
+        <span>🔥 Win streak <b id="hudStreak">0</b></span>
+      </div>
+
+      <div class="practice-banner" id="practiceBanner" hidden>
+        <span>🎓 <b>Practice round</b> — records paused. Wins, losses, streaks and your best haul won't change, and you'll get a coaching tip on your turns. Fish freely and try things out.</span>
+        <button type="button" id="practiceExit">Switch to Play</button>
+      </div>
+
+      <section class="table" id="tableSection" aria-label="Go Fish pond">
+        <div class="ai-row" id="aiRow"></div>
+        <div class="center">
+          <div class="pond"><span class="deckstack" aria-hidden="true"></span><span id="pondLabel">Pond: 32 cards</span></div>
+          <p class="msg" id="tableMsg" role="status">Dealing…</p>
+          <div class="score-row" id="scoreRow"></div>
+        </div>
+      </section>
+
+      <section class="you-area" aria-label="Your hand">
+        <div class="you-head">
+          <h2>Your hand</h2>
+          <span class="hint" id="handHint">Tap a card to pick a rank, then tap a rival to ask them for it.</span>
+        </div>
+        <div class="hand" id="hand"></div>
+        <div class="bookrow" id="bookRow"></div>
+        <div class="practice-tip" id="practiceTip" hidden></div>
+        <div class="askbar" id="askBar">
+          <span class="prompt" id="askPrompt">Your move — pick a card.</span>
+        </div>
+      </section>
+
+      <details class="info">
+        <summary>📜 Fishing log</summary>
+        <ul class="log-list" id="logList"></ul>
+      </details>
+
+      <p class="pane-footer">More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener">Ridiculously Fit and Fed</a></p>
+    </main>
+
+    <!-- Tutorial / first-run walkthrough -->
+    <div class="overlay" id="tutOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+      <div class="tut-card">
+        <div class="tut-head">
+          <span class="tut-icon" aria-hidden="true">🐟</span>
+          <div>
+            <h3 id="tutTitle">How to play — Go Fish</h3>
+            <p>How to play — under a minute</p>
+          </div>
+          <button class="tut-x" id="tutX" type="button" aria-label="Close tutorial">✕</button>
+        </div>
+        <ol class="tut-steps">
+          <li><span class="tut-num">1</span><div><b>🎯 The goal</b><span>Collect <b>books</b> — all four cards of one rank (four 7s, four Kings…). Most books when the deck runs out wins. There are 13 books in total.</span></div></li>
+          <li><span class="tut-num">2</span><div><b>🃏 Your cards</b><span>With 3 rivals you get 5 cards each; with 2 rivals, 7 each. The rest of the deck is the <b>pond</b> in the middle. Pairs and triples in your hand are gold — they're what you ask about.</span></div></li>
+          <li><span class="tut-num">3</span><div><b>🎣 On your turn, ask</b><span>Tap one of your cards to pick its rank, then tap a rival. You can only ask for a rank you're holding. If they have any, they must hand over <b>all</b> of them — and you ask again!</span></div></li>
+          <li><span class="tut-num">4</span><div><b>🌊 “Go fish!”</b><span>No luck? You draw one card from the pond. If it's the rank you just asked for, you get to ask again. Otherwise your turn ends and the next player fishes.</span></div></li>
+          <li><span class="tut-num">5</span><div><b>🧠 Watch and remember</b><span>Every ask gives away information: whoever asks for 9s is holding 9s. The AI listens too — on Hard it remembers everything it hears. Beat them to the books!</span></div></li>
+        </ol>
+        <p class="tut-practice">🎓 <b>Want a no-pressure first round?</b> Switch <b>Mode</b> (top of the page) to <b>Practice</b>. Practice rounds don't count toward your records — no wins, losses or streak changes — and you get a coaching tip on each of your turns.</p>
+        <div class="tut-foot">
+          <button class="tut-go" id="tutGo" type="button">Got it — let's fish ▶</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full rules -->
+    <div class="overlay" id="rulesOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+      <div class="tut-card">
+        <div class="tut-head">
+          <span class="tut-icon" aria-hidden="true">📖</span>
+          <div>
+            <h3 id="rulesTitle">Rules — Go Fish</h3>
+            <p>The full rulebook · scoring, special rules &amp; win conditions</p>
+          </div>
+          <button class="tut-x" id="rulesX" type="button" aria-label="Close rules">✕</button>
+        </div>
+        <div class="rules-body">
+          <section>
+            <h4>🎯 Objective</h4>
+            <p>Collect the most <b>books</b>. A book is all four cards of the same rank — for example, all four 7s or all four Kings. There are <b>13 books</b> in a standard 52-card deck (Aces through Kings). The player with the most books when the game ends wins.</p>
+          </section>
+          <section>
+            <h4>🃏 Setup</h4>
+            <ul>
+              <li>Standard 52-card deck, shuffled. Suits don't matter for scoring — only rank matters.</li>
+              <li><b>3 rivals (4 players):</b> 5 cards each, 32 cards left in the pond.</li>
+              <li><b>2 rivals (3 players):</b> 7 cards each, 31 cards left in the pond.</li>
+              <li>The remaining cards form the face-down draw pile — the <b>pond</b> — in the centre.</li>
+              <li>If you're dealt all four of a rank, that book is laid down straight away. You always go first.</li>
+            </ul>
+          </section>
+          <section>
+            <h4>🎣 How a turn works</h4>
+            <ul>
+              <li>On your turn, pick <b>one rival</b> and ask for <b>one rank</b>. You may only ask for a rank you are already holding at least one card of.</li>
+              <li><b>If they have it:</b> they must hand over <b>all</b> cards of that rank — no holding back, no partial gives. You then take another turn and may ask again (any rival, any rank you hold).</li>
+              <li><b>If they don't have it:</b> they say “Go Fish!” and you draw the top card from the pond. Your turn then passes to the next player — unless you hit the lucky draw below.</li>
+              <li>There is no limit to how many times you can ask in a row while you keep succeeding.</li>
+            </ul>
+          </section>
+          <section>
+            <h4>📚 Books</h4>
+            <p>As soon as you hold all four cards of a rank, they are removed from your hand and scored as one book. Books are public — everyone can see how many books each player has, but not which cards remain in anyone's hand.</p>
+          </section>
+          <section>
+            <h4>⭐ Special rules in this version</h4>
+            <ul>
+              <li><b>Lucky catch:</b> if the card you draw from the pond after a “Go Fish!” is exactly the rank you just asked for, you keep your turn and ask again.</li>
+              <li><b>Empty hand:</b> if your hand is empty at the start of your turn and the pond still has cards, you draw one card and play on. If you book out your hand mid-turn, you draw one card from the pond to keep going (if any remain).</li>
+              <li><b>Empty pond:</b> once the pond is empty there are no more draws — a failed ask simply ends your turn.</li>
+              <li><b>Out of the game:</b> a player with no cards and an empty pond sits out; play continues with the remaining players.</li>
+              <li><b>Honest asks only:</b> you can never ask for a rank you don't hold. Every ask is public, so asking also reveals that you're holding that rank — memory is part of the game.</li>
+            </ul>
+          </section>
+          <section>
+            <h4>🏆 Scoring &amp; winning</h4>
+            <ul>
+              <li><b>Scoring is books only:</b> 1 book = 1 point. Leftover cards in hand at the end are worth nothing, and no rank is worth more than any other.</li>
+              <li><b>Game end:</b> the game ends when all 13 books have been made, or when no player can take a turn (all hands empty and the pond empty).</li>
+              <li><b>Winner:</b> the player with the most books wins. If two or more players tie on books, the game is a tie — no tiebreaker in this version.</li>
+              <li><b>Your records:</b> your best haul (most books in one game), games won, games played and current win streak are saved on this device. A tie does not count as a win and ends a win streak. Practice rounds (see below) never touch these records.</li>
+            </ul>
+          </section>
+          <section>
+            <h4>🎓 Practice rounds</h4>
+            <p>Use the <b>Mode</b> switch at the top of the page to play a practice round instead of a scored game. The cards, rivals and rules are exactly the same — only the record-keeping changes.</p>
+            <ul>
+              <li><b>Records paused:</b> a practice round never changes your games played, games won, win streak or best haul — win or lose, it doesn't count.</li>
+              <li><b>Coaching tips:</b> on your turns, a tip under your hand points out the strongest ask the table talk has revealed (for example, who asked for a rank you're holding), or suggests your biggest group when nothing has been given away yet.</li>
+              <li><b>Switching modes starts a fresh round</b> right away, just like changing Rivals or Difficulty. Your Mode choice is remembered on this device.</li>
+              <li>Ready for it to count? Tap <b>Switch to Play</b> in the gold practice banner and the next round is scored as normal.</li>
+            </ul>
+          </section>
+          <section>
+            <h4>🤖 Rivals &amp; difficulty</h4>
+            <ul>
+              <li><b>Easy:</b> rivals mostly ask about their biggest group and only sometimes use what they've heard.</li>
+              <li><b>Normal:</b> rivals usually remember recent asks, but their memory fades after a few turns.</li>
+              <li><b>Hard:</b> rivals remember everything they hear for the whole game and target known cards.</li>
+              <li>Changing Rivals or Difficulty starts a fresh game immediately.</li>
+              <li>Your Rivals and Difficulty choices are remembered on this device, so the table is set up the same way next time you play.</li>
+            </ul>
+          </section>
+        </div>
+        <div class="tut-foot">
+          <button class="tut-go" id="rulesGo" type="button">Close rules</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback -->
+    <div class="overlay" id="feedbackOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+      <div class="tut-card">
+        <div class="tut-head">
+          <span class="tut-icon" aria-hidden="true">💬</span>
+          <div>
+            <h3 id="fbTitle">Feedback — Go Fish</h3>
+            <p>Tell us what you think — it helps make the game better.</p>
+          </div>
+          <button class="tut-x" id="fbX" type="button" aria-label="Close feedback">✕</button>
+        </div>
+        <div class="fb-form" id="fbForm">
+          <span class="fb-label" id="fbRatingLabel">Your rating</span>
+          <div class="fb-stars" role="radiogroup" aria-labelledby="fbRatingLabel">
+            <button type="button" class="fb-star" data-rating="1" role="radio" aria-checked="false" aria-label="1 star">⭐</button>
+            <button type="button" class="fb-star" data-rating="2" role="radio" aria-checked="false" aria-label="2 stars">⭐</button>
+            <button type="button" class="fb-star" data-rating="3" role="radio" aria-checked="false" aria-label="3 stars">⭐</button>
+            <button type="button" class="fb-star" data-rating="4" role="radio" aria-checked="false" aria-label="4 stars">⭐</button>
+            <button type="button" class="fb-star" data-rating="5" role="radio" aria-checked="false" aria-label="5 stars">⭐</button>
+          </div>
+          <span class="fb-label" id="fbTagLabel">What's this about? (optional)</span>
+          <div class="fb-tags" role="group" aria-labelledby="fbTagLabel">
+            <button type="button" data-tag="Bug">🐛 Bug</button>
+            <button type="button" data-tag="Suggestion">💡 Suggestion</button>
+            <button type="button" data-tag="Other" class="active">💬 Other</button>
+          </div>
+          <label class="fb-label" for="fbText">Your comment</label>
+          <textarea class="fb-text" id="fbText" placeholder="What did you like? What could be better?" maxlength="1000"></textarea>
+          <p style="font-size:12.5px;color:var(--muted);margin:10px 0 0">No personal info needed — keep it clean. Feedback follows the same Terms &amp; Conditions as the games and may be used to improve them. Saved on this device only.</p>
+          <div class="tut-foot">
+            <button class="tut-go" id="fbSave" type="button">Save feedback</button>
+          </div>
+        </div>
+        <div class="fb-thanks" id="fbThanks" hidden>🎉 Thanks! Your feedback was saved.</div>
+      </div>
+    </div>
+
+    <!-- Game over -->
+    <div class="overlay" id="overOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="overTitle">
+      <div class="tut-card">
+        <div class="over-card">
+          <div class="big-icon" id="overIcon">🏆</div>
+          <h3 id="overTitle">Game over</h3>
+          <p id="overText"></p>
+          <div class="final-books" id="overBooks"></div>
+          <p id="overStats"></p>
+          <button class="btn primary" id="againBtn" type="button">Play again</button>
+        </div>
+      </div>
+    </div>
+
+<script>
+(function(){
+"use strict";
+function $(id){ return document.getElementById(id); }
+var RANKS = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+var RANK_NAMES = ["Aces","2s","3s","4s","5s","6s","7s","8s","9s","10s","Jacks","Queens","Kings"];
+var SUITS = ["♠","♥","♦","♣"];
+var AI_DEFS = [
+  { name:"Marina", emoji:"🧜‍♀️", style:"sharp" },
+  { name:"Finn",   emoji:"🦈", style:"bold" },
+  { name:"Pip",    emoji:"🐙", style:"sneaky" }
+];
+var LS_KEY = "gofish.stats.v1", LS_TUT = "gofish.tutSeen.v1", LS_SET = "gofish.settings.v1";
+
+/* ---------- persistent bests ---------- */
+var stats = { played:0, won:0, bestBooks:0, streak:0 };
+try { var saved = JSON.parse(localStorage.getItem(LS_KEY) || "null"); if (saved) stats = saved; } catch(e){}
+function saveStats(){ try { localStorage.setItem(LS_KEY, JSON.stringify(stats)); } catch(e){} }
+var seenTut = false;
+try { seenTut = !!localStorage.getItem(LS_TUT); } catch(e){}
+
+/* ---------- game state ---------- */
+var difficulty = "normal";
+var numAI = 3;
+var practiceMode = false;
+var players = [];      // {name, emoji, isAI, hand:[{r,s}], books:[r,...]}
+var pond = [];         // draw pile of {r,s}
+var current = 0;       // index into players
+var busy = false;      // AI turn / animation in progress
+var gameOver = false;
+var selRank = null;    // rank index the human has selected
+var turnCount = 0;
+/* Public knowledge: known[rank] = { playerIdx: minCountKnown, atTurn }
+   Rebuilt from public events; AI memory quality depends on difficulty. */
+var known = {};        // rank -> { idx: {count: n, turn: t} }
+var booked = {};       // rank -> true once booked
+
+/* ---------- saved settings (difficulty + rivals) ---------- */
+try {
+  var savedSet = JSON.parse(localStorage.getItem(LS_SET) || "null");
+  if (savedSet){
+    if (savedSet.difficulty === "easy" || savedSet.difficulty === "normal" || savedSet.difficulty === "hard") difficulty = savedSet.difficulty;
+    if (savedSet.numAI === 2 || savedSet.numAI === 3) numAI = savedSet.numAI;
+    if (savedSet.practiceMode === true) practiceMode = true;
+  }
+} catch(e){}
+function saveSettings(){ try { localStorage.setItem(LS_SET, JSON.stringify({ difficulty:difficulty, numAI:numAI, practiceMode:practiceMode })); } catch(e){} }
+
+function shuffle(a){ for (var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function sortHand(h){ h.sort(function(a,b){ return a.r-b.r || a.s-b.s; }); }
+function countRank(hand, r){ var n=0; for (var i=0;i<hand.length;i++) if (hand[i].r===r) n++; return n; }
+function totalBooks(){ var n=0; for (var i=0;i<players.length;i++) n+=players[i].books.length; return n; }
+
+function log(text){
+  var li = document.createElement("li");
+  li.textContent = text;
+  var list = $("logList");
+  list.insertBefore(li, list.firstChild);
+  while (list.children.length > 60) list.removeChild(list.lastChild);
+}
+function say(html){ $("tableMsg").innerHTML = html; }
+
+/* ---------- knowledge tracking (public events) ---------- */
+function knowSet(r, idx, count){
+  if (!known[r]) known[r] = {};
+  var prev = known[r][idx];
+  if (!prev || count > prev.count) known[r][idx] = { count: count, turn: turnCount };
+  else prev.turn = turnCount;
+}
+function knowClear(r, idx){ if (known[r]) delete known[r][idx]; }
+function onAsk(asker, r){ knowSet(r, asker, Math.max(1, countRank(players[asker].hand, r))); }
+function onTransfer(from, to, r, n){
+  knowClear(r, from);
+  knowSet(r, to, countRank(players[to].hand, r));
+}
+function onNoHave(target, r){ knowClear(r, target); }
+function onBook(r){ booked[r] = true; delete known[r]; }
+
+/* ---------- books ---------- */
+function checkBooks(idx){
+  var p = players[idx], made = [];
+  for (var r=0;r<13;r++){
+    if (countRank(p.hand, r) === 4){
+      p.hand = p.hand.filter(function(c){ return c.r !== r; });
+      p.books.push(r); onBook(r); made.push(r);
+    }
+  }
+  if (made.length){
+    sortHand(p.hand);
+    for (var i=0;i<made.length;i++)
+      log("📚 " + p.name + " books the " + RANK_NAMES[made[i]] + "! (" + totalBooks() + " of 13)");
+  }
+  return made;
+}
+
+/* ---------- setup ---------- */
+function newGame(){
+  var deck = [];
+  for (var r=0;r<13;r++) for (var s=0;s<4;s++) deck.push({r:r, s:s});
+  shuffle(deck);
+  players = [{ name:"You", emoji:"🎣", isAI:false, hand:[], books:[] }];
+  for (var i=0;i<numAI;i++) players.push({ name:AI_DEFS[i].name, emoji:AI_DEFS[i].emoji, isAI:true, hand:[], books:[] });
+  var deal = (players.length === 3) ? 7 : 5;
+  for (var k=0;k<deal;k++) for (var p=0;p<players.length;p++) players[p].hand.push(deck.pop());
+  pond = deck;
+  known = {}; booked = {}; turnCount = 0;
+  current = 0; busy = false; gameOver = false; selRank = null;
+  for (var q=0;q<players.length;q++){ sortHand(players[q].hand); checkBooks(q); }
+  $("logList").innerHTML = "";
+  $("overOverlay").hidden = true;
+  log("🎣 New " + (practiceMode ? "practice round" : "game") + " — " + numAI + " rivals, " + deal + " cards each, " + pond.length + " in the pond." + (practiceMode ? " Records paused — this one doesn't count." : ""));
+  say(practiceMode
+    ? "🎓 Practice round — this one doesn't count toward your records. Your turn first! Pick a card, then tap a rival."
+    : "Your turn first! Pick a card, then tap a rival to ask for that rank.");
+  render();
+  updateHud();
+}
+
+function updateHud(){
+  $("hudBooks").textContent = players.length ? players[0].books.length : 0;
+  $("hudBest").textContent = stats.bestBooks ? stats.bestBooks + " books" : "—";
+  $("hudWon").textContent = stats.won;
+  $("hudPlayed").textContent = stats.played;
+  $("hudStreak").textContent = stats.streak;
+}
+
+/* ---------- practice coaching tip ---------- */
+function practiceTipHTML(){
+  var me = players[0];
+  if (!me || !me.hand.length) return "🎓 <b>Practice tip:</b> No cards right now — you'll draw from the pond when your turn starts, then fish with whatever you catch.";
+  /* Strongest revealed ask: a rank we hold that table talk says a rival holds too. */
+  var myCounts = {};
+  for (var i=0;i<me.hand.length;i++) myCounts[me.hand[i].r] = (myCounts[me.hand[i].r]||0)+1;
+  var best = null;
+  for (var r in known){
+    r = +r;
+    if (!myCounts[r] || booked[r]) continue;
+    for (var idx in known[r]){
+      idx = +idx;
+      if (idx === 0 || !players[idx].hand.length) continue;
+      var score = myCounts[r] * 10 + known[r][idx].count;
+      if (!best || score > best.score) best = { rank:r, target:idx, score:score };
+    }
+  }
+  if (best){
+    if (selRank === best.rank) return "🎓 <b>Practice tip:</b> Good pick — now tap <b>" + players[best.target].name + "</b>. They've shown they're holding " + RANK_NAMES[best.rank] + ", so that's your strongest ask.";
+    return "🎓 <b>Practice tip:</b> Try asking <b>" + players[best.target].name + "</b> for <b>" + RANK_NAMES[best.rank] + "</b> — table talk says they're holding some, and you're holding " + myCounts[best.rank] + ". Tap one of your " + RANK_NAMES[best.rank] + " to pick it.";
+  }
+  /* Nothing revealed: suggest our biggest group. */
+  var topRank = null, topN = 0;
+  for (var k in myCounts){ k = +k; if (myCounts[k] > topN){ topN = myCounts[k]; topRank = k; } }
+  if (selRank !== null && selRank !== topRank)
+    return "🎓 <b>Practice tip:</b> Nothing has been given away about " + RANK_NAMES[selRank] + " yet, so it's a blind ask — that's fine. Your biggest group is " + RANK_NAMES[topRank] + " (" + topN + " cards) if you'd rather build toward a book.";
+  return "🎓 <b>Practice tip:</b> No rival has given away a rank you're holding yet. Your biggest group is <b>" + RANK_NAMES[topRank] + "</b> (" + topN + " card" + (topN===1?"":"s") + ") — asking for that rank is a solid opener, and every answer teaches you who holds what.";
+}
+
+/* ---------- rendering ---------- */
+function cardEl(card, opts){
+  var b = document.createElement("button");
+  b.type = "button";
+  b.className = "pcard" + ((card.s===1||card.s===2) ? " red" : "") + (opts && opts.sel ? " sel" : "");
+  b.disabled = !(opts && opts.clickable);
+  b.setAttribute("aria-label", RANKS[card.r] + " of " + ["spades","hearts","diamonds","clubs"][card.s]);
+  b.innerHTML = '<span class="r">' + RANKS[card.r] + '</span><span class="s">' + SUITS[card.s] + '</span><span class="big">' + SUITS[card.s] + "</span>";
+  if (opts && opts.clickable) b.addEventListener("click", function(){ pickRank(card.r); });
+  return b;
+}
+function render(){
+  /* AI seats */
+  var row = $("aiRow"); row.innerHTML = "";
+  for (var i=1;i<players.length;i++){
+    (function(idx){
+      var p = players[idx];
+      var seat = document.createElement("div");
+      seat.className = "seat" + (current===idx && !gameOver ? " turn" : "");
+      var humanTurn = current===0 && !busy && !gameOver;
+      if (humanTurn && selRank !== null && p.hand.length > 0) seat.className += " askable";
+      var backs = "";
+      var shown = Math.min(p.hand.length, 7);
+      for (var b=0;b<shown;b++) backs += '<span class="back"></span>';
+      seat.innerHTML = '<div class="avatar" aria-hidden="true">' + p.emoji + '</div>' +
+        '<div class="pname">' + p.name + '</div>' +
+        '<div class="backs" aria-hidden="true">' + backs + '</div>' +
+        '<div class="pcount">' + p.hand.length + (p.hand.length===1 ? " card" : " cards") + '</div>' +
+        '<div class="pbooks">📚 ' + p.books.length + (p.books.length===1 ? " book" : " books") + "</div>";
+      if (seat.className.indexOf("askable") >= 0){
+        seat.setAttribute("role","button");
+        seat.setAttribute("tabindex","0");
+        seat.setAttribute("aria-label","Ask " + p.name + " for " + RANK_NAMES[selRank]);
+        seat.addEventListener("click", function(){ humanAsk(idx); });
+        seat.addEventListener("keydown", function(e){ if (e.key==="Enter" || e.key===" "){ e.preventDefault(); humanAsk(idx); } });
+      }
+      row.appendChild(seat);
+    })(i);
+  }
+  /* Pond + scores */
+  $("pondLabel").textContent = pond.length ? ("Pond: " + pond.length + (pond.length===1 ? " card" : " cards")) : "Pond is empty";
+  var sr = $("scoreRow"); sr.innerHTML = "";
+  for (var j=0;j<players.length;j++){
+    var chip = document.createElement("span");
+    chip.className = "score-chip" + (j===0 ? " me" : "");
+    chip.textContent = players[j].name + ": " + players[j].books.length + " 📚";
+    sr.appendChild(chip);
+  }
+  /* Human hand */
+  var hand = $("hand"); hand.innerHTML = "";
+  var me = players[0];
+  var humanTurn = current===0 && !busy && !gameOver;
+  for (var c=0;c<me.hand.length;c++){
+    hand.appendChild(cardEl(me.hand[c], { clickable: humanTurn, sel: selRank === me.hand[c].r }));
+  }
+  if (!me.hand.length) hand.innerHTML = '<span style="color:var(--muted);font-size:14px">No cards in hand — you\'ll draw from the pond on your turn.</span>';
+  /* Books row */
+  var br = $("bookRow");
+  if (me.books.length){
+    br.innerHTML = "<span>Your books:</span> " + me.books.slice().sort(function(a,b){return a-b;}).map(function(r){ return '<span class="book-chip">' + RANK_NAMES[r] + "</span>"; }).join(" ");
+  } else br.innerHTML = "<span>No books yet — get all four of a rank to book it.</span>";
+  /* Ask prompt */
+  var prompt = $("askPrompt");
+  if (gameOver) prompt.textContent = "Game over — see the results!";
+  else if (busy) prompt.textContent = "The rivals are fishing…";
+  else if (current !== 0) prompt.textContent = players[current].name + " is fishing…";
+  else if (selRank !== null) prompt.innerHTML = "Ask a rival for <b>" + RANK_NAMES[selRank] + "</b> — tap a glowing seat above.";
+  else prompt.textContent = "Your move — pick a card.";
+  $("handHint").textContent = humanTurn
+    ? (selRank !== null ? "Now tap a rival's seat to ask them." : "Tap a card to pick a rank, then tap a rival to ask them for it.")
+    : "Watch the log — every ask tells you who's holding what.";
+  /* Practice mode chrome */
+  $("practiceBanner").hidden = !practiceMode;
+  $("tableSection").classList.toggle("practice", practiceMode);
+  var tip = $("practiceTip");
+  if (practiceMode && humanTurn && !gameOver){ tip.innerHTML = practiceTipHTML(); tip.hidden = false; }
+  else tip.hidden = true;
+  updateHud();
+}
+
+/* ---------- turn engine ---------- */
+function pickRank(r){
+  if (current !== 0 || busy || gameOver) return;
+  selRank = (selRank === r) ? null : r;
+  render();
+}
+function drawFromPond(idx){
+  if (!pond.length) return null;
+  var c = pond.pop();
+  players[idx].hand.push(c); sortHand(players[idx].hand);
+  return c;
+}
+function nextPlayer(from){
+  var n = players.length;
+  for (var step=1; step<=n; step++){
+    var idx = (from + step) % n;
+    if (players[idx].hand.length || pond.length) return idx;
+  }
+  return -1;
+}
+function endTurn(){
+  selRank = null;
+  if (totalBooks() >= 13 || nextPlayer(current) === -1){ finishGame(); return; }
+  current = nextPlayer(current);
+  turnCount++;
+  startTurn();
+}
+function startTurn(){
+  render();
+  if (gameOver) return;
+  var p = players[current];
+  if (!p.hand.length){
+    var drawn = drawFromPond(current);
+    if (drawn){
+      log("🎣 " + p.name + "'s hand was empty — draws from the pond.");
+      if (!p.isAI) say("Your hand was empty, so you draw a card from the pond. Your move!");
+      checkBooks(current);
+      render();
+    } else { endTurn(); return; }
+  }
+  if (p.isAI){ busy = true; render(); setTimeout(aiStep, 850); }
+  else { busy = false; render(); }
+}
+
+/* Resolve one ask. Returns "again" if the asker keeps the turn, else "done". */
+function resolveAsk(askerIdx, targetIdx, r){
+  var asker = players[askerIdx], target = players[targetIdx];
+  onAsk(askerIdx, r);
+  var got = target.hand.filter(function(c){ return c.r === r; });
+  if (got.length){
+    target.hand = target.hand.filter(function(c){ return c.r !== r; });
+    for (var i=0;i<got.length;i++) asker.hand.push(got[i]);
+    sortHand(asker.hand);
+    onTransfer(targetIdx, askerIdx, r, got.length);
+    log("✅ " + asker.name + " asks " + target.name + " for " + RANK_NAMES[r] + " — gets " + got.length + "!");
+    say('<span class="who">' + asker.name + "</span> asked " + target.name + " for " + RANK_NAMES[r] + " — and got " + got.length + "! Ask again.");
+    checkBooks(askerIdx);
+    render();
+    if (!asker.hand.length){
+      var d = drawFromPond(askerIdx);
+      if (d){ log("🎣 " + asker.name + " books out the hand and draws from the pond."); checkBooks(askerIdx); render(); }
+      else return "done";
+    }
+    return "again";
+  }
+  onNoHave(targetIdx, r);
+  log("🌊 " + asker.name + " asks " + target.name + " for " + RANK_NAMES[r] + " — Go Fish!");
+  var drawn = drawFromPond(askerIdx);
+  if (drawn && drawn.r === r){
+    log("🍀 " + asker.name + " fishes up a " + RANKS[r] + " — asks again!");
+    say('<span class="who">' + asker.name + "</span> went fishing for " + RANK_NAMES[r] + "… and caught one! Ask again.");
+    checkBooks(askerIdx);
+    render();
+    return "again";
+  }
+  if (drawn) checkBooks(askerIdx);
+  say('<span class="who">' + asker.name + "</span> asked " + target.name + " for " + RANK_NAMES[r] + " — Go Fish! 🐟");
+  render();
+  return "done";
+}
+
+function humanAsk(targetIdx){
+  if (current !== 0 || busy || gameOver || selRank === null) return;
+  if (!players[targetIdx].hand.length) return;
+  var r = selRank;
+  busy = true;
+  var res = resolveAsk(0, targetIdx, r);
+  selRank = (res === "again") ? (countRank(players[0].hand, r) ? r : null) : null;
+  if (totalBooks() >= 13){ finishGame(); return; }
+  if (res === "again"){ busy = false; render(); }
+  else setTimeout(endTurn, 650);
+}
+
+/* ---------- AI ---------- */
+function aiMemoryRank(aiIdx){
+  /* Ranks this AI holds where memory says someone else holds more. */
+  var p = players[aiIdx];
+  var myRanks = {};
+  for (var i=0;i<p.hand.length;i++) myRanks[p.hand[i].r] = (myRanks[p.hand[i].r]||0)+1;
+  var best = null;
+  for (var r in known){
+    r = +r;
+    if (!myRanks[r] || booked[r]) continue;
+    for (var idx in known[r]){
+      idx = +idx;
+      if (idx === aiIdx) continue;
+      if (!players[idx].hand.length) continue;
+      var info = known[r][idx];
+      if (difficulty === "normal" && turnCount - info.turn > 6) continue; /* fuzzy memory */
+      var score = myRanks[r] * 10 + info.count;
+      if (!best || score > best.score) best = { rank:r, target:idx, score:score };
+    }
+  }
+  return best;
+}
+function aiChoose(aiIdx){
+  var p = players[aiIdx];
+  var targets = [];
+  for (var i=0;i<players.length;i++) if (i !== aiIdx && players[i].hand.length) targets.push(i);
+  if (!targets.length) return null;
+  var useMemory = difficulty === "hard" ? true : (difficulty === "normal" ? Math.random() < 0.85 : Math.random() < 0.25);
+  if (useMemory){
+    var mem = aiMemoryRank(aiIdx);
+    if (mem) return mem;
+  }
+  /* Fallback: ask about our biggest group, at a random target. Easy sometimes picks any rank we hold. */
+  var counts = {};
+  for (var j=0;j<p.hand.length;j++) counts[p.hand[j].r] = (counts[p.hand[j].r]||0)+1;
+  var ranks = Object.keys(counts).map(Number);
+  var pick;
+  if (difficulty === "easy" && Math.random() < 0.5) pick = ranks[Math.floor(Math.random()*ranks.length)];
+  else { ranks.sort(function(a,b){ return counts[b]-counts[a]; }); pick = ranks[0]; }
+  return { rank: pick, target: targets[Math.floor(Math.random()*targets.length)] };
+}
+function aiStep(){
+  if (gameOver) return;
+  var idx = current;
+  if (!players[idx].isAI){ busy = false; render(); return; }
+  var choice = aiChoose(idx);
+  if (!choice){ busy = false; endTurn(); return; }
+  var res = resolveAsk(idx, choice.target, choice.rank);
+  if (totalBooks() >= 13){ finishGame(); return; }
+  if (res === "again") setTimeout(aiStep, 800);
+  else { busy = false; setTimeout(endTurn, 650); }
+}
+
+/* ---------- game over ---------- */
+function finishGame(){
+  if (gameOver) return;
+  gameOver = true; busy = false; selRank = null;
+  var standings = players.map(function(p,i){ return { name:p.name, books:p.books.length, idx:i }; })
+    .sort(function(a,b){ return b.books - a.books; });
+  var top = standings[0].books;
+  var winners = standings.filter(function(s){ return s.books === top; });
+  var youWon = winners.length === 1 && winners[0].idx === 0;
+  var tied = winners.length > 1 && winners.some(function(s){ return s.idx === 0; });
+  if (!practiceMode){
+    stats.played++;
+    if (youWon){ stats.won++; stats.streak++; } else stats.streak = 0;
+    if (players[0].books.length > stats.bestBooks) stats.bestBooks = players[0].books.length;
+    saveStats();
+  }
+  render();
+  log("🏁 " + (practiceMode ? "Practice round over" : "Game over") + " — " + standings.map(function(s){ return s.name + " " + s.books; }).join(", ") + "." + (practiceMode ? " Records unchanged." : ""));
+  $("overIcon").textContent = practiceMode ? "🎓" : (youWon ? "🏆" : (tied ? "🤝" : "🐟"));
+  $("overTitle").textContent = practiceMode
+    ? (youWon ? "Practice round won!" : (tied ? "Practice round — tied!" : winners[0].name + " takes the practice round"))
+    : (youWon ? "You win — top fisher!" : (tied ? "It's a tie!" : winners[0].name + " wins this round"));
+  $("overText").textContent = youWon
+    ? "You booked " + players[0].books.length + " of the 13 books. The pond never stood a chance."
+    : (tied ? "You matched the best haul with " + players[0].books.length + " books. So close to sole bragging rights!"
+            : "You booked " + players[0].books.length + " of 13. " + winners[0].name + " took it with " + top + " — rematch?");
+  $("overBooks").innerHTML = standings.map(function(s){
+    return '<span class="book-chip">' + s.name + ": " + s.books + " 📚</span>";
+  }).join("");
+  $("overStats").textContent = practiceMode
+    ? "🎓 Practice round — your records were paused, so nothing here counted. Best haul: " + stats.bestBooks + " books · Games won: " + stats.won + " of " + stats.played + ". Switch Mode to Play when you want it to count."
+    : "Your best haul: " + stats.bestBooks + " books · Games won: " + stats.won + " of " + stats.played + (stats.streak > 1 ? " · Win streak: " + stats.streak + " 🔥" : "");
+  $("againBtn").textContent = practiceMode ? "Practice again" : "Play again";
+  setTimeout(function(){ $("overOverlay").hidden = false; }, 500);
+}
+
+/* ---------- controls ---------- */
+document.querySelectorAll("[data-diff]").forEach(function(b){
+  b.addEventListener("click", function(){
+    difficulty = b.getAttribute("data-diff");
+    document.querySelectorAll("[data-diff]").forEach(function(x){ x.classList.toggle("active", x === b); });
+    saveSettings();
+    newGame();
+  });
+});
+document.querySelectorAll("[data-opp]").forEach(function(b){
+  b.addEventListener("click", function(){
+    numAI = +b.getAttribute("data-opp");
+    document.querySelectorAll("[data-opp]").forEach(function(x){ x.classList.toggle("active", x === b); });
+    saveSettings();
+    newGame();
+  });
+});
+function setMode(practice){
+  if (practiceMode === practice) return;
+  practiceMode = practice;
+  document.querySelectorAll("[data-mode]").forEach(function(x){ x.classList.toggle("active", (x.getAttribute("data-mode") === "practice") === practiceMode); });
+  saveSettings();
+  newGame();
+}
+document.querySelectorAll("[data-mode]").forEach(function(b){
+  b.addEventListener("click", function(){ setMode(b.getAttribute("data-mode") === "practice"); });
+});
+$("practiceExit").addEventListener("click", function(){ setMode(false); });
+$("newGameBtn").addEventListener("click", newGame);
+$("againBtn").addEventListener("click", newGame);
+function markTutSeen(){
+  if (!seenTut){ seenTut = true; try { localStorage.setItem(LS_TUT, "1"); } catch(e){} }
+  var hint = $("tutHint"); if (hint) hint.hidden = true;
+}
+function openTut(){ $("tutOverlay").hidden = false; }
+function closeTut(){ $("tutOverlay").hidden = true; markTutSeen(); }
+$("howBtn").addEventListener("click", openTut);
+$("tutX").addEventListener("click", closeTut);
+$("tutGo").addEventListener("click", closeTut);
+function openRules(){ $("rulesOverlay").hidden = false; }
+function closeRules(){ $("rulesOverlay").hidden = true; }
+$("rulesBtn").addEventListener("click", openRules);
+$("rulesX").addEventListener("click", closeRules);
+$("rulesGo").addEventListener("click", closeRules);
+$("hintDismiss").addEventListener("click", markTutSeen);
+
+/* ---------- feedback ---------- */
+var FB_KEY = "holos-arcade-feedback";
+var fbRating = 0, fbTag = "Other";
+function fbPaintStars(){
+  document.querySelectorAll(".fb-star").forEach(function(s){
+    var on = +s.getAttribute("data-rating") <= fbRating;
+    s.classList.toggle("on", on);
+    s.setAttribute("aria-checked", +s.getAttribute("data-rating") === fbRating ? "true" : "false");
+  });
+}
+function openFeedback(){
+  fbRating = 0; fbTag = "Other";
+  $("fbText").value = "";
+  fbPaintStars();
+  document.querySelectorAll("[data-tag]").forEach(function(x){ x.classList.toggle("active", x.getAttribute("data-tag") === fbTag); });
+  $("fbForm").hidden = false;
+  $("fbThanks").hidden = true;
+  $("feedbackOverlay").hidden = false;
+}
+function closeFeedback(){ $("feedbackOverlay").hidden = true; }
+$("feedbackBtn").addEventListener("click", openFeedback);
+$("fbX").addEventListener("click", closeFeedback);
+document.querySelectorAll(".fb-star").forEach(function(s){
+  s.addEventListener("click", function(){ fbRating = +s.getAttribute("data-rating"); fbPaintStars(); });
+});
+document.querySelectorAll("[data-tag]").forEach(function(x){
+  x.addEventListener("click", function(){
+    fbTag = x.getAttribute("data-tag");
+    document.querySelectorAll("[data-tag]").forEach(function(y){ y.classList.toggle("active", y === x); });
+  });
+});
+$("fbSave").addEventListener("click", function(){
+  var record = {
+    game: "go-fish",
+    rating: fbRating,
+    text: $("fbText").value.trim(),
+    tag: fbTag,
+    timestamp: new Date().toISOString()
+  };
+  try {
+    var arr = JSON.parse(localStorage.getItem(FB_KEY) || "[]");
+    if (!Array.isArray(arr)) arr = [];
+    arr.push(record);
+    localStorage.setItem(FB_KEY, JSON.stringify(arr));
+  } catch(e){}
+  $("fbForm").hidden = true;
+  $("fbThanks").hidden = false;
+  setTimeout(closeFeedback, 1600);
+});
+
+document.querySelectorAll("[data-diff]").forEach(function(x){ x.classList.toggle("active", x.getAttribute("data-diff") === difficulty); });
+document.querySelectorAll("[data-opp]").forEach(function(x){ x.classList.toggle("active", +x.getAttribute("data-opp") === numAI); });
+document.querySelectorAll("[data-mode]").forEach(function(x){ x.classList.toggle("active", (x.getAttribute("data-mode") === "practice") === practiceMode); });
+newGame();
+if (!seenTut) $("tutHint").hidden = false;
+})();
+</script>
+  </body>
+</html>

@@ -1,0 +1,1104 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Grid Tactics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]), textarea { min-height: 2.25rem; }
+      :root{
+        --bg:#e9ebe3; --panel:#f7f7f1; --panel2:#eef0e6; --ink:#1d241e; --muted:#5b665c;
+        --line:#c9cec0; --accent:#b34a26; --accent-ink:#fff;
+        --teal:#1e6f66; --teal-soft:#d7e9e2;
+        --tile-plain:#cfd6b8; --tile-plain2:#c3ccab; --tile-forest:#7d9b6a; --tile-hill:#d9c08a; --tile-water:#7fb3c8;
+        --move:rgba(30,111,102,.45); --atk:rgba(179,74,38,.5); --heal:rgba(64,145,80,.5);
+        --player:#1e6f66; --enemy:#a03a24;
+        --shadow:0 2px 10px rgba(29,36,30,.14);
+        --gold:#a87b1f;
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --bg:#131714; --panel:#1d231e; --panel2:#232a24; --ink:#e8ece2; --muted:#a3ae9f;
+          --line:#39423a; --accent:#d96f43; --teal:#3fa294; --teal-soft:#24443e;
+          --tile-plain:#4c5a41; --tile-plain2:#46543c; --tile-forest:#33512e; --tile-hill:#6d5c33; --tile-water:#2c5468;
+          --move:rgba(63,162,148,.55); --atk:rgba(217,111,67,.55); --heal:rgba(96,190,110,.5);
+          --player:#3fa294; --enemy:#d96f43;
+          --shadow:0 2px 10px rgba(0,0,0,.4);
+          --gold:#d9a83e;
+        }
+      }
+      *{box-sizing:border-box}
+      html,body{margin:0;padding:0}
+      body{background:var(--bg);color:var(--ink);font-family:"Barlow",system-ui,sans-serif;font-size:16px;line-height:1.45}
+      h1,h2,h3,.cond{font-family:"Barlow Condensed","Barlow",sans-serif;letter-spacing:.02em}
+      .wrap{max-width:1120px;margin:0 auto;padding:14px 14px 8px}
+      /* ---------- top bar ---------- */
+      .topbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:10px}
+      .title-block h1{font-size:2rem;margin:0;line-height:1;text-transform:uppercase}
+      .title-block p{margin:2px 0 0;color:var(--muted);font-size:.9rem}
+      .top-actions{display:flex;flex-wrap:wrap;gap:6px}
+      .btn{appearance:none;border:1.5px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;
+        padding:7px 12px;font:600 .92rem "Barlow",sans-serif;cursor:pointer;min-height:38px}
+      .btn:hover{border-color:var(--muted)}
+      .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+      .btn.teal{background:var(--teal);border-color:var(--teal);color:#fff}
+      .btn:disabled{opacity:.45;cursor:not-allowed}
+      .btn.small{padding:4px 9px;min-height:36px;font-size:.85rem}
+      .btn.active{outline:3px solid var(--move);outline-offset:1px}
+      /* ---------- status strip ---------- */
+      .status-strip{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+      .chip{background:var(--panel);border:1.5px solid var(--line);border-radius:8px;padding:6px 12px;font-weight:600;font-size:.92rem}
+      .chip b{color:var(--accent)}
+      .chip.turn-player{border-color:var(--teal);color:var(--teal)}
+      .chip.turn-enemy{border-color:var(--accent);color:var(--accent)}
+      /* ---------- settings row ---------- */
+      .settings{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--panel);border:1.5px solid var(--line);
+        border-radius:10px;padding:8px 12px;margin-bottom:12px}
+      .settings label{font-weight:600;font-size:.9rem;display:flex;align-items:center;gap:6px}
+      .settings select{border:1.5px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:7px;padding:5px 8px;font:600 .92rem "Barlow",sans-serif}
+      .seg{display:flex;border:1.5px solid var(--line);border-radius:8px;overflow:hidden}
+      .seg button{border:0;background:var(--panel);color:var(--ink);padding:6px 12px;font:600 .9rem "Barlow",sans-serif;cursor:pointer;min-height:36px}
+      .seg button.on{background:var(--teal);color:#fff}
+      .settings .note{color:var(--muted);font-size:.85rem}
+      /* ---------- layout ---------- */
+      .layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:14px;align-items:start}
+      @media (max-width:860px){.layout{grid-template-columns:1fr}}
+      /* ---------- board ---------- */
+      .board-frame{background:var(--panel);border:1.5px solid var(--line);border-radius:12px;padding:10px;box-shadow:var(--shadow)}
+      .board{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;width:100%}
+      .tile{position:relative;border:0;border-radius:6px;aspect-ratio:1/1;cursor:pointer;padding:0;overflow:hidden;
+        display:flex;align-items:center;justify-content:center;font-family:inherit}
+      .tile.t-plain{background:var(--tile-plain)} .tile.t-plain.alt{background:var(--tile-plain2)}
+      .tile.t-forest{background:var(--tile-forest)} .tile.t-hill{background:var(--tile-hill)} .tile.t-water{background:var(--tile-water)}
+      .tile .terr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:.55;pointer-events:none}
+      .tile .terr svg{width:58%;height:58%}
+      .tile.hl-move{box-shadow:inset 0 0 0 3px var(--teal), inset 0 0 0 100px var(--move)}
+      .tile.hl-atk{box-shadow:inset 0 0 0 3px var(--accent), inset 0 0 0 100px var(--atk)}
+      .tile.hl-heal{box-shadow:inset 0 0 0 3px #40914f, inset 0 0 0 100px var(--heal)}
+      .tile.selected{box-shadow:inset 0 0 0 3px var(--gold), inset 0 0 0 100px rgba(168,123,31,.25)}
+      .tile.targeted{box-shadow:inset 0 0 0 3px var(--accent), inset 0 0 0 100px rgba(179,74,38,.35)}
+      .unit{position:relative;z-index:2;width:78%;height:78%;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        color:#fff;font-weight:700;line-height:1;border:2.5px solid rgba(255,255,255,.85);box-shadow:0 2px 5px rgba(0,0,0,.35)}
+      .unit .glyph{font-family:"Barlow Condensed",sans-serif;font-size:clamp(.95rem,3.4vw,1.35rem);font-weight:700}
+      .unit .hpbar{width:80%;height:5px;border-radius:3px;background:rgba(0,0,0,.45);margin-top:3px;overflow:hidden}
+      .unit .hpbar i{display:block;height:100%;background:#7ee08a;border-radius:3px}
+      .unit .hpbar i.low{background:#e0653a}
+      .unit.side-player{background:var(--player)} .unit.side-enemy{background:var(--enemy)}
+      .unit.done{opacity:.45;filter:grayscale(.5)}
+      .unit.boss{border-color:var(--gold);border-width:3.5px}
+      .unit.hit{animation:shake .3s}
+      @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+      @media (prefers-reduced-motion: reduce){.unit.hit{animation:none}}
+      .float-dmg{position:absolute;z-index:5;top:2px;left:50%;transform:translateX(-50%);font-weight:700;font-size:.95rem;
+        color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7);pointer-events:none;animation:rise 1s forwards}
+      .float-dmg.heal{color:#b9ffc4}
+      @keyframes rise{to{transform:translate(-50%,-16px);opacity:0}}
+      @media (prefers-reduced-motion: reduce){.float-dmg{animation:none}}
+      .legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:9px;font-size:.85rem;color:var(--muted)}
+      .legend span{display:inline-flex;align-items:center;gap:5px}
+      .swatch{width:16px;height:16px;border-radius:4px;display:inline-block;border:1px solid var(--line)}
+      /* ---------- side panel ---------- */
+      .panel{background:var(--panel);border:1.5px solid var(--line);border-radius:12px;padding:12px;box-shadow:var(--shadow);margin-bottom:12px}
+      .panel h2{margin:0 0 8px;font-size:1.25rem;text-transform:uppercase}
+      .panel h3{margin:10px 0 4px;font-size:1.05rem}
+      .hint{color:var(--muted);font-size:.92rem;margin:0}
+      .sel-card .cls-name{font-family:"Barlow Condensed",sans-serif;font-size:1.5rem;font-weight:700;line-height:1.05}
+      .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:.93rem;margin:8px 0}
+      .stat-grid div{display:flex;justify-content:space-between;border-bottom:1px dashed var(--line);padding:2px 0}
+      .hp-track{height:12px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin:4px 0 2px}
+      .hp-track i{display:block;height:100%;background:#4c9a57}
+      .hp-track i.low{background:#c2512c}
+      .action-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+      .preview{background:var(--panel2);border:1.5px dashed var(--accent);border-radius:9px;padding:9px 11px;margin-top:10px;font-size:.94rem}
+      .preview b{color:var(--accent)}
+      .preview.heal{border-color:#40914f}.preview.heal b{color:#40914f}
+      .squad-list{display:flex;flex-direction:column;gap:6px}
+      .squad-row{display:flex;align-items:center;gap:9px;width:100%;text-align:left;background:var(--panel2);border:1.5px solid var(--line);
+        border-radius:9px;padding:6px 9px;cursor:pointer;color:var(--ink);font:500 .93rem "Barlow",sans-serif}
+      .squad-row:disabled{cursor:default;opacity:.75}
+      .squad-row .dot{width:30px;height:30px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;color:#fff;
+        font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:1rem}
+      .squad-row .grow{flex:1;min-width:0}
+      .squad-row .mini-hp{height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin-top:3px}
+      .squad-row .mini-hp i{display:block;height:100%;background:#4c9a57}
+      .squad-row .st{font-size:.8rem;color:var(--muted);white-space:nowrap}
+      .squad-row.dead{opacity:.45}.squad-row.dead .dot{background:#666}
+      .squad-row.enemy-row{cursor:default}
+      .log{max-height:190px;overflow-y:auto;font-size:.88rem;display:flex;flex-direction:column;gap:3px}
+      .log p{margin:0;border-bottom:1px dotted var(--line);padding-bottom:3px}
+      .log p.good{color:var(--teal);font-weight:600}.log p.bad{color:var(--accent);font-weight:600}
+      /* ---------- overlays ---------- */
+      .overlay{position:fixed;inset:0;background:rgba(10,14,10,.62);display:none;align-items:flex-start;justify-content:center;
+        padding:18px 12px;overflow-y:auto;z-index:50}
+      .overlay.open{display:flex}
+      .sheet{background:var(--panel);color:var(--ink);border-radius:14px;max-width:560px;width:100%;padding:20px;box-shadow:var(--shadow)}
+      .sheet h2{margin:0 0 6px;font-size:1.7rem;text-transform:uppercase}
+      .sheet h3{margin:14px 0 4px;font-size:1.15rem}
+      .sheet ul{margin:4px 0 8px;padding-left:20px}
+      .sheet li{margin-bottom:4px}
+      .stars{display:flex;gap:6px;margin:8px 0}
+      .stars button{font-size:1.7rem;background:none;border:0;cursor:pointer;color:var(--line);padding:2px 4px;min-height:44px;min-width:44px;line-height:1}
+      .stars button.lit{color:var(--gold)}
+      textarea{width:100%;border:1.5px solid var(--line);border-radius:9px;background:var(--panel2);color:var(--ink);
+        font:400 .95rem "Barlow",sans-serif;padding:9px;min-height:84px;resize:vertical}
+      .heal-opts{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+      .heal-opts .btn{text-align:left;min-height:48px}
+      .heal-opts .btn small{display:block;font-weight:500;opacity:.85}
+      .mend-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+      /* ---------- rules view ---------- */
+      .rules-view{display:none}
+      .rules-view.open{display:block}
+      .rules-view .panel p,.rules-view .panel li{font-size:.97rem}
+      table.stats{width:100%;border-collapse:collapse;font-size:.92rem;margin:6px 0}
+      table.stats th,table.stats td{border:1px solid var(--line);padding:5px 8px;text-align:left}
+      table.stats th{background:var(--panel2);font-family:"Barlow Condensed",sans-serif;font-size:1rem;letter-spacing:.03em}
+      footer{margin-top:22px;padding:16px 4px 26px;border-top:1.5px solid var(--line);text-align:center;color:var(--muted);font-size:.95rem}
+      footer a{color:var(--accent);font-weight:700}
+      .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--bg);
+        padding:10px 18px;border-radius:9px;font-weight:600;z-index:80;transition:transform .25s;max-width:92vw;text-align:center}
+      .toast.show{transform:translateX(-50%) translateY(0)}
+      @media (prefers-reduced-motion: reduce){.toast{transition:none}}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <!-- ======= GAME VIEW ======= -->
+      <div id="gameView">
+        <div class="topbar">
+          <div class="title-block">
+            <h1>Grid Tactics</h1>
+            <p>Turn-based squad battles on an 8×8 field. Outmanoeuvre, use the terrain, clear all five battles.</p>
+          </div>
+          <div class="top-actions">
+            <button class="btn" id="btnTutorial" type="button">How to play</button>
+            <button class="btn" id="btnRules" type="button">Rules</button>
+            <button class="btn" id="btnFeedback" type="button">Feedback</button>
+          </div>
+        </div>
+
+        <div class="settings">
+          <label>Difficulty
+            <select id="selDifficulty" aria-label="Difficulty">
+              <option value="easy">Easy</option>
+              <option value="normal" selected>Normal</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+          <label>Mode</label>
+          <div class="seg" role="group" aria-label="Mode">
+            <button type="button" id="segCampaign" class="on">Campaign</button>
+            <button type="button" id="segPractice">Practice</button>
+          </div>
+          <span class="note" id="modeNote">Campaign: wins count toward your bests.</span>
+          <span class="note" id="bestNote"></span>
+        </div>
+
+        <div class="status-strip">
+          <span class="chip">Battle <b id="chipBattle">1 / 5</b></span>
+          <span class="chip" id="chipName">The Meadow Skirmish</span>
+          <span class="chip turn-player" id="chipTurn">Your turn</span>
+          <span class="chip">Round <b id="chipRound">1</b></span>
+          <span class="chip">Score <b id="chipScore">0</b></span>
+        </div>
+
+        <div class="layout">
+          <div>
+            <div class="board-frame">
+              <div class="board" id="board" role="grid" aria-label="Battle grid"></div>
+              <div class="legend">
+                <span><i class="swatch" style="background:var(--tile-forest)"></i> Forest — cover vs ranged, costs 2 to enter</span>
+                <span><i class="swatch" style="background:var(--tile-hill)"></i> Hill — +1 range, +2 damage</span>
+                <span><i class="swatch" style="background:var(--tile-water)"></i> Water — blocked</span>
+              </div>
+            </div>
+            <div class="action-row" style="margin-top:10px">
+              <button class="btn teal" id="btnEndTurn" type="button">End turn</button>
+              <button class="btn" id="btnUndo" type="button" disabled>Undo move (Practice)</button>
+              <button class="btn" id="btnRestartBattle" type="button">Restart battle</button>
+              <button class="btn" id="btnNewCampaign" type="button">New campaign</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="panel sel-card" id="selPanel">
+              <h2>Unit</h2>
+              <p class="hint" id="selHint">Tap one of your units (teal) to select it. Blue-green tiles are moves, red tiles are targets. Tap a target once to preview the damage, again — or Confirm — to strike.</p>
+              <div id="selBody" style="display:none">
+                <div class="cls-name" id="selName">Knight</div>
+                <div id="selSub" style="color:var(--muted);font-size:.9rem"></div>
+                <div class="hp-track"><i id="selHpBar" style="width:100%"></i></div>
+                <div style="font-size:.9rem"><b id="selHpText"></b> HP · <span id="selTerrain"></span></div>
+                <div class="stat-grid">
+                  <div><span>Move</span><b id="selMove"></b></div>
+                  <div><span>Range</span><b id="selRange"></b></div>
+                  <div><span>Damage</span><b id="selDmg"></b></div>
+                  <div><span>Status</span><b id="selStatus"></b></div>
+                </div>
+                <div style="font-size:.93rem"><b>Ability:</b> <span id="selAbility"></span></div>
+                <div class="action-row" id="selActions"></div>
+                <div class="preview" id="previewBox" style="display:none"></div>
+              </div>
+            </div>
+
+            <div class="panel">
+              <h2>Your squad</h2>
+              <div class="squad-list" id="squadList"></div>
+            </div>
+
+            <div class="panel">
+              <h2>Enemies</h2>
+              <div class="squad-list" id="enemyList"></div>
+            </div>
+
+            <div class="panel">
+              <h2>Battle log</h2>
+              <div class="log" id="log"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======= RULES VIEW ======= -->
+      <div class="rules-view" id="rulesView">
+        <div class="topbar">
+          <div class="title-block"><h1>Rules</h1><p>Everything you need to command the squad.</p></div>
+          <div class="top-actions"><button class="btn primary" id="btnBackToGame" type="button">Back to game</button></div>
+        </div>
+        <div class="panel">
+          <h2>Goal &amp; turns</h2>
+          <p>Defeat every enemy on the field to win the battle. Win all <b>5 campaign battles</b> to clear the campaign. If your whole squad falls, the battle is lost — retry it with the HP your squad had when the battle began.</p>
+          <p>You and the enemy alternate turns. On your turn, each of your units may <b>move once</b> and <b>act once</b> (attack, heal, or use its ability), in either order. Press <b>Wait</b> to finish a unit early, or <b>End turn</b> to hand over. Surviving units keep their remaining HP between battles, with a healing choice after each victory.</p>
+          <h3>Terrain</h3>
+          <ul>
+            <li><b>Forest:</b> costs 2 movement to enter. A unit standing in forest takes <b>2 less damage from ranged attacks</b> (range 2+).</li>
+            <li><b>Hill:</b> a unit attacking from a hill gets <b>+1 range and +2 damage</b>.</li>
+            <li><b>Water:</b> completely blocked — nobody can enter or cross it.</li>
+          </ul>
+          <h3>Damage preview</h3>
+          <p>Tap a highlighted target once to see the exact damage (after hill and forest modifiers), then tap again or press Confirm to strike. Healing shows a green preview the same way.</p>
+        </div>
+        <div class="panel">
+          <h2>Your squad</h2>
+          <table class="stats">
+            <tr><th>Unit</th><th>HP</th><th>Move</th><th>Range</th><th>Dmg</th><th>Ability</th></tr>
+            <tr><td>Knight</td><td>30</td><td>3</td><td>1</td><td>8</td><td>Heavy Strike — 13 damage (3-turn cooldown)</td></tr>
+            <tr><td>Archer</td><td>20</td><td>3</td><td>3</td><td>6</td><td>Power Shot — 10 damage at +1 range (3-turn cooldown)</td></tr>
+            <tr><td>Mage</td><td>17</td><td>2</td><td>3</td><td>7</td><td>Fireball — 10 damage, plus 3 splash to enemies beside the target (3-turn cooldown)</td></tr>
+            <tr><td>Cleric</td><td>22</td><td>3</td><td>2</td><td>4</td><td>Greater Heal — restore 13 HP (3-turn cooldown). Basic Mend heals 8 any turn.</td></tr>
+            <tr><td>Rogue</td><td>22</td><td>4</td><td>1</td><td>7</td><td>Shadow Strike — 12 damage (3-turn cooldown)</td></tr>
+          </table>
+          <h2>Enemies</h2>
+          <p>Brigands, Slingers, Warlocks, Acolytes and Brutes — the same five classes in enemy colours, growing in number and strength each battle. Battle 5 is led by <b>Warlord Brakk</b>, a boss Knight with extra HP and damage.</p>
+          <h2>Difficulty &amp; modes</h2>
+          <ul>
+            <li><b>Easy:</b> enemies have less HP and damage, and the AI plays loosely, sometimes wandering.</li>
+            <li><b>Normal:</b> standard stats; the AI advances and attacks the nearest unit.</li>
+            <li><b>Hard:</b> enemies have more HP and damage; the AI focuses your weakest unit, seeks hills and forest, and uses abilities whenever they pay off.</li>
+            <li><b>Practice mode:</b> same battles, but wins don't count toward your bests and you can <b>Undo</b> your moves and actions.</li>
+          </ul>
+          <h2>Scoring &amp; bests</h2>
+          <p>Winning a battle scores 100 points, +10 for each surviving squad member, +25 if you finish in 6 rounds or fewer, and +50 if you press on without healing between battles. Your battles won and campaigns cleared are kept as bests on this device.</p>
+        </div>
+      </div>
+
+      <footer>
+        More ridiculous health &amp; fitness fun: <a href="https://instagram.com/ridiculouslyfitandfed" target="_blank" rel="noopener">Ridiculously Fit and Fed</a>
+      </footer>
+    </div>
+
+    <!-- ======= TUTORIAL ======= -->
+    <div class="overlay" id="tutorialOverlay" role="dialog" aria-modal="true" aria-label="How to play">
+      <div class="sheet">
+        <h2>How to play</h2>
+        <p>Command five heroes across an 8×8 battlefield. Beat all the enemies in each of the 5 battles to win the campaign.</p>
+        <h3>1 · Pick a unit</h3>
+        <p>Tap any teal unit. Its card shows HP, move, range, damage and its special ability.</p>
+        <h3>2 · Move</h3>
+        <p>Teal-outlined tiles are where it can walk. Forests cost double to enter, water is blocked, and hills are worth grabbing.</p>
+        <h3>3 · Attack or heal</h3>
+        <p>Red-outlined enemies are in range. Tap one to see a <b>damage preview</b>, tap again (or Confirm) to strike. The Cleric gets green outlines on allies instead — tap to preview and confirm a heal.</p>
+        <h3>4 · Use abilities</h3>
+        <p>Each unit has a signature ability — Heavy Strike, Power Shot, Fireball, Greater Heal, Shadow Strike — on a 3-turn cooldown. Use the buttons on the unit card.</p>
+        <h3>5 · End your turn</h3>
+        <p>When every unit has moved and acted (or waited), press <b>End turn</b> and the enemy moves. Watch the battle log to follow the fight.</p>
+        <h3>Between battles</h3>
+        <p>Your squad keeps its wounds. After each win, choose: bandage everyone a little, fully mend one hero, or press on unhealed for bonus score.</p>
+        <div class="action-row"><button class="btn primary" id="btnCloseTutorial" type="button">Got it — to battle</button></div>
+      </div>
+    </div>
+
+    <!-- ======= BETWEEN BATTLES ======= -->
+    <div class="overlay" id="betweenOverlay" role="dialog" aria-modal="true" aria-label="Battle won">
+      <div class="sheet">
+        <h2 id="betweenTitle">Battle won!</h2>
+        <p id="betweenText"></p>
+        <div id="betweenSquad"></div>
+        <h3>Before the next battle, choose one:</h3>
+        <div class="heal-opts">
+          <button class="btn" id="btnHealAll" type="button">Bandage everyone<small>Every living unit recovers 8 HP.</small></button>
+          <button class="btn" id="btnHealOne" type="button">Full mend<small>Fully restore one unit — pick below.</small></button>
+          <div class="mend-row" id="mendRow" style="display:none"></div>
+          <button class="btn" id="btnPressOn" type="button">Press on<small>No healing — but +50 bonus score for the next win.</small></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======= CAMPAIGN END ======= -->
+    <div class="overlay" id="endOverlay" role="dialog" aria-modal="true" aria-label="Campaign result">
+      <div class="sheet">
+        <h2 id="endTitle">Campaign cleared!</h2>
+        <p id="endText"></p>
+        <div class="action-row">
+          <button class="btn primary" id="btnEndNew" type="button">New campaign</button>
+          <button class="btn" id="btnEndClose" type="button">Admire the field</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======= FEEDBACK ======= -->
+    <div class="overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-label="Feedback">
+      <div class="sheet">
+        <h2>Feedback</h2>
+        <p>Tell us how Grid Tactics plays. Your rating and comment are saved on this device.</p>
+        <div class="stars" id="starRow" role="radiogroup" aria-label="Rating">
+          <button type="button" data-star="1" aria-label="1 star">★</button>
+          <button type="button" data-star="2" aria-label="2 stars">★</button>
+          <button type="button" data-star="3" aria-label="3 stars">★</button>
+          <button type="button" data-star="4" aria-label="4 stars">★</button>
+          <button type="button" data-star="5" aria-label="5 stars">★</button>
+        </div>
+        <label for="fbText" style="font-weight:600">Your comment</label>
+        <textarea id="fbText" placeholder="What worked? What should change?"></textarea>
+        <p class="hint" style="margin-top:8px">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+        <div class="action-row">
+          <button class="btn primary" id="btnSaveFeedback" type="button">Save feedback</button>
+          <button class="btn" id="btnCloseFeedback" type="button">Cancel</button>
+        </div>
+        <p class="hint" id="fbSavedNote"></p>
+      </div>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+/* ================= data ================= */
+var CLASSES = {
+  knight:{name:"Knight", glyph:"K", hp:30, move:3, range:1, dmg:8,  ability:{name:"Heavy Strike", dmg:13, range:1, cd:3, kind:"attack"}},
+  archer:{name:"Archer", glyph:"A", hp:20, move:3, range:3, dmg:6,  ability:{name:"Power Shot", dmg:10, range:4, cd:3, kind:"attack"}},
+  mage:  {name:"Mage",   glyph:"M", hp:17, move:2, range:3, dmg:7,  ability:{name:"Fireball", dmg:10, range:3, cd:3, kind:"attack", splash:3}},
+  cleric:{name:"Cleric", glyph:"C", hp:22, move:3, range:2, dmg:4,  ability:{name:"Greater Heal", heal:13, range:2, cd:3, kind:"heal"}, basicHeal:8},
+  rogue: {name:"Rogue",  glyph:"R", hp:22, move:4, range:1, dmg:7,  ability:{name:"Shadow Strike", dmg:12, range:1, cd:3, kind:"attack"}}
+};
+var ENEMY_NAMES = { knight:"Brigand", archer:"Slinger", mage:"Warlock", cleric:"Acolyte", rogue:"Cutpurse" };
+var BATTLES = [
+  { name:"The Meadow Skirmish", map:[
+    "........",".F....F.","..W..H..","..W.....",".F..FF..","....W...",".H..W.F.","........"],
+    enemies:[["rogue",6,1],["archer",7,3],["knight",6,5]] },
+  { name:"Riverbend Ambush", map:[
+    "..F..W..","....HW..",".FF.W...","....W.F.",".H..W...","....W.H.",".F..W.F.","....W..."],
+    enemies:[["knight",6,1],["archer",7,2],["rogue",6,4],["mage",7,6]] },
+  { name:"The Pinewood Stand", map:[
+    ".FF..FF.",".FF..FF.","...HH...",".F....F.","..W..W..",".F.FF.F.","...H....",".F....F."],
+    enemies:[["knight",6,0],["rogue",7,2],["archer",6,4],["cleric",7,5],["mage",6,7]] },
+  { name:"Hillfort Assault", map:[
+    "..W...H.",".F.W.HHH","...W.H..",".FF...F.","....W...",".H..W.F.","..F...H.",".....F.."],
+    enemies:[["knight",6,1],["knight",7,3],["archer",6,3],["mage",7,5],["rogue",6,6],["cleric",7,7]] },
+  { name:"Warlord's Last Field", map:[
+    ".F..W.F.","..F.W...","H...W..H","..FF....","....FF..","H..W...H","...W..F.",".F.W.F.."],
+    enemies:[["knight",7,4,"boss"],["knight",6,2],["mage",7,1],["archer",6,6],["rogue",7,7],["cleric",6,4]] }
+];
+var PLAYER_STARTS = [[0,1],[0,3],[0,5],[1,6],[1,2]]; /* x,y per class order */
+var CLASS_ORDER = ["knight","archer","mage","cleric","rogue"];
+var DIFF = {
+  easy:  { hpMul:0.85, dmgAdd:-1, label:"Easy" },
+  normal:{ hpMul:1.0,  dmgAdd:0,  label:"Normal" },
+  hard:  { hpMul:1.2,  dmgAdd:2,  label:"Hard" }
+};
+
+/* ================= storage ================= */
+function lsGet(k, d){ try{ var v = localStorage.getItem(k); return v===null ? d : JSON.parse(v); }catch(e){ return d; } }
+function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+var difficulty = lsGet("gridTactics_difficulty","normal"); if(!DIFF[difficulty]) difficulty = "normal";
+var bests = lsGet("gridTactics_bests", { battlesWon:0, campaignsWon:0, bestScore:0 });
+var practice = false;
+
+/* ================= state ================= */
+var S = null; /* battle state */
+var campaign = null; /* {battleIdx, carryHp:{cls:hp}, score, pressOnBonus} */
+var undoStack = [];
+var fbRating = 0;
+
+function terrainAt(bi,x,y){ return BATTLES[bi].map[y].charAt(x); }
+function key(x,y){ return x+","+y; }
+function unitAt(x,y){ if(!S) return null; for(var i=0;i<S.units.length;i++){ var u=S.units[i]; if(u.alive && u.x===x && u.y===y) return u; } return null; }
+function dist(a,b){ return Math.abs(a.x-b.x)+Math.abs(a.y-b.y); }
+
+function makeUnit(side, cls, x, y, hpOverride, boss){
+  var c = CLASSES[cls];
+  var maxHp = c.hp, dmg = c.dmg;
+  if(side==="enemy"){
+    var d = DIFF[difficulty];
+    maxHp = Math.max(6, Math.round(c.hp * d.hpMul * (1 + campaign.battleIdx*0.06)));
+    dmg = Math.max(2, c.dmg + d.dmgAdd + (campaign.battleIdx>=3 ? 1 : 0));
+    if(boss){ maxHp += 16; dmg += 3; }
+  }
+  var hp = (hpOverride!=null) ? Math.min(hpOverride, maxHp) : maxHp;
+  return { id: side+"-"+cls+"-"+x+"-"+y+"-"+Math.floor(Math.random()*1e6), side:side, cls:cls,
+    name: side==="player" ? c.name : (boss ? "Warlord Brakk" : ENEMY_NAMES[cls]),
+    glyph:c.glyph, x:x, y:y, hp:hp, maxHp:maxHp, baseDmg:dmg, move:c.move, range:c.range,
+    abilityCd:0, hasMoved:false, hasActed:false, alive: hp>0, boss:!!boss };
+}
+function effRange(u){
+  var r = u.range;
+  if(terrainAt(S.battleIdx,u.x,u.y)==="H") r += 1;
+  return r;
+}
+function calcDamage(attacker, defender, baseDmg, rangeUsed){
+  var dmg = baseDmg;
+  if(terrainAt(S.battleIdx,attacker.x,attacker.y)==="H") dmg += 2;
+  if(rangeUsed>=2 && terrainAt(S.battleIdx,defender.x,defender.y)==="F") dmg -= 2; /* forest cover vs ranged */
+  return Math.max(1, dmg);
+}
+
+function startCampaign(){
+  campaign = { battleIdx:0, carryHp:{}, score:0, pressOn:false };
+  CLASS_ORDER.forEach(function(c){ campaign.carryHp[c] = CLASSES[c].hp; });
+  startBattle(0);
+}
+function startBattle(idx){
+  campaign.battleIdx = idx;
+  S = { battleIdx:idx, units:[], turn:"player", round:1, selectedId:null, mode:"attack", pending:null, over:false, busy:false, startHp:{} };
+  CLASS_ORDER.forEach(function(cls,i){
+    var st = PLAYER_STARTS[i];
+    var u = makeUnit("player", cls, st[0], st[1], campaign.carryHp[cls]);
+    S.units.push(u); S.startHp[cls] = u.hp;
+  });
+  BATTLES[idx].enemies.forEach(function(e){
+    S.units.push(makeUnit("enemy", e[0], e[1], e[2], null, e[3]==="boss"));
+  });
+  undoStack = [];
+  logMsg("Battle "+(idx+1)+" — "+BATTLES[idx].name+". Defeat all "+BATTLES[idx].enemies.length+" enemies!", "good");
+  render();
+}
+
+/* ================= movement ================= */
+function reachable(u){
+  var seen = {}, q = [{x:u.x,y:u.y,c:0}]; seen[key(u.x,u.y)] = 0;
+  while(q.length){
+    var cur = q.shift();
+    var dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+    for(var i=0;i<4;i++){
+      var nx = cur.x+dirs[i][0], ny = cur.y+dirs[i][1];
+      if(nx<0||ny<0||nx>7||ny>7) continue;
+      var t = terrainAt(S.battleIdx,nx,ny);
+      if(t==="W") continue;
+      var occ = unitAt(nx,ny); if(occ) continue;
+      var cost = cur.c + (t==="F" ? 2 : 1);
+      if(cost > u.move) continue;
+      if(seen[key(nx,ny)]!=null && seen[key(nx,ny)]<=cost) continue;
+      seen[key(nx,ny)] = cost; q.push({x:nx,y:ny,c:cost});
+    }
+  }
+  delete seen[key(u.x,u.y)];
+  return seen;
+}
+function targetsFor(u, mode){
+  var out = [];
+  var ab = CLASSES[u.cls].ability;
+  var range = effRange(u), baseDmg = u.baseDmg, kind = "attack";
+  if(mode==="ability"){
+    range = ab.range + (terrainAt(S.battleIdx,u.x,u.y)==="H" && ab.kind==="attack" ? 1 : 0);
+    baseDmg = ab.dmg || u.baseDmg; kind = ab.kind;
+  } else if(mode==="heal"){ kind = "heal"; }
+  S.units.forEach(function(v){
+    if(!v.alive) return;
+    var d = dist(u,v);
+    if(d>range) return;
+    if(kind==="heal"){ if(v.side===u.side) out.push({unit:v, dmg: mode==="ability" ? ab.heal : CLASSES[u.cls].basicHeal, kind:"heal", dist:d}); }
+    else { if(v.side!==u.side) out.push({unit:v, dmg: calcDamage(u, v, baseDmg, d), kind:"attack", dist:d}); }
+  });
+  return out;
+}
+
+/* ================= log / toast ================= */
+var logEl = document.getElementById("log");
+function logMsg(msg, cls){
+  var p = document.createElement("p"); p.textContent = msg; if(cls) p.className = cls;
+  logEl.insertBefore(p, logEl.firstChild);
+  while(logEl.children.length>40) logEl.removeChild(logEl.lastChild);
+}
+var toastTimer = null;
+function toast(msg){
+  var t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 2400);
+}
+
+/* ================= undo (practice) ================= */
+function snapshot(){
+  return JSON.stringify({ units:S.units, turn:S.turn, round:S.round, selectedId:S.selectedId, score:campaign.score });
+}
+function pushUndo(){ if(practice) undoStack.push(snapshot()); }
+function doUndo(){
+  if(!practice || !undoStack.length || S.busy || S.over) return;
+  var s = JSON.parse(undoStack.pop());
+  S.units = s.units; S.turn = s.turn; S.round = s.round; S.selectedId = s.selectedId; campaign.score = s.score;
+  S.pending = null; S.mode = "attack";
+  logMsg("Undid the last action (Practice).");
+  render();
+}
+
+/* ================= actions ================= */
+function sel(){ if(!S || !S.selectedId) return null; for(var i=0;i<S.units.length;i++) if(S.units[i].id===S.selectedId) return S.units[i]; return null; }
+
+function doMove(u, x, y){
+  pushUndo();
+  u.x = x; u.y = y; u.hasMoved = true; S.pending = null;
+  logMsg(u.name+" moves to "+terrainName(terrainAt(S.battleIdx,x,y))+".");
+  if(u.hasActed){ S.selectedId = null; }
+  render();
+  maybeAutoEnd();
+}
+function terrainName(t){ return t==="F" ? "the forest" : t==="H" ? "a hill" : t==="W" ? "water" : "open ground"; }
+
+function dealDamage(attacker, target, dmg, label){
+  target.hp = Math.max(0, target.hp - dmg);
+  flashUnit(target, "-"+dmg, false);
+  logMsg(attacker.name+" "+label+" "+target.name+" for "+dmg+" damage."+(target.hp<=0 ? " "+target.name+" falls!" : ""), attacker.side==="player" ? "good" : "bad");
+  if(target.hp<=0){ target.alive = false; if(S.selectedId===target.id) S.selectedId = null; }
+}
+function doHeal(healer, target, amount){
+  var real = Math.min(amount, target.maxHp - target.hp);
+  target.hp += real;
+  flashUnit(target, "+"+real, true);
+  logMsg(healer.name+" heals "+target.name+" for "+real+" HP.", "good");
+}
+function performAction(u, targetInfo){
+  pushUndo();
+  var ab = CLASSES[u.cls].ability;
+  if(targetInfo.kind==="heal"){
+    doHeal(u, targetInfo.unit, targetInfo.dmg);
+  } else {
+    var label = S.mode==="ability" ? "unleashes "+ab.name+" on" : "hits";
+    dealDamage(u, targetInfo.unit, targetInfo.dmg, label);
+    if(S.mode==="ability" && ab.splash && targetInfo.unit){
+      var tx = targetInfo.unit.x, ty = targetInfo.unit.y;
+      S.units.slice().forEach(function(v){
+        if(v.alive && v.side!==u.side && v.id!==targetInfo.unit.id && Math.abs(v.x-tx)+Math.abs(v.y-ty)===1){
+          dealDamage(u, v, ab.splash, "Fireball splash catches");
+        }
+      });
+    }
+  }
+  if(S.mode==="ability") u.abilityCd = ab.cd;
+  u.hasActed = true; S.pending = null;
+  afterAction();
+}
+function afterAction(){
+  render();
+  if(checkEnd()) return;
+  var u = sel();
+  if(u && u.hasMoved && u.hasActed){ S.selectedId = null; render(); }
+  maybeAutoEnd();
+}
+function maybeAutoEnd(){
+  if(S.over || S.turn!=="player") return;
+  var anyLeft = S.units.some(function(u){ return u.side==="player" && u.alive && !(u.hasMoved && u.hasActed); });
+  if(!anyLeft){ logMsg("All units have acted — enemy turn."); setTimeout(endPlayerTurn, 500); }
+}
+function endPlayerTurn(){
+  if(S.over || S.turn!=="player" || S.busy) return;
+  S.selectedId = null; S.pending = null; S.turn = "enemy";
+  S.units.forEach(function(u){ if(u.side==="player" && u.alive){ u.abilityCd = Math.max(0, u.abilityCd-1); } });
+  render();
+  setTimeout(aiTurn, 450);
+}
+function checkEnd(){
+  var players = S.units.some(function(u){ return u.side==="player" && u.alive; });
+  var enemies = S.units.some(function(u){ return u.side==="enemy" && u.alive; });
+  if(!enemies){ onBattleWon(); return true; }
+  if(!players){ onBattleLost(); return true; }
+  return false;
+}
+function battleScore(){
+  var alive = S.units.filter(function(u){ return u.side==="player" && u.alive; }).length;
+  var sc = 100 + alive*10 + (S.round<=6 ? 25 : 0) + (campaign.pressOn ? 50 : 0);
+  return sc;
+}
+function onBattleWon(){
+  S.over = true;
+  var sc = battleScore();
+  campaign.score += sc;
+  S.units.forEach(function(u){ if(u.side==="player") campaign.carryHp[u.cls] = u.hp; });
+  if(!practice){
+    bests.battlesWon += 1;
+    bests.bestScore = Math.max(bests.bestScore, campaign.score);
+    lsSet("gridTactics_bests", bests);
+  }
+  logMsg("Battle won! +"+sc+" points.", "good");
+  render();
+  if(campaign.battleIdx >= 4){
+    if(!practice){ bests.campaignsWon += 1; lsSet("gridTactics_bests", bests); }
+    document.getElementById("endTitle").textContent = "Campaign cleared!";
+    document.getElementById("endText").textContent = "Warlord Brakk is defeated and the field is yours. Final score: "+campaign.score+" points over 5 battles on "+DIFF[difficulty].label+(practice ? " (Practice — score not saved to bests)" : "")+". Battles won all-time: "+bests.battlesWon+" · Campaigns cleared: "+bests.campaignsWon+".";
+    document.getElementById("endOverlay").classList.add("open");
+  } else {
+    document.getElementById("betweenTitle").textContent = "Battle "+(campaign.battleIdx+1)+" won! +"+sc+" points";
+    document.getElementById("betweenText").textContent = "Next: Battle "+(campaign.battleIdx+2)+" — "+BATTLES[campaign.battleIdx+1].name+". Your squad carries its wounds forward.";
+    var bs = document.getElementById("betweenSquad"); bs.innerHTML = "";
+    S.units.filter(function(u){ return u.side==="player"; }).forEach(function(u){
+      var d = document.createElement("div"); d.style.cssText = "display:flex;justify-content:space-between;border-bottom:1px dotted var(--line);padding:3px 0";
+      d.innerHTML = "<span>"+u.name+"</span><b>"+(u.alive ? u.hp+" / "+u.maxHp+" HP" : "Fallen — returns at 1 HP")+"</b>";
+      bs.appendChild(d);
+    });
+    document.getElementById("mendRow").style.display = "none";
+    document.getElementById("betweenOverlay").classList.add("open");
+  }
+  updateBestNote();
+}
+function onBattleLost(){
+  S.over = true;
+  logMsg("Your squad has fallen.", "bad");
+  render();
+  document.getElementById("endTitle").textContent = "Battle lost";
+  document.getElementById("endText").textContent = "The squad falls in "+BATTLES[campaign.battleIdx].name+". Retry the battle with the HP your squad had when it began — or start a fresh campaign.";
+  document.getElementById("btnEndNew").textContent = "Retry battle";
+  document.getElementById("endOverlay").classList.add("open");
+}
+
+/* ================= AI ================= */
+function aiTurn(){
+  if(S.over) return;
+  S.busy = true; render();
+  var enemies = S.units.filter(function(u){ return u.side==="enemy" && u.alive; });
+  var i = 0;
+  function step(){
+    if(S.over){ S.busy = false; render(); return; }
+    if(i >= enemies.length){
+      S.units.forEach(function(u){
+        if(u.side==="enemy" && u.alive) u.abilityCd = Math.max(0, u.abilityCd-1);
+        if(u.alive){ u.hasMoved = false; u.hasActed = false; }
+      });
+      S.turn = "player"; S.round += 1; S.busy = false;
+      logMsg("Round "+S.round+" — your turn.");
+      render(); return;
+    }
+    var u = enemies[i++]; if(!u.alive){ step(); return; }
+    aiAct(u);
+    render();
+    if(checkEnd()){ S.busy = false; return; }
+    setTimeout(step, 420);
+  }
+  step();
+}
+function aiAct(u){
+  var players = S.units.filter(function(p){ return p.side==="player" && p.alive; });
+  if(!players.length) return;
+  var c = CLASSES[u.cls];
+  /* healer: heal wounded ally first */
+  if(c.ability.kind==="heal"){
+    var wounded = S.units.filter(function(a){ return a.side==="enemy" && a.alive && a.hp < a.maxHp-3; })
+      .sort(function(a,b){ return (a.hp/a.maxHp)-(b.hp/b.maxHp); })[0];
+    if(wounded){
+      if(dist(u,wounded) > effRange(u)) aiMoveToward(u, wounded);
+      if(dist(u,wounded) <= effRange(u)){
+        var useBig = u.abilityCd===0 && wounded.hp <= wounded.maxHp - c.ability.heal;
+        doHeal(u, wounded, useBig ? c.ability.heal : (c.basicHeal || 4));
+        if(useBig) u.abilityCd = c.ability.cd;
+        u.hasActed = true; return;
+      }
+    }
+  }
+  /* pick target */
+  var target;
+  if(difficulty==="hard"){
+    target = players.slice().sort(function(a,b){ return a.hp-b.hp; })[0];
+  } else if(difficulty==="easy" && Math.random()<0.35){
+    target = players[Math.floor(Math.random()*players.length)];
+  } else {
+    target = players.slice().sort(function(a,b){ return dist(u,a)-dist(u,b); })[0];
+  }
+  /* move */
+  var rangeNow = effRange(u);
+  if(difficulty==="easy" && Math.random()<0.3){
+    var opts = Object.keys(reachable(u));
+    if(opts.length){ var p = opts[Math.floor(Math.random()*opts.length)].split(","); u.x = +p[0]; u.y = +p[1]; }
+  } else if(dist(u,target) > rangeNow){
+    aiMoveToward(u, target);
+  } else if(difficulty==="hard"){
+    aiReposition(u, target);
+  }
+  /* attack */
+  var inRange = players.filter(function(p){ return dist(u,p) <= effRange(u); });
+  if(inRange.length){
+    var t = (difficulty==="hard") ? inRange.sort(function(a,b){ return a.hp-b.hp; })[0]
+          : inRange.sort(function(a,b){ return dist(u,a)-dist(u,b); })[0];
+    var d = dist(u,t);
+    var useAbility = u.abilityCd===0 && c.ability.kind==="attack" &&
+      (difficulty==="hard" ? (c.ability.dmg >= t.hp || difficulty==="hard") : Math.random()<0.6) &&
+      d <= c.ability.range + (terrainAt(S.battleIdx,u.x,u.y)==="H" ? 1 : 0);
+    if(useAbility){
+      dealDamage(u, t, calcDamage(u, t, c.ability.dmg, d), "unleashes "+c.ability.name+" on");
+      if(c.ability.splash){
+        S.units.slice().forEach(function(v){ if(v.alive && v.side==="player" && v.id!==t.id && Math.abs(v.x-t.x)+Math.abs(v.y-t.y)===1) dealDamage(u, v, c.ability.splash, "splash catches"); });
+      }
+      u.abilityCd = c.ability.cd;
+    } else {
+      dealDamage(u, t, calcDamage(u, t, u.baseDmg, d), "hits");
+    }
+    u.hasActed = true;
+  }
+}
+function aiMoveToward(u, target){
+  var reach = reachable(u); var best = null, bestScore = Infinity;
+  Object.keys(reach).forEach(function(k){
+    var p = k.split(","), x = +p[0], y = +p[1];
+    var d = Math.abs(x-target.x)+Math.abs(y-target.y);
+    var score = d;
+    if(difficulty==="hard"){ if(terrainAt(S.battleIdx,x,y)==="H") score -= 0.6; if(terrainAt(S.battleIdx,x,y)==="F") score -= 0.4; }
+    if(score < bestScore){ bestScore = score; best = {x:x,y:y}; }
+  });
+  /* also consider staying */
+  if(dist(u,target) < bestScore || !best) return;
+  if(best){ u.x = best.x; u.y = best.y; u.hasMoved = true; }
+}
+function aiReposition(u, target){
+  /* hard AI: if already in range, step onto hill/forest if reachable without losing range */
+  var reach = reachable(u); var cur = terrainAt(S.battleIdx,u.x,u.y);
+  if(cur==="H" || cur==="F") return;
+  var best = null;
+  Object.keys(reach).forEach(function(k){
+    var p = k.split(","), x = +p[0], y = +p[1];
+    var t = terrainAt(S.battleIdx,x,y);
+    if((t==="H"||t==="F") && Math.abs(x-target.x)+Math.abs(y-target.y) <= effRangeAt(x,y,u)) best = {x:x,y:y};
+  });
+  if(best){ u.x = best.x; u.y = best.y; u.hasMoved = true; }
+}
+function effRangeAt(x,y,u){ return u.range + (terrainAt(S.battleIdx,x,y)==="H" ? 1 : 0); }
+
+/* ================= fx ================= */
+function flashUnit(u, text, isHeal){
+  setTimeout(function(){
+    var el = document.querySelector('[data-unit="'+u.id+'"]');
+    if(!el) return;
+    el.classList.add("hit");
+    var f = document.createElement("span"); f.className = "float-dmg"+(isHeal ? " heal" : ""); f.textContent = text;
+    var tile = el.closest(".tile"); if(tile) tile.appendChild(f);
+    setTimeout(function(){ if(f.parentNode) f.parentNode.removeChild(f); }, 1000);
+  }, 30);
+}
+
+/* ================= render ================= */
+var boardEl = document.getElementById("board");
+var TERR_SVG = {
+  F:'<svg viewBox="0 0 24 24" fill="#2e4a26"><path d="M12 2 L19 12 H15 L21 20 H3 L9 12 H5 Z"/><rect x="11" y="20" width="2" height="3"/></svg>',
+  H:'<svg viewBox="0 0 24 24" fill="rgba(120,90,30,.8)"><path d="M3 19 L12 6 L21 19 Z"/></svg>',
+  W:'<svg viewBox="0 0 24 24" fill="none" stroke="rgba(20,70,95,.85)" stroke-width="2"><path d="M2 9 Q6 6 10 9 T18 9 T26 9"/><path d="M2 16 Q6 13 10 16 T18 16 T26 16"/></svg>'
+};
+function render(){
+  if(!S) return;
+  document.getElementById("chipBattle").textContent = (S.battleIdx+1)+" / 5";
+  document.getElementById("chipName").textContent = BATTLES[S.battleIdx].name;
+  var turnChip = document.getElementById("chipTurn");
+  turnChip.textContent = S.over ? "Battle over" : (S.turn==="player" ? "Your turn" : "Enemy turn…");
+  turnChip.className = "chip " + (S.turn==="player" ? "turn-player" : "turn-enemy");
+  document.getElementById("chipRound").textContent = S.round;
+  document.getElementById("chipScore").textContent = campaign.score;
+  document.getElementById("btnEndTurn").disabled = S.turn!=="player" || S.busy || S.over;
+  document.getElementById("btnUndo").disabled = !(practice && undoStack.length && !S.busy && !S.over && S.turn==="player");
+  document.getElementById("btnUndo").textContent = practice ? "Undo move" : "Undo move (Practice only)";
+
+  var u = sel();
+  var moveTiles = {}, atkMap = {};
+  if(u && S.turn==="player" && !S.busy && !S.over){
+    if(!u.hasMoved) moveTiles = reachable(u);
+    if(!u.hasActed){
+      targetsFor(u, S.mode).forEach(function(t){ atkMap[key(t.unit.x,t.unit.y)] = t; });
+      if(S.mode==="heal" || (S.mode==="ability" && CLASSES[u.cls].ability.kind==="heal")){ /* heal map same */ }
+    }
+  }
+  boardEl.innerHTML = "";
+  for(var y=0;y<8;y++) for(var x=0;x<8;x++){
+    var t = terrainAt(S.battleIdx,x,y);
+    var tile = document.createElement("button");
+    tile.type = "button"; tile.className = "tile t-"+(t==="F"?"forest":t==="H"?"hill":t==="W"?"water":"plain")+(((x+y)%2)?" alt":"");
+    tile.setAttribute("role","gridcell");
+    tile.setAttribute("aria-label", "Row "+(y+1)+" column "+(x+1)+", "+terrainName(t));
+    if(TERR_SVG[t]){ var sp = document.createElement("span"); sp.className="terr"; sp.innerHTML = TERR_SVG[t]; tile.appendChild(sp); }
+    var k = key(x,y);
+    var occupant = unitAt(x,y);
+    if(moveTiles[k]!=null) tile.classList.add("hl-move");
+    if(atkMap[k]){
+      tile.classList.add(atkMap[k].kind==="heal" ? "hl-heal" : "hl-atk");
+      if(S.pending && S.pending.unit.id===atkMap[k].unit.id) tile.classList.add("targeted");
+    }
+    if(u && occupant && occupant.id===u.id) tile.classList.add("selected");
+    if(occupant){
+      var d = document.createElement("span");
+      d.className = "unit side-"+occupant.side + (occupant.boss ? " boss" : "") + ((occupant.hasMoved && occupant.hasActed) ? " done" : "");
+      d.setAttribute("data-unit", occupant.id);
+      var pct = Math.max(0, Math.round(occupant.hp/occupant.maxHp*100));
+      d.innerHTML = '<span class="glyph">'+occupant.glyph+'</span><span class="hpbar"><i style="width:'+pct+'%" class="'+(pct<=30?"low":"")+'"></i></span>';
+      d.title = occupant.name+" — "+occupant.hp+"/"+occupant.maxHp+" HP";
+      tile.appendChild(d);
+      tile.setAttribute("aria-label", tile.getAttribute("aria-label")+", "+occupant.name+", "+occupant.hp+" of "+occupant.maxHp+" HP");
+    }
+    (function(tx,ty){ tile.addEventListener("click", function(){ onTile(tx,ty); }); })(x,y);
+    boardEl.appendChild(tile);
+  }
+  renderSelPanel(u, atkMap);
+  renderLists();
+}
+function renderSelPanel(u, atkMap){
+  var body = document.getElementById("selBody"), hint = document.getElementById("selHint");
+  if(!u){ body.style.display = "none"; hint.style.display = "block"; return; }
+  body.style.display = "block"; hint.style.display = "none";
+  document.getElementById("selName").textContent = u.name + (u.side==="enemy" ? " (enemy)" : "");
+  document.getElementById("selSub").textContent = CLASSES[u.cls].name + (u.side==="enemy" ? " — "+ENEMY_NAMES[u.cls] : "") + " · tap a highlighted tile";
+  var pct = Math.max(0, Math.round(u.hp/u.maxHp*100));
+  var bar = document.getElementById("selHpBar"); bar.style.width = pct+"%"; bar.className = pct<=30 ? "low" : "";
+  document.getElementById("selHpText").textContent = u.hp+" / "+u.maxHp;
+  var tt = terrainAt(S.battleIdx,u.x,u.y);
+  document.getElementById("selTerrain").textContent = "on " + (tt==="F" ? "forest (cover)" : tt==="H" ? "a hill (+range/dmg)" : tt==="W" ? "water" : "open ground");
+  document.getElementById("selMove").textContent = u.hasMoved ? "used" : u.move;
+  document.getElementById("selRange").textContent = effRange(u) + (tt==="H" ? " (hill)" : "");
+  document.getElementById("selDmg").textContent = u.baseDmg + (tt==="H" ? " (+2 on hill)" : "");
+  document.getElementById("selStatus").textContent = !u.alive ? "Fallen" : (u.hasMoved && u.hasActed) ? "Done" : S.turn==="enemy" ? "Waiting" : "Ready";
+  var ab = CLASSES[u.cls].ability;
+  document.getElementById("selAbility").textContent = ab.name + " — " +
+    (ab.kind==="heal" ? "heal "+ab.heal+" HP" : ab.dmg+" damage") + (ab.splash ? " + splash" : "") +
+    (u.abilityCd>0 ? " · ready in "+u.abilityCd+" turn(s)" : " · ready");
+  /* actions */
+  var row = document.getElementById("selActions"); row.innerHTML = "";
+  var prev = document.getElementById("previewBox"); prev.style.display = "none"; prev.className = "preview";
+  if(u.side==="player" && S.turn==="player" && !S.over && u.alive){
+    function mkBtn(label, mode, disabled){
+      var b = document.createElement("button"); b.type = "button"; b.className = "btn small" + (S.mode===mode ? " primary" : "");
+      b.textContent = label; b.disabled = !!disabled;
+      b.addEventListener("click", function(){ S.mode = mode; S.pending = null; render(); });
+      row.appendChild(b);
+    }
+    mkBtn("Attack ("+u.baseDmg+")", "attack", u.hasActed);
+    if(u.cls==="cleric") mkBtn("Mend (heal "+CLASSES.cleric.basicHeal+")", "heal", u.hasActed);
+    mkBtn(ab.name + (u.abilityCd>0 ? " ("+u.abilityCd+")" : ""), "ability", u.hasActed || u.abilityCd>0);
+    var wait = document.createElement("button"); wait.type = "button"; wait.className = "btn small"; wait.textContent = "Wait (done)";
+    wait.disabled = u.hasMoved && u.hasActed;
+    wait.addEventListener("click", function(){ pushUndo(); u.hasMoved = true; u.hasActed = true; S.pending = null; logMsg(u.name+" waits."); render(); maybeAutoEnd(); });
+    row.appendChild(wait);
+  }
+  /* preview */
+  if(S.pending && u.side==="player"){
+    var p = S.pending;
+    prev.style.display = "block";
+    if(p.kind==="heal"){
+      prev.classList.add("heal");
+      prev.innerHTML = "<b>Heal preview:</b> "+u.name+" restores <b>"+Math.min(p.dmg, p.unit.maxHp-p.unit.hp)+" HP</b> to "+p.unit.name+" ("+p.unit.hp+" → "+Math.min(p.unit.maxHp, p.unit.hp+p.dmg)+").";
+    } else {
+      var notes = [];
+      if(terrainAt(S.battleIdx,u.x,u.y)==="H") notes.push("hill bonus +2 included");
+      if(p.dist>=2 && terrainAt(S.battleIdx,p.unit.x,p.unit.y)==="F") notes.push("forest cover −2 included");
+      if(S.mode==="ability" && CLASSES[u.cls].ability.splash) notes.push("plus "+CLASSES[u.cls].ability.splash+" splash to adjacent enemies");
+      prev.innerHTML = "<b>Damage preview:</b> "+u.name+" deals <b>"+p.dmg+" damage</b> to "+p.unit.name+" ("+p.unit.hp+" → "+Math.max(0,p.unit.hp-p.dmg)+" HP)"+(p.dmg>=p.unit.hp ? " — <b>lethal!</b>" : "")+(notes.length ? "<br><span style='color:var(--muted)'>"+notes.join(" · ")+"</span>" : "");
+    }
+    var cb = document.createElement("div"); cb.className = "action-row";
+    var conf = document.createElement("button"); conf.type = "button"; conf.className = "btn small primary";
+    conf.textContent = p.kind==="heal" ? "Confirm heal" : "Confirm attack";
+    conf.addEventListener("click", function(){ var uu = sel(); if(uu) performAction(uu, p); });
+    var canc = document.createElement("button"); canc.type = "button"; canc.className = "btn small"; canc.textContent = "Cancel";
+    canc.addEventListener("click", function(){ S.pending = null; render(); });
+    cb.appendChild(conf); cb.appendChild(canc); prev.appendChild(cb);
+  }
+}
+function renderLists(){
+  function fill(el, side){
+    el.innerHTML = "";
+    S.units.filter(function(u){ return u.side===side; }).forEach(function(u){
+      var b = document.createElement(side==="player" ? "button" : "div");
+      if(side==="player"){ b.type = "button"; }
+      b.className = "squad-row" + (side==="enemy" ? " enemy-row" : "") + (!u.alive ? " dead" : "");
+      var pct = Math.max(0, Math.round(u.hp/u.maxHp*100));
+      b.innerHTML = '<span class="dot" style="background:'+(u.alive ? (side==="player" ? "var(--player)" : "var(--enemy)") : "#666")+'">'+u.glyph+'</span>'+
+        '<span class="grow"><b>'+u.name+'</b> · '+u.hp+'/'+u.maxHp+' HP<span class="mini-hp"><i style="width:'+pct+'%"></i></span></span>'+
+        '<span class="st">'+(!u.alive ? "Fallen" : (side==="player" ? ((u.hasMoved&&u.hasActed) ? "Done" : "Ready") : ""))+'</span>';
+      if(side==="player"){
+        b.disabled = !u.alive || S.turn!=="player" || S.busy || S.over;
+        b.addEventListener("click", function(){ selectUnit(u); });
+      }
+      el.appendChild(b);
+    });
+  }
+  fill(document.getElementById("squadList"), "player");
+  fill(document.getElementById("enemyList"), "enemy");
+}
+function selectUnit(u){
+  if(S.turn!=="player" || S.busy || S.over) return;
+  S.selectedId = u.id; S.mode = "attack"; S.pending = null;
+  render();
+}
+
+/* ================= tile clicks ================= */
+function onTile(x,y){
+  if(!S || S.over || S.busy || S.turn!=="player") return;
+  var occupant = unitAt(x,y);
+  var u = sel();
+  if(occupant && occupant.side==="player" && occupant.alive){
+    if(!u || occupant.id!==u.id){ selectUnit(occupant); return; }
+  }
+  if(!u || !u.alive) return;
+  /* target? */
+  if(occupant && !u.hasActed){
+    var list = targetsFor(u, S.mode);
+    for(var i=0;i<list.length;i++){
+      if(list[i].unit.id===occupant.id){
+        if(S.pending && S.pending.unit.id===occupant.id){ performAction(u, list[i]); return; }
+        S.pending = list[i]; render(); return;
+      }
+    }
+  }
+  /* move? */
+  if(!occupant && !u.hasMoved){
+    var reach = reachable(u);
+    if(reach[key(x,y)]!=null){ doMove(u, x, y); return; }
+  }
+  if(occupant && occupant.side==="enemy"){ toast("Out of range — move closer or pick the ability with more reach."); }
+}
+
+/* ================= between battles ================= */
+function closeBetween(choice){
+  document.getElementById("betweenOverlay").classList.remove("open");
+  if(choice==="all"){
+    S.units.forEach(function(u){ if(u.side==="player" && u.alive) u.hp = Math.min(u.maxHp, u.hp+8); });
+    campaign.pressOn = false;
+  } else if(choice==="press"){
+    campaign.pressOn = true;
+  }
+  S.units.forEach(function(u){ if(u.side==="player") campaign.carryHp[u.cls] = u.alive ? u.hp : 1; });
+  startBattle(campaign.battleIdx+1);
+}
+document.getElementById("btnHealAll").addEventListener("click", function(){
+  S.units.forEach(function(u){ if(u.side==="player" && u.alive) campaign.carryHp[u.cls] = Math.min(u.maxHp, u.hp+8); else if(u.side==="player") campaign.carryHp[u.cls] = 1; });
+  campaign.pressOn = false;
+  document.getElementById("betweenOverlay").classList.remove("open");
+  startBattle(campaign.battleIdx+1);
+});
+document.getElementById("btnPressOn").addEventListener("click", function(){
+  S.units.forEach(function(u){ if(u.side==="player") campaign.carryHp[u.cls] = u.alive ? u.hp : 1; });
+  campaign.pressOn = true;
+  document.getElementById("betweenOverlay").classList.remove("open");
+  toast("Pressing on — +50 bonus on the next win.");
+  startBattle(campaign.battleIdx+1);
+});
+document.getElementById("btnHealOne").addEventListener("click", function(){
+  var row = document.getElementById("mendRow"); row.innerHTML = "";
+  row.style.display = row.style.display==="none" ? "flex" : "none";
+  if(row.style.display==="none") return;
+  S.units.filter(function(u){ return u.side==="player"; }).forEach(function(u){
+    var b = document.createElement("button"); b.type = "button"; b.className = "btn small";
+    b.textContent = u.name+" ("+(u.alive ? u.hp+"/"+u.maxHp : "fallen")+")";
+    b.addEventListener("click", function(){
+      S.units.forEach(function(v){ if(v.side==="player") campaign.carryHp[v.cls] = v.alive ? v.hp : 1; });
+      campaign.carryHp[u.cls] = u.maxHp;
+      campaign.pressOn = false;
+      document.getElementById("betweenOverlay").classList.remove("open");
+      startBattle(campaign.battleIdx+1);
+    });
+    row.appendChild(b);
+  });
+});
+
+/* ================= controls ================= */
+document.getElementById("btnEndTurn").addEventListener("click", endPlayerTurn);
+document.getElementById("btnUndo").addEventListener("click", doUndo);
+document.getElementById("btnRestartBattle").addEventListener("click", function(){
+  if(S.busy) return;
+  CLASS_ORDER.forEach(function(c){ campaign.carryHp[c] = S.startHp[c] || CLASSES[c].hp; });
+  campaign.score = Math.max(0, campaign.score); /* score kept simple: restart keeps campaign score */
+  startBattle(campaign.battleIdx);
+  toast("Battle restarted with the squad's starting HP.");
+});
+document.getElementById("btnNewCampaign").addEventListener("click", function(){ startCampaign(); toast("New campaign — Battle 1."); });
+document.getElementById("btnEndNew").addEventListener("click", function(){
+  document.getElementById("endOverlay").classList.remove("open");
+  document.getElementById("btnEndNew").textContent = "New campaign";
+  if(S && !S.units.some(function(u){ return u.side==="enemy" && u.alive; }) && campaign.battleIdx>=4){ startCampaign(); }
+  else if(S && !S.units.some(function(u){ return u.side==="player" && u.alive; })){
+    CLASS_ORDER.forEach(function(c){ campaign.carryHp[c] = S.startHp[c] || CLASSES[c].hp; });
+    startBattle(campaign.battleIdx);
+  } else startCampaign();
+});
+document.getElementById("btnEndClose").addEventListener("click", function(){ document.getElementById("endOverlay").classList.remove("open"); });
+
+var selDiff = document.getElementById("selDifficulty");
+selDiff.value = difficulty;
+selDiff.addEventListener("change", function(){
+  difficulty = selDiff.value; lsSet("gridTactics_difficulty", difficulty);
+  toast("Difficulty: "+DIFF[difficulty].label+" — applies from the next battle (restart to apply now).");
+});
+function setPractice(on){
+  practice = on;
+  document.getElementById("segCampaign").classList.toggle("on", !on);
+  document.getElementById("segPractice").classList.toggle("on", on);
+  document.getElementById("modeNote").textContent = on ? "Practice: wins don't count toward bests, and Undo is available." : "Campaign: wins count toward your bests.";
+  if(!on) undoStack = [];
+  render();
+}
+document.getElementById("segCampaign").addEventListener("click", function(){ setPractice(false); });
+document.getElementById("segPractice").addEventListener("click", function(){ setPractice(true); toast("Practice mode — Undo unlocked, scores not saved."); });
+
+/* tutorial / rules */
+document.getElementById("btnTutorial").addEventListener("click", function(){ document.getElementById("tutorialOverlay").classList.add("open"); });
+document.getElementById("btnCloseTutorial").addEventListener("click", function(){ document.getElementById("tutorialOverlay").classList.remove("open"); });
+document.getElementById("btnRules").addEventListener("click", function(){
+  document.getElementById("gameView").style.display = "none";
+  document.getElementById("rulesView").classList.add("open");
+  window.scrollTo(0,0);
+});
+document.getElementById("btnBackToGame").addEventListener("click", function(){
+  document.getElementById("rulesView").classList.remove("open");
+  document.getElementById("gameView").style.display = "";
+  window.scrollTo(0,0);
+});
+
+/* feedback */
+function paintStars(){
+  document.querySelectorAll("#starRow button").forEach(function(b){
+    b.classList.toggle("lit", +b.getAttribute("data-star") <= fbRating);
+  });
+}
+document.querySelectorAll("#starRow button").forEach(function(b){
+  b.addEventListener("click", function(){ fbRating = +b.getAttribute("data-star"); paintStars(); });
+});
+document.getElementById("btnFeedback").addEventListener("click", function(){
+  var saved = lsGet("gridTactics_feedback", []);
+  document.getElementById("fbSavedNote").textContent = saved.length ? saved.length+" feedback entr"+(saved.length===1?"y":"ies")+" saved on this device. Latest rating: "+saved[saved.length-1].rating+"★." : "";
+  document.getElementById("feedbackOverlay").classList.add("open");
+});
+document.getElementById("btnCloseFeedback").addEventListener("click", function(){ document.getElementById("feedbackOverlay").classList.remove("open"); });
+document.getElementById("btnSaveFeedback").addEventListener("click", function(){
+  var text = document.getElementById("fbText").value.trim();
+  if(!fbRating && !text){ toast("Pick a star rating or write a comment first."); return; }
+  var saved = lsGet("gridTactics_feedback", []);
+  saved.push({ rating: fbRating, comment: text, when: new Date().toISOString() });
+  lsSet("gridTactics_feedback", saved);
+  /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+  try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "grid-tactics", rating: fbRating||0, text: text||"", tag: "", mode: "real", level: "", difficulty: "", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+  document.getElementById("fbText").value = ""; fbRating = 0; paintStars();
+  document.getElementById("feedbackOverlay").classList.remove("open");
+  toast("Thanks! Feedback saved on this device.");
+});
+
+function updateBestNote(){
+  document.getElementById("bestNote").textContent = "Bests — battles won: "+bests.battlesWon+" · campaigns cleared: "+bests.campaignsWon+" · best score: "+bests.bestScore;
+}
+
+/* ================= go ================= */
+updateBestNote();
+startCampaign();
+</script>
+  </body>
+</html>

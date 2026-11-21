@@ -1,0 +1,786 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="color-scheme" content="light dark"/>
+<link rel="icon" href="data:,">
+<title>Claw Machine — Holo's Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FFF6FA; --card:#FFFEFB; --card2:#FCE4F0; --ink:#2E1730; --muted:#8A6A86; --line:#F0C9DE;
+  --pink:#E84A8A; --pink-d:#C2336B; --purple:#7C4DFF; --purple-d:#5E35C9; --gold:#FFB020; --gold-d:#D98A00;
+  --teal:#18A999; --teal-d:#0E7A6E; --green:#3FA34D; --shadow:0 8px 24px rgba(120,30,80,.14); --radius:18px;
+  --glass:#EAF7FF; --glass2:#D6EEFF;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#1E1220; --card:#2D1E30; --card2:#3D2942; --ink:#FFF0F7; --muted:#C9A8C4; --line:#4E3552; --shadow:0 8px 24px rgba(0,0,0,.45); --glass:#1B2F45; --glass2:#14253A; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Nunito,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+button{font-family:inherit;cursor:pointer;min-height:44px}
+h1,h2,h3{font-family:Fredoka,Nunito,sans-serif;margin:0;line-height:1.05}
+.wrap{max-width:680px;margin:0 auto;padding:0 14px 28px}
+.marquee{height:14px;margin:0 -14px;background:radial-gradient(circle at 10px 7px,#FFE066 4px,transparent 5px) 0 0/28px 14px repeat-x,linear-gradient(90deg,var(--pink),var(--purple));border-bottom:3px solid var(--pink-d)}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 0 10px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-emoji{font-size:38px;line-height:1;filter:drop-shadow(0 3px 0 rgba(0,0,0,.12))}
+.logo h1{font-size:28px}
+.logo p{margin:2px 0 0;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.top-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.pill-btn{border:2px solid var(--line);background:var(--card);color:var(--ink);font-weight:900;font-size:13px;padding:8px 12px;border-radius:999px}
+.pill-btn:active{transform:scale(.97)}
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.stat{background:var(--card);border:2px solid var(--line);border-radius:14px;padding:8px 6px;text-align:center;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:Fredoka,sans-serif;font-size:20px;line-height:1}
+.stat span{font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.stat.tokens b{color:var(--gold-d)} .stat.tickets b{color:var(--pink)} .stat.best b{color:var(--purple)}
+/* Machine */
+.machine{background:linear-gradient(180deg,#FF6FA5,#E84A8A 55%,#C2336B);border:3px solid var(--pink-d);border-radius:22px;padding:12px 12px 10px;box-shadow:var(--shadow);position:relative}
+.machine-head{text-align:center;color:#fff;font-family:Fredoka,sans-serif;font-size:20px;letter-spacing:.06em;text-shadow:0 2px 0 rgba(0,0,0,.2);margin-bottom:8px}
+.machine-head small{display:block;font-family:Nunito,sans-serif;font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;opacity:.9}
+.glass{position:relative;height:340px;border-radius:16px;overflow:hidden;background:linear-gradient(180deg,var(--glass),var(--glass2) 70%,#FFE9F3);border:3px solid rgba(255,255,255,.65);box-shadow:inset 0 0 0 2px rgba(255,255,255,.35), inset 0 -18px 30px rgba(232,74,138,.15)}
+@media(prefers-color-scheme:dark){.glass{background:linear-gradient(180deg,var(--glass),var(--glass2) 70%,#2A1A2E)}}
+.rail{position:absolute;top:14px;left:10px;right:10px;height:10px;border-radius:999px;background:#5A3A66;box-shadow:inset 0 2px 0 rgba(255,255,255,.35)}
+.claw-wrap{position:absolute;top:8px;width:64px;margin-left:-32px;text-align:center;transition:left .08s linear;z-index:5;pointer-events:none}
+.carriage{width:44px;height:22px;margin:0 auto;background:#FFD23F;border:2.5px solid #8A5A00;border-radius:8px;box-shadow:0 3px 0 #8A5A00}
+.cable{width:4px;margin:0 auto;background:#5A3A66;border-radius:2px;transition:height .5s ease}
+.claw{position:relative;height:44px;margin-top:-2px}
+.claw .hub{width:20px;height:14px;margin:0 auto;background:#8E6BC8;border:2px solid #4A2E7A;border-radius:6px}
+.prong{position:absolute;top:10px;width:22px;height:34px;border:4px solid #4A2E7A;border-top:none;border-radius:0 0 18px 18px;transition:transform .35s ease}
+.prong.l{left:6px;border-right:none;transform-origin:top right;transform:rotate(18deg)}
+.prong.r{right:6px;border-left:none;transform-origin:top left;transform:rotate(-18deg)}
+.claw.closed .prong.l{transform:rotate(-8deg)} .claw.closed .prong.r{transform:rotate(8deg)}
+.claw-carry{position:absolute;left:50%;top:26px;transform:translateX(-50%);font-size:30px;line-height:1;display:none;filter:drop-shadow(0 3px 2px rgba(0,0,0,.25))}
+.pile{position:absolute;left:0;right:0;bottom:0;height:170px}
+.plush{position:absolute;text-align:center;transition:transform .25s,opacity .25s;filter:drop-shadow(0 4px 3px rgba(0,0,0,.18))}
+.plush .e{display:block;line-height:1}
+.plush .n{display:block;font-size:9px;font-weight:900;background:rgba(255,255,255,.88);color:#5A2340;border-radius:999px;padding:1px 5px;margin-top:1px;white-space:nowrap}
+.plush .t{display:block;font-size:8px;font-weight:900;color:#8A5A00}
+.plush.taken{opacity:0;transform:translateY(-30px) scale(.6);pointer-events:none}
+.plush.target{outline:3px dashed var(--gold);outline-offset:2px;border-radius:14px}
+.chute{position:absolute;left:8px;bottom:8px;width:74px;height:58px;background:#3A2340;border:3px solid #FFD23F;border-radius:10px;color:#FFE9A8;display:grid;place-items:center;font-size:10px;font-weight:900;text-align:center;z-index:4;line-height:1.2}
+.chute.win{animation:chutePulse .7s ease 3}
+@keyframes chutePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+.row-label{position:absolute;right:8px;top:36px;background:rgba(255,255,255,.9);color:#5A2340;font-size:11px;font-weight:900;border-radius:999px;padding:4px 9px;z-index:6}
+.msg{min-height:46px;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;font-weight:900;font-size:15px;padding:8px 10px 2px;line-height:1.3}
+/* Controls */
+.controls{margin-top:12px;background:var(--card);border:2px solid var(--line);border-radius:18px;padding:12px;box-shadow:var(--shadow)}
+.pad{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.pad .mid{display:grid;grid-template-rows:1fr 1fr;gap:8px}
+.ctrl{border:2.5px solid var(--line);background:var(--card2);color:var(--ink);border-radius:14px;font-size:24px;font-weight:900;padding:10px 6px;min-height:56px;touch-action:none;user-select:none;-webkit-user-select:none}
+.ctrl:active,.ctrl.held{background:var(--gold);border-color:var(--gold-d);transform:scale(.97)}
+.ctrl small{display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.drop{width:100%;margin-top:10px;border:none;border-radius:999px;padding:16px;font-size:20px;font-weight:900;background:var(--pink);color:#fff;box-shadow:0 6px 0 var(--pink-d);letter-spacing:.04em}
+.drop:active{transform:translateY(3px);box-shadow:0 3px 0 var(--pink-d)}
+.drop:disabled{opacity:.45;box-shadow:none}
+.hintline{text-align:center;font-size:12px;font-weight:800;color:var(--muted);margin-top:8px}
+/* Panel */
+.panel{background:var(--card);border:2px solid var(--line);border-radius:20px;padding:18px;box-shadow:var(--shadow);margin-top:12px}
+.panel h2{font-size:22px;margin-bottom:6px} .panel p{color:var(--muted);font-weight:700;line-height:1.5;margin:6px 0}
+.diff-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}
+.diff{border:2.5px solid var(--line);background:var(--card2);border-radius:14px;padding:12px 6px;text-align:center;font-weight:900;color:var(--ink)}
+.diff small{display:block;font-weight:700;color:var(--muted);margin-top:4px;line-height:1.35;font-size:11px}
+.diff.sel{border-color:var(--pink);box-shadow:0 0 0 3px rgba(232,74,138,.18)}
+.btn{border:none;border-radius:999px;padding:14px 16px;font-weight:900;font-size:16px}
+.btn-primary{background:var(--pink);color:#fff;box-shadow:0 6px 0 var(--pink-d);width:100%} .btn-primary:active{transform:translateY(3px);box-shadow:0 3px 0 var(--pink-d)}
+.btn-secondary{background:var(--card);border:2px solid var(--line);color:var(--ink)}
+.btn-practice{background:var(--teal);color:#fff;box-shadow:0 6px 0 var(--teal-d);width:100%} .btn-practice:active{transform:translateY(3px);box-shadow:0 3px 0 var(--teal-d)}
+.practice-card{margin-top:12px;border:2px dashed var(--teal);background:#E9F7F3;border-radius:14px;padding:12px}
+@media(prefers-color-scheme:dark){.practice-card{background:#16302B}}
+.practice-card p{margin:4px 0 10px;font-size:13px}
+.bests{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.best-chip{background:var(--card2);border:1.5px solid var(--line);border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900}
+.mode-badge{display:none;background:var(--teal);color:#fff;font-weight:900;font-size:12px;padding:6px 11px;border-radius:999px;align-self:center}
+.mode-badge.show{display:inline-block}
+.live-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.live-row .btn{flex:1}
+/* Shelf */
+.shelf{margin-top:14px;background:#6B4A2F;background:linear-gradient(180deg,#8A6544,#5C4033);border-radius:18px;padding:14px;color:#FFEFD6;box-shadow:var(--shadow)}
+@media(prefers-color-scheme:dark){.shelf{background:linear-gradient(180deg,#3D2A1E,#2A1C13)}}
+.shelf-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.shelf-head h2{font-size:18px}
+.shelf-head span{font-size:12px;font-weight:900;opacity:.9}
+.shelf-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+@media(min-width:560px){.shelf-grid{grid-template-columns:repeat(6,1fr)}}
+.slot{background:rgba(255,255,255,.14);border:1.5px dashed rgba(255,255,255,.35);border-radius:14px;padding:8px 4px;text-align:center;min-height:82px}
+.slot.got{border-style:solid;background:rgba(255,255,255,.92);color:#3A2340}
+.slot .e{font-size:28px;line-height:1.1;display:block}
+.slot .n{font-size:10px;font-weight:900;display:block;margin-top:2px;line-height:1.2}
+.slot .c{font-size:10px;font-weight:900;color:var(--gold-d);display:block}
+.slot.missing .e{filter:grayscale(1);opacity:.35}
+.slot.missing .n{opacity:.65}
+.shelf-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.shelf-foot p{margin:0;font-size:12px;font-weight:700;opacity:.9}
+.mini-btn{border:1.5px solid rgba(255,255,255,.5);background:transparent;color:#FFEFD6;border-radius:999px;padding:7px 12px;font-weight:900;font-size:12px;min-height:38px}
+/* Overlay / sheet */
+.overlay{position:fixed;inset:0;background:rgba(30,10,25,.62);display:none;place-items:end center;z-index:50}
+.overlay.open{display:grid}
+.sheet{background:var(--bg);width:100%;max-width:680px;max-height:88vh;overflow:auto;border-radius:22px 22px 0 0;padding:20px 18px 28px}
+@media(min-width:640px){.overlay{place-items:center;padding:18px}.sheet{border-radius:22px}}
+.sheet h2{font-size:24px;margin-bottom:8px} .sheet h3{font-size:16px;margin:16px 0 6px}
+.sheet p,.sheet li{font-weight:700;color:var(--muted);line-height:1.55}
+.sheet ul{padding-left:20px;margin:6px 0} .sheet li{margin:4px 0}
+.close-x{float:right;width:40px;height:40px;border-radius:50%;border:2px solid var(--line);background:var(--card);font-size:18px;font-weight:900;color:var(--ink)}
+.stars{display:flex;gap:6px;margin:10px 0}
+.star{font-size:34px;background:none;border:none;padding:4px;line-height:1;filter:grayscale(1);opacity:.5;min-width:44px}
+.star.on{filter:none;opacity:1}
+textarea{width:100%;border:2px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-weight:700;background:var(--card);color:var(--ink);min-height:84px;resize:vertical}
+.tag-row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.tag{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:7px 12px;font-weight:900;font-size:13px}
+.tag.sel{border-color:var(--pink);background:var(--card2)}
+.fb-q{font-weight:900;font-size:13px;margin-top:12px;color:var(--ink)}
+.hidden{display:none!important}
+footer{margin-top:22px;text-align:center;padding:18px 10px;border-top:2px dashed var(--line)}
+footer b{font-family:Fredoka,sans-serif} footer p{margin:4px 0;color:var(--muted);font-weight:700;font-size:13px}
+.score-big{font-family:Fredoka,sans-serif;font-size:44px;text-align:center;margin:8px 0}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);background:#2E1730;color:#FFF0F7;padding:12px 16px;border-radius:999px;font-weight:900;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:60;max-width:92vw;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.won-row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:10px 0;font-size:30px}
+table{width:100%;border-collapse:collapse;font-weight:700;color:var(--muted);font-size:14px;margin:8px 0}
+td,th{border:1.5px solid var(--line);padding:7px 8px;text-align:left}
+th{background:var(--card2);color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="marquee"></div>
+  <header class="topbar">
+    <div class="logo"><div class="logo-emoji">🕹️</div><div><h1>Claw Machine</h1><p>Holo's Arcade • Grab a plush!</p></div></div>
+    <div class="top-actions">
+      <button class="pill-btn" id="btnTutorial" type="button">❓ How to play</button>
+      <button class="pill-btn" id="btnRules" type="button">📖 Rules</button>
+      <button class="pill-btn" id="btnFeedback" type="button">💬 Feedback</button>
+    </div>
+  </header>
+
+  <main id="viewGame">
+    <div class="stats">
+      <div class="stat tokens"><b id="statTokens">10</b><span>🎟️ Play tokens</span></div>
+      <div class="stat tickets"><b id="statTickets">0</b><span>🎫 Tickets</span></div>
+      <div class="stat"><b id="statPlush">0</b><span>🧸 Plush won</span></div>
+      <div class="stat best"><b id="statBest">0</b><span>🏆 Best tickets</span></div>
+    </div>
+
+    <section class="machine" aria-label="Claw machine">
+      <div class="machine-head">✨ CLAW MACHINE ✨<small>Play money only — tokens &amp; tickets are just for fun</small></div>
+      <div class="glass" id="glass">
+        <div class="rail"></div>
+        <div class="row-label" id="rowLabel">Row: Middle</div>
+        <div class="claw-wrap" id="clawWrap" style="left:50%">
+          <div class="carriage"></div>
+          <div class="cable" id="cable" style="height:26px"></div>
+          <div class="claw" id="claw">
+            <div class="hub"></div>
+            <div class="prong l"></div><div class="prong r"></div>
+            <div class="claw-carry" id="clawCarry">🧸</div>
+          </div>
+        </div>
+        <div class="pile" id="pile"></div>
+        <div class="chute" id="chute">PRIZE<br>CHUTE 🎁</div>
+      </div>
+      <div class="msg" id="msg" role="status" aria-live="polite">Pick a difficulty, then press Start — line the claw up over a plush and DROP!</div>
+    </section>
+
+    <section class="controls" aria-label="Claw controls">
+      <div class="pad">
+        <button class="ctrl" id="btnLeft" type="button" aria-label="Move claw left">◀<small>Left</small></button>
+        <div class="mid">
+          <button class="ctrl" id="btnBack" type="button" aria-label="Move claw to back row">▲<small>Back row</small></button>
+          <button class="ctrl" id="btnFront" type="button" aria-label="Move claw to front row">▼<small>Front row</small></button>
+        </div>
+        <button class="ctrl" id="btnRight" type="button" aria-label="Move claw right">▶<small>Right</small></button>
+      </div>
+      <button class="drop" id="btnDrop" type="button" disabled>⬇️ DROP THE CLAW</button>
+      <p class="hintline">Hold ◀ ▶ to slide • ▲ ▼ changes row • Keyboard: ← → ↑ ↓ + Space to drop</p>
+    </section>
+
+    <section class="panel" id="startPanel">
+      <h2 id="panelTitle">Ready to play?</h2>
+      <p id="panelText">Each drop costs <b>1 play token</b>. Line the claw up over a plush, pick its row, and drop. Win plushies for your shelf and tickets for your score — rare plushies are worth way more, but they're slipperier!</p>
+      <div class="diff-row" role="group" aria-label="Difficulty">
+        <button class="diff" data-diff="easy" type="button">😊 Easy<small>12 tokens • Strong grip<br>Rare slips • Tickets ×1</small></button>
+        <button class="diff" data-diff="normal" type="button">🎯 Normal<small>10 tokens • Fair grip<br>Some slips • Tickets ×1</small></button>
+        <button class="diff" data-diff="hard" type="button">🔥 Hard<small>8 tokens • Wobbly claw<br>Slippery! • Tickets ×2</small></button>
+      </div>
+      <button class="btn btn-primary" id="btnStart" type="button">▶ Start — insert tokens</button>
+      <div class="practice-card">
+        <b>🎓 New here? Try Practice mode</b>
+        <p>Unlimited tokens and a stronger grip, so you can learn the claw with zero pressure. Practice plushies and tickets are just for fun — they don't save to your best scores or your collection shelf.</p>
+        <button class="btn btn-practice" id="btnPractice" type="button">🎓 Start Practice mode</button>
+      </div>
+      <div class="bests" id="bestsRow"></div>
+      <div class="live-row hidden" id="liveRow">
+        <span class="mode-badge" id="modeBadge">🎓 PRACTICE</span>
+        <button class="btn btn-secondary" id="btnRestock" type="button">🔄 Restock pile</button>
+        <button class="btn btn-secondary" id="btnEndRound" type="button">✕ End round</button>
+      </div>
+    </section>
+
+    <section class="shelf" aria-label="Collection shelf">
+      <div class="shelf-head"><h2>🧸 My Collection Shelf</h2><span id="shelfCount">0 / 12 collected</span></div>
+      <div class="shelf-grid" id="shelfGrid"></div>
+      <div class="shelf-foot">
+        <p id="shelfNote">Win a plush in a real round and it lives here forever (on this device). Duplicates earn +5 bonus tickets!</p>
+        <button class="mini-btn" id="btnResetShelf" type="button">Reset shelf &amp; bests</button>
+      </div>
+    </section>
+  </main>
+
+  <main id="viewRules" class="hidden">
+    <div class="panel">
+      <h2>📖 Rules — Claw Machine</h2>
+      <h3>🎯 Goal</h3><p>Use your play tokens to grab as many plushies as you can. Every plush you win earns tickets and (in a real round) a spot on your Collection Shelf. Collect all 12!</p>
+      <h3>🕹️ How a turn works</h3>
+      <ul>
+        <li>Slide the claw left/right with ◀ ▶ (hold to move) or ← → keys.</li>
+        <li>Pick a row with ▲ Back / ▼ Front (or ↑ ↓ keys). The claw only grabs plushies in its row — the dashed outline shows your best target.</li>
+        <li>Press <b>DROP THE CLAW</b> (or Space). That costs 1 token. The claw drops, closes, and lifts.</li>
+        <li>If it grabs well, it carries the plush to the prize chute. If it's off-centre or the plush is heavy/rare, it may slip on the way up!</li>
+        <li>The round ends when your tokens run out. The pile restocks for the next round — your shelf and bests stay saved.</li>
+      </ul>
+      <h3>🎫 Tickets &amp; scoring</h3>
+      <table>
+        <tr><th>Plush rarity</th><th>Tickets</th><th>Examples</th></tr>
+        <tr><td>Common</td><td>10</td><td>🧸 Bear, 🐸 Frog, 🐶 Pup</td></tr>
+        <tr><td>Uncommon</td><td>25</td><td>🐰 Bunny, 🐱 Cat, 🦊 Fox</td></tr>
+        <tr><td>Rare</td><td>50</td><td>🐼 Panda, 🐙 Octopus, 🐧 Penguin</td></tr>
+        <tr><td>Epic</td><td>100</td><td>🦄 Unicorn, 🦁 Lion</td></tr>
+        <tr><td>Jackpot</td><td>250</td><td>✨ Golden Bear</td></tr>
+      </table>
+      <p>Duplicate of a plush you already own: <b>+5 bonus tickets</b> on top. Hard mode doubles all ticket values (×2). Your best tickets per difficulty are saved on this device.</p>
+      <h3>⚙️ Difficulty (saved for next time)</h3>
+      <table>
+        <tr><th></th><th>Easy 😊</th><th>Normal 🎯</th><th>Hard 🔥</th></tr>
+        <tr><td>Tokens per round</td><td>12</td><td>10</td><td>8</td></tr>
+        <tr><td>Claw grip</td><td>Strong</td><td>Fair</td><td>Wobbly + sway</td></tr>
+        <tr><td>Slip chance</td><td>Low</td><td>Medium</td><td>High, esp. rare</td></tr>
+        <tr><td>Tickets</td><td>×1</td><td>×1</td><td>×2</td></tr>
+      </table>
+      <h3>🎓 Practice mode</h3><p>Unlimited tokens, stronger grip, no pressure. Practice wins do <b>not</b> save to your best scores or your Collection Shelf — it's purely for learning the claw. End any time with <b>End round</b>.</p>
+      <h3>💰 Play money only</h3><p>Tokens and tickets in this game are pretend. There's no real money, no prizes to buy, and nothing to win outside the game — just plushies on a shelf and bragging rights. 🎉</p>
+      <h3>💾 Saving</h3><p>Difficulty, best tickets, and your collection are saved in this browser on this device only (localStorage). Nothing is sent anywhere. Use “Reset shelf &amp; bests” on the shelf to start fresh.</p>
+      <button class="btn btn-primary" id="btnBackToGame" type="button" style="margin-top:14px">← Back to Game</button>
+    </div>
+  </main>
+
+  <footer>
+    <b>Ridiculously Fit and Fed</b>
+    <p>Part of Holo's Arcade • Claw Machine — a Holo original</p>
+    <p style="font-size:12px">Play money only • Best scores, collection &amp; feedback are saved on this device only.</p>
+    <p style="margin-top:8px"><button class="pill-btn" id="btnFeedbackFooter" type="button">💬 Feedback</button></p>
+  </footer>
+</div>
+
+<!-- TUTORIAL (opt-in only — opens from How to play, never automatically) -->
+<div class="overlay" id="tutorialOverlay" role="dialog" aria-modal="true" aria-label="How to play">
+  <div class="sheet">
+    <button class="close-x" data-close="tutorialOverlay" type="button">✕</button>
+    <h2>❓ How to play</h2>
+    <p>A 20-second tour — then the claw is yours:</p>
+    <h3>1️⃣ Pick a difficulty &amp; start</h3><p>Easy gives you more tokens and a stronger grip. Hard is wobbly but pays double tickets. Your pick is remembered for next time. Press <b>Start</b> to insert your play tokens.</p>
+    <h3>2️⃣ Line it up</h3><p>Hold <b>◀ ▶</b> to slide the claw. Use <b>▲ Back / ▼ Front</b> to match the plush's row — plushies sit in 3 rows, and the claw only grabs its own row. A dashed gold outline marks your current best target.</p>
+    <h3>3️⃣ Drop it!</h3><p>Hit the big <b>DROP THE CLAW</b> button. The claw drops, closes around the plush, and lifts. Dead-centre drops grab best — off-centre and heavy rare plushies can slip!</p>
+    <h3>4️⃣ Collect &amp; score</h3><p>Wins land in the prize chute, earn tickets, and join your <b>Collection Shelf</b> below. Duplicates pay +5 bonus tickets. When tokens run out, check your summary and play again!</p>
+    <h3>💡 Pro tip</h3><p>Common plushies are light and easy — great for a sure thing. The ✨ Golden Bear (250 tickets!) is heavy and slippery, so save it for when your aim feels sharp. Or warm up in <b>Practice mode</b> first — unlimited tokens, no pressure.</p>
+    <button class="btn btn-primary" data-close="tutorialOverlay" type="button" style="margin-top:12px">Got it — let's grab some plushies!</button>
+  </div>
+</div>
+
+<!-- FEEDBACK (less formal — stars + comment + tags, saved on this device) -->
+<div class="overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-label="Feedback">
+  <div class="sheet">
+    <button class="close-x" data-close="feedbackOverlay" type="button">✕</button>
+    <h2>💬 How was it?</h2>
+    <p>Be honest — we can take it 😄 Loved it, found a bug, or the claw cheated you? Tell us below. It saves right here on this device, no email, no fuss.</p>
+    <div class="stars" id="stars" role="radiogroup" aria-label="Star rating">
+      <button class="star" data-v="1" type="button" aria-label="1 star">⭐</button>
+      <button class="star" data-v="2" type="button" aria-label="2 stars">⭐</button>
+      <button class="star" data-v="3" type="button" aria-label="3 stars">⭐</button>
+      <button class="star" data-v="4" type="button" aria-label="4 stars">⭐</button>
+      <button class="star" data-v="5" type="button" aria-label="5 stars">⭐</button>
+    </div>
+    <p class="fb-q">Was it fun?</p>
+    <div class="tag-row" id="fbFun">
+      <button class="tag" data-v="Fun" type="button">😍 Fun</button>
+      <button class="tag" data-v="Meh" type="button">😐 Meh</button>
+      <button class="tag" data-v="Not fun" type="button">😴 Not fun</button>
+    </div>
+    <p class="fb-q">Did everything work?</p>
+    <div class="tag-row" id="fbWorks">
+      <button class="tag" data-v="Works fine" type="button">✅ Works fine</button>
+      <button class="tag" data-v="Confusing" type="button">🤔 Confusing</button>
+      <button class="tag" data-v="Broken" type="button">🐛 Broken</button>
+    </div>
+    <p class="fb-q">Too easy or too hard?</p>
+    <div class="tag-row" id="fbDiff">
+      <button class="tag" data-v="Too easy" type="button">🥱 Too easy</button>
+      <button class="tag" data-v="Just right" type="button">👌 Just right</button>
+      <button class="tag" data-v="Too hard" type="button">😤 Too hard</button>
+    </div>
+    <p class="fb-q">Anything else?</p>
+    <textarea id="feedbackText" placeholder="The claw dropped my unicorn and I have feelings about it…"></textarea>
+    <div class="tag-row" id="fbTag">
+      <button class="tag" data-v="Bug" type="button">🐛 Bug</button>
+      <button class="tag" data-v="Suggestion" type="button">💡 Suggestion</button>
+      <button class="tag" data-v="Other" type="button">💬 Other</button>
+    </div>
+    <p style="font-size:12px;margin:10px 0 0">We automatically note the game, difficulty, mode and score with your feedback so it's actually useful — no personal info, ever.</p>
+    <div id="feedbackSaved" style="margin-top:10px"></div>
+    <button class="btn btn-primary" id="btnSaveFeedback" type="button" style="margin-top:12px">Send it 💜</button>
+  </div>
+</div>
+
+<!-- ROUND END -->
+<div class="overlay" id="endOverlay" role="dialog" aria-modal="true" aria-label="Round over">
+  <div class="sheet" style="text-align:center">
+    <h2 id="endTitle">Out of tokens! 🎉</h2>
+    <div class="score-big" id="endScore">0 🎫</div>
+    <div class="won-row" id="endWon"></div>
+    <p id="endDetail"></p>
+    <p id="endBest" style="font-weight:900;color:var(--ink)"></p>
+    <button class="btn btn-primary" id="btnPlayAgain" type="button" style="margin-top:12px">▶ Play again</button>
+    <button class="btn btn-secondary" data-close="endOverlay" type="button" style="width:100%;margin-top:8px">Look at my shelf 🧸</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+"use strict";
+var GAME = "claw-machine";
+var DIFF_KEY = "claw-machine-difficulty";
+var BESTS_KEY = "claw-machine-bests";
+var COLLECTION_KEY = "claw-machine-collection";
+var FEEDBACK_KEY = "holos-arcade-feedback";
+
+var PLUSH = [
+  {id:"bear",    emoji:"🧸", name:"Bear",        rarity:"Common",   tickets:10,  weight:0.10},
+  {id:"frog",    emoji:"🐸", name:"Frog",        rarity:"Common",   tickets:10,  weight:0.10},
+  {id:"pup",     emoji:"🐶", name:"Pup",         rarity:"Common",   tickets:10,  weight:0.12},
+  {id:"bunny",   emoji:"🐰", name:"Bunny",       rarity:"Uncommon", tickets:25,  weight:0.18},
+  {id:"cat",     emoji:"🐱", name:"Cat",         rarity:"Uncommon", tickets:25,  weight:0.18},
+  {id:"fox",     emoji:"🦊", name:"Fox",         rarity:"Uncommon", tickets:25,  weight:0.20},
+  {id:"panda",   emoji:"🐼", name:"Panda",       rarity:"Rare",     tickets:50,  weight:0.28},
+  {id:"octopus", emoji:"🐙", name:"Octopus",     rarity:"Rare",     tickets:50,  weight:0.26},
+  {id:"penguin", emoji:"🐧", name:"Penguin",     rarity:"Rare",     tickets:50,  weight:0.28},
+  {id:"unicorn", emoji:"🦄", name:"Unicorn",     rarity:"Epic",     tickets:100, weight:0.36},
+  {id:"lion",    emoji:"🦁", name:"Lion",        rarity:"Epic",     tickets:100, weight:0.38},
+  {id:"golden",  emoji:"✨🧸", name:"Golden Bear", rarity:"Jackpot", tickets:250, weight:0.48}
+];
+var DIFFS = {
+  easy:   {label:"Easy",   tokens:12, grip:0.90, slip:0.05, mult:1, sway:0},
+  normal: {label:"Normal", tokens:10, grip:0.72, slip:0.15, mult:1, sway:0},
+  hard:   {label:"Hard",   tokens:8,  grip:0.55, slip:0.30, mult:2, sway:2.5}
+};
+var ROWS = ["Front","Middle","Back"];
+/* row 0=front(bottom, big), 1=middle, 2=back(top, small) */
+var ROW_STYLE = [
+  {bottom:6,  size:44, z:3},
+  {bottom:58, size:38, z:2},
+  {bottom:106,size:32, z:1}
+];
+
+function $(id){ return document.getElementById(id); }
+function storeGet(k, fb){ try{ var v = localStorage.getItem(k); return v==null?fb:JSON.parse(v); }catch(e){ return fb; } }
+function storeSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function toast(t){ var el=$("toast"); el.textContent=t; el.classList.add("show"); setTimeout(function(){el.classList.remove("show");},2200); }
+
+/* ---------- State ---------- */
+var diff = storeGet(DIFF_KEY, "normal");
+if(!DIFFS[diff]) diff = "normal";
+var practice = false;
+var playing = false;
+var busy = false; /* claw animating */
+var tokens = DIFFS[diff].tokens;
+var tickets = 0;
+var wonThisRound = [];
+var clawX = 50; /* % */
+var clawRow = 1;
+var pile = []; /* {plush, x, row, taken, el} */
+var holdTimer = null, holdDir = 0;
+
+function getBests(){ return storeGet(BESTS_KEY, {}); }
+function getCollection(){ return storeGet(COLLECTION_KEY, {}); }
+
+/* ---------- Pile ---------- */
+function buildPile(){
+  pile = [];
+  var spots = [];
+  /* 4 per row, shuffled plush assignment, jittered x */
+  var order = PLUSH.slice();
+  for(var i=order.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=order[i]; order[i]=order[j]; order[j]=t; }
+  var idx = 0;
+  for(var r=0;r<3;r++){
+    for(var c=0;c<4;c++){
+      spots.push({plush: order[idx++], row:r, x: 16 + c*22 + (Math.random()*6-3)});
+    }
+  }
+  pile = spots.map(function(s){ return {plush:s.plush, row:s.row, x:Math.max(8,Math.min(92,s.x)), taken:false, el:null}; });
+  renderPile();
+}
+function renderPile(){
+  var box = $("pile"); box.innerHTML = "";
+  pile.forEach(function(p){
+    var d = document.createElement("div");
+    d.className = "plush" + (p.taken ? " taken" : "");
+    var rs = ROW_STYLE[p.row];
+    d.style.left = "calc(" + p.x + "% - 26px)";
+    d.style.bottom = rs.bottom + "px";
+    d.style.width = "52px";
+    d.style.zIndex = rs.z;
+    d.innerHTML = '<span class="e" style="font-size:' + rs.size + 'px">' + p.plush.emoji + '</span>' +
+      '<span class="n">' + p.plush.name + '</span>' +
+      '<span class="t">' + p.plush.tickets + ' 🎫</span>';
+    box.appendChild(d); p.el = d;
+  });
+  updateTarget();
+}
+function nearestTarget(){
+  var best = null, bestDist = 1e9;
+  pile.forEach(function(p){
+    if(p.taken || p.row !== clawRow) return;
+    var d = Math.abs(p.x - clawX);
+    if(d < bestDist){ bestDist = d; best = p; }
+  });
+  return {target: best, dist: bestDist};
+}
+function updateTarget(){
+  pile.forEach(function(p){ if(p.el) p.el.classList.remove("target"); });
+  if(!playing) return;
+  var n = nearestTarget();
+  if(n.target && n.dist <= 14 && n.target.el) n.target.el.classList.add("target");
+}
+
+/* ---------- Shelf & bests UI ---------- */
+function renderShelf(){
+  var col = getCollection();
+  var grid = $("shelfGrid"); grid.innerHTML = "";
+  var got = 0;
+  PLUSH.forEach(function(pl){
+    var n = col[pl.id] || 0;
+    if(n > 0) got++;
+    var d = document.createElement("div");
+    d.className = "slot" + (n>0 ? " got" : " missing");
+    d.innerHTML = '<span class="e">' + pl.emoji + '</span><span class="n">' + pl.name + '</span>' +
+      (n>0 ? '<span class="c">×' + n + ' • ' + pl.tickets + ' 🎫</span>' : '<span class="c">' + pl.rarity + ' • ' + pl.tickets + ' 🎫</span>');
+    grid.appendChild(d);
+  });
+  $("shelfCount").textContent = got + " / " + PLUSH.length + " collected";
+  if(got === PLUSH.length) $("shelfNote").textContent = "🏆 FULL SET! Every single plushie collected. Absolute claw legend.";
+}
+function renderBests(){
+  var bests = getBests();
+  var row = $("bestsRow"); row.innerHTML = "";
+  ["easy","normal","hard"].forEach(function(k){
+    var chip = document.createElement("span"); chip.className = "best-chip";
+    chip.textContent = "🏆 " + DIFFS[k].label + " best: " + (bests[k] || 0) + " 🎫";
+    row.appendChild(chip);
+  });
+  $("statBest").textContent = bests[diff] || 0;
+}
+function renderStats(){
+  $("statTokens").textContent = practice ? "∞" : tokens;
+  $("statTickets").textContent = tickets;
+  $("statPlush").textContent = wonThisRound.length;
+  $("btnDrop").disabled = !playing || busy || (!practice && tokens <= 0);
+}
+function setMsg(t){ $("msg").textContent = t; }
+function setClaw(){
+  $("clawWrap").style.left = clawX + "%";
+  $("rowLabel").textContent = "Row: " + ROWS[clawRow];
+  updateTarget();
+}
+
+/* ---------- Round flow ---------- */
+function startRound(isPractice){
+  practice = !!isPractice;
+  playing = true; busy = false;
+  tokens = DIFFS[diff].tokens;
+  tickets = 0; wonThisRound = [];
+  clawX = 50; clawRow = 1;
+  buildPile(); setClaw(); renderStats(); renderBests();
+  $("liveRow").classList.remove("hidden");
+  $("modeBadge").classList.toggle("show", practice);
+  $("btnStart").textContent = "▶ Restart round";
+  $("btnPractice").textContent = "🎓 Restart Practice mode";
+  setMsg(practice
+    ? "🎓 Practice mode — unlimited tokens! Slide the claw, match the row, and DROP."
+    : "Tokens in! Slide the claw over a plush, match its row, then DROP. " + tokens + " tokens — make 'em count!");
+  $("cable").style.height = "26px";
+  $("claw").classList.remove("closed");
+  $("clawCarry").style.display = "none";
+}
+function endRound(reason){
+  if(!playing) return;
+  playing = false; busy = false;
+  renderStats();
+  var isBest = false;
+  if(!practice){
+    var bests = getBests();
+    if(!bests[diff] || tickets > bests[diff]){ bests[diff] = tickets; storeSet(BESTS_KEY, bests); isBest = tickets > 0; }
+  }
+  renderBests();
+  $("endTitle").textContent = practice ? "Practice done! 🎓" : (reason === "out" ? "Out of tokens! 🎉" : "Round over! 🎉");
+  $("endScore").textContent = tickets + " 🎫";
+  $("endWon").textContent = wonThisRound.length ? wonThisRound.map(function(w){return w.emoji;}).join(" ") : "🫥";
+  $("endDetail").textContent = wonThisRound.length
+    ? "You grabbed " + wonThisRound.length + " plush" + (wonThisRound.length>1?"ies":"") + ": " + wonThisRound.map(function(w){return w.name;}).join(", ") + "."
+    : "No plushies this time — the claw is a fickle friend. Line it up dead-centre and try again!";
+  $("endBest").textContent = practice
+    ? "Practice scores don't count toward your best — ready for a real round?"
+    : (isBest ? "🏆 New best on " + DIFFS[diff].label + "!" : "Best on " + DIFFS[diff].label + ": " + (getBests()[diff]||0) + " 🎫");
+  $("endOverlay").classList.add("open");
+  setMsg("Round over — press Play again or Start for another go!");
+}
+
+/* ---------- Claw drop ---------- */
+function dropClaw(){
+  if(!playing || busy) return;
+  if(!practice && tokens <= 0){ endRound("out"); return; }
+  busy = true;
+  if(!practice) tokens--;
+  renderStats();
+  var d = DIFFS[diff];
+  var dropX = clawX + (d.sway ? (Math.random()*2-1)*d.sway : 0);
+  dropX = Math.max(5, Math.min(95, dropX));
+  var n = nearestTarget();
+  var target = n.target, dist = Math.abs((target?target.x:dropX) - dropX);
+  var grabbed = null;
+  if(target && dist <= 14){
+    var chance = d.grip - dist*0.025 - target.plush.weight*0.7 + (practice ? 0.15 : 0);
+    chance = Math.max(0.05, Math.min(0.97, chance));
+    if(Math.random() < chance) grabbed = target;
+  }
+  /* animation: descend -> close -> rise (maybe slip) -> chute */
+  var cable = $("cable"), claw = $("claw"), carry = $("clawCarry");
+  var dropH = 150 - clawRow*28; /* front row = deeper drop */
+  setMsg(grabbed ? "Dropping… fingers crossed 🤞" : "Dropping…");
+  cable.style.height = dropH + "px";
+  setTimeout(function(){
+    claw.classList.add("closed");
+    if(grabbed){
+      carry.textContent = grabbed.plush.emoji;
+      carry.style.display = "block";
+      grabbed.taken = true;
+      if(grabbed.el) grabbed.el.classList.add("taken");
+    }
+    setTimeout(function(){
+      cable.style.height = "26px";
+      setTimeout(function(){
+        var slipped = false;
+        if(grabbed){
+          var slipChance = d.slip + grabbed.plush.weight*0.35 - (practice ? 0.08 : 0);
+          if(Math.random() < Math.max(0.02, slipChance)) slipped = true;
+        }
+        if(grabbed && slipped){
+          carry.style.display = "none";
+          grabbed.taken = false;
+          if(grabbed.el) grabbed.el.classList.remove("taken");
+          claw.classList.remove("closed");
+          setMsg("😱 It slipped! The " + grabbed.plush.name + " wriggled free on the way up. So close!");
+          finishDrop();
+        } else if(grabbed){
+          /* carry to chute */
+          var startX = clawX, steps = 0;
+          var iv = setInterval(function(){
+            steps++; clawX = startX + (12 - startX) * (steps/10);
+            setClaw();
+            if(steps >= 10){
+              clearInterval(iv);
+              carry.style.display = "none";
+              claw.classList.remove("closed");
+              $("chute").classList.remove("win"); void $("chute").offsetWidth; $("chute").classList.add("win");
+              awardPlush(grabbed.plush);
+              setTimeout(function(){ clawX = 50; setClaw(); finishDrop(); }, 450);
+            }
+          }, 45);
+        } else {
+          claw.classList.remove("closed");
+          setMsg(target && dist <= 14
+            ? "🫥 The claw closed on air — just missed the " + target.plush.name + ". Centre it up and go again!"
+            : "🫥 Nothing there! Match the claw's row to a plush (watch the gold outline), then drop.");
+          finishDrop();
+        }
+      }, 550);
+    }, 450);
+  }, 550);
+}
+function awardPlush(pl){
+  var mult = DIFFS[diff].mult;
+  var col = getCollection();
+  var isDup = !practice && (col[pl.id] || 0) > 0;
+  var earned = pl.tickets * mult + (isDup ? 5 : 0);
+  tickets += earned;
+  wonThisRound.push(pl);
+  if(!practice){
+    col[pl.id] = (col[pl.id] || 0) + 1;
+    storeSet(COLLECTION_KEY, col);
+    renderShelf();
+  }
+  setMsg("🎉 You got the " + pl.name + "! +" + earned + " 🎫" + (isDup ? " (includes +5 duplicate bonus)" : "") + (practice ? " — practice win, not saved to your shelf" : " — it's on your shelf!"));
+  renderStats();
+}
+function finishDrop(){
+  busy = false;
+  renderStats(); updateTarget();
+  if(!practice && tokens <= 0){
+    setTimeout(function(){ endRound("out"); }, 900);
+  }
+}
+
+/* ---------- Controls ---------- */
+function move(dir){
+  if(!playing || busy) return;
+  clawX = Math.max(6, Math.min(94, clawX + dir*2.2));
+  setClaw();
+}
+function startHold(dir){
+  stopHold(); holdDir = dir; move(dir);
+  holdTimer = setInterval(function(){ move(holdDir); }, 55);
+}
+function stopHold(){ if(holdTimer){ clearInterval(holdTimer); holdTimer = null; } }
+function bindHold(id, dir){
+  var b = $(id);
+  b.addEventListener("pointerdown", function(e){ e.preventDefault(); b.classList.add("held"); startHold(dir); });
+  ["pointerup","pointerleave","pointercancel"].forEach(function(ev){
+    b.addEventListener(ev, function(){ b.classList.remove("held"); stopHold(); });
+  });
+}
+bindHold("btnLeft", -1);
+bindHold("btnRight", 1);
+$("btnBack").addEventListener("click", function(){ if(!playing||busy) return; clawRow = Math.min(2, clawRow+1); setClaw(); });
+$("btnFront").addEventListener("click", function(){ if(!playing||busy) return; clawRow = Math.max(0, clawRow-1); setClaw(); });
+$("btnDrop").addEventListener("click", dropClaw);
+document.addEventListener("keydown", function(e){
+  if($("viewRules").classList.contains("hidden") === false) return;
+  if(e.key === "ArrowLeft"){ e.preventDefault(); move(-1); }
+  else if(e.key === "ArrowRight"){ e.preventDefault(); move(1); }
+  else if(e.key === "ArrowUp"){ e.preventDefault(); if(playing&&!busy){ clawRow=Math.min(2,clawRow+1); setClaw(); } }
+  else if(e.key === "ArrowDown"){ e.preventDefault(); if(playing&&!busy){ clawRow=Math.max(0,clawRow-1); setClaw(); } }
+  else if(e.key === " " || e.key === "Enter"){ if(playing && !busy && document.activeElement.tagName !== "BUTTON"){ e.preventDefault(); dropClaw(); } }
+});
+
+/* ---------- Difficulty (saved) ---------- */
+function paintDiff(){
+  document.querySelectorAll(".diff").forEach(function(b){
+    b.classList.toggle("sel", b.getAttribute("data-diff") === diff);
+  });
+  renderBests();
+}
+document.querySelectorAll(".diff").forEach(function(b){
+  b.addEventListener("click", function(){
+    diff = b.getAttribute("data-diff");
+    storeSet(DIFF_KEY, diff);
+    paintDiff();
+    if(!playing){ tokens = DIFFS[diff].tokens; renderStats(); }
+    toast(DIFFS[diff].label + " it is — saved for next time ✓");
+  });
+});
+
+/* ---------- Buttons ---------- */
+$("btnStart").addEventListener("click", function(){ startRound(false); });
+$("btnPractice").addEventListener("click", function(){ startRound(true); });
+$("btnEndRound").addEventListener("click", function(){ endRound("quit"); });
+$("btnRestock").addEventListener("click", function(){
+  if(busy) return;
+  buildPile(); setMsg("Fresh pile! New plushies, new chances 🧸");
+});
+$("btnPlayAgain").addEventListener("click", function(){
+  $("endOverlay").classList.remove("open");
+  startRound(practice);
+});
+$("btnResetShelf").addEventListener("click", function(){
+  if(confirm("Reset your collection shelf and best scores on this device? This can't be undone.")){
+    try{ localStorage.removeItem(COLLECTION_KEY); localStorage.removeItem(BESTS_KEY); }catch(e){}
+    renderShelf(); renderBests(); toast("Shelf cleared — fresh start! 🧸");
+  }
+});
+
+/* ---------- Views & overlays ---------- */
+$("btnRules").addEventListener("click", function(){
+  $("viewGame").classList.add("hidden"); $("viewRules").classList.remove("hidden"); window.scrollTo(0,0);
+});
+$("btnBackToGame").addEventListener("click", function(){
+  $("viewRules").classList.add("hidden"); $("viewGame").classList.remove("hidden"); window.scrollTo(0,0);
+});
+$("btnTutorial").addEventListener("click", function(){ $("tutorialOverlay").classList.add("open"); });
+document.querySelectorAll("[data-close]").forEach(function(b){
+  b.addEventListener("click", function(){ $(b.getAttribute("data-close")).classList.remove("open"); });
+});
+document.querySelectorAll(".overlay").forEach(function(o){
+  o.addEventListener("click", function(e){ if(e.target === o) o.classList.remove("open"); });
+});
+
+/* ---------- Feedback (less formal; auto-captures game/difficulty/mode/score) ---------- */
+var fbRating = 0, fbTag = "", fbFun = "", fbWorks = "", fbDiffTag = "";
+function paintStars(){
+  document.querySelectorAll("#stars .star").forEach(function(s){
+    s.classList.toggle("on", Number(s.getAttribute("data-v")) <= fbRating);
+  });
+}
+document.querySelectorAll("#stars .star").forEach(function(s){
+  s.addEventListener("click", function(){ fbRating = Number(s.getAttribute("data-v")); paintStars(); });
+});
+function bindTagRow(id, setter){
+  document.querySelectorAll("#" + id + " .tag").forEach(function(t){
+    t.addEventListener("click", function(){
+      var was = t.classList.contains("sel");
+      document.querySelectorAll("#" + id + " .tag").forEach(function(x){ x.classList.remove("sel"); });
+      if(!was){ t.classList.add("sel"); setter(t.getAttribute("data-v")); } else { setter(""); }
+    });
+  });
+}
+bindTagRow("fbFun", function(v){ fbFun = v; });
+bindTagRow("fbWorks", function(v){ fbWorks = v; });
+bindTagRow("fbDiff", function(v){ fbDiffTag = v; });
+bindTagRow("fbTag", function(v){ fbTag = v; });
+function openFeedback(){
+  fbRating = 0; fbTag = ""; fbFun = ""; fbWorks = ""; fbDiffTag = "";
+  paintStars();
+  document.querySelectorAll("#feedbackOverlay .tag").forEach(function(x){ x.classList.remove("sel"); });
+  $("feedbackText").value = ""; $("feedbackSaved").innerHTML = "";
+  $("feedbackOverlay").classList.add("open");
+}
+$("btnFeedback").addEventListener("click", openFeedback);
+$("btnFeedbackFooter").addEventListener("click", openFeedback);
+$("btnSaveFeedback").addEventListener("click", function(){
+  var tags = [];
+  if(fbFun) tags.push(fbFun);
+  if(fbWorks) tags.push(fbWorks);
+  if(fbDiffTag) tags.push(fbDiffTag);
+  var rec = {
+    game: GAME,
+    rating: fbRating,
+    text: $("feedbackText").value.trim(),
+    tag: fbTag,
+    tags: tags,
+    timestamp: new Date().toISOString(),
+    /* auto-captured context (no personal info) */
+    difficulty: diff,
+    mode: practice ? "practice" : "standard",
+    tickets: tickets,
+    plushWon: wonThisRound.length,
+    collected: Object.keys(getCollection()).length
+  };
+  var arr = storeGet(FEEDBACK_KEY, []);
+  if(!Array.isArray(arr)) arr = [];
+  arr.push(rec);
+  storeSet(FEEDBACK_KEY, arr);
+  $("feedbackSaved").innerHTML = '<p style="font-weight:900;color:var(--ink);text-align:center">Thanks! 💜 Saved on this device.</p>';
+  toast("Thanks for the feedback! 💜");
+  setTimeout(function(){ $("feedbackOverlay").classList.remove("open"); }, 1200);
+});
+
+/* ---------- Init (no auto tutorial — opt-in only) ---------- */
+paintDiff();
+tokens = DIFFS[diff].tokens;
+buildPile(); setClaw(); renderStats(); renderShelf(); renderBests();
+})();
+</script>
+</body>
+</html>

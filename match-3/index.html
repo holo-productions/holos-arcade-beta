@@ -1,0 +1,1211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Match-3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#fdfcf7; --ink:#171a18; --muted:#5b6560; --line:#e7e2d6;
+  --card:#ffffff; --chip:#f1ede1;
+  --rff:#0e7569; --rff-deep:#0a574f;
+  --gold:#ffbe0b; --gold-ink:#7a5b00;
+  --good:#1d7a3a; --bad:#b3261e;
+  --shadow:0 10px 30px rgba(23,26,24,.10);
+  --radius:20px;
+  --cell-a:#f6f2e7; --cell-b:#efe9da;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#111412; --ink:#f2efe8; --muted:#a8b0ab; --line:#2a2f2c;
+    --card:#1a1e1c; --chip:#242825;
+    --shadow:0 10px 30px rgba(0,0,0,.4);
+    --cell-a:#1d211f; --cell-b:#181c1a;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;font-family:"Public Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+button{font-family:inherit;cursor:pointer}
+.wrap{max-width:760px;margin:0 auto;padding:14px 16px 40px}
+
+/* Top control rows */
+.toprow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.toprow .spacer{flex:1}
+.btn{appearance:none;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;font-size:14.5px;padding:11px 16px;border-radius:12px;min-height:48px;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn:disabled{opacity:.38;cursor:not-allowed}
+.seg{display:flex;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;padding:8px 14px;border-radius:999px;font-weight:800;min-height:40px;color:var(--muted);font-size:14px}
+.seg button.active{background:var(--card);color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.14)}
+.seg-label{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);width:100%;margin-bottom:2px}
+.ctrl-block{display:flex;flex-direction:column}
+
+/* HUD */
+.hud{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}
+.hud span{font-size:12.5px;font-weight:700;background:var(--chip);padding:7px 11px;border-radius:999px}
+.hud span b{font-weight:800}
+.hud span.yours{background:var(--rff);color:#fff}
+.hud span.best{background:var(--ink);color:var(--bg)}
+.hud span.warn{background:var(--bad);color:#fff}
+.hud span.practice{background:var(--gold);color:#231a00;border:1px solid #e6a800}
+.practice-banner{display:flex;gap:10px;align-items:center;background:#fff8d6;border:1.5px dashed #e6a800;border-radius:12px;padding:10px 12px;font-size:13.5px;margin-bottom:12px;color:#5c4300;line-height:1.45}
+@media (prefers-color-scheme: dark){ .practice-banner{background:#2e2a12;color:#ffe58a;border-color:#8a6d00} }
+.practice-banner b{color:inherit}
+.progress{height:10px;background:var(--chip);border:1px solid var(--line);border-radius:999px;overflow:hidden;margin:0 0 10px}
+.progress i{display:block;height:100%;background:var(--rff);width:0%;transition:width .3s ease}
+.progress.got i{background:var(--gold)}
+
+/* One-time hint bar (non-blocking) */
+.hint{display:flex;gap:10px;align-items:center;background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-size:13.5px;margin-bottom:12px}
+.hint-x{margin-left:auto;appearance:none;border:0;background:transparent;color:var(--muted);width:36px;height:36px;border-radius:50%;font-size:15px;cursor:pointer;flex:0 0 auto}
+.hint-x:hover{color:var(--ink)}
+
+/* Status line */
+.status{min-height:26px;text-align:center;font-weight:800;font-size:15px;margin:2px 0 10px;color:var(--rff-deep)}
+@media (prefers-color-scheme: dark){ .status{color:#7fd1c5} }
+.status.pop{animation:statuspop .3s ease}
+@keyframes statuspop{0%{transform:scale(.92)}60%{transform:scale(1.06)}100%{transform:scale(1)}}
+
+/* Board */
+.board-wrap{position:relative;max-width:560px;margin:0 auto}
+.board{position:relative;width:100%;aspect-ratio:1/1;border-radius:18px;border:2px solid var(--line);overflow:hidden;touch-action:manipulation;
+  background:
+    conic-gradient(var(--cell-a) 25%, var(--cell-b) 0 50%, var(--cell-a) 0 75%, var(--cell-b) 0);
+  background-size:25% 25%;
+  box-shadow:var(--shadow)}
+.gem{position:absolute;left:0;top:0;width:12.5%;height:12.5%;padding:0;background:transparent;border:0;margin:0;
+  transition:transform .19s ease;will-change:transform;-webkit-tap-highlight-color:transparent;z-index:1}
+.gem .gem-in{position:absolute;inset:7%;display:block}
+.gem svg{display:block;width:100%;height:100%;pointer-events:none;filter:drop-shadow(0 2px 2px rgba(0,0,0,.25))}
+.gem.selected{z-index:3}
+.gem .ring{position:absolute;inset:-6%;border:3px solid var(--gold);border-radius:24%;pointer-events:none}
+.gem.selected .ring{animation:selpulse .7s ease-in-out infinite alternate}
+@keyframes selpulse{from{transform:scale(.96)}to{transform:scale(1.03)}}
+.gem.hinting .ring{border-color:var(--rff);animation:selpulse .28s ease-in-out infinite alternate}
+.gem.clearing{transition:transform .22s ease,opacity .22s ease;opacity:0;z-index:2}
+.gem.clearing svg{transform:scale(.2) rotate(40deg);transition:transform .22s ease}
+.gem.bomb svg{animation:bombpulse 1s ease-in-out infinite alternate}
+@keyframes bombpulse{from{filter:drop-shadow(0 0 3px rgba(255,190,11,.5))}to{filter:drop-shadow(0 0 10px rgba(255,190,11,.95))}}
+.gem.line svg{filter:drop-shadow(0 0 6px rgba(255,255,255,.75)) drop-shadow(0 2px 2px rgba(0,0,0,.25))}
+.board-cover{position:absolute;inset:0;z-index:10;background:rgba(10,12,10,.55);display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;border-radius:18px;color:#fff;text-align:center;padding:20px}
+.board-cover h3{font-family:"Bricolage Grotesque",sans-serif;font-size:30px;margin:0}
+.board-cover .btn{background:#fff;color:#171a18;border-color:#fff}
+
+.pane-footer{margin:26px 0 0;padding-top:14px;border-top:1px solid var(--line);font-size:13.5px;color:var(--muted);text-align:center}
+.pane-footer a{color:var(--rff);font-weight:700;text-decoration:underline;text-underline-offset:2px}
+
+/* Feedback */
+.fb-body{padding:18px 22px 6px}
+.fb-label{font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.fb-stars{display:flex;gap:6px;margin-bottom:18px}
+.fb-star{appearance:none;border:1.5px solid var(--line);background:var(--card);width:52px;height:52px;border-radius:12px;font-size:26px;line-height:1;display:grid;place-items:center;color:#c9c2ae;cursor:pointer}
+.fb-star:hover{border-color:var(--ink)}
+.fb-star.on{color:#e8a400;border-color:var(--gold);background:#fff8d6}
+@media (prefers-color-scheme: dark){ .fb-star.on{background:#2e2a12} .fb-star{color:#5a5f5c} }
+.fb-textarea{width:100%;min-height:110px;resize:vertical;border:1.5px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font:inherit;font-size:15px;padding:12px 14px;line-height:1.5}
+.fb-textarea:focus{outline:2px solid var(--rff);outline-offset:1px;border-color:var(--rff)}
+.fb-terms{font-size:13px;color:var(--muted);line-height:1.5;margin:12px 0 0;background:var(--chip);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.fb-status{min-height:22px;font-size:14px;font-weight:700;color:var(--good);margin:10px 0 0;text-align:center}
+.fb-saved{font-size:13px;color:var(--muted);text-align:center;margin:4px 0 0}
+.fb-actions{display:flex;gap:8px;flex-wrap:wrap}
+.fb-actions .tut-go{flex:1}
+.fb-clear{appearance:none;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;font-size:14.5px;padding:12px 16px;border-radius:12px;min-height:52px;cursor:pointer;font-family:inherit}
+.fb-clear:hover{border-color:var(--ink)}
+.fb-tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+.fb-tag{appearance:none;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;font-size:14px;padding:10px 16px;border-radius:999px;min-height:44px;cursor:pointer;font-family:inherit}
+.fb-tag:hover{border-color:var(--ink)}
+.fb-tag.on{background:var(--rff-deep);color:#fff;border-color:var(--rff-deep)}
+
+/* Rules overlay body */
+.rules-body{padding:16px 22px 8px;font-size:14.5px;line-height:1.55}
+.rules-body h4{margin:14px 0 4px;font-size:14px;letter-spacing:.05em;text-transform:uppercase;color:var(--rff-deep)}
+@media (prefers-color-scheme: dark){ .rules-body h4{color:#7fd1c5} }
+.rules-body h4:first-child{margin-top:0}
+.rules-body p{margin:4px 0;color:var(--ink)}
+.rules-body ul{margin:4px 0 8px;padding-left:20px}
+.rules-body li{margin:3px 0}
+.rules-body table{border-collapse:collapse;margin:6px 0 10px;width:100%}
+.rules-body td,.rules-body th{border:1px solid var(--line);padding:5px 9px;text-align:left;font-size:14px}
+.rules-body th{background:var(--chip);font-weight:800}
+
+/* Overlays (tutorial + game over) — arcade style */
+.overlay{position:fixed;inset:0;z-index:60;background:rgba(10,12,10,.58);display:flex;align-items:center;justify-content:center;padding:16px}
+.overlay[hidden]{display:none}
+.tut-card{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;max-width:520px;width:100%;max-height:calc(100dvh - 32px);overflow-y:auto;box-shadow:var(--shadow)}
+.tut-head{background:var(--rff-deep);color:#fff;padding:18px 22px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:1}
+.tut-head .tut-icon{font-size:34px;line-height:1}
+.tut-head h3{font-family:"Bricolage Grotesque",sans-serif;font-size:23px;margin:0;line-height:1.1}
+.tut-head p{margin:2px 0 0;font-size:13.5px;color:rgba(255,255,255,.85)}
+.tut-x{margin-left:auto;appearance:none;border:0;background:rgba(255,255,255,.18);color:#fff;width:44px;height:44px;border-radius:50%;font-size:19px;cursor:pointer;flex:0 0 auto}
+.tut-steps{list-style:none;margin:0;padding:18px 22px 6px;display:flex;flex-direction:column;gap:14px}
+.tut-steps li{display:flex;gap:12px;align-items:flex-start}
+.tut-num{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:var(--rff-deep);color:#fff;font-weight:800;font-size:15px;display:grid;place-items:center;margin-top:1px}
+.tut-steps b{display:block;font-size:15.5px;margin-bottom:1px}
+.tut-steps li div span{font-size:14.5px;color:var(--muted);line-height:1.5;display:block}
+.tut-foot{padding:12px 22px 20px}
+.tut-go{appearance:none;border:0;width:100%;background:var(--rff-deep);color:#fff;font-weight:800;font-size:16px;padding:14px 18px;border-radius:12px;cursor:pointer;font-family:inherit;min-height:52px}
+.tut-go:hover{opacity:.9}
+.over-card{text-align:center;padding:30px 24px}
+.over-card .big-icon{font-size:52px}
+.over-card h3{font-family:"Bricolage Grotesque",sans-serif;font-size:30px;margin:8px 0 6px}
+.over-card p{color:var(--muted);margin:4px 0}
+.over-card p.win-line{color:var(--ink);font-weight:700}
+.over-card .newbest{display:inline-block;background:var(--gold);color:#231a00;font-weight:800;font-size:13px;padding:5px 12px;border-radius:999px;margin-top:6px}
+.over-card .btn{margin-top:14px;min-height:54px;padding:13px 26px;font-size:16px}
+
+@media (prefers-reduced-motion: reduce){
+  .gem,.gem.clearing,.gem.clearing svg{transition:none}
+  .gem.selected .ring,.gem.hinting .ring,.gem.bomb svg,.status.pop{animation:none}
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <div class="toprow">
+    <div class="ctrl-block">
+      <span class="seg-label" id="modeLabel">Mode</span>
+      <div class="seg" role="group" aria-labelledby="modeLabel">
+        <button type="button" id="modeMoves" class="active">🎯 Moves</button>
+        <button type="button" id="modeTimed">⏱️ Timed</button>
+        <button type="button" id="modeZen">🌿 Zen</button>
+        <button type="button" id="modePractice">🎓 Practice</button>
+      </div>
+    </div>
+    <div class="ctrl-block">
+      <span class="seg-label" id="diffLabel">Difficulty</span>
+      <div class="seg" role="group" aria-labelledby="diffLabel">
+        <button type="button" id="diffEasy">🌱 Easy</button>
+        <button type="button" id="diffNormal" class="active">⭐ Normal</button>
+        <button type="button" id="diffHard">🔥 Hard</button>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn" id="howBtn" type="button">❓ How to play</button>
+    <button class="btn" id="rulesBtn" type="button">📖 Rules</button>
+  </div>
+
+  <div class="toprow">
+    <button class="btn primary" id="newBtn" type="button">↻ New game</button>
+    <button class="btn" id="hintBtn" type="button">💡 Hint</button>
+    <button class="btn" id="pauseBtn" type="button" hidden>⏸ Pause</button>
+    <button class="btn" id="endBtn" type="button" hidden>🏁 End game</button>
+    <div class="spacer"></div>
+    <button class="btn" id="soundBtn" type="button" aria-pressed="true">🔊 Sound on</button>
+    <button class="btn" id="feedbackBtn" type="button">💬 Feedback</button>
+  </div>
+
+  <div class="hint" id="hintBar">
+    <span>👋 New here? Tap <b>❓ How to play</b> for a quick walkthrough, or <b>📖 Rules</b> for the full rulebook. Tap a gem, then tap a neighbour to swap it.</span>
+    <button class="hint-x" id="hintX" type="button" aria-label="Dismiss hint">✕</button>
+  </div>
+
+  <div class="practice-banner" id="practiceBanner" hidden>
+    <span aria-hidden="true" style="font-size:20px">🎓</span>
+    <span><b>Practice round — just for learning.</b> No timer, no move limit, no target. Try swaps, line gems and colour bombs as much as you like. This score <b>doesn't count</b> toward your best. Tap <b>🏁 End practice</b> when you're done, or switch to 🎯 Moves / ⏱️ Timed when you're ready for the real thing.</span>
+  </div>
+
+  <div class="hud" aria-live="polite">
+    <span class="yours">Score <b id="hudScore">0</b></span>
+    <span id="hudDiff">⭐ Normal</span>
+    <span id="hudGoalWrap">🎯 Target <b id="hudGoal">2,000</b> in <b id="hudMoves">30</b> moves</span>
+    <span id="hudTimeWrap" hidden>⏱️ Time <b id="hudTime">90</b>s</span>
+    <span id="hudPracticeWrap" hidden class="practice">🎓 Practice</span>
+    <span id="hudPracticeMovesWrap" hidden>Moves used <b id="hudPracticeMoves">0</b></span>
+    <span class="best" id="hudBestWrap">🏆 Best <b id="hudBest">0</b></span>
+  </div>
+  <div class="progress" id="progressWrap"><i id="progressBar"></i></div>
+
+  <div class="status" id="statusLine">Make a match of 3 or more!</div>
+
+  <div class="board-wrap">
+    <div class="board" id="board" role="grid" aria-label="Match-3 gem board, 8 by 8"></div>
+    <div class="board-cover" id="pauseCover" hidden>
+      <h3>⏸ Paused</h3>
+      <button class="btn" id="resumeBtn" type="button">▶ Resume</button>
+    </div>
+  </div>
+
+  <p class="pane-footer">More games in the <a href="../games-hub/">Arcade</a> · More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener">Ridiculously Fit and Fed</a></p>
+</main>
+
+<!-- Tutorial (opt-in) -->
+<div class="overlay" id="tutOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+  <div class="tut-card">
+    <div class="tut-head">
+      <span class="tut-icon" aria-hidden="true">💎</span>
+      <div>
+        <h3 id="tutTitle">How to play Match-3</h3>
+        <p>Swap gems, line up 3 or more, chase the cascades.</p>
+      </div>
+      <button class="tut-x" id="tutClose" type="button" aria-label="Close tutorial">✕</button>
+    </div>
+    <ol class="tut-steps">
+      <li><span class="tut-num">1</span><div><b>Tap a gem, then tap a neighbour</b><span>Tap any gem to select it (it gets a gold ring), then tap a gem directly above, below, left or right of it to swap them. Tap the selected gem again to deselect.</span></div></li>
+      <li><span class="tut-num">2</span><div><b>Line up 3 or more of a kind</b><span>If the swap makes a row or column of 3+ matching gems, they pop and score. If it doesn't make a match, the gems swap right back and no move is used.</span></div></li>
+      <li><span class="tut-num">3</span><div><b>Watch the gems fall</b><span>Gems above drop down and new gems fall in from the top. If the falling gems line up again, that's a <b>cascade</b> — and each cascade in a row multiplies your points (×2, ×3…).</span></div></li>
+      <li><span class="tut-num">4</span><div><b>Make special gems</b><span>Match <b>4</b> to create a glowing <b>line gem</b> — match it later and it blasts its whole row or column. Match <b>5</b> to create a <b>colour bomb</b> — swap it with any gem to pop every gem of that colour.</span></div></li>
+      <li><span class="tut-num">5</span><div><b>Pick your mode — or practise first</b><span><b>🎓 Practice:</b> a warm-up round with no timer, no move limit and no target — scores don't count toward your best, so experiment freely. <b>🎯 Moves:</b> reach the target before your moves run out. <b>⏱️ Timed:</b> score as much as you can before the clock ends (4- and 5-matches add bonus time). <b>🌿 Zen:</b> no clock, no move limit — play until you tap End game.</span></div></li>
+      <li><span class="tut-num">6</span><div><b>Pick your difficulty</b><span><b>🌱 Easy:</b> 5 gem types (matches are easier to find), lower target, more moves &amp; more time. <b>⭐ Normal:</b> 6 gem types, 2,000 points in 30 moves or 90 seconds. <b>🔥 Hard:</b> 6 gem types, higher target, fewer moves &amp; less time. Changing difficulty starts a fresh game — your best is saved separately for each mode + difficulty.</span></div></li>
+      <li><span class="tut-num">7</span><div><b>Stuck?</b><span>Tap <b>💡 Hint</b> and two gems that can make a match will flash. If the board ever has no possible matches, it shuffles itself for free.</span></div></li>
+    </ol>
+    <div class="tut-foot">
+      <button class="tut-go" id="tutGo" type="button">Start matching →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rules (full rulebook, separate from the tutorial) -->
+<div class="overlay" id="rulesOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="tut-card">
+    <div class="tut-head">
+      <span class="tut-icon" aria-hidden="true">📖</span>
+      <div>
+        <h3 id="rulesTitle">Match-3 — Rules</h3>
+        <p>The full rulebook: scoring, specials and win conditions.</p>
+      </div>
+      <button class="tut-x" id="rulesClose" type="button" aria-label="Close rules">✕</button>
+    </div>
+    <div class="rules-body">
+      <h4>The board</h4>
+      <p>The board is 8 × 8. On Normal and Hard there are 6 gem types — ruby (red circle), sapphire (blue diamond), emerald (green triangle), amber (orange square), amethyst (purple hexagon) and opal (teal drop). On Easy there are 5 (no opal), so matches are easier to find. Each gem has its own shape as well as its colour, so the game never depends on telling colours apart.</p>
+      <h4>How a turn works</h4>
+      <ul>
+        <li>Tap a gem, then tap an orthogonally adjacent gem (up, down, left or right — never diagonal) to swap them.</li>
+        <li>A swap only counts if it creates at least one match of 3 or more in a row or column. Otherwise the gems swap back and <b>no move is used</b> and no time bonus or penalty applies.</li>
+        <li>Matched gems pop, gems above fall to fill the gaps, and new gems drop in from the top.</li>
+        <li>If falling gems form new matches, they pop too. Each chain reaction is a <b>cascade</b> and scores at a higher multiplier (see Scoring).</li>
+        <li>Only one swap can be in progress at a time — wait for the board to settle before swapping again.</li>
+      </ul>
+      <h4>Scoring</h4>
+      <table>
+        <tr><th>Event</th><th>Points</th></tr>
+        <tr><td>Each gem popped</td><td>10</td></tr>
+        <tr><td>Making a 4-match (bonus)</td><td>+40</td></tr>
+        <tr><td>Making a 5-match (bonus)</td><td>+100</td></tr>
+        <tr><td>Colour bomb detonation (bonus)</td><td>+50</td></tr>
+        <tr><td>Cascade multiplier</td><td>×1, then ×2, ×3… per chain step</td></tr>
+      </table>
+      <p>Every point scored in one chain step — gems, bonuses and blasts — is multiplied by that step's cascade multiplier. The first step of a swap is ×1; if the falling gems match again it's ×2, then ×3, and so on until the board settles.</p>
+      <h4>Special gems</h4>
+      <ul>
+        <li><b>Line gem</b> (match 4): one gem in the match survives and becomes a glowing line gem of the same type. A horizontal 4-match makes a row-blaster; a vertical 4-match makes a column-blaster. When a line gem is part of any later match — or is caught in another blast — it also pops every gem in its row or column. Each of those gems scores the usual 10 points.</li>
+        <li><b>Colour bomb</b> (match 5, or an L/T-shaped match): a dark sparkling bomb that matches nothing by itself. Swap it with any normal gem and it detonates: the bomb and <b>every gem of that gem's colour</b> pop. Swapping two colour bombs together pops the entire board.</li>
+        <li>A special gem caught in a line blast goes off too, so blasts can chain.</li>
+      </ul>
+      <h4>Difficulty</h4>
+      <p>Pick <b>🌱 Easy</b>, <b>⭐ Normal</b> or <b>🔥 Hard</b> at the top. Changing difficulty starts a new game. Your best score is saved separately for every mode + difficulty combination on this device.</p>
+      <table>
+        <tr><th>Difficulty</th><th>Gem types</th><th>🎯 Moves mode</th><th>⏱️ Timed mode</th></tr>
+        <tr><td>🌱 Easy</td><td>5 (no Opal)</td><td>1,200 pts in 40 moves</td><td>120 seconds</td></tr>
+        <tr><td>⭐ Normal</td><td>6</td><td>2,000 pts in 30 moves</td><td>90 seconds</td></tr>
+        <tr><td>🔥 Hard</td><td>6</td><td>3,000 pts in 22 moves</td><td>60 seconds</td></tr>
+      </table>
+      <p>On Easy there are only 5 gem types, so matches and cascades happen more often. In Zen, difficulty only changes the number of gem types — there is still no clock or move limit.</p>
+      <h4>Modes &amp; win conditions</h4>
+      <ul>
+        <li><b>🎯 Moves:</b> Only successful swaps count as moves. Reach the target for your difficulty (see table above) before the moves run out to win. If the moves run out below the target, the game ends — your score still counts toward your best for that mode + difficulty.</li>
+        <li><b>⏱️ Timed:</b> You have the time shown for your difficulty (Easy 120s · Normal 90s · Hard 60s). There is no target — beat your own best score. Making a 4-match adds <b>+2 seconds</b> and a 5-match adds <b>+5 seconds</b>. The game ends when the clock hits zero.</li>
+        <li><b>🌿 Zen:</b> No clock and no move limit on any difficulty. Play as long as you like and tap <b>🏁 End game</b> when you're done; your score counts toward your Zen best for that difficulty.</li>
+        <li><b>🎓 Practice:</b> A learning / warm-up round. No clock, no move limit and no target on any difficulty — difficulty only changes how many gem types are on the board. Use Hint as much as you like, try out line gems and colour bombs, and tap <b>🏁 End practice</b> when you're done. Practice scores are <b>never</b> saved as a best and don't affect any other mode.</li>
+      </ul>
+      <h4>Dead boards &amp; hints</h4>
+      <ul>
+        <li>If no possible match remains, the board shuffles itself automatically, for free, until a move exists. Shuffling never creates matches on its own.</li>
+        <li>The <b>💡 Hint</b> button flashes two gems that can make a match. Hints are free and unlimited in every mode.</li>
+        <li>Your best score for each mode + difficulty is saved on this device.</li>
+      </ul>
+    </div>
+    <div class="tut-foot">
+      <button class="tut-go" id="rulesGo" type="button">Got it →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback (standard — rating + comment, saved on this device) -->
+<div class="overlay" id="feedbackOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+  <div class="tut-card">
+    <div class="tut-head">
+      <span class="tut-icon" aria-hidden="true">💬</span>
+      <div>
+        <h3 id="feedbackTitle">Feedback — Match-3</h3>
+        <p>Rate the game and tell us what to improve.</p>
+      </div>
+      <button class="tut-x" id="feedbackClose" type="button" aria-label="Close feedback">✕</button>
+    </div>
+    <div class="fb-body">
+      <p class="fb-label" id="fbRatingLabel">Your rating</p>
+      <div class="fb-stars" role="radiogroup" aria-labelledby="fbRatingLabel">
+        <button type="button" class="fb-star" data-rating="1" role="radio" aria-checked="false" aria-label="1 star">★</button>
+        <button type="button" class="fb-star" data-rating="2" role="radio" aria-checked="false" aria-label="2 stars">★</button>
+        <button type="button" class="fb-star" data-rating="3" role="radio" aria-checked="false" aria-label="3 stars">★</button>
+        <button type="button" class="fb-star" data-rating="4" role="radio" aria-checked="false" aria-label="4 stars">★</button>
+        <button type="button" class="fb-star" data-rating="5" role="radio" aria-checked="false" aria-label="5 stars">★</button>
+      </div>
+      <p class="fb-label" id="fbTagLabel">Tag <span style="text-transform:none;font-weight:600">(optional)</span></p>
+      <div class="fb-tags" role="group" aria-labelledby="fbTagLabel">
+        <button type="button" class="fb-tag" data-tag="Bug" aria-pressed="false">🐛 Bug</button>
+        <button type="button" class="fb-tag" data-tag="Suggestion" aria-pressed="false">💡 Suggestion</button>
+        <button type="button" class="fb-tag" data-tag="Other" aria-pressed="false">💬 Other</button>
+      </div>
+      <label class="fb-label" for="fbComment" style="display:block">Your comment</label>
+      <textarea class="fb-textarea" id="fbComment" maxlength="1000" placeholder="What did you like? What was confusing or broken? What would make it better?"></textarea>
+      <p class="fb-terms">Feedback follows the same Terms &amp; Conditions as the games: no personal info needed — please don't include it — keep it clean (moderation rules apply), and feedback may be used to improve the games. Saved on this device for now; syncing comes with a later update.</p>
+      <p class="fb-status" id="fbStatus" aria-live="polite"></p>
+      <p class="fb-saved" id="fbSavedCount"></p>
+    </div>
+    <div class="tut-foot">
+      <div class="fb-actions">
+        <button class="tut-go" id="fbSubmit" type="button">Save</button>
+        <button class="fb-clear" id="fbDone" type="button">Done</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Game over -->
+<div class="overlay" id="overOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="overTitle">
+  <div class="tut-card">
+    <div class="over-card">
+      <div class="big-icon" id="overIcon" aria-hidden="true">💎</div>
+      <h3 id="overTitle">Game over</h3>
+      <p class="win-line" id="overLine"></p>
+      <p id="overStats"></p>
+      <span class="newbest" id="overBest" hidden>🏆 New best!</span>
+      <br>
+      <button class="btn primary" id="againBtn" type="button">▶ Play again</button>
+      <button class="btn" id="overClose" type="button">Look at the board</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================= Match-3 ================= */
+var ROWS = 8, COLS = 8;
+var DIFFS = {
+  easy:   { label:"Easy",   icon:"🌱", types:5, target:1200, moves:40, time:120 },
+  normal: { label:"Normal", icon:"⭐", types:6, target:2000, moves:30, time:90 },
+  hard:   { label:"Hard",   icon:"🔥", types:6, target:3000, moves:22, time:60 }
+};
+var LS_BEST = "match3_best_v2", LS_BEST_OLD = "match3_best_v1", LS_HINT = "match3_hint_seen_v1", LS_DIFF = "match3_diff_v1";
+function loadDiff(){
+  try { var d = localStorage.getItem(LS_DIFF); if (d && DIFFS[d]) return d; } catch (e) {}
+  return "normal";
+}
+var difficulty = loadDiff();
+function diffCfg(){ return DIFFS[difficulty] || DIFFS.normal; }
+function bestKey(){ return mode + "_" + difficulty; }
+
+var GEM_DEFS = [
+  { name:"Ruby",     color:"#e63950", dark:"#a11730", shape:"circle"   },
+  { name:"Sapphire", color:"#2f7fe0", dark:"#1a56a8", shape:"diamond"  },
+  { name:"Emerald",  color:"#22a06b", dark:"#146845", shape:"triangle" },
+  { name:"Amber",    color:"#f59e0b", dark:"#b96f02", shape:"square"   },
+  { name:"Amethyst", color:"#8b5cf6", dark:"#5f35c4", shape:"hexagon"  },
+  { name:"Opal",     color:"#0ea5b7", dark:"#076b78", shape:"drop"     }
+];
+
+function shapeSVG(d, inner){
+  var s = "";
+  if (d.shape === "circle")   s = '<circle cx="50" cy="50" r="37"/>';
+  if (d.shape === "diamond")  s = '<polygon points="50,5 93,50 50,95 7,50"/>';
+  if (d.shape === "triangle") s = '<polygon points="50,9 91,87 9,87"/>';
+  if (d.shape === "square")   s = '<rect x="14" y="14" width="72" height="72" rx="15"/>';
+  if (d.shape === "hexagon")  s = '<polygon points="50,5 89,27 89,73 50,95 11,73 11,27"/>';
+  if (d.shape === "drop")     s = '<path d="M50 4 C50 4 88 42 88 63 A38 38 0 1 1 12 63 C12 42 50 4 50 4 Z"/>';
+  return '<g fill="' + d.color + '" stroke="' + d.dark + '" stroke-width="4" stroke-linejoin="round">' + s + "</g>" + inner;
+}
+function gemSVG(gem){
+  if (gem.special === "bomb"){
+    var dots = "", cols = ["#e63950","#2f7fe0","#22a06b","#f59e0b","#8b5cf6","#0ea5b7"], i, a;
+    for (i = 0; i < 6; i++){
+      a = i * Math.PI / 3;
+      dots += '<circle cx="' + (50 + 24 * Math.cos(a)).toFixed(1) + '" cy="' + (50 + 24 * Math.sin(a)).toFixed(1) + '" r="6.5" fill="' + cols[i] + '"/>';
+    }
+    return '<svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="40" fill="#26222e" stroke="#0c0a12" stroke-width="4"/>' + dots +
+      '<polygon points="50,38 54,46 63,46 56,52 58,61 50,56 42,61 44,52 37,46 46,46" fill="#ffffff"/></svg>';
+  }
+  var d = GEM_DEFS[gem.type];
+  var inner = '<ellipse cx="36" cy="32" rx="14" ry="9" fill="#ffffff" opacity="0.38" transform="rotate(-24 36 32)"/>';
+  if (gem.special === "row")  inner += '<rect x="4" y="41" width="92" height="18" rx="9" fill="#ffffff" opacity="0.92"/><polygon points="88,50 74,41 74,59" fill="#ffd94d"/><polygon points="12,50 26,41 26,59" fill="#ffd94d"/>';
+  if (gem.special === "col")  inner += '<rect x="41" y="4" width="18" height="92" rx="9" fill="#ffffff" opacity="0.92"/><polygon points="50,12 41,26 59,26" fill="#ffd94d"/><polygon points="50,88 41,74 59,74" fill="#ffd94d"/>';
+  return '<svg viewBox="0 0 100 100" aria-hidden="true">' + shapeSVG(d, inner) + "</svg>";
+}
+
+/* ---------- State ---------- */
+var grid = [];            // grid[r][c] = {id,type,special} | null ; special: null | "row" | "col" | "bomb"
+var nodes = {};           // id -> element
+var nextId = 1;
+var mode = "moves";       // "moves" | "timed" | "zen"
+var score = 0, movesLeft = 30, timeLeft = 90;
+var selected = null;      // {r,c}
+var busy = false, over = false, paused = false;
+var endAt = 0, timerId = null;
+var stats = { swaps:0, bestCascade:0, specials:0 };
+var soundOn = true;
+
+var boardEl = document.getElementById("board");
+var statusEl = document.getElementById("statusLine");
+var hudScore = document.getElementById("hudScore");
+var hudBest = document.getElementById("hudBest");
+var hudMoves = document.getElementById("hudMoves");
+var hudTime = document.getElementById("hudTime");
+var hudGoalWrap = document.getElementById("hudGoalWrap");
+var hudGoal = document.getElementById("hudGoal");
+var hudDiff = document.getElementById("hudDiff");
+var hudTimeWrap = document.getElementById("hudTimeWrap");
+var progressWrap = document.getElementById("progressWrap");
+var progressBar = document.getElementById("progressBar");
+var pauseBtn = document.getElementById("pauseBtn");
+var endBtn = document.getElementById("endBtn");
+var pauseCover = document.getElementById("pauseCover");
+var practiceBanner = document.getElementById("practiceBanner");
+var hudPracticeWrap = document.getElementById("hudPracticeWrap");
+var hudPracticeMovesWrap = document.getElementById("hudPracticeMovesWrap");
+var hudPracticeMoves = document.getElementById("hudPracticeMoves");
+var hudBestWrap = document.getElementById("hudBestWrap");
+
+/* ---------- Sound (tiny synth) ---------- */
+var AC = null;
+function beep(freq, dur, type, gain){
+  if (!soundOn) return;
+  try {
+    if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === "suspended") AC.resume();
+    var o = AC.createOscillator(), g = AC.createGain();
+    o.type = type || "sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(gain || 0.08, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + dur);
+  } catch (e) { /* no audio — fine */ }
+}
+function sndSelect(){ beep(520, .06, "triangle", .05); }
+function sndBad(){ beep(150, .12, "square", .05); }
+function sndPop(chain){ beep(420 + chain * 90, .12, "sine", .09); setTimeout(function(){ beep(640 + chain * 110, .14, "sine", .07); }, 55); }
+function sndSpecial(){ beep(880, .16, "triangle", .09); setTimeout(function(){ beep(1180, .2, "triangle", .08); }, 70); }
+function sndOver(win){ beep(win ? 660 : 300, .25, "triangle", .09); if (win) setTimeout(function(){ beep(880, .3, "triangle", .09); }, 160); }
+
+/* ---------- Bests ---------- */
+function emptyBests(){
+  return { moves_easy:0, moves_normal:0, moves_hard:0, timed_easy:0, timed_normal:0, timed_hard:0, zen_easy:0, zen_normal:0, zen_hard:0 };
+}
+function loadBests(){
+  var out = emptyBests();
+  try {
+    var b = JSON.parse(localStorage.getItem(LS_BEST) || "null");
+    if (b){
+      for (var k in out) out[k] = +b[k] || 0;
+      return out;
+    }
+    // Migrate v1 bests (per-mode only) into Normal difficulty.
+    var old = JSON.parse(localStorage.getItem(LS_BEST_OLD) || "{}");
+    out.moves_normal = +old.moves || 0;
+    out.timed_normal = +old.timed || 0;
+    out.zen_normal = +old.zen || 0;
+    return out;
+  } catch (e) { return out; }
+}
+var bests = loadBests();
+function saveBest(){
+  var k = bestKey();
+  if (score > (bests[k] || 0)){
+    bests[k] = score;
+    try { localStorage.setItem(LS_BEST, JSON.stringify(bests)); } catch (e) {}
+    return true;
+  }
+  return false;
+}
+
+/* ---------- Helpers ---------- */
+function randType(){ return Math.floor(Math.random() * diffCfg().types); }
+function key(r, c){ return r + "," + c; }
+function inB(r, c){ return r >= 0 && r < ROWS && c >= 0 && c < COLS; }
+function fmt(n){ return n.toLocaleString("en-US"); }
+function setStatus(msg, pop){
+  statusEl.textContent = msg;
+  if (pop){ statusEl.classList.remove("pop"); void statusEl.offsetWidth; statusEl.classList.add("pop"); }
+}
+function wait(ms){ return new Promise(function(res){ setTimeout(res, ms); }); }
+var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function animMs(ms){ return reduceMotion ? 0 : ms; }
+
+/* ---------- Board generation ---------- */
+function makesRunAt(g, r, c, t){
+  if (c >= 2 && g[r][c-1] && g[r][c-2] && g[r][c-1].type === t && g[r][c-2].type === t) return true;
+  if (r >= 2 && g[r-1][c] && g[r-2][c] && g[r-1][c].type === t && g[r-2][c].type === t) return true;
+  return false;
+}
+function genBoard(){
+  var g, tries = 0;
+  do {
+    g = [];
+    for (var r = 0; r < ROWS; r++){
+      g.push([]);
+      for (var c = 0; c < COLS; c++){
+        var t;
+        do { t = randType(); } while (makesRunAt(g, r, c, t));
+        g[r].push({ id: nextId++, type: t, special: null });
+      }
+    }
+    tries++;
+  } while (!findMoveOn(g) && tries < 60);
+  return g;
+}
+
+/* ---------- Match finding ---------- */
+function findMatches(g){
+  var set = {}, runs = [], r, c, len, i, j, t;
+  for (r = 0; r < ROWS; r++){
+    c = 0;
+    while (c < COLS){
+      var cell = g[r][c];
+      if (!cell || cell.special === "bomb"){ c++; continue; }
+      t = cell.type; len = 1;
+      while (c + len < COLS && g[r][c+len] && g[r][c+len].type === t && g[r][c+len].special !== "bomb") len++;
+      if (len >= 3){
+        var cells = [];
+        for (i = 0; i < len; i++){ set[key(r, c+i)] = true; cells.push([r, c+i]); }
+        runs.push({ cells: cells, dir: "h", len: len, type: t });
+      }
+      c += len;
+    }
+  }
+  for (c = 0; c < COLS; c++){
+    r = 0;
+    while (r < ROWS){
+      var cell2 = g[r][c];
+      if (!cell2 || cell2.special === "bomb"){ r++; continue; }
+      t = cell2.type; len = 1;
+      while (r + len < ROWS && g[r+len][c] && g[r+len][c].type === t && g[r+len][c].special !== "bomb") len++;
+      if (len >= 3){
+        var cells2 = [];
+        for (j = 0; j < len; j++){ set[key(r+j, c)] = true; cells2.push([r+j, c]); }
+        runs.push({ cells: cells2, dir: "v", len: len, type: t });
+      }
+      r += len;
+    }
+  }
+  return { set: set, runs: runs };
+}
+function typeGridHasMatch(types){
+  var r, c, t;
+  for (r = 0; r < ROWS; r++) for (c = 0; c + 2 < COLS; c++){
+    t = types[r][c];
+    if (t >= 0 && t === types[r][c+1] && t === types[r][c+2]) return true;
+  }
+  for (c = 0; c < COLS; c++) for (r = 0; r + 2 < ROWS; r++){
+    t = types[r][c];
+    if (t >= 0 && t === types[r+1][c] && t === types[r+2][c]) return true;
+  }
+  return false;
+}
+function findMoveOn(g){
+  // A colour bomb next to anything is always a move.
+  var r, c, d, dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+  var types = [];
+  for (r = 0; r < ROWS; r++){ types.push([]); for (c = 0; c < COLS; c++) types[r].push(g[r][c] ? (g[r][c].special === "bomb" ? -2 : g[r][c].type) : -1); }
+  for (r = 0; r < ROWS; r++) for (c = 0; c < COLS; c++){
+    if (types[r][c] === -2){
+      for (d = 0; d < 4; d++){ var br = r + dirs[d][0], bc = c + dirs[d][1]; if (inB(br, bc)) return [[r, c], [br, bc]]; }
+    }
+  }
+  for (r = 0; r < ROWS; r++) for (c = 0; c < COLS; c++){
+    for (d = 0; d < 2; d++){ // right + down is enough
+      var r2 = r + dirs[d*2][0], c2 = c + dirs[d*2][1];
+      if (!inB(r2, c2)) continue;
+      var tmp = types[r][c]; types[r][c] = types[r2][c2]; types[r2][c2] = tmp;
+      var ok = typeGridHasMatch(types);
+      types[r2][c2] = types[r][c]; types[r][c] = tmp;
+      if (ok) return [[r, c], [r2, c2]];
+    }
+  }
+  return null;
+}
+
+/* ---------- Rendering ---------- */
+function render(spawn){
+  var seen = {}, r, c;
+  for (r = 0; r < ROWS; r++) for (c = 0; c < COLS; c++){
+    var gem = grid[r][c];
+    if (!gem) continue;
+    seen[gem.id] = true;
+    var el = nodes[gem.id];
+    if (!el){
+      el = document.createElement("button");
+      el.type = "button";
+      el.className = "gem";
+      el.innerHTML = '<span class="gem-in"></span>';
+      el.dataset.r = r; el.dataset.c = c;
+      el.addEventListener("click", onGemTap);
+      nodes[gem.id] = el;
+      boardEl.appendChild(el);
+      var startR = (spawn && spawn[gem.id] != null) ? spawn[gem.id] : r;
+      el.style.transition = "none";
+      el.style.transform = "translate(" + (c * 100) + "%," + (startR * 100) + "%)";
+      void el.offsetWidth;
+      el.style.transition = "";
+    }
+    el.dataset.r = r; el.dataset.c = c;
+    el.style.transform = "translate(" + (c * 100) + "%," + (r * 100) + "%)";
+    el.classList.toggle("bomb", gem.special === "bomb");
+    el.classList.toggle("line", gem.special === "row" || gem.special === "col");
+    el.classList.toggle("selected", !!selected && selected.r === r && selected.c === c);
+    var label = gem.special === "bomb" ? "Colour bomb" : GEM_DEFS[gem.type].name + (gem.special ? " line gem" : " gem");
+    el.setAttribute("aria-label", "Row " + (r + 1) + ", column " + (c + 1) + ", " + label);
+    el.setAttribute("role", "gridcell");
+    var inner = el.firstChild;
+    var want = gemSVG(gem);
+    if (inner._svg !== want){ inner.innerHTML = want + '<span class="ring" hidden></span>'; inner._svg = want; }
+    var ring = inner.querySelector(".ring");
+    var showRing = el.classList.contains("selected") || el.classList.contains("hinting");
+    if (ring) ring.hidden = !showRing;
+  }
+  for (var id in nodes){
+    if (!seen[id]){ nodes[id].remove(); delete nodes[id]; }
+  }
+}
+function updateHUD(){
+  var cfg = diffCfg();
+  var isPractice = mode === "practice";
+  hudScore.textContent = fmt(score);
+  hudBest.textContent = fmt(isPractice ? (bests["moves_" + difficulty] || 0) : Math.max(bests[bestKey()] || 0, score));
+  if (hudGoal) hudGoal.textContent = fmt(cfg.target);
+  if (hudDiff) hudDiff.textContent = cfg.icon + " " + cfg.label;
+  hudMoves.textContent = movesLeft;
+  hudTime.textContent = Math.max(0, Math.ceil(timeLeft));
+  hudTimeWrap.classList.toggle("warn", mode === "timed" && timeLeft <= 10 && !over);
+  hudGoalWrap.hidden = mode !== "moves";
+  hudTimeWrap.hidden = mode !== "timed";
+  if (practiceBanner) practiceBanner.hidden = !isPractice;
+  if (hudPracticeWrap) hudPracticeWrap.hidden = !isPractice;
+  if (hudPracticeMovesWrap) hudPracticeMovesWrap.hidden = !isPractice;
+  if (hudPracticeMoves) hudPracticeMoves.textContent = stats.swaps;
+  if (hudBestWrap) hudBestWrap.hidden = isPractice;
+  progressWrap.hidden = mode !== "moves";
+  progressBar.style.width = Math.min(100, score / cfg.target * 100) + "%";
+  progressWrap.classList.toggle("got", score >= cfg.target);
+  pauseBtn.hidden = mode !== "timed";
+  endBtn.hidden = !(mode === "zen" || isPractice);
+  if (isPractice) endBtn.textContent = "🏁 End practice";
+  else if (mode === "zen") endBtn.textContent = "🏁 End game";
+  document.getElementById("modeMoves").classList.toggle("active", mode === "moves");
+  document.getElementById("modeTimed").classList.toggle("active", mode === "timed");
+  document.getElementById("modeZen").classList.toggle("active", mode === "zen");
+  var mp = document.getElementById("modePractice");
+  if (mp) mp.classList.toggle("active", isPractice);
+  document.getElementById("diffEasy").classList.toggle("active", difficulty === "easy");
+  document.getElementById("diffNormal").classList.toggle("active", difficulty === "normal");
+  document.getElementById("diffHard").classList.toggle("active", difficulty === "hard");
+}
+
+/* ---------- Selection & swapping ---------- */
+function clearSelection(){ selected = null; render(); }
+function clearHints(){
+  var els = boardEl.querySelectorAll(".gem.hinting");
+  for (var i = 0; i < els.length; i++) els[i].classList.remove("hinting");
+  render();
+}
+function onGemTap(e){
+  if (busy || over || paused) return;
+  var el = e.currentTarget;
+  var r = +el.dataset.r, c = +el.dataset.c;
+  if (!grid[r] || !grid[r][c]) return;
+  clearHints();
+  if (!selected){
+    selected = { r: r, c: c }; sndSelect(); render(); return;
+  }
+  if (selected.r === r && selected.c === c){ selected = null; render(); return; }
+  var dist = Math.abs(selected.r - r) + Math.abs(selected.c - c);
+  if (dist === 1){
+    var a = selected; selected = null;
+    trySwap(a, { r: r, c: c });
+  } else {
+    selected = { r: r, c: c }; sndSelect(); render();
+  }
+}
+function swapCells(a, b){
+  var t = grid[a.r][a.c]; grid[a.r][a.c] = grid[b.r][b.c]; grid[b.r][b.c] = t;
+}
+async function trySwap(a, b){
+  busy = true; render();
+  var ga = grid[a.r][a.c], gb = grid[b.r][b.c];
+  swapCells(a, b); render();
+  await wait(animMs(200));
+
+  // Colour bomb involved?
+  if (ga.special === "bomb" || gb.special === "bomb"){
+    stats.swaps++;
+    if (mode === "moves") movesLeft--;
+    await resolveBombSwap(ga.special === "bomb" ? ga : gb, ga.special === "bomb" ? gb : ga,
+                           ga.special === "bomb" && gb.special === "bomb");
+    await afterResolve();
+    busy = false; updateHUD(); render();
+    return;
+  }
+  var m = findMatches(grid);
+  if (!Object.keys(m.set).length){
+    swapCells(a, b); render(); sndBad();
+    setStatus("No match — the gems swap back. No move used.");
+    await wait(animMs(200));
+    busy = false; updateHUD();
+    return;
+  }
+  stats.swaps++;
+  if (mode === "moves") movesLeft--;
+  updateHUD();
+  await resolveBoard(a, b);
+  await afterResolve();
+  busy = false; updateHUD(); render();
+}
+
+/* ---------- Resolution ---------- */
+// Expands a clear-set: line gems inside it blast their row/col (chaining).
+function expandBlasts(set){
+  var queue = Object.keys(set), seen = {};
+  while (queue.length){
+    var k = queue.pop();
+    if (seen[k]) continue; seen[k] = true;
+    var p = k.split(","), r = +p[0], c = +p[1];
+    var gem = grid[r][c];
+    if (!gem) continue;
+    if (gem.special === "row"){
+      for (var cc = 0; cc < COLS; cc++){ var kk = key(r, cc); if (!set[kk]){ set[kk] = true; queue.push(kk); } }
+    } else if (gem.special === "col"){
+      for (var rr = 0; rr < ROWS; rr++){ var k2 = key(rr, c); if (!set[k2]){ set[k2] = true; queue.push(k2); } }
+    }
+  }
+  return set;
+}
+async function clearAndFall(set){
+  var r, c;
+  for (var k in set){
+    var p = k.split(","), gem = grid[+p[0]][+p[1]];
+    if (gem && nodes[gem.id]) nodes[gem.id].classList.add("clearing");
+  }
+  await wait(animMs(230));
+  for (var k2 in set){
+    var p2 = k2.split(",");
+    grid[+p2[0]][+p2[1]] = null;
+  }
+  // Gravity + refill
+  var spawn = {};
+  for (c = 0; c < COLS; c++){
+    var write = ROWS - 1;
+    for (r = ROWS - 1; r >= 0; r--){
+      if (grid[r][c]){
+        if (write !== r){ grid[write][c] = grid[r][c]; grid[r][c] = null; }
+        write--;
+      }
+    }
+    var missing = write + 1;
+    for (r = write; r >= 0; r--){
+      var ng = { id: nextId++, type: randType(), special: null };
+      grid[r][c] = ng;
+      spawn[ng.id] = r - missing;
+    }
+  }
+  render(spawn);
+  await wait(animMs(240));
+}
+async function resolveBoard(swapA, swapB){
+  var chain = 0;
+  var m = findMatches(grid);
+  while (Object.keys(m.set).length){
+    chain++;
+    stats.bestCascade = Math.max(stats.bestCascade, chain);
+    // Decide special creation from the longest run / intersections.
+    var createAt = null, createKind = null, longest = 0, runOfCreate = null;
+    var inH = {}, inV = {};
+    m.runs.forEach(function(run){
+      run.cells.forEach(function(cell){ (run.dir === "h" ? inH : inV)[key(cell[0], cell[1])] = true; });
+      if (run.len > longest) longest = run.len;
+    });
+    var cross = Object.keys(inH).filter(function(k){ return inV[k]; });
+    var pref = [];
+    if (swapB) pref.push(key(swapB.r, swapB.c));
+    if (swapA) pref.push(key(swapA.r, swapA.c));
+    function pickFrom(cells){
+      for (var i = 0; i < pref.length; i++) if (cells.indexOf(pref[i]) >= 0) return pref[i];
+      return cells[Math.floor(cells.length / 2)];
+    }
+    if (cross.length){
+      createAt = pickFrom(cross); createKind = "bomb";
+    } else if (longest >= 5){
+      var big = m.runs.filter(function(x){ return x.len >= 5; })[0];
+      createAt = pickFrom(big.cells.map(function(x){ return key(x[0], x[1]); })); createKind = "bomb"; runOfCreate = big;
+    } else if (longest === 4 && chain === 1){
+      var four = m.runs.filter(function(x){ return x.len === 4; })[0];
+      createAt = pickFrom(four.cells.map(function(x){ return key(x[0], x[1]); }));
+      createKind = four.dir === "h" ? "row" : "col"; runOfCreate = four;
+    }
+    var set = {};
+    for (var k in m.set) set[k] = true;
+    var survivor = null;
+    if (createAt && chain === 1 || createAt && createKind === "bomb" && !grid[+createAt.split(",")[0]][+createAt.split(",")[1]]._madeBomb){
+      var cp = createAt.split(","), cr = +cp[0], cc = +cp[1];
+      survivor = grid[cr][cc];
+      delete set[createAt];
+    }
+    var before = Object.keys(set).length;
+    expandBlasts(set);
+    var blasted = Object.keys(set).length - before;
+    // Points
+    var bonus = 0;
+    if (longest === 4) bonus += 40;
+    if (longest >= 5) bonus += 100;
+    var pts = (Object.keys(set).length * 10 + bonus) * chain;
+    score += pts;
+    if (mode === "timed"){
+      if (longest === 4){ addTime(2); setStatus("+" + fmt(pts) + " points · +2 seconds!", true); }
+      else if (longest >= 5){ addTime(5); setStatus("+" + fmt(pts) + " points · +5 seconds!", true); }
+      else if (chain > 1) setStatus("Cascade ×" + chain + "! +" + fmt(pts) + " points", true);
+      else setStatus("+" + fmt(pts) + " points", true);
+    } else {
+      if (blasted > 0) setStatus("Line blast! +" + fmt(pts) + " points" + (chain > 1 ? " · Cascade ×" + chain : ""), true);
+      else if (chain > 1) setStatus("Cascade ×" + chain + "! +" + fmt(pts) + " points", true);
+      else setStatus("+" + fmt(pts) + " points", true);
+    }
+    sndPop(chain);
+    if (survivor){
+      if (createKind === "bomb"){ survivor.type = survivor.type; survivor.special = "bomb"; survivor._madeBomb = true; }
+      else { survivor.special = createKind; }
+      stats.specials++;
+      sndSpecial();
+      setStatus(createKind === "bomb" ? "Colour bomb created! Swap it with any gem." : "Line gem created! Match it to blast a " + (createKind === "row" ? "row" : "column") + ".", true);
+      render();
+    }
+    updateHUD();
+    await clearAndFall(set);
+    swapA = swapB = null;
+    m = findMatches(grid);
+  }
+  return chain;
+}
+async function resolveBombSwap(bombGem, otherGem, bothBombs){
+  var set = {}, r, c;
+  // Locate bomb(s)
+  var bombCells = [];
+  for (r = 0; r < ROWS; r++) for (c = 0; c < COLS; c++)
+    if (grid[r][c] && grid[r][c].special === "bomb") bombCells.push([r, c]);
+  if (bothBombs){
+    for (r = 0; r < ROWS; r++) for (c = 0; c < COLS; c++) set[key(r, c)] = true;
+    setStatus("Double colour bomb — the whole board pops!", true);
+  } else {
+    bombCells.forEach(function(bc){ set[key(bc[0], bc[1])] = true; });
+    var t = otherGem.type;
+    for (r = 0; r < ROWS; r++) for (c = 0; c < COLS; c++){
+      var g = grid[r][c];
+      if (g && g.special !== "bomb" && g.type === t) set[key(r, c)] = true;
+    }
+    setStatus("Colour bomb! Every " + GEM_DEFS[t].name + " gem pops!", true);
+  }
+  expandBlasts(set);
+  var pts = Object.keys(set).length * 10 + 50;
+  score += pts;
+  sndSpecial(); sndPop(2);
+  updateHUD();
+  await clearAndFall(set);
+  await resolveBoard(null, null);
+}
+async function afterResolve(){
+  // Dead board? Shuffle for free.
+  if (!findMoveOn(grid)){
+    setStatus("No moves left — shuffling the board for free…", true);
+    await wait(animMs(650));
+    shuffleBoard();
+    render();
+    setStatus("Shuffled! Find your next match.");
+  }
+  if (mode === "moves" && movesLeft <= 0) return endGame();
+  if (mode === "moves" && score >= diffCfg().target && movesLeft >= 0 && stats.swaps > 0 && movesLeft === 0) return endGame();
+}
+function shuffleBoard(){
+  var types = [], r, c;
+  for (r = 0; r < ROWS; r++) for (c = 0; c < COLS; c++)
+    if (grid[r][c] && grid[r][c].special !== "bomb") types.push(grid[r][c].type);
+  var tries = 0;
+  do {
+    var pool = types.slice();
+    for (var i = pool.length - 1; i > 0; i--){ var j = Math.floor(Math.random() * (i + 1)); var t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+    var idx = 0;
+    for (r = 0; r < ROWS; r++) for (c = 0; c < COLS; c++)
+      if (grid[r][c] && grid[r][c].special !== "bomb") grid[r][c].type = pool[idx++];
+    tries++;
+  } while ((Object.keys(findMatches(grid).set).length || !findMoveOn(grid)) && tries < 80);
+  if (Object.keys(findMatches(grid).set).length || !findMoveOn(grid)) grid = genBoard();
+  // Rebuild DOM for fresh board if regenerated
+  if (tries >= 80){ boardEl.innerHTML = ""; nodes = {}; }
+  render();
+}
+
+/* ---------- Timer ---------- */
+function startTimer(){
+  stopTimer();
+  endAt = Date.now() + timeLeft * 1000;
+  timerId = setInterval(function(){
+    if (paused || over) return;
+    timeLeft = Math.max(0, (endAt - Date.now()) / 1000);
+    // Keep endAt in sync when bonuses add time
+    updateHUD();
+    if (timeLeft <= 0){ endGame(); }
+  }, 200);
+}
+function stopTimer(){ if (timerId){ clearInterval(timerId); timerId = null; } }
+function addTime(sec){
+  timeLeft += sec;
+  if (mode === "timed" && timerId && !paused && !over) endAt += sec * 1000;
+}
+
+/* ---------- Game flow ---------- */
+function newGame(m){
+  if (m) mode = m;
+  stopTimer();
+  var cfg = diffCfg();
+  score = 0; movesLeft = cfg.moves; timeLeft = cfg.time;
+  selected = null; busy = false; over = false; paused = false;
+  stats = { swaps: 0, bestCascade: 0, specials: 0 };
+  pauseCover.hidden = true;
+  document.getElementById("overOverlay").hidden = true;
+  grid = genBoard();
+  boardEl.innerHTML = ""; nodes = {};
+  render(); updateHUD();
+  if (mode === "timed"){
+    startTimer();
+    setStatus(cfg.time + " seconds — go! 4-matches add time.");
+  } else if (mode === "moves"){
+    setStatus("Reach " + fmt(cfg.target) + " points in " + cfg.moves + " moves!");
+  } else if (mode === "practice"){
+    setStatus("🎓 Practice round — unlimited moves, no pressure. Try things out!");
+  } else {
+    setStatus("Zen mode — no clock, no move limit. Relax and match.");
+  }
+  pauseBtn.textContent = "⏸ Pause";
+}
+function endGame(){
+  if (over) return;
+  over = true; stopTimer();
+  var isPractice = mode === "practice";
+  var isNewBest = isPractice ? false : saveBest();
+  var cfg = diffCfg();
+  var won = mode === "moves" && score >= cfg.target;
+  var icon = document.getElementById("overIcon");
+  var title = document.getElementById("overTitle");
+  var line = document.getElementById("overLine");
+  var statsEl = document.getElementById("overStats");
+  if (mode === "moves"){
+    icon.textContent = won ? "🎯" : "💎";
+    title.textContent = won ? "Target smashed!" : "Out of moves";
+    line.textContent = won ? "You reached " + fmt(score) + " points — target was " + fmt(cfg.target) + "."
+                           : "You scored " + fmt(score) + " of the " + fmt(cfg.target) + "-point target.";
+  } else if (mode === "timed"){
+    icon.textContent = "⏱️";
+    title.textContent = "Time's up!";
+    line.textContent = "You scored " + fmt(score) + " points in " + cfg.time + " seconds.";
+  } else if (mode === "practice"){
+    icon.textContent = "🎓";
+    title.textContent = "Practice done — nice warm-up!";
+    line.textContent = "You scored " + fmt(score) + " points in practice. That score doesn't count toward your best — ready to try Moves or Timed for real?";
+  } else {
+    icon.textContent = "🌿";
+    title.textContent = "Zen session done";
+    line.textContent = "You scored " + fmt(score) + " points at your own pace.";
+  }
+  statsEl.textContent = isPractice
+    ? "Swaps: " + stats.swaps + " · Best cascade: ×" + Math.max(1, stats.bestCascade) + " · Special gems made: " + stats.specials + " · Difficulty: " + cfg.label + " · Practice — no best saved"
+    : "Swaps: " + stats.swaps + " · Best cascade: ×" + Math.max(1, stats.bestCascade) + " · Special gems made: " + stats.specials + " · Best (" + mode + " · " + cfg.label + "): " + fmt(bests[bestKey()]);
+  document.getElementById("overBest").hidden = !isNewBest;
+  document.getElementById("againBtn").textContent = isPractice ? "🎓 Practice again" : "▶ Play again";
+  document.getElementById("overOverlay").hidden = false;
+  sndOver(won || mode !== "moves");
+  updateHUD();
+}
+
+/* ---------- Wiring ---------- */
+document.getElementById("modeMoves").addEventListener("click", function(){ newGame("moves"); });
+document.getElementById("modeTimed").addEventListener("click", function(){ newGame("timed"); });
+document.getElementById("modeZen").addEventListener("click", function(){ newGame("zen"); });
+document.getElementById("modePractice").addEventListener("click", function(){ newGame("practice"); });
+function setDifficulty(d){
+  if (!DIFFS[d] || busy) return;
+  if (d === difficulty){ updateHUD(); return; }
+  difficulty = d;
+  try { localStorage.setItem(LS_DIFF, d); } catch (e) {}
+  newGame();
+  setStatus(diffCfg().icon + " " + diffCfg().label + " — new game started. " + (mode === "moves" ? "Target " + fmt(diffCfg().target) + " in " + diffCfg().moves + " moves." : mode === "timed" ? diffCfg().time + " seconds on the clock." : mode === "practice" ? "Practice round — " + diffCfg().types + " gem types, no pressure." : diffCfg().types + " gem types."), true);
+}
+document.getElementById("diffEasy").addEventListener("click", function(){ setDifficulty("easy"); });
+document.getElementById("diffNormal").addEventListener("click", function(){ setDifficulty("normal"); });
+document.getElementById("diffHard").addEventListener("click", function(){ setDifficulty("hard"); });
+document.getElementById("newBtn").addEventListener("click", function(){ newGame(); });
+document.getElementById("againBtn").addEventListener("click", function(){ newGame(); });
+document.getElementById("overClose").addEventListener("click", function(){ document.getElementById("overOverlay").hidden = true; });
+endBtn.addEventListener("click", function(){ if ((mode === "zen" || mode === "practice") && !over) endGame(); });
+pauseBtn.addEventListener("click", function(){
+  if (mode !== "timed" || over) return;
+  paused = !paused;
+  if (paused){
+    timeLeft = Math.max(0, (endAt - Date.now()) / 1000);
+    pauseCover.hidden = false;
+    pauseBtn.textContent = "▶ Resume";
+  } else {
+    endAt = Date.now() + timeLeft * 1000;
+    pauseCover.hidden = true;
+    pauseBtn.textContent = "⏸ Pause";
+  }
+  updateHUD();
+});
+document.getElementById("resumeBtn").addEventListener("click", function(){ pauseBtn.click(); });
+document.getElementById("hintBtn").addEventListener("click", function(){
+  if (busy || over || paused) return;
+  clearHints();
+  var mv = findMoveOn(grid);
+  if (!mv){ setStatus("No moves on this board — it will shuffle after your next match."); return; }
+  mv.forEach(function(cell){
+    var gem = grid[cell[0]][cell[1]];
+    if (gem && nodes[gem.id]) nodes[gem.id].classList.add("hinting");
+  });
+  render();
+  setStatus("Hint: try swapping the two flashing gems.");
+  sndSelect();
+  setTimeout(clearHints, 1800);
+});
+var soundBtn = document.getElementById("soundBtn");
+soundBtn.addEventListener("click", function(){
+  soundOn = !soundOn;
+  soundBtn.textContent = soundOn ? "🔊 Sound on" : "🔇 Sound off";
+  soundBtn.setAttribute("aria-pressed", soundOn ? "true" : "false");
+  if (soundOn) sndSelect();
+});
+
+/* Overlays */
+function wireOverlay(openId, overlayId, closeIds){
+  var ov = document.getElementById(overlayId);
+  document.getElementById(openId).addEventListener("click", function(){ ov.hidden = false; });
+  closeIds.forEach(function(id){
+    document.getElementById(id).addEventListener("click", function(){ ov.hidden = true; });
+  });
+  ov.addEventListener("click", function(e){ if (e.target === ov) ov.hidden = true; });
+}
+wireOverlay("howBtn", "tutOverlay", ["tutClose", "tutGo"]);
+wireOverlay("rulesBtn", "rulesOverlay", ["rulesClose", "rulesGo"]);
+wireOverlay("feedbackBtn", "feedbackOverlay", ["feedbackClose", "fbDone"]);
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape"){
+    document.getElementById("tutOverlay").hidden = true;
+    document.getElementById("rulesOverlay").hidden = true;
+    document.getElementById("feedbackOverlay").hidden = true;
+  }
+});
+
+/* ---------- Feedback (standard) ---------- */
+var LS_FEEDBACK = "holos-arcade-feedback";
+var fbRating = 0;
+var fbTag = null;
+var fbStars = Array.prototype.slice.call(document.querySelectorAll(".fb-star"));
+var fbTags = Array.prototype.slice.call(document.querySelectorAll(".fb-tag"));
+var fbComment = document.getElementById("fbComment");
+var fbStatus = document.getElementById("fbStatus");
+var fbSavedCount = document.getElementById("fbSavedCount");
+function loadFeedback(){
+  try { var v = JSON.parse(localStorage.getItem(LS_FEEDBACK) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+}
+function renderFbStars(){
+  fbStars.forEach(function(btn){
+    var r = +btn.getAttribute("data-rating");
+    var on = r <= fbRating;
+    btn.classList.toggle("on", on);
+    btn.setAttribute("aria-checked", r === fbRating ? "true" : "false");
+  });
+}
+function renderFbTags(){
+  fbTags.forEach(function(btn){
+    var on = btn.getAttribute("data-tag") === fbTag;
+    btn.classList.toggle("on", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+function updateFbSavedCount(){
+  var n = loadFeedback().length;
+  fbSavedCount.textContent = n ? n + (n === 1 ? " feedback note" : " feedback notes") + " saved on this device." : "No feedback saved on this device yet.";
+}
+fbStars.forEach(function(btn){
+  btn.addEventListener("click", function(){
+    fbRating = +btn.getAttribute("data-rating");
+    renderFbStars();
+    fbStatus.textContent = "";
+    if (typeof sndSelect === "function") sndSelect();
+  });
+});
+fbTags.forEach(function(btn){
+  btn.addEventListener("click", function(){
+    var t = btn.getAttribute("data-tag");
+    fbTag = (fbTag === t) ? null : t;
+    renderFbTags();
+    fbStatus.textContent = "";
+    if (typeof sndSelect === "function") sndSelect();
+  });
+});
+document.getElementById("feedbackBtn").addEventListener("click", function(){
+  fbStatus.textContent = "";
+  updateFbSavedCount();
+  renderFbStars();
+  renderFbTags();
+});
+document.getElementById("fbSubmit").addEventListener("click", function(){
+  var text = (fbComment.value || "").trim();
+  if (!fbRating && !text){
+    fbStatus.style.color = "var(--bad)";
+    fbStatus.textContent = "Add a star rating or a comment first.";
+    return;
+  }
+  var entry = {
+    game: "match-3",
+    rating: fbRating || null,
+    text: text,
+    tag: fbTag || null,
+    mode: mode,
+    difficulty: difficulty,
+    score: score,
+    swaps: stats.swaps,
+    timestamp: new Date().toISOString()
+  };
+  try {
+    var all = loadFeedback();
+    all.push(entry);
+    localStorage.setItem(LS_FEEDBACK, JSON.stringify(all));
+  } catch (e) {}
+  fbRating = 0;
+  fbTag = null;
+  fbComment.value = "";
+  renderFbStars();
+  renderFbTags();
+  updateFbSavedCount();
+  fbStatus.style.color = "var(--good)";
+  fbStatus.textContent = "Thanks! Your feedback was saved on this device.";
+  if (typeof sndSpecial === "function") sndSpecial();
+});
+renderFbStars();
+renderFbTags();
+updateFbSavedCount();
+
+/* One-time hint bar */
+var hintBar = document.getElementById("hintBar");
+try { if (localStorage.getItem(LS_HINT)) hintBar.hidden = true; } catch (e) {}
+document.getElementById("hintX").addEventListener("click", function(){
+  hintBar.hidden = true;
+  try { localStorage.setItem(LS_HINT, "1"); } catch (e) {}
+});
+
+newGame("moves");
+</script>
+</body>
+</html>

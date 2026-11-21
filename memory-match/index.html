@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Memory Match</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#fdfcf7; --ink:#171a18; --muted:#5b6560; --line:#e7e2d6;
+  --card:#ffffff; --chip:#f1ede1;
+  --rff:#0e7569; --rff-deep:#0a574f;
+  --gold:#ffbe0b; --gold-ink:#7a5b00;
+  --good:#1d7a3a; --bad:#b3261e;
+  --ai:#c2540a;
+  --shadow:0 10px 30px rgba(23,26,24,.10);
+  --radius:20px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#111412; --ink:#f2efe8; --muted:#a8b0ab; --line:#2a2f2c;
+    --card:#1a1e1c; --chip:#242825;
+    --shadow:0 10px 30px rgba(0,0,0,.4);
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;font-family:"Public Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+button{font-family:inherit;cursor:pointer}
+.wrap{max-width:760px;margin:0 auto;padding:14px 16px 40px}
+
+/* Top control rows */
+.toprow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.toprow .spacer{flex:1}
+.btn{appearance:none;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;font-size:14.5px;padding:11px 16px;border-radius:12px;min-height:48px;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn:disabled{opacity:.38;cursor:not-allowed}
+.seg{display:flex;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px;flex-wrap:wrap}
+.seg button{border:0;background:transparent;padding:8px 14px;border-radius:999px;font-weight:800;min-height:40px;color:var(--muted);font-size:14px}
+.seg button.active{background:var(--card);color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.14)}
+.seg-label{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);width:100%;margin-bottom:2px}
+.ctrl-block{display:flex;flex-direction:column}
+.ctrl-row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px}
+.diff-hint{font-size:12.5px;color:var(--muted);margin-top:5px;max-width:280px;line-height:1.4}
+
+/* HUD */
+.hud{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.hud span{font-size:12.5px;font-weight:700;background:var(--chip);padding:7px 11px;border-radius:999px}
+.hud span b{font-weight:800}
+.hud span.yours{background:var(--rff);color:#fff}
+.hud span.ai-pill{background:var(--ai);color:#fff}
+.hud span.best{background:var(--ink);color:var(--bg)}
+
+/* One-time hint bar (non-blocking) */
+.hint{display:flex;gap:10px;align-items:center;background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:9px 12px;font-size:13.5px;margin-bottom:12px}
+.hint-x{margin-left:auto;appearance:none;border:0;background:transparent;color:var(--muted);width:36px;height:36px;border-radius:50%;font-size:15px;cursor:pointer;flex:0 0 auto}
+.hint-x:hover{color:var(--ink)}
+
+/* Rules overlay body */
+.rules-body{padding:16px 22px 8px;font-size:14.5px;line-height:1.55}
+.rules-body h4{margin:14px 0 4px;font-size:14px;letter-spacing:.05em;text-transform:uppercase;color:var(--rff-deep)}
+.rules-body h4:first-child{margin-top:0}
+.rules-body p{margin:4px 0;color:var(--ink)}
+.rules-body ul{margin:4px 0 8px;padding-left:20px}
+.rules-body li{margin:3px 0}
+
+/* Turn banner */
+.turn-banner{border-radius:14px;padding:10px 16px;font-weight:800;font-size:15.5px;margin-bottom:12px;text-align:center;border:2px solid var(--line);background:var(--card)}
+.turn-banner.you{border-color:var(--rff);background:var(--rff);color:#fff}
+.turn-banner.ai{border-color:var(--ai);background:var(--ai);color:#fff}
+.turn-banner.practice{border-color:var(--gold);background:#fff8d6;color:#5c4a00}
+@media (prefers-color-scheme: dark){ .turn-banner.practice{background:#2e2a12;color:#ffe98a} }
+.practice-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:center;margin:-4px auto 12px;max-width:640px}
+.practice-bar .practice-note{font-size:13.5px;color:var(--muted);font-weight:600;text-align:center;width:100%}
+.practice-bar .btn{border-color:var(--gold);background:var(--card)}
+.mcard.peek-locked{pointer-events:none}
+
+/* Board */
+.board{display:grid;gap:10px;max-width:640px;margin:0 auto}
+.board.c3{grid-template-columns:repeat(4,1fr)}
+.board.c4{grid-template-columns:repeat(4,1fr)}
+.board.c5{grid-template-columns:repeat(5,1fr)}
+.board.c6{grid-template-columns:repeat(6,1fr)}
+@media(max-width:560px){ .board{gap:7px} }
+.mcard{appearance:none;border:0;background:transparent;padding:0;aspect-ratio:3/4;perspective:600px;min-height:44px;-webkit-tap-highlight-color:transparent}
+.mcard .inner{position:relative;display:block;width:100%;height:100%;transform-style:preserve-3d;transition:transform .38s cubic-bezier(.3,.7,.3,1)}
+.mcard.flipped .inner{transform:rotateY(180deg)}
+.mcard .face{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;border-radius:14px;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+.mcard .back{background:var(--rff);border:2px solid var(--rff-deep);color:#fff;font-family:"Bricolage Grotesque",sans-serif;font-weight:800;box-shadow:inset 0 0 0 3px rgba(255,255,255,.18)}
+.mcard .back .q{font-size:clamp(18px,4.5vw,30px);opacity:.92}
+.mcard:not(.flipped):not(:disabled):hover .back{background:var(--rff-deep)}
+.mcard .front{background:var(--card);border:2px solid var(--line);transform:rotateY(180deg);font-size:clamp(22px,6vw,42px);line-height:1}
+.board.small-cards .front{font-size:clamp(17px,4.6vw,32px)}
+.mcard.matched{cursor:default}
+.mcard.matched .front{border-color:var(--gold);background:var(--chip);box-shadow:0 0 0 2px var(--gold)}
+.mcard.matched-by-you .front{border-color:var(--rff);box-shadow:0 0 0 2px var(--rff)}
+.mcard.matched-by-ai .front{border-color:var(--ai);box-shadow:0 0 0 2px var(--ai)}
+.mcard:disabled{cursor:default}
+@media (prefers-reduced-motion: reduce){ .mcard .inner{transition:none} }
+
+/* Result panel */
+.result{margin:16px auto 0;max-width:640px;background:var(--card);border:2px solid var(--gold);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;text-align:center}
+.result h3{font-family:"Bricolage Grotesque",sans-serif;font-size:25px;margin:0 0 6px;letter-spacing:-.01em}
+.result p{margin:4px 0;color:var(--muted);font-size:15px}
+.result p.win-line{color:var(--ink);font-weight:700}
+.result .newbest{display:inline-block;background:var(--gold);color:#231a00;font-weight:800;font-size:13px;padding:5px 12px;border-radius:999px;margin-top:6px}
+.result .btn{margin-top:12px;min-height:54px;padding:13px 26px;font-size:16px}
+
+.pane-footer{margin:26px 0 0;padding-top:14px;border-top:1px solid var(--line);font-size:13.5px;color:var(--muted);text-align:center}
+.pane-footer a{color:var(--rff);font-weight:700;text-decoration:underline;text-underline-offset:2px}
+
+/* Overlays (tutorial + game over) — arcade tutorial style */
+.overlay{position:fixed;inset:0;z-index:60;background:rgba(10,12,10,.58);display:flex;align-items:center;justify-content:center;padding:16px}
+.overlay[hidden]{display:none}
+.tut-card{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;max-width:520px;width:100%;max-height:calc(100dvh - 32px);overflow-y:auto;box-shadow:var(--shadow)}
+.tut-head{background:var(--rff-deep);color:#fff;padding:18px 22px;display:flex;align-items:center;gap:14px;position:sticky;top:0}
+.tut-head .tut-icon{font-size:34px;line-height:1}
+.tut-head h3{font-family:"Bricolage Grotesque",sans-serif;font-size:23px;margin:0;line-height:1.1}
+.tut-head p{margin:2px 0 0;font-size:13.5px;color:rgba(255,255,255,.85)}
+.tut-x{margin-left:auto;appearance:none;border:0;background:rgba(255,255,255,.18);color:#fff;width:44px;height:44px;border-radius:50%;font-size:19px;cursor:pointer;flex:0 0 auto}
+.tut-steps{list-style:none;margin:0;padding:18px 22px 6px;display:flex;flex-direction:column;gap:14px}
+.tut-steps li{display:flex;gap:12px;align-items:flex-start}
+.tut-num{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:var(--rff-deep);color:#fff;font-weight:800;font-size:15px;display:grid;place-items:center;margin-top:1px}
+.tut-steps b{display:block;font-size:15.5px;margin-bottom:1px}
+.tut-steps li div span{font-size:14.5px;color:var(--muted);line-height:1.5;display:block}
+.tut-foot{padding:12px 22px 20px}
+.tut-go{appearance:none;border:0;width:100%;background:var(--rff-deep);color:#fff;font-weight:800;font-size:16px;padding:14px 18px;border-radius:12px;cursor:pointer;font-family:inherit;min-height:52px}
+.tut-go:hover{opacity:.9}
+.tut-go:disabled{opacity:.45;cursor:not-allowed}
+.over-card{text-align:center;padding:30px 24px}
+.over-card .big-icon{font-size:52px}
+.over-card h3{font-family:"Bricolage Grotesque",sans-serif;font-size:30px;margin:8px 0 6px}
+.over-card p{color:var(--muted);margin:4px 0}
+.over-card .btn{margin-top:14px;min-height:54px;padding:13px 26px;font-size:16px}
+
+/* Feedback */
+.fb-body{padding:18px 22px 6px}
+.fb-label{font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--rff-deep);margin:0 0 8px}
+.fb-stars{display:flex;gap:6px;margin-bottom:16px}
+.fb-star{appearance:none;border:1.5px solid var(--line);background:var(--chip);width:52px;height:52px;border-radius:12px;font-size:26px;line-height:1;color:#c9c2ae;cursor:pointer}
+.fb-star.on{color:var(--gold-ink);background:var(--gold);border-color:var(--gold)}
+.fb-star:hover{border-color:var(--ink)}
+.fb-text{width:100%;min-height:110px;resize:vertical;border:1.5px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink);font-family:inherit;font-size:15px;padding:12px;line-height:1.5}
+.fb-text:focus{outline:2px solid var(--rff);outline-offset:1px}
+.fb-note{font-size:12.5px;color:var(--muted);margin:10px 0 0;line-height:1.45}
+.fb-tags{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 4px}
+.fb-tag{appearance:none;border:1.5px solid var(--line);background:var(--chip);color:var(--muted);font-weight:700;font-size:14px;padding:9px 15px;border-radius:999px;min-height:44px;cursor:pointer;font-family:inherit}
+.fb-tag.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.fb-thanks{text-align:center;padding:26px 22px 10px}
+.fb-thanks .big-icon{font-size:46px}
+.fb-thanks h4{font-family:"Bricolage Grotesque",sans-serif;font-size:22px;margin:8px 0 4px}
+.fb-thanks p{color:var(--muted);margin:0;font-size:14.5px}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <div class="toprow">
+    <div class="seg" role="group" aria-label="Game mode">
+      <button type="button" id="modeSolo" class="active">🧠 Solo</button>
+      <button type="button" id="modeVs">🤖 Vs AI</button>
+      <button type="button" id="modePractice">🎯 Practice</button>
+    </div>
+    <span class="spacer"></span>
+    <button class="btn" id="howBtn" type="button">❓ How to play</button>
+    <button class="btn" id="rulesBtn" type="button">📖 Rules</button>
+    <button class="btn" id="feedbackBtn" type="button">💬 Feedback</button>
+    <button class="btn" id="newGameBtn" type="button">↺ New game</button>
+  </div>
+
+  <div class="hint" id="hintBar" hidden>
+    <span>👋 New here? Tap <b>❓ How to play</b> for a quick walkthrough, or <b>📖 Rules</b> for the full rulebook.</span>
+    <button class="hint-x" id="hintClose" type="button" aria-label="Dismiss hint">✕</button>
+  </div>
+
+  <div class="ctrl-row">
+    <div class="ctrl-block">
+      <span class="seg-label" id="sizeLabel">Board size</span>
+      <div class="seg" role="group" aria-labelledby="sizeLabel">
+        <button type="button" data-size="small">Small · 6 pairs</button>
+        <button type="button" data-size="classic" class="active">Classic · 8 pairs</button>
+        <button type="button" data-size="big">Big · 15 pairs</button>
+      </div>
+    </div>
+    <div class="ctrl-block">
+      <span class="seg-label" id="themeLabel">Card theme</span>
+      <div class="seg" role="group" aria-labelledby="themeLabel">
+        <button type="button" data-theme="animals" class="active">🐾 Animals</button>
+        <button type="button" data-theme="food">🍕 Food</button>
+        <button type="button" data-theme="space">🚀 Space</button>
+      </div>
+    </div>
+    <div class="ctrl-block">
+      <span class="seg-label" id="diffLabel">Difficulty</span>
+      <div class="seg" role="group" aria-labelledby="diffLabel">
+        <button type="button" data-diff="easy">Easy</button>
+        <button type="button" data-diff="normal" class="active">Normal</button>
+        <button type="button" data-diff="hard">Hard</button>
+      </div>
+      <span class="diff-hint" id="diffHint"></span>
+    </div>
+  </div>
+
+  <div class="hud" aria-label="Game stats">
+    <span>⏱ Time <b id="hudTime">0:00</b></span>
+    <span>👆 Flips <b id="hudFlips">0</b></span>
+    <span>🎯 Pairs <b id="hudPairs">0 / 8</b></span>
+    <span class="yours" id="hudYouScore" hidden>🟢 You <b id="hudYouPairs">0</b></span>
+    <span class="ai-pill" id="hudAiScore" hidden>🤖 Nova <b id="hudAiPairs">0</b></span>
+    <span class="best" id="hudBest">🏆 Best: <b id="hudBestVal">—</b></span>
+  </div>
+
+  <div class="turn-banner" id="turnBanner" hidden></div>
+
+  <div class="practice-bar" id="practiceBar" hidden>
+    <span class="practice-note">🎯 Practice round — no timer pressure, no best score saved. Peek as much as you need, then try Solo when you're ready.</span>
+    <button class="btn" id="peekBtn" type="button">👀 Peek at cards (3s)</button>
+    <button class="btn" id="practiceRestartBtn" type="button">↺ Restart practice</button>
+  </div>
+
+  <section class="board c4" id="board" aria-label="Memory match board"></section>
+
+  <div class="result" id="resultPanel" hidden>
+    <h3 id="resultTitle">🎉 Board cleared!</h3>
+    <p class="win-line" id="resultLine"></p>
+    <p id="resultDetail"></p>
+    <span class="newbest" id="resultBest" hidden>🏆 New personal best!</span>
+    <br>
+    <button class="btn primary" id="againBtn" type="button">↺ Play again</button>
+  </div>
+
+  <p class="pane-footer">More games in the <a href="../games-hub/">Arcade</a> · More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener">Ridiculously Fit and Fed</a></p>
+</main>
+
+<!-- Tutorial / first-run walkthrough -->
+<div class="overlay" id="tutOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+  <div class="tut-card">
+    <div class="tut-head">
+      <span class="tut-icon" aria-hidden="true">🧠</span>
+      <div>
+        <h3 id="tutTitle">How to play Memory Match</h3>
+        <p>Flip cards, find pairs, trust your brain.</p>
+      </div>
+      <button class="tut-x" id="tutClose" type="button" aria-label="Close tutorial">✕</button>
+    </div>
+    <ol class="tut-steps">
+      <li><span class="tut-num">1</span><div><b>Flip two cards</b><span>Tap any two face-down cards to turn them over. If the pictures match, the pair stays face up.</span></div></li>
+      <li><span class="tut-num">2</span><div><b>Remember what you saw</b><span>No match? The cards flip back — but now you know where they are. That's the whole game: your memory is the scoreboard.</span></div></li>
+      <li><span class="tut-num">3</span><div><b>Solo mode</b><span>Clear the whole board in as few flips and as little time as you can. Your best time and fewest flips are saved for every board size.</span></div></li>
+      <li><span class="tut-num">4</span><div><b>Vs AI mode</b><span>You and Nova the AI take turns. A match scores the pair and earns you another turn — a good memory can run the table. Most pairs when the board is empty wins.</span></div></li>
+      <li><span class="tut-num">5</span><div><b>Practice round 🎯</b><span>New to the game or warming up? Practice starts with all cards face up so you can memorize them, you can peek again anytime, and nothing counts — no timer pressure and no best score saved. Perfect for learning a new board size or theme.</span></div></li>
+      <li><span class="tut-num">6</span><div><b>Pick your difficulty</b><span>Easy, Normal, or Hard — switch anytime, it applies right away. In Solo it sets how long a miss stays face up before flipping back. Against Nova it also sets her memory: Forgetful, Sharp, or Photographic.</span></div></li>
+    </ol>
+    <div class="tut-foot">
+      <button class="tut-go" id="tutGo" type="button">Start matching →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rules (full rulebook, separate from the short tutorial) -->
+<div class="overlay" id="rulesOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="tut-card">
+    <div class="tut-head">
+      <span class="tut-icon" aria-hidden="true">📖</span>
+      <div>
+        <h3 id="rulesTitle">Memory Match — Rules</h3>
+        <p>The full rulebook: scoring, turns, and win conditions.</p>
+      </div>
+      <button class="tut-x" id="rulesClose" type="button" aria-label="Close rules">✕</button>
+    </div>
+    <div class="rules-body">
+      <h4>The basics</h4>
+      <p>All cards start face down in a shuffled grid. On a turn, a player flips exactly two cards. If the pictures match, the pair is collected and stays face up. If they don't match, both cards flip back face down after a short pause — every player can see them while they're up, so remembering positions is the whole game.</p>
+      <h4>Solo mode</h4>
+      <ul>
+        <li>There are no turns and no opponent — just you against the board.</li>
+        <li><b>Scoring:</b> the clock starts on your first flip. Your score is your finishing <b>time</b> and your total <b>flips</b> (every single card flip counts, so a pair attempt costs 2).</li>
+        <li><b>Win condition:</b> find every pair to clear the board.</li>
+        <li><b>Records:</b> your best time and fewest flips are saved separately for each board size (Small 6 pairs, Classic 8 pairs, Big 15 pairs). Card theme is just for looks and never affects scoring.</li>
+      </ul>
+      <h4>Practice round 🎯</h4>
+      <ul>
+        <li>Practice is a warm-up — it <b>doesn't count</b>. No best time, no best flips, and no win/loss record is saved.</li>
+        <li>Every practice round <b>starts with a peek</b>: all cards are shown face up for a few seconds so you can memorize where they are, then they flip face down and you play as normal.</li>
+        <li>Tap <b>👀 Peek at cards</b> anytime during practice to see all unmatched cards again for 3 seconds. There's no limit and no penalty — peek as often as you like.</li>
+        <li>Misses stay face up a little longer in practice (1.4 seconds) so you have more time to take them in.</li>
+        <li>Board size, theme, and difficulty all work in practice, so you can rehearse the exact setup you want to try for real in Solo or Vs AI.</li>
+      </ul>
+      <h4>Vs AI mode</h4>
+      <ul>
+        <li>You and Nova alternate turns. A match scores that pair for the player who found it <b>and earns the same player another turn</b> — a good memory can collect several pairs in a row. A miss passes the turn to the other player.</li>
+        <li><b>Scoring:</b> each collected pair is worth 1 point. Pairs you find are outlined in green; Nova's are outlined in orange.</li>
+        <li><b>Win condition:</b> when the board is empty, the player with the most pairs wins. Equal pairs is a tie.</li>
+        <li>Your win / loss / tie record against Nova is saved.</li>
+      </ul>
+      <h4>Difficulty — Easy / Normal / Hard</h4>
+      <ul>
+        <li>Every game uses the same three settings: <b>Easy</b>, <b>Normal</b>, and <b>Hard</b>. You can change difficulty at any time — it applies from that moment on and never reshuffles the board.</li>
+        <li><b>Solo:</b> difficulty sets how long mismatched cards stay face up before flipping back — Easy gives you 1.6 seconds to memorize them, Normal 0.9 seconds, Hard just 0.5 seconds.</li>
+        <li><b>Vs AI:</b> the same flip-back pace applies to both players, and difficulty also sets Nova's memory (next section).</li>
+        <li>Difficulty never changes scoring — Solo records are still kept per board size, and a Vs AI pair is still worth 1 point.</li>
+      </ul>
+      <h4>Nova's memory</h4>
+      <ul>
+        <li>Nova can only use cards she has actually seen flipped — she never peeks at face-down cards.</li>
+        <li><b>Easy — Forgetful:</b> Nova forgets most of what she's seen almost immediately.</li>
+        <li><b>Normal — Sharp:</b> Nova remembers most seen cards, but still loses track of some.</li>
+        <li><b>Hard — Photographic:</b> Nova remembers every card she has ever seen, perfectly.</li>
+      </ul>
+      <h4>Special rules</h4>
+      <ul>
+        <li>You can't flip a card that's already face up or already matched, and the board locks briefly while a pair is checked.</li>
+        <li>Switching board size or card theme starts a fresh shuffled game. Switching Solo ↔ Vs AI also starts fresh.</li>
+        <li>There's no flip limit and no penalty for misses in either mode — in Solo they simply cost you time and flips.</li>
+      </ul>
+    </div>
+    <div class="tut-foot">
+      <button class="tut-go" id="rulesGo" type="button">Got it →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback (standard on all games: rating + comment, saved on this device) -->
+<div class="overlay" id="fbOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+  <div class="tut-card">
+    <div class="tut-head">
+      <span class="tut-icon" aria-hidden="true">💬</span>
+      <div>
+        <h3 id="fbTitle">Memory Match — Feedback</h3>
+        <p>Tell us what you think — it helps make the games better.</p>
+      </div>
+      <button class="tut-x" id="fbClose" type="button" aria-label="Close feedback">✕</button>
+    </div>
+    <div id="fbForm">
+      <div class="fb-body">
+        <p class="fb-label" id="fbRateLabel">How fun is this game?</p>
+        <div class="fb-stars" role="radiogroup" aria-labelledby="fbRateLabel">
+          <button type="button" class="fb-star" data-star="1" role="radio" aria-checked="false" aria-label="1 star">★</button>
+          <button type="button" class="fb-star" data-star="2" role="radio" aria-checked="false" aria-label="2 stars">★</button>
+          <button type="button" class="fb-star" data-star="3" role="radio" aria-checked="false" aria-label="3 stars">★</button>
+          <button type="button" class="fb-star" data-star="4" role="radio" aria-checked="false" aria-label="4 stars">★</button>
+          <button type="button" class="fb-star" data-star="5" role="radio" aria-checked="false" aria-label="5 stars">★</button>
+        </div>
+        <p class="fb-label"><label for="fbText">Your comment</label></p>
+        <textarea class="fb-text" id="fbText" maxlength="1000" placeholder="What did you like? What should change? Found a bug?"></textarea>
+        <div class="fb-tags" role="group" aria-label="Feedback type (optional)">
+          <button type="button" class="fb-tag" data-tag="Bug">🐞 Bug</button>
+          <button type="button" class="fb-tag" data-tag="Suggestion">💡 Suggestion</button>
+          <button type="button" class="fb-tag" data-tag="Other">💬 Other</button>
+        </div>
+        <p class="fb-note">No personal info needed — please don't include any. Keep it clean: the same Terms &amp; Conditions moderation rules apply to feedback, and feedback may be used to improve the games. Saved on this device for now.</p>
+      </div>
+      <div class="tut-foot">
+        <button class="tut-go" id="fbSubmit" type="button" disabled>Save feedback</button>
+      </div>
+    </div>
+    <div id="fbThanks" hidden>
+      <div class="fb-thanks">
+        <span class="big-icon" aria-hidden="true">💙</span>
+        <h4>Thanks for the feedback!</h4>
+        <p id="fbThanksLine">Your rating and comment were saved on this device.</p>
+      </div>
+      <div class="tut-foot">
+        <button class="tut-go" id="fbDone" type="button">Back to the game →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+var LS_KEY = "memoryMatch_v1", LS_TUT = "memoryMatch_tutSeen", LS_SET = "memoryMatch_settings";
+
+var THEMES = {
+  animals: ["🦊","🐸","🦉","🐙","🦋","🐢","🦁","🐼","🐨","🦄","🐳","🦩","🐝","🦜","🐞"],
+  food:    ["🍕","🍩","🍓","🍔","🍦","🥑","🍉","🧀","🌮","🍪","🍇","🥐","🍜","🧁","🍿"],
+  space:   ["🚀","🪐","⭐","🌙","☄️","👽","🛸","🔭","🌟","🌍","💫","🧑‍🚀","🛰️","🌌","☀️"]
+};
+var SIZES = {
+  small:   { pairs: 6,  cols: 4, cls: "c4" },
+  classic: { pairs: 8,  cols: 4, cls: "c4" },
+  big:     { pairs: 15, cols: 6, cls: "c6" }
+};
+/* AI memory: chance a seen card is still remembered when Nova needs it */
+var AI_MEMORY = { easy: 0.35, normal: 0.75, hard: 1.0 };
+/* Difficulty (standard Easy/Normal/Hard): how long a miss stays face up, ms */
+var MISMATCH_MS = { easy: 1600, normal: 900, hard: 500 };
+
+var stats = { solo: {}, vs: { wins: 0, losses: 0, ties: 0, games: 0 } };
+try { var saved = JSON.parse(localStorage.getItem(LS_KEY) || "null"); if (saved && saved.solo && saved.vs) stats = saved; } catch(e){}
+function saveStats(){ try { localStorage.setItem(LS_KEY, JSON.stringify(stats)); } catch(e){} }
+
+/* ---------- State ---------- */
+var mode = "solo";           /* "solo" | "vs" | "practice" */
+var isPeeking = false;
+var peekTimer = null;
+var peekCount = 0;
+var sizeKey = "classic";
+var themeKey = "animals";
+var diff = "normal";
+try { var savedSet = JSON.parse(localStorage.getItem(LS_SET) || "null"); if (savedSet){ if (SIZES[savedSet.size]) sizeKey = savedSet.size; if (AI_MEMORY[savedSet.diff] !== undefined) diff = savedSet.diff; } } catch(e){}
+function saveSettings(){ try { localStorage.setItem(LS_SET, JSON.stringify({ size: sizeKey, diff: diff })); } catch(e){} }
+var deck = [];               /* array of emoji, length = pairs*2 */
+var cardEls = [];
+var firstPick = -1;          /* index of first flipped card this turn */
+var lockBoard = false;
+var matchedCount = 0;
+var flips = 0;
+var timerId = null, elapsed = 0, timerStarted = false;
+var currentPlayer = "you";   /* "you" | "ai" */
+var youPairs = 0, aiPairs = 0;
+var aiKnown = {};            /* emoji -> [indices] Nova currently remembers */
+var gameOver = false;
+
+var board = document.getElementById("board");
+var hudTime = document.getElementById("hudTime");
+var hudFlips = document.getElementById("hudFlips");
+var hudPairs = document.getElementById("hudPairs");
+var hudBestVal = document.getElementById("hudBestVal");
+var hudYouScore = document.getElementById("hudYouScore");
+var hudAiScore = document.getElementById("hudAiScore");
+var hudYouPairs = document.getElementById("hudYouPairs");
+var hudAiPairs = document.getElementById("hudAiPairs");
+var turnBanner = document.getElementById("turnBanner");
+var resultPanel = document.getElementById("resultPanel");
+
+function fmtTime(s){
+  var m = Math.floor(s/60), r = s%60;
+  return m + ":" + (r < 10 ? "0" : "") + r;
+}
+function shuffle(a){
+  for (var i = a.length - 1; i > 0; i--){
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+function startTimer(){
+  if (timerStarted) return;
+  timerStarted = true;
+  timerId = setInterval(function(){ elapsed++; hudTime.textContent = fmtTime(elapsed); }, 1000);
+}
+function stopTimer(){ if (timerId){ clearInterval(timerId); timerId = null; } }
+
+function bestLabel(){
+  if (mode === "practice") return "Practice — doesn't count";
+  if (mode === "vs") return "Vs Nova: " + stats.vs.wins + "W – " + stats.vs.losses + "L" + (stats.vs.ties ? " – " + stats.vs.ties + "T" : "");
+  var b = stats.solo[sizeKey];
+  if (!b) return "—";
+  var parts = [];
+  if (b.bestTime != null) parts.push(fmtTime(b.bestTime));
+  if (b.bestFlips != null) parts.push(b.bestFlips + " flips");
+  return parts.join(" · ") || "—";
+}
+function updateHud(){
+  hudFlips.textContent = flips;
+  hudPairs.textContent = matchedCount + " / " + SIZES[sizeKey].pairs;
+  hudBestVal.textContent = bestLabel();
+  hudYouPairs.textContent = youPairs;
+  hudAiPairs.textContent = aiPairs;
+}
+function updateDiffHint(){
+  var el = document.getElementById("diffHint");
+  if (!el) return;
+  if (mode === "practice") el.textContent = "Practice: starts with a peek, peek again anytime, misses stay up 1.4s. Nothing is saved.";
+  else el.textContent = mode === "vs"
+    ? "Nova's memory — Easy: Forgetful · Normal: Sharp · Hard: Photographic."
+    : "Solo: how long a miss stays face up — Easy 1.6s · Normal 0.9s · Hard 0.5s.";
+}
+function updateBanner(){
+  if (gameOver){ turnBanner.hidden = true; return; }
+  if (mode === "practice"){
+    turnBanner.hidden = false;
+    turnBanner.className = "turn-banner practice";
+    turnBanner.textContent = isPeeking ? "👀 Memorize the cards…" : "🎯 Practice round — take your time, peek anytime, nothing counts";
+    return;
+  }
+  if (mode !== "vs"){ turnBanner.hidden = true; return; }
+  turnBanner.hidden = false;
+  if (currentPlayer === "you"){ turnBanner.className = "turn-banner you"; turnBanner.textContent = "🟢 Your turn — find a pair to keep going"; }
+  else { turnBanner.className = "turn-banner ai"; turnBanner.textContent = "🤖 Nova is thinking…"; }
+}
+function startPeek(ms, countIt){
+  if (mode !== "practice" || gameOver || isPeeking) return;
+  if (lockBoard) return;
+  if (peekTimer) clearTimeout(peekTimer);
+  isPeeking = true; lockBoard = true; if (countIt !== false) peekCount++;
+  /* remember what was already up (a first pick) so we restore it */
+  var wasUp = [];
+  cardEls.forEach(function(el, i){ if (el.classList.contains("flipped")) wasUp.push(i); });
+  cardEls.forEach(function(el, i){ if (!el.classList.contains("matched")) flipUp(i); });
+  updateBanner();
+  var peekBtn = document.getElementById("peekBtn");
+  if (peekBtn) peekBtn.disabled = true;
+  peekTimer = setTimeout(function(){
+    cardEls.forEach(function(el, i){
+      if (!el.classList.contains("matched") && wasUp.indexOf(i) === -1) flipDown(i);
+    });
+    isPeeking = false; lockBoard = false; peekTimer = null;
+    if (peekBtn) peekBtn.disabled = false;
+    updateBanner();
+  }, ms || 3000);
+}
+
+/* ---------- Game setup ---------- */
+function newGame(){
+  stopTimer();
+  if (peekTimer){ clearTimeout(peekTimer); peekTimer = null; }
+  isPeeking = false; peekCount = 0;
+  elapsed = 0; timerStarted = false;
+  flips = 0; matchedCount = 0; firstPick = -1;
+  lockBoard = false; gameOver = false;
+  currentPlayer = "you"; youPairs = 0; aiPairs = 0;
+  aiKnown = {};
+  resultPanel.hidden = true;
+  hudTime.textContent = "0:00";
+
+  var faces = THEMES[themeKey].slice(0, SIZES[sizeKey].pairs);
+  deck = shuffle(faces.concat(faces));
+
+  board.className = "board " + SIZES[sizeKey].cls + (sizeKey === "big" ? " small-cards" : "");
+  board.innerHTML = "";
+  cardEls = [];
+  deck.forEach(function(emoji, i){
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mcard";
+    btn.setAttribute("aria-label", "Face-down card " + (i + 1));
+    btn.innerHTML = '<span class="inner"><span class="face back"><span class="q">?</span></span><span class="face front" aria-hidden="true">' + emoji + "</span></span>";
+    btn.addEventListener("click", function(){ onCardClick(i); });
+    board.appendChild(btn);
+    cardEls.push(btn);
+  });
+
+  hudYouScore.hidden = mode !== "vs";
+  hudAiScore.hidden = mode !== "vs";
+  var pb = document.getElementById("practiceBar");
+  if (pb) pb.hidden = mode !== "practice";
+  var bestPill = document.getElementById("hudBest");
+  if (bestPill) bestPill.firstChild.textContent = mode === "practice" ? "🎯 " : "🏆 Best: ";
+  updateHud();
+  updateBanner();
+  updateDiffHint();
+  if (mode === "practice"){
+    /* Opening peek: show the whole board, scaled a bit for bigger boards */
+    var peekMs = sizeKey === "big" ? 5000 : (sizeKey === "classic" ? 4000 : 3000);
+    setTimeout(function(){ startPeek(peekMs, false); }, 350);
+  }
+}
+
+function flipUp(i){
+  cardEls[i].classList.add("flipped");
+  cardEls[i].setAttribute("aria-label", "Card showing " + deck[i]);
+}
+function flipDown(i){
+  cardEls[i].classList.remove("flipped");
+  cardEls[i].setAttribute("aria-label", "Face-down card " + (i + 1));
+}
+/* Both players "see" every flip; Nova may or may not retain it. */
+function novaSees(i){
+  var e = deck[i];
+  if (!aiKnown[e]) aiKnown[e] = [];
+  if (aiKnown[e].indexOf(i) === -1) aiKnown[e].push(i);
+  if (Math.random() > AI_MEMORY[diff]){
+    /* Nova forgets this one almost as soon as she sees it */
+    var arr = aiKnown[e];
+    arr.splice(arr.indexOf(i), 1);
+    if (!arr.length) delete aiKnown[e];
+  }
+}
+function novaForgetsPair(e){ delete aiKnown[e]; }
+
+function unmatchedIndices(){
+  var out = [];
+  for (var i = 0; i < deck.length; i++) if (!cardEls[i].classList.contains("matched")) out.push(i);
+  return out;
+}
+
+/* ---------- Turn logic ---------- */
+function onCardClick(i){
+  if (mode === "vs" && currentPlayer !== "you") return;
+  if (lockBoard || gameOver || isPeeking) return;
+  if (cardEls[i].classList.contains("flipped") || cardEls[i].classList.contains("matched")) return;
+  if (mode !== "practice") startTimer();
+  handlePick(i, "you");
+}
+
+function handlePick(i, who){
+  flipUp(i);
+  flips++; updateHud();
+  if (mode === "vs") novaSees(i);
+
+  if (firstPick === -1){ firstPick = i; return; }
+
+  var a = firstPick, b = i;
+  firstPick = -1;
+  lockBoard = true;
+
+  if (deck[a] === deck[b]){
+    setTimeout(function(){
+      [a, b].forEach(function(idx){
+        cardEls[idx].classList.add("matched");
+        cardEls[idx].classList.add(who === "you" ? "matched-by-you" : "matched-by-ai");
+        cardEls[idx].disabled = true;
+      });
+      matchedCount++;
+      if (mode === "vs"){
+        novaForgetsPair(deck[a]);
+        if (who === "you") youPairs++; else aiPairs++;
+      }
+      updateHud();
+      lockBoard = false;
+      if (matchedCount === SIZES[sizeKey].pairs){ endGame(); return; }
+      if (mode === "vs" && who === "ai"){ setTimeout(aiTurn, 650); }
+      /* match = same player goes again; banner already correct */
+    }, 420);
+  } else {
+    setTimeout(function(){
+      flipDown(a); flipDown(b);
+      lockBoard = false;
+      if (mode === "vs"){
+        currentPlayer = (who === "you") ? "ai" : "you";
+        updateBanner();
+        if (currentPlayer === "ai") setTimeout(aiTurn, 650);
+      }
+    }, mode === "practice" ? 1400 : MISMATCH_MS[diff]);
+  }
+}
+
+/* ---------- AI ---------- */
+function aiTurn(){
+  if (gameOver || mode !== "vs" || currentPlayer !== "ai") return;
+  updateBanner();
+  /* 1. Does Nova know a complete pair? */
+  var pairEmoji = null;
+  for (var e in aiKnown){
+    if (aiKnown[e].length >= 2){ pairEmoji = e; break; }
+  }
+  if (pairEmoji){
+    var idxs = aiKnown[pairEmoji].slice(0, 2);
+    handlePick(idxs[0], "ai");
+    setTimeout(function(){ handlePick(idxs[1], "ai"); }, 550);
+    return;
+  }
+  /* 2. Flip an unknown card; if its mate is remembered, take it. */
+  var unknown = unmatchedIndices().filter(function(i){
+    var arr = aiKnown[deck[i]] || [];
+    return arr.indexOf(i) === -1 && !cardEls[i].classList.contains("flipped");
+  });
+  if (!unknown.length) unknown = unmatchedIndices();
+  var first = unknown[Math.floor(Math.random() * unknown.length)];
+  handlePick(first, "ai");
+  setTimeout(function(){
+    var mateArr = (aiKnown[deck[first]] || []).filter(function(i){ return i !== first && !cardEls[i].classList.contains("matched"); });
+    if (mateArr.length){
+      handlePick(mateArr[0], "ai");
+    } else {
+      var rest = unmatchedIndices().filter(function(i){ return i !== first && !cardEls[i].classList.contains("flipped"); });
+      if (!rest.length) return;
+      /* Prefer a card Nova hasn't catalogued; fall back to any card */
+      var fresh = rest.filter(function(i){ return !(aiKnown[deck[i]] || []).length; });
+      var pool = fresh.length ? fresh : rest;
+      handlePick(pool[Math.floor(Math.random() * pool.length)], "ai");
+    }
+  }, 550);
+}
+
+/* ---------- End of game ---------- */
+function endGame(){
+  gameOver = true;
+  stopTimer();
+  updateBanner();
+  var title = document.getElementById("resultTitle");
+  var line = document.getElementById("resultLine");
+  var detail = document.getElementById("resultDetail");
+  var bestTag = document.getElementById("resultBest");
+  bestTag.hidden = true;
+  document.getElementById("againBtn").textContent = mode === "practice" ? "↺ Another practice round" : "↺ Play again";
+
+  if (mode === "practice"){
+    title.textContent = "🎯 Practice complete!";
+    line.textContent = "You cleared all " + SIZES[sizeKey].pairs + " pairs in " + flips + " flips" + (peekCount ? " with " + peekCount + " peek" + (peekCount === 1 ? "" : "s") : "") + ".";
+    detail.textContent = peekCount ? "Nice warm-up — try peeking less next round, then switch to Solo to set a real best." : "No extra peeks needed — you're ready. Switch to Solo to set a real best, or Vs AI to take on Nova.";
+    var pb2 = document.getElementById("practiceBar");
+    if (pb2) pb2.hidden = true;
+  } else if (mode === "solo"){
+    var b = stats.solo[sizeKey] || {};
+    var isBest = false;
+    if (b.bestTime == null || elapsed < b.bestTime){ b.bestTime = elapsed; isBest = true; }
+    if (b.bestFlips == null || flips < b.bestFlips){ b.bestFlips = flips; isBest = true; }
+    stats.solo[sizeKey] = b; saveStats();
+    title.textContent = "🎉 Board cleared!";
+    line.textContent = "All " + SIZES[sizeKey].pairs + " pairs found in " + fmtTime(elapsed) + " with " + flips + " flips.";
+    detail.textContent = "Best on this board: " + fmtTime(b.bestTime) + " · " + b.bestFlips + " flips. Try the Big board — or take on Nova in Vs AI.";
+    bestTag.hidden = !isBest;
+  } else {
+    stats.vs.games++;
+    title.textContent = youPairs > aiPairs ? "🏆 You win!" : (youPairs < aiPairs ? "🤖 Nova wins this one" : "🤝 It's a tie!");
+    line.textContent = "Final score — You " + youPairs + " pairs, Nova " + aiPairs + " pairs.";
+    if (youPairs > aiPairs){ stats.vs.wins++; detail.textContent = "Your memory beat the machine. Rematch? Nova is already shuffling."; }
+    else if (youPairs < aiPairs){ stats.vs.losses++; detail.textContent = diff === "hard" ? "Photographic memory is a tough roommate. Try Sharp — or run it back." : "Nova got the lucky flips this time. Run it back?"; }
+    else { stats.vs.ties++; detail.textContent = "Dead even. There's only one way to settle this…"; }
+    saveStats();
+  }
+  updateHud();
+  resultPanel.hidden = false;
+  resultPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+/* ---------- Controls ---------- */
+function segWire(selector, fn){
+  var btns = document.querySelectorAll(selector);
+  btns.forEach(function(btn){
+    btn.addEventListener("click", function(){
+      btns.forEach(function(b){ b.classList.remove("active"); });
+      btn.classList.add("active");
+      fn(btn);
+    });
+  });
+}
+function setMode(m){
+  mode = m;
+  ["modeSolo","modeVs","modePractice"].forEach(function(id){ document.getElementById(id).classList.remove("active"); });
+  document.getElementById(m === "vs" ? "modeVs" : (m === "practice" ? "modePractice" : "modeSolo")).classList.add("active");
+  newGame();
+}
+document.getElementById("modeSolo").addEventListener("click", function(){ setMode("solo"); });
+document.getElementById("modeVs").addEventListener("click", function(){ setMode("vs"); });
+document.getElementById("modePractice").addEventListener("click", function(){ setMode("practice"); });
+document.getElementById("peekBtn").addEventListener("click", function(){ startPeek(3000); });
+document.getElementById("practiceRestartBtn").addEventListener("click", newGame);
+segWire("[data-size]", function(btn){ sizeKey = btn.getAttribute("data-size"); saveSettings(); newGame(); });
+segWire("[data-theme]", function(btn){ themeKey = btn.getAttribute("data-theme"); newGame(); });
+segWire("[data-diff]", function(btn){ diff = btn.getAttribute("data-diff"); saveSettings(); });
+document.getElementById("newGameBtn").addEventListener("click", newGame);
+document.getElementById("againBtn").addEventListener("click", newGame);
+
+/* ---------- Tutorial (opt-in only) & hint ---------- */
+var tutOverlay = document.getElementById("tutOverlay");
+var hintBar = document.getElementById("hintBar");
+function markTutSeen(){ try { localStorage.setItem(LS_TUT, "1"); } catch(e){} }
+function closeTut(){ tutOverlay.hidden = true; markTutSeen(); hintBar.hidden = true; }
+document.getElementById("howBtn").addEventListener("click", function(){ tutOverlay.hidden = false; });
+document.getElementById("tutClose").addEventListener("click", closeTut);
+document.getElementById("tutGo").addEventListener("click", closeTut);
+tutOverlay.addEventListener("click", function(e){ if (e.target === tutOverlay) closeTut(); });
+document.getElementById("hintClose").addEventListener("click", function(){ hintBar.hidden = true; markTutSeen(); });
+
+var seenTut = false;
+try { seenTut = !!localStorage.getItem(LS_TUT); } catch(e){}
+if (!seenTut) hintBar.hidden = false;   /* one-time, non-blocking hint — the game is playable underneath */
+
+/* ---------- Rules ---------- */
+var rulesOverlay = document.getElementById("rulesOverlay");
+function closeRules(){ rulesOverlay.hidden = true; }
+document.getElementById("rulesBtn").addEventListener("click", function(){ rulesOverlay.hidden = false; });
+document.getElementById("rulesClose").addEventListener("click", closeRules);
+document.getElementById("rulesGo").addEventListener("click", closeRules);
+rulesOverlay.addEventListener("click", function(e){ if (e.target === rulesOverlay) closeRules(); });
+
+/* ---------- Feedback (arcade standard: rating + comment + tag, saved locally) ---------- */
+var LS_FB = "holos-arcade-feedback";
+var fbOverlay = document.getElementById("fbOverlay");
+var fbRating = 0;
+var fbTag = "";
+var fbStars = document.querySelectorAll(".fb-star");
+var fbTags = document.querySelectorAll(".fb-tag");
+var fbSubmit = document.getElementById("fbSubmit");
+function fbRefresh(){
+  fbStars.forEach(function(s){
+    var n = parseInt(s.getAttribute("data-star"), 10);
+    s.classList.toggle("on", n <= fbRating);
+    s.setAttribute("aria-checked", n === fbRating ? "true" : "false");
+  });
+  fbTags.forEach(function(t){ t.classList.toggle("on", t.getAttribute("data-tag") === fbTag); });
+  fbSubmit.disabled = fbRating === 0;
+}
+fbStars.forEach(function(s){
+  s.addEventListener("click", function(){ fbRating = parseInt(s.getAttribute("data-star"), 10); fbRefresh(); });
+});
+fbTags.forEach(function(t){
+  t.addEventListener("click", function(){
+    var v = t.getAttribute("data-tag");
+    fbTag = (fbTag === v) ? "" : v;   /* tap again to clear — tag is optional */
+    fbRefresh();
+  });
+});
+function openFb(){
+  fbRating = 0;
+  fbTag = "";
+  document.getElementById("fbText").value = "";
+  document.getElementById("fbForm").hidden = false;
+  document.getElementById("fbThanks").hidden = true;
+  fbRefresh();
+  fbOverlay.hidden = false;
+}
+function closeFb(){ fbOverlay.hidden = true; }
+document.getElementById("feedbackBtn").addEventListener("click", openFb);
+document.getElementById("fbClose").addEventListener("click", closeFb);
+document.getElementById("fbDone").addEventListener("click", closeFb);
+fbOverlay.addEventListener("click", function(e){ if (e.target === fbOverlay) closeFb(); });
+fbSubmit.addEventListener("click", function(){
+  if (!fbRating) return;
+  var entry = {
+    game: "memory-match",
+    rating: fbRating,
+    text: document.getElementById("fbText").value.trim(),
+    tag: fbTag,
+    mode: mode,
+    boardSize: sizeKey,
+    theme: themeKey,
+    difficulty: diff,
+    timestamp: new Date().toISOString()
+  };
+  var saved = false;
+  try {
+    var all = JSON.parse(localStorage.getItem(LS_FB) || "[]");
+    if (!Array.isArray(all)) all = [];
+    all.push(entry);
+    localStorage.setItem(LS_FB, JSON.stringify(all));
+    saved = true;
+  } catch(e){}
+  document.getElementById("fbThanksLine").textContent = saved
+    ? "You rated Memory Match " + fbRating + " of 5 stars. Saved on this device — thanks for helping improve the games."
+    : "You rated Memory Match " + fbRating + " of 5 stars — thanks! It couldn't be saved on this device, but we appreciate you taking the time.";
+  document.getElementById("fbForm").hidden = true;
+  document.getElementById("fbThanks").hidden = false;
+});
+
+document.querySelectorAll("[data-size]").forEach(function(b){ b.classList.toggle("active", b.getAttribute("data-size") === sizeKey); });
+document.querySelectorAll("[data-diff]").forEach(function(b){ b.classList.toggle("active", b.getAttribute("data-diff") === diff); });
+newGame();
+</script>
+</body>
+</html>

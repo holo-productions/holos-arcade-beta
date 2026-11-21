@@ -1,0 +1,1013 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Go Board Game</title>
+<style>
+  :root{
+    --bg:#eef0e9; --card:#ffffff; --card2:#f6f4ec; --ink:#20261f; --ink-soft:#5a6355;
+    --line:#d8dcd2; --accent:#2e5c40; --accent-ink:#ffffff; --accent-soft:#e2ede4;
+    --danger:#a33b2e; --wood:#e2b26a; --wood-dark:#a9762f; --grid:#7a5518;
+    --chip:#eef1e8; --shadow:0 2px 10px rgba(30,40,25,.10);
+    --btn:#ffffff; --btn-line:#c9cfc2;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#12161a; --card:#1d2329; --card2:#232a30; --ink:#e9ede8; --ink-soft:#a7b0a4;
+      --line:#333d42; --accent:#4d8a64; --accent-ink:#0e1510; --accent-soft:#22352a;
+      --danger:#d97a6c; --chip:#232a30; --shadow:0 2px 10px rgba(0,0,0,.4);
+      --btn:#232a30; --btn-line:#3a454b;
+    }
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button, select, input, textarea{ font:inherit; }
+  button, [role="button"], select, summary{ min-height:2.75rem; }
+  .wrap{ max-width:700px; margin:0 auto; padding:14px 14px 28px; }
+
+  /* ---------- header ---------- */
+  .topbar{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin:4px 0 12px; }
+  h1{ font-family:Georgia, "Iowan Old Style", "Times New Roman", serif; font-size:2rem; margin:0; letter-spacing:.01em; }
+  .tagline{ color:var(--ink-soft); font-size:.92rem; margin:2px 0 0; }
+  .feedback-top{
+    flex:0 0 auto; background:var(--card); color:var(--ink); border:1px solid var(--btn-line);
+    border-radius:999px; padding:8px 14px; font-weight:600; cursor:pointer; box-shadow:var(--shadow);
+  }
+
+  /* ---------- cards & controls ---------- */
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); padding:14px; margin-bottom:12px; }
+  .controls{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .controls label{ display:block; font-size:.78rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:5px; }
+  .controls select{
+    width:100%; padding:9px 10px; border-radius:10px; border:1px solid var(--btn-line);
+    background:var(--btn); color:var(--ink); min-height:2.75rem;
+  }
+  .controls .wide{ grid-column:1 / -1; display:flex; gap:10px; flex-wrap:wrap; }
+  .btn{
+    border:1px solid var(--btn-line); background:var(--btn); color:var(--ink);
+    border-radius:10px; padding:10px 16px; font-weight:600; cursor:pointer; min-height:2.75rem;
+  }
+  .btn:active{ transform:translateY(1px); }
+  .btn.primary{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .btn.danger{ color:var(--danger); border-color:var(--danger); background:transparent; }
+  .btn.toggle[aria-pressed="true"]{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+  .btn.confirm{ background:var(--danger); border-color:var(--danger); color:#fff; }
+  .practice-note{ grid-column:1 / -1; font-size:.85rem; color:var(--ink-soft); margin:0; display:none; }
+  .practice-note.on{ display:block; }
+
+  /* ---------- status ---------- */
+  .status-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .chip{
+    background:var(--chip); border:1px solid var(--line); border-radius:999px;
+    padding:6px 12px; font-size:.85rem; font-weight:600; display:inline-flex; align-items:center; gap:7px;
+  }
+  .dot{ width:14px; height:14px; border-radius:50%; flex:0 0 auto; border:1px solid rgba(0,0,0,.35); }
+  .dot.b{ background:radial-gradient(circle at 35% 30%, #5a5a5a, #000 70%); }
+  .dot.w{ background:radial-gradient(circle at 35% 30%, #ffffff, #c9cbc4 75%); }
+  .message{
+    background:var(--accent-soft); border-radius:10px; padding:10px 12px; font-size:.95rem;
+    margin:0 0 12px; min-height:1.2em;
+  }
+  .message.warn{ background:#f7e8e2; color:#7c2d20; }
+  @media (prefers-color-scheme: dark){ .message.warn{ background:#3d2622; color:#f0b8ab; } }
+
+  /* ---------- board ---------- */
+  .board-frame{
+    background:linear-gradient(145deg, #c08c3e, var(--wood-dark));
+    border-radius:14px; padding:10px; box-shadow:var(--shadow); margin-bottom:12px;
+  }
+  .board{
+    position:relative; width:100%; aspect-ratio:1 / 1; background:var(--wood);
+    border-radius:6px; touch-action:manipulation; user-select:none; -webkit-user-select:none;
+  }
+  .board svg{ position:absolute; inset:0; width:100%; height:100%; }
+  .coord{
+    position:absolute; transform:translate(-50%,-50%); font-size:9px; font-weight:700;
+    color:rgba(90,58,10,.75); pointer-events:none; line-height:1;
+  }
+  @media (max-width:480px){ .coord{ display:none; } }
+  .slot{
+    position:absolute; transform:translate(-50%,-50%); border:0; background:transparent;
+    padding:0; cursor:pointer; border-radius:50%; min-height:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .slot:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+  .stone{
+    width:92%; height:92%; border-radius:50%; pointer-events:none; position:relative; flex:0 0 auto;
+  }
+  .stone.b{ background:radial-gradient(circle at 35% 30%, #5c5c5c, #050505 72%); box-shadow:0 2px 3px rgba(0,0,0,.45); }
+  .stone.w{ background:radial-gradient(circle at 35% 30%, #ffffff, #ccd0c8 78%); box-shadow:0 2px 3px rgba(0,0,0,.35); border:1px solid rgba(0,0,0,.18); }
+  .stone.last::after{
+    content:""; position:absolute; inset:34%; border-radius:50%;
+    background:#e4572e; box-shadow:0 0 0 2px rgba(255,255,255,.55);
+  }
+  .stone.dead{ opacity:.38; }
+  .stone.dead::before{
+    content:"✕"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:.8em; font-weight:900; color:#c22f1d; text-shadow:0 0 3px #fff;
+  }
+  .stone.atari{ box-shadow:0 0 0 3px #e4572e, 0 2px 3px rgba(0,0,0,.4); animation:pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{ box-shadow:0 0 0 2px #e4572e; } 50%{ box-shadow:0 0 0 5px rgba(228,87,46,.45); } }
+  @media (prefers-reduced-motion: reduce){ .stone.atari{ animation:none; } }
+  .terr{ width:34%; height:34%; border-radius:3px; pointer-events:none; }
+  .terr.b{ background:rgba(10,10,10,.78); }
+  .terr.w{ background:rgba(255,255,255,.9); border:1px solid rgba(0,0,0,.4); }
+  .slot.hint .stone, .slot.hint-empty{ box-shadow:0 0 0 3px var(--accent); }
+  .slot.hint-empty{ border-radius:50%; background:rgba(46,92,64,.25); }
+  .thinking{ position:absolute; inset:0; display:none; align-items:center; justify-content:center; pointer-events:none; }
+  .thinking.on{ display:flex; }
+  .thinking span{
+    background:rgba(20,20,20,.78); color:#fff; padding:8px 16px; border-radius:999px; font-size:.9rem; font-weight:600;
+  }
+
+  /* ---------- actions ---------- */
+  .actions{ display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
+  .actions .btn{ flex:1 1 30%; }
+  .links-row{ display:flex; flex-wrap:wrap; gap:10px; }
+  .links-row .btn{ flex:1 1 28%; }
+
+  /* ---------- score panel ---------- */
+  #scorePanel{ display:none; }
+  #scorePanel.on{ display:block; }
+  #scorePanel h2{ font-family:Georgia, serif; margin:0 0 6px; font-size:1.35rem; }
+  .winner-line{ font-size:1.05rem; font-weight:700; margin:0 0 10px; }
+  table.score{ width:100%; border-collapse:collapse; font-size:.95rem; }
+  table.score th, table.score td{ padding:7px 8px; text-align:right; border-bottom:1px solid var(--line); }
+  table.score th:first-child, table.score td:first-child{ text-align:left; }
+  table.score tr.total td{ font-weight:800; border-bottom:0; font-size:1.05rem; }
+  .score-note{ color:var(--ink-soft); font-size:.85rem; margin:10px 0 0; }
+
+  /* ---------- modals ---------- */
+  .modal{
+    position:fixed; inset:0; background:rgba(12,14,12,.55); display:none; z-index:50;
+    align-items:flex-end; justify-content:center; padding:0;
+  }
+  .modal.on{ display:flex; }
+  .sheet{
+    background:var(--card); color:var(--ink); width:100%; max-width:600px; max-height:88vh;
+    overflow-y:auto; border-radius:18px 18px 0 0; padding:20px 18px 26px;
+  }
+  @media (min-width:640px){ .modal{ align-items:center; padding:20px; } .sheet{ border-radius:18px; } }
+  .sheet h2{ font-family:Georgia, serif; margin:0 0 4px; font-size:1.45rem; }
+  .sheet h3{ margin:16px 0 4px; font-size:1.02rem; }
+  .sheet p, .sheet li{ font-size:.95rem; line-height:1.5; }
+  .sheet ul{ padding-left:20px; margin:6px 0; }
+  .sheet .close-row{ display:flex; justify-content:flex-end; margin-top:16px; }
+  .tut-dots{ display:flex; gap:6px; justify-content:center; margin:14px 0 4px; }
+  .tut-dots i{ width:8px; height:8px; border-radius:50%; background:var(--line); display:block; }
+  .tut-dots i.on{ background:var(--accent); }
+  .tut-nav{ display:flex; gap:10px; margin-top:10px; }
+  .tut-nav .btn{ flex:1; }
+  .demo-board{
+    display:grid; grid-template-columns:repeat(5, 34px); gap:0; justify-content:center;
+    background:var(--wood); border:6px solid var(--wood-dark); border-radius:8px;
+    padding:12px; width:max-content; margin:12px auto;
+  }
+  .demo-board i{
+    width:34px; height:34px; display:flex; align-items:center; justify-content:center; position:relative;
+  }
+  .demo-board i::before{ content:""; position:absolute; inset:0;
+    background:
+      linear-gradient(var(--grid), var(--grid)) center/100% 1.5px no-repeat,
+      linear-gradient(var(--grid), var(--grid)) center/1.5px 100% no-repeat; opacity:.7; }
+  .demo-board .st{ width:27px; height:27px; border-radius:50%; z-index:1; }
+  .demo-board .st.b{ background:radial-gradient(circle at 35% 30%, #5c5c5c, #050505 72%); }
+  .demo-board .st.w{ background:radial-gradient(circle at 35% 30%, #fff, #ccd0c8 78%); border:1px solid rgba(0,0,0,.2); }
+  .demo-board .mark{ z-index:1; color:#c22f1d; font-weight:900; font-size:1.05rem; }
+
+  /* ---------- feedback ---------- */
+  .stars{ display:flex; gap:6px; margin:8px 0 4px; }
+  .stars button{
+    width:46px; height:46px; min-height:46px; border-radius:10px; border:1px solid var(--btn-line);
+    background:var(--btn); font-size:1.4rem; color:#c8a13a; cursor:pointer; line-height:1;
+  }
+  .stars button.off{ color:var(--ink-soft); opacity:.5; }
+  .sheet textarea{
+    width:100%; min-height:130px; border-radius:10px; border:1px solid var(--btn-line);
+    background:var(--card2); color:var(--ink); padding:10px; resize:vertical;
+  }
+  .sheet select{
+    width:100%; padding:9px 10px; border-radius:10px; border:1px solid var(--btn-line);
+    background:var(--btn); color:var(--ink); min-height:2.75rem; margin-bottom:10px;
+  }
+  .sheet label.flabel{ display:block; font-size:.8rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-soft); margin:12px 0 5px; }
+  .toast{
+    position:fixed; left:50%; bottom:22px; transform:translateX(-50%) translateY(20px);
+    background:#20261f; color:#fff; padding:10px 18px; border-radius:999px; font-size:.9rem; font-weight:600;
+    opacity:0; pointer-events:none; transition:opacity .25s, transform .25s; z-index:80; max-width:88vw; text-align:center;
+  }
+  .toast.on{ opacity:1; transform:translateX(-50%) translateY(0); }
+  @media (prefers-color-scheme: dark){ .toast{ background:#e9ede8; color:#14181a; } }
+
+  footer{ text-align:center; color:var(--ink-soft); font-size:.85rem; padding:14px 0 4px; }
+  footer strong{ color:var(--ink); font-family:Georgia, serif; letter-spacing:.02em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <h1>Go</h1>
+      <p class="tagline">The ancient game of surrounding territory. You play Black — Black goes first.</p>
+    </div>
+    <button class="feedback-top" id="feedbackBtnTop" type="button">💬 Feedback</button>
+  </div>
+
+  <div class="card">
+    <div class="controls">
+      <div>
+        <label for="sizeSel">Board size</label>
+        <select id="sizeSel">
+          <option value="9">9 × 9 — quick game</option>
+          <option value="13">13 × 13 — mid game</option>
+          <option value="19">19 × 19 — full game</option>
+        </select>
+      </div>
+      <div>
+        <label for="diffSel">AI strength</label>
+        <select id="diffSel">
+          <option value="easy">Easy — learning the ropes</option>
+          <option value="medium">Medium — a real fight</option>
+          <option value="hard">Hard — no mercy</option>
+        </select>
+      </div>
+      <div class="wide">
+        <button class="btn toggle" id="practiceBtn" type="button" aria-pressed="false">Practice mode</button>
+        <button class="btn" id="newGameBtn" type="button">New game</button>
+      </div>
+      <p class="practice-note" id="practiceNote">Practice is on: you play <strong>both</strong> colours, the AI sits out, and you get hints, undo, and atari highlights (orange rings = a group with only one liberty left). No pressure — poke around and learn.</p>
+    </div>
+  </div>
+
+  <div class="status-row" id="statusRow">
+    <span class="chip"><span class="dot b" id="turnDot"></span><span id="turnText">Black to play</span></span>
+    <span class="chip">Captured by Black: <span id="capB">0</span></span>
+    <span class="chip">Captured by White: <span id="capW">0</span></span>
+    <span class="chip">Move <span id="moveNo">0</span></span>
+    <span class="chip">Komi: 6.5 to White</span>
+  </div>
+
+  <p class="message" id="message">Tap any intersection to place a stone. Surround empty points to claim territory, and surround enemy stones to capture them.</p>
+
+  <div class="board-frame">
+    <div class="board" id="board" role="grid" aria-label="Go board"></div>
+  </div>
+
+  <div class="actions">
+    <button class="btn primary" id="passBtn" type="button">Pass</button>
+    <button class="btn" id="hintBtn" type="button" style="display:none">Hint</button>
+    <button class="btn" id="undoBtn" type="button" style="display:none">Undo</button>
+    <button class="btn danger" id="resignBtn" type="button">Resign</button>
+  </div>
+
+  <div class="card" id="scorePanel" aria-live="polite">
+    <h2 id="scoreTitle">Game over</h2>
+    <p class="winner-line" id="winnerLine"></p>
+    <div id="scoreBody"></div>
+    <p class="score-note" id="scoreNote"></p>
+    <div class="links-row" style="margin-top:14px">
+      <button class="btn primary" id="scoreNewBtn" type="button">Play again</button>
+      <button class="btn" id="resumeBtn" type="button" style="display:none">Keep playing</button>
+      <button class="btn" id="finishScoreBtn" type="button" style="display:none">Finish scoring</button>
+    </div>
+  </div>
+
+  <div class="links-row">
+    <button class="btn" id="tutorialBtn" type="button">How to play</button>
+    <button class="btn" id="rulesBtn" type="button">Rules</button>
+    <button class="btn" id="feedbackBtn" type="button">Feedback</button>
+  </div>
+
+  <footer><strong>Ridiculously Fit and Fed</strong></footer>
+</div>
+
+<!-- ============ TUTORIAL ============ -->
+<div class="modal" id="tutorialModal" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+  <div class="sheet">
+    <h2 id="tutTitle">How to play Go</h2>
+    <div id="tutBody"></div>
+    <div class="tut-dots" id="tutDots"></div>
+    <div class="tut-nav">
+      <button class="btn" id="tutBack" type="button">Back</button>
+      <button class="btn primary" id="tutNext" type="button">Next</button>
+    </div>
+    <div class="close-row"><button class="btn" data-close="tutorialModal" type="button">Close</button></div>
+  </div>
+</div>
+
+<!-- ============ RULES ============ -->
+<div class="modal" id="rulesModal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="sheet">
+    <h2 id="rulesTitle">Rules of Go</h2>
+    <h3>The goal</h3>
+    <p>Two players take turns placing stones on the intersections of the grid. Black plays first. When the game ends, whoever controls more of the board — empty territory they surround, plus stones they captured — wins. White gets <strong>6.5 bonus points (komi)</strong> to make up for moving second, which is why scores end in .5 and never tie.</p>
+    <h3>Liberties &amp; capturing</h3>
+    <p>Every stone or connected group of stones has <em>liberties</em>: the empty intersections directly next to it (up, down, left, right — not diagonal). Fill a group's <strong>last</strong> liberty and the whole group is captured and lifted off the board. A group with one liberty left is <em>in atari</em> — one move from capture.</p>
+    <h3>Two moves you can't make</h3>
+    <ul>
+      <li><strong>Suicide:</strong> you can't place a stone where its group would have no liberties — unless that move captures enemy stones and frees up space.</li>
+      <li><strong>Ko:</strong> you can't make a move that recreates an earlier board position. This stops two players from capturing the same stone back and forth forever. Play somewhere else first, then you can take back.</li>
+    </ul>
+    <h3>Passing &amp; ending the game</h3>
+    <p>Don't see a useful move? Pass. When <strong>both players pass in a row</strong>, the game ends and scoring begins. You can also resign at any time.</p>
+    <h3>Scoring</h3>
+    <ul>
+      <li>At the end, tap any group that is <strong>dead</strong> — surrounded with no way to live — to mark it. Dead stones are removed and count as captures for the other side. Tap again to un-mark.</li>
+      <li>Empty points completely surrounded by one colour are that colour's <strong>territory</strong>.</li>
+      <li><strong>Score = territory + stones you captured.</strong> White adds the 6.5 komi. Biggest total wins.</li>
+    </ul>
+    <h3>Board sizes</h3>
+    <p>9×9 is the classic learning board (about 10–15 minutes). 13×13 is a middle ground. 19×19 is the full tournament board.</p>
+    <h3>Practice mode</h3>
+    <p>Practice mode turns the AI off so you play both colours, and adds a Hint button, Undo, and orange atari highlights. Great for setting up a capture and watching it work.</p>
+    <div class="close-row"><button class="btn primary" data-close="rulesModal" type="button">Got it</button></div>
+  </div>
+</div>
+
+<!-- ============ FEEDBACK ============ -->
+<div class="modal" id="feedbackModal" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+  <div class="sheet">
+    <h2 id="fbTitle">Something wonky? Tell us!</h2>
+    <p>Spotted a bug, the AI did something deeply suspicious, or you just want to say hi? We read everything — no homework, no deadlines, just tell us how it went.</p>
+    <label class="flabel">How was this game?</label>
+    <div class="stars" id="starRow" role="radiogroup" aria-label="Star rating">
+      <button type="button" data-star="1" aria-label="1 star">★</button>
+      <button type="button" data-star="2" aria-label="2 stars">★</button>
+      <button type="button" data-star="3" aria-label="3 stars">★</button>
+      <button type="button" data-star="4" aria-label="4 stars">★</button>
+      <button type="button" data-star="5" aria-label="5 stars">★</button>
+    </div>
+    <label class="flabel" for="fbKind">What's this about?</label>
+    <select id="fbKind">
+      <option value="Something's broken">Something's broken</option>
+      <option value="An idea">An idea</option>
+      <option value="Just saying hi">Just saying hi</option>
+    </select>
+    <label class="flabel" for="fbText">Your note (game details tacked on automatically)</label>
+    <textarea id="fbText"></textarea>
+    <div class="tut-nav">
+      <button class="btn" id="fbCopy" type="button">Copy report</button>
+      <button class="btn primary" id="fbMail" type="button">Send by email</button>
+    </div>
+    <div class="close-row"><button class="btn" data-close="feedbackModal" type="button">Close</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ================= Go engine ================= */
+var EMPTY=0, BLACK=1, WHITE=2, KOMI=6.5;
+var COLS="ABCDEFGHJKLMNOPQRSTUVWXYZ";
+
+var settings = { size:9, difficulty:"medium", practice:false };
+try{
+  var savedSettings = JSON.parse(localStorage.getItem("go.settings.v1")||"null");
+  if(savedSettings){ settings.size=[9,13,19].indexOf(savedSettings.size)>=0?savedSettings.size:9;
+    settings.difficulty=["easy","medium","hard"].indexOf(savedSettings.difficulty)>=0?savedSettings.difficulty:"medium";
+    settings.practice=!!savedSettings.practice; }
+}catch(e){}
+
+var S = null;
+function emptyBoard(n){ var b=[]; for(var y=0;y<n;y++){ var r=[]; for(var x=0;x<n;x++) r.push(0); b.push(r);} return b; }
+function hashBoard(bd){ return bd.map(function(r){return r.join("");}).join("/"); }
+function nbrs(x,y,n){ var out=[]; if(x>0)out.push([x-1,y]); if(x<n-1)out.push([x+1,y]); if(y>0)out.push([x,y-1]); if(y<n-1)out.push([x,y+1]); return out; }
+
+function groupInfo(bd,x,y){
+  var n=bd.length, color=bd[y][x]; if(!color) return null;
+  var stones=[], libSet={}, seen={}, stack=[[x,y]]; seen[x+","+y]=1;
+  while(stack.length){
+    var cur=stack.pop(), cx=cur[0], cy=cur[1]; stones.push([cx,cy]);
+    var ns=nbrs(cx,cy,n);
+    for(var i=0;i<ns.length;i++){ var nx=ns[i][0], ny=ns[i][1], v=bd[ny][nx], k=nx+","+ny;
+      if(v===EMPTY) libSet[k]=1;
+      else if(v===color && !seen[k]){ seen[k]=1; stack.push([nx,ny]); } }
+  }
+  return { color:color, stones:stones, liberties:Object.keys(libSet).length, libSet:libSet };
+}
+
+/* Returns {ok, board, captured} or {ok:false, error} */
+function checkMove(bd,x,y,color,historySet){
+  var n=bd.length;
+  if(bd[y][x]!==EMPTY) return {ok:false,error:"occupied"};
+  var nb=bd.map(function(r){return r.slice();});
+  nb[y][x]=color;
+  var opp = color===BLACK?WHITE:BLACK, captured=0, checked={};
+  var ns=nbrs(x,y,n);
+  for(var i=0;i<ns.length;i++){
+    var nx=ns[i][0], ny=ns[i][1];
+    if(nb[ny][nx]===opp && !checked[nx+","+ny]){
+      var g=groupInfo(nb,nx,ny);
+      g.stones.forEach(function(s){ checked[s[0]+","+s[1]]=1; });
+      if(g.liberties===0){ g.stones.forEach(function(s){ nb[s[1]][s[0]]=EMPTY; }); captured+=g.stones.length; }
+    }
+  }
+  var own=groupInfo(nb,x,y);
+  if(own.liberties===0) return {ok:false,error:"suicide"};
+  if(historySet && historySet[hashBoard(nb)]) return {ok:false,error:"ko"};
+  return {ok:true, board:nb, captured:captured};
+}
+
+function newGame(){
+  S = {
+    size: settings.size,
+    board: emptyBoard(settings.size),
+    turn: BLACK,
+    captures: {1:0, 2:0},
+    passes: 0,
+    moveNo: 0,
+    lastMove: null,
+    history: {},
+    snapshots: [],
+    over: false,
+    scoring: false,
+    resigned: null,
+    dead: {},
+    thinking: false,
+    finalScore: null
+  };
+  S.history[hashBoard(S.board)] = 1;
+  hideScore();
+  setMessage(settings.practice
+    ? "Practice game — you play both colours. Black first: tap an intersection."
+    : "New game. You're Black — tap any intersection to place your first stone.");
+  render();
+  saveGame();
+}
+
+function snapshot(){
+  S.snapshots.push({
+    board: S.board.map(function(r){return r.slice();}),
+    captures: {1:S.captures[1], 2:S.captures[2]},
+    turn: S.turn, lastMove: S.lastMove, moveNo: S.moveNo, passes: S.passes,
+    history: Object.assign({}, S.history)
+  });
+  if(S.snapshots.length>500) S.snapshots.shift();
+}
+
+function applyMove(x,y){
+  var res = checkMove(S.board,x,y,S.turn,S.history);
+  if(!res.ok) return res;
+  snapshot();
+  if(res.captured>0) S.captures[S.turn]+=res.captured;
+  S.board = res.board;
+  S.history[hashBoard(S.board)] = 1;
+  S.lastMove = [x,y];
+  S.moveNo++; S.passes = 0;
+  S.turn = S.turn===BLACK?WHITE:BLACK;
+  return res;
+}
+
+function applyPass(){
+  snapshot();
+  S.passes++; S.moveNo++; S.lastMove = null;
+  var who = S.turn;
+  S.turn = S.turn===BLACK?WHITE:BLACK;
+  if(S.passes>=2){ startScoring(); return who; }
+  return who;
+}
+
+/* ---------- scoring ---------- */
+function effectiveBoard(){
+  var bd = S.board.map(function(r){return r.slice();});
+  var extra={1:0,2:0};
+  Object.keys(S.dead).forEach(function(k){
+    var parts=k.split(","), x=+parts[0], y=+parts[1], c=bd[y][x];
+    if(c){ bd[y][x]=EMPTY; if(c===BLACK) extra[WHITE]++; else extra[BLACK]++; }
+  });
+  return { board:bd, extra:extra };
+}
+function computeScore(){
+  var eff = effectiveBoard(), bd = eff.board, n = S.size;
+  var seen={}, terr={1:0,2:0}, terrMap={};
+  for(var y=0;y<n;y++) for(var x=0;x<n;x++){
+    if(bd[y][x]!==EMPTY || seen[x+","+y]) continue;
+    var region=[], borders={}, stack=[[x,y]]; seen[x+","+y]=1;
+    while(stack.length){
+      var cur=stack.pop(); region.push(cur);
+      var ns=nbrs(cur[0],cur[1],n);
+      for(var i=0;i<ns.length;i++){ var nx=ns[i][0], ny=ns[i][1], v=bd[ny][nx], k=nx+","+ny;
+        if(v===EMPTY && !seen[k]){ seen[k]=1; stack.push([nx,ny]); }
+        else if(v!==EMPTY) borders[v]=1; }
+    }
+    var cols=Object.keys(borders);
+    if(cols.length===1){ var owner=+cols[0]; terr[owner]+=region.length;
+      region.forEach(function(p){ terrMap[p[0]+","+p[1]]=owner; }); }
+  }
+  var capB = S.captures[BLACK]+eff.extra[BLACK];
+  var capW = S.captures[WHITE]+eff.extra[WHITE];
+  var totalB = terr[BLACK]+capB;
+  var totalW = terr[WHITE]+capW+KOMI;
+  return { terrB:terr[BLACK], terrW:terr[WHITE], capB:capB, capW:capW,
+           totalB:totalB, totalW:totalW, terrMap:terrMap,
+           winner: totalB>totalW?BLACK:WHITE, margin: Math.abs(totalB-totalW) };
+}
+function startScoring(){
+  S.scoring = true; S.dead = {}; S.finalScore = null;
+  setMessage("Both players passed — game over! Now tap any dead groups (stones with no hope of living) to mark them, then finish scoring.");
+  showScorePanel(true);
+  render();
+  saveGame();
+}
+function finishScoring(){
+  S.finalScore = computeScore();
+  S.scoring = false; S.over = true;
+  showScorePanel(false);
+  render();
+  saveGame();
+}
+
+/* ================= AI ================= */
+function starPoints(n){
+  if(n===9) return [[2,2],[6,2],[2,6],[6,6],[4,4]];
+  if(n===13) return [[3,3],[9,3],[3,9],[9,9],[6,6],[3,6],[9,6],[6,3],[6,9]];
+  return [[3,3],[9,3],[15,3],[3,9],[9,9],[15,9],[3,15],[9,15],[15,15]];
+}
+function isOwnEye(bd,x,y,color){
+  var n=bd.length, ns=nbrs(x,y,n);
+  for(var i=0;i<ns.length;i++){ if(bd[ns[i][1]][ns[i][0]]!==color) return false; }
+  return true;
+}
+function scoreMoveForAI(x,y,color){
+  var res = checkMove(S.board,x,y,color,S.history);
+  if(!res.ok) return null;
+  var n=S.size, bd=res.board, score=0;
+  score += res.captured * 14;
+  var own = groupInfo(bd,x,y);
+  /* defence: did this move rescue an own group that was in atari? */
+  var nsB = nbrs(x,y,n), i, g;
+  for(i=0;i<nsB.length;i++){
+    if(S.board[nsB[i][1]][nsB[i][0]]===color){
+      g = groupInfo(S.board, nsB[i][0], nsB[i][1]);
+      if(g && g.liberties===1) score += 9 + g.stones.length*2;
+    }
+    if(S.board[nsB[i][1]][nsB[i][0]]===(color===BLACK?WHITE:BLACK)){
+      var og = groupInfo(S.board, nsB[i][0], nsB[i][1]);
+      if(og && og.liberties===2) score += 3; /* approaching a weak group */
+    }
+  }
+  /* attack: enemy groups left in atari after the move */
+  var nsA = nbrs(x,y,n), seenG={};
+  for(i=0;i<nsA.length;i++){
+    var ax=nsA[i][0], ay=nsA[i][1];
+    if(bd[ay][ax]===(color===BLACK?WHITE:BLACK) && !seenG[ax+","+ay]){
+      g = groupInfo(bd,ax,ay);
+      g.stones.forEach(function(s){ seenG[s[0]+","+s[1]]=1; });
+      if(g.liberties===1) score += 6 + g.stones.length;
+    }
+  }
+  if(own.liberties===1 && res.captured===0) score -= 11;      /* self-atari */
+  else score += Math.min(own.liberties,4)*0.4;
+  if(res.captured===0 && isOwnEye(S.board,x,y,color)) score -= 15; /* don't fill your own eye */
+  /* stay near the action */
+  var stonesOnBoard = S.moveNo;
+  if(stonesOnBoard===0){
+    var sp = starPoints(n);
+    for(i=0;i<sp.length;i++) if(sp[i][0]===x && sp[i][1]===y) score += 5;
+  } else {
+    var best=99;
+    for(var yy=0;yy<n;yy++) for(var xx=0;xx<n;xx++) if(S.board[yy][xx]!==EMPTY){
+      var d=Math.max(Math.abs(xx-x),Math.abs(yy-y)); if(d<best) best=d;
+    }
+    if(best===1) score+=2.5; else if(best===2) score+=1.6; else if(best===3) score+=0.5; else score-=2;
+  }
+  /* prefer 3rd/4th line early, avoid the very edge */
+  var edge = Math.min(x,y,n-1-x,n-1-y);
+  if(edge===0) score -= (S.moveNo < n*2 ? 3 : 0.6);
+  else if(edge===1) score -= 0.4;
+  else if(edge===2||edge===3) score += 1.2;
+  return { x:x, y:y, score:score };
+}
+function aiTakeTurn(){
+  if(S.over || S.scoring) return;
+  S.thinking = true; render();
+  var delay = 380 + Math.random()*420;
+  setTimeout(function(){
+    S.thinking = false;
+    if(S.over || S.scoring) { render(); return; }
+    var diff = settings.difficulty;
+    var noise = diff==="easy"?7 : diff==="medium"?2.6 : 0.7;
+    var cands = [];
+    for(var y=0;y<S.size;y++) for(var x=0;x<S.size;x++){
+      if(S.board[y][x]!==EMPTY) continue;
+      var sm = scoreMoveForAI(x,y,WHITE);
+      if(sm) cands.push({x:x,y:y,v: sm.score + Math.random()*noise});
+    }
+    var fill = S.moveNo/(S.size*S.size);
+    var passLine = diff==="easy"?2.2 : diff==="medium"?1.1 : 0.6;
+    cands.sort(function(a,b){return b.v-a.v;});
+    if(!cands.length || (cands[0].v < passLine && fill>0.4)){
+      var who = applyPass();
+      if(S.scoring){ render(); saveGame(); return; }
+      setMessage("White passes. Your move, Black.");
+      render(); saveGame(); return;
+    }
+    var pick;
+    if(diff==="easy" && Math.random()<0.22 && cands.length>3){
+      pick = cands[Math.floor(Math.random()*Math.min(8,cands.length))];
+    } else pick = cands[0];
+    var before = S.captures[WHITE];
+    var res = applyMove(pick.x, pick.y);
+    if(res && res.ok){
+      if(S.captures[WHITE]>before)
+        setMessage("White played "+COLS[pick.x]+(S.size-pick.y)+" and captured "+(S.captures[WHITE]-before)+" of your stone"+(S.captures[WHITE]-before>1?"s":"")+". Your move.");
+      else
+        setMessage("White played "+COLS[pick.x]+(S.size-pick.y)+". Your move, Black.");
+    }
+    render(); saveGame();
+  }, delay);
+}
+
+/* ================= rendering ================= */
+var boardEl = document.getElementById("board");
+var msgEl = document.getElementById("message");
+var msgTimer = null;
+function setMessage(t, warn){
+  msgEl.textContent = t;
+  msgEl.classList.toggle("warn", !!warn);
+}
+function toast(t){
+  var el=document.getElementById("toast"); el.textContent=t; el.classList.add("on");
+  clearTimeout(msgTimer); msgTimer=setTimeout(function(){ el.classList.remove("on"); }, 2400);
+}
+function boardGeometry(){
+  var n=S.size, margin=6.5, step=(100-margin*2)/(n-1);
+  return { margin:margin, step:step };
+}
+function render(){
+  var n=S.size, geo=boardGeometry();
+  var html = "";
+  /* grid svg */
+  var lines = "";
+  for(var i=0;i<n;i++){
+    var p = geo.margin + i*geo.step;
+    lines += '<line x1="'+geo.margin+'" y1="'+p+'" x2="'+(100-geo.margin)+'" y2="'+p+'"/>';
+    lines += '<line x1="'+p+'" y1="'+geo.margin+'" x2="'+p+'" y2="'+(100-geo.margin)+'"/>';
+  }
+  var hoshi = "";
+  starPoints(n).forEach(function(pt){
+    hoshi += '<circle cx="'+(geo.margin+pt[0]*geo.step)+'" cy="'+(geo.margin+pt[1]*geo.step)+'" r="1.1"/>';
+  });
+  html += '<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">'
+        + '<g stroke="#7a5518" stroke-width="0.45">'+lines+'</g>'
+        + '<g fill="#7a5518">'+hoshi+'</g>'
+        + '<rect x="'+geo.margin+'" y="'+geo.margin+'" width="'+(100-geo.margin*2)+'" height="'+(100-geo.margin*2)+'" fill="none" stroke="#7a5518" stroke-width="0.8"/></svg>';
+  /* coordinates */
+  for(var c=0;c<n;c++){
+    var cp = geo.margin + c*geo.step;
+    html += '<span class="coord" style="left:'+cp+'%;top:2.2%">'+COLS[c]+'</span>';
+    html += '<span class="coord" style="left:2.2%;top:'+cp+'%">'+(n-c)+'</span>';
+  }
+  /* atari groups (practice only) */
+  var atariSet = {};
+  if(settings.practice && !S.over && !S.scoring){
+    var seenA={};
+    for(var ay=0;ay<n;ay++) for(var ax=0;ax<n;ax++){
+      if(S.board[ay][ax]!==EMPTY && !seenA[ax+","+ay]){
+        var g=groupInfo(S.board,ax,ay);
+        g.stones.forEach(function(s){ seenA[s[0]+","+s[1]]=1; });
+        if(g.liberties===1) g.stones.forEach(function(s){ atariSet[s[0]+","+s[1]]=1; });
+      }
+    }
+  }
+  var scoreData = (S.scoring || S.over) ? computeScore() : null;
+  for(var y=0;y<n;y++) for(var x=0;x<n;x++){
+    var px = geo.margin + x*geo.step, py = geo.margin + y*geo.step;
+    var v = S.board[y][x], key = x+","+y;
+    var inner = "";
+    if(v!==EMPTY){
+      var cls = "stone " + (v===BLACK?"b":"w");
+      if(S.lastMove && S.lastMove[0]===x && S.lastMove[1]===y && !S.scoring && !S.over) cls += " last";
+      if(S.dead[key]) cls += " dead";
+      if(atariSet[key]) cls += " atari";
+      inner = '<span class="'+cls+'"></span>';
+    } else if(scoreData && scoreData.terrMap[key]){
+      inner = '<span class="terr '+(scoreData.terrMap[key]===BLACK?"b":"w")+'"></span>';
+    }
+    var label = COLS[x]+(n-y) + (v===BLACK?", black stone":v===WHITE?", white stone":", empty");
+    html += '<button type="button" class="slot" role="gridcell" aria-label="'+label+'" data-x="'+x+'" data-y="'+y+'" style="left:'+px+'%;top:'+py+'%;width:'+(geo.step*0.96)+'%;height:'+(geo.step*0.96)+'%">'+inner+'</button>';
+  }
+  html += '<div class="thinking'+(S.thinking?" on":"")+'"><span>White is thinking…</span></div>';
+  boardEl.innerHTML = html;
+  /* status */
+  document.getElementById("turnDot").className = "dot " + (S.turn===BLACK?"b":"w");
+  document.getElementById("turnText").textContent =
+    S.over ? "Game over" : S.scoring ? "Scoring — tap dead groups" :
+    (S.turn===BLACK?"Black":"White") + (settings.practice ? " to play (you)" : S.turn===BLACK ? " to play (you)" : " to play (AI)");
+  document.getElementById("capB").textContent = S.captures[BLACK];
+  document.getElementById("capW").textContent = S.captures[WHITE];
+  document.getElementById("moveNo").textContent = S.moveNo;
+  document.getElementById("hintBtn").style.display = settings.practice && !S.over && !S.scoring ? "" : "none";
+  document.getElementById("undoBtn").style.display = settings.practice && !S.over ? "" : "none";
+  document.getElementById("undoBtn").disabled = !S.snapshots.length;
+  document.getElementById("passBtn").disabled = S.over || S.scoring || S.thinking || (!settings.practice && S.turn!==BLACK);
+  document.getElementById("resignBtn").disabled = S.over || S.scoring;
+  if(S.scoring) refreshScorePanel(true);
+  else if(S.over && S.finalScore) refreshScorePanel(false);
+}
+
+/* ================= score panel ================= */
+var scorePanel = document.getElementById("scorePanel");
+function hideScore(){ scorePanel.classList.remove("on"); }
+function showScorePanel(isScoring){
+  scorePanel.classList.add("on");
+  document.getElementById("resumeBtn").style.display = isScoring ? "" : "none";
+  document.getElementById("finishScoreBtn").style.display = isScoring ? "" : "none";
+  refreshScorePanel(isScoring);
+}
+function refreshScorePanel(isScoring){
+  var sc = S.finalScore || computeScore();
+  document.getElementById("scoreTitle").textContent = isScoring ? "Scoring the game" : "Final score";
+  document.getElementById("winnerLine").textContent = isScoring
+    ? "So far: " + (sc.totalB>sc.totalW ? "Black" : "White") + " leads by " + sc.margin.toFixed(1)
+    : (S.resigned ? (S.resigned===BLACK ? "Black resigned — White wins!" : "White resigned — Black wins!")
+       : (sc.winner===BLACK ? "🏆 Black wins" : "🏆 White wins") + " by " + sc.margin.toFixed(1) + " points!");
+  document.getElementById("scoreBody").innerHTML =
+    '<table class="score"><tr><th></th><th>Black (you)</th><th>White (AI)</th></tr>'
+    + '<tr><td>Territory</td><td>'+sc.terrB+'</td><td>'+sc.terrW+'</td></tr>'
+    + '<tr><td>Stones captured</td><td>'+sc.capB+'</td><td>'+sc.capW+'</td></tr>'
+    + '<tr><td>Komi</td><td>—</td><td>'+KOMI+'</td></tr>'
+    + '<tr class="total"><td>Total</td><td>'+sc.totalB+'</td><td>'+sc.totalW.toFixed(1)+'</td></tr></table>';
+  document.getElementById("scoreNote").textContent = isScoring
+    ? "Tap a stone group on the board to mark it dead (faded with a ✕) — dead stones count as captures for the other side and their points become territory. Tap again to bring a group back. Squares on empty points show whose territory they are."
+    : "Score = territory + captured stones, plus 6.5 komi for White. Thanks for playing!";
+}
+
+/* ================= input ================= */
+boardEl.addEventListener("click", function(e){
+  var btn = e.target.closest(".slot"); if(!btn || !S) return;
+  var x=+btn.getAttribute("data-x"), y=+btn.getAttribute("data-y");
+  if(S.scoring){
+    if(S.board[y][x]===EMPTY) return;
+    var g = groupInfo(S.board,x,y), deadNow = !!S.dead[x+","+y];
+    g.stones.forEach(function(s){ var k=s[0]+","+s[1]; if(deadNow) delete S.dead[k]; else S.dead[k]=1; });
+    render(); saveGame(); return;
+  }
+  if(S.over || S.thinking) return;
+  if(!settings.practice && S.turn!==BLACK) return;
+  var mover = S.turn;
+  var res = applyMove(x,y);
+  if(!res.ok){
+    if(res.error==="occupied") setMessage("That spot's already taken — stones go on empty intersections.", true);
+    else if(res.error==="ko") setMessage("Ko rule: that move would repeat the board position from a moment ago. Play somewhere else first, then you can capture back.", true);
+    else if(res.error==="suicide") setMessage("That would be suicide — your group would have no liberties left. It only works if the move captures enemy stones.", true);
+    return;
+  }
+  if(res.captured>0)
+    setMessage((mover===BLACK?"Black":"White")+" captured "+res.captured+" stone"+(res.captured>1?"s":"")+"! "+(settings.practice ? "Next colour to play." : "White is thinking…"));
+  else if(settings.practice)
+    setMessage((mover===BLACK?"Black":"White")+" played "+COLS[x]+(S.size-y)+". "+(S.turn===BLACK?"Black":"White")+" to play.");
+  render(); saveGame();
+  if(!settings.practice && !S.over && !S.scoring && S.turn===WHITE) aiTakeTurn();
+});
+
+document.getElementById("passBtn").addEventListener("click", function(){
+  if(!S || S.over || S.scoring || S.thinking) return;
+  var who = S.turn;
+  applyPass();
+  if(S.scoring){ render(); saveGame(); return; }
+  setMessage((who===BLACK?"Black":"White")+" passed. "+(settings.practice ? (S.turn===BLACK?"Black":"White")+" to play — pass again to end and score." : "White is thinking…"));
+  render(); saveGame();
+  if(!settings.practice && S.turn===WHITE) aiTakeTurn();
+});
+
+var resignArm = null;
+document.getElementById("resignBtn").addEventListener("click", function(){
+  var btn = this;
+  if(!resignArm){
+    resignArm = setTimeout(function(){ resignArm=null; btn.textContent="Resign"; btn.classList.remove("confirm"); }, 3000);
+    btn.textContent = settings.practice ? "Tap again to confirm" : "Tap again — really resign?";
+    btn.classList.add("confirm");
+    return;
+  }
+  clearTimeout(resignArm); resignArm=null;
+  btn.textContent="Resign"; btn.classList.remove("confirm");
+  S.resigned = settings.practice ? S.turn : BLACK;
+  S.over = true; S.finalScore = computeScore();
+  showScorePanel(false);
+  setMessage(S.resigned===BLACK ? "You resigned. White takes this one — rematch?" : "White resigned.");
+  render(); saveGame();
+});
+
+document.getElementById("undoBtn").addEventListener("click", function(){
+  if(!S.snapshots.length) return;
+  var snap = S.snapshots.pop();
+  S.board = snap.board; S.captures = snap.captures; S.turn = snap.turn;
+  S.lastMove = snap.lastMove; S.moveNo = snap.moveNo; S.passes = snap.passes; S.history = snap.history;
+  if(S.scoring){ S.scoring=false; hideScore(); }
+  setMessage("Took that move back. " + (S.turn===BLACK?"Black":"White") + " to play.");
+  render(); saveGame();
+});
+
+document.getElementById("hintBtn").addEventListener("click", function(){
+  if(S.over || S.scoring) return;
+  var best=null;
+  for(var y=0;y<S.size;y++) for(var x=0;x<S.size;x++){
+    if(S.board[y][x]!==EMPTY) continue;
+    var sm = scoreMoveForAI(x,y,S.turn);
+    if(sm && (!best || sm.score>best.score)) best = sm;
+  }
+  if(!best){ toast("No legal moves — time to pass."); return; }
+  render();
+  var slot = boardEl.querySelector('.slot[data-x="'+best.x+'"][data-y="'+best.y+'"]');
+  if(slot){ slot.classList.add("hint-empty");
+    setTimeout(function(){ slot.classList.remove("hint-empty"); }, 2200); }
+  setMessage("Hint: try "+COLS[best.x]+(S.size-best.y)+" — it builds territory, defends, or threatens a capture.");
+});
+
+document.getElementById("resumeBtn").addEventListener("click", function(){
+  S.scoring=false; S.passes=0; S.dead={}; S.turn=BLACK; hideScore();
+  setMessage("Back to playing — Black to move. The game ends when both sides pass in a row.");
+  render(); saveGame();
+});
+document.getElementById("finishScoreBtn").addEventListener("click", function(){
+  finishScoring();
+  setMessage("Final score is in — see the breakdown below. Nice game!");
+});
+document.getElementById("scoreNewBtn").addEventListener("click", function(){ newGame(); });
+
+/* ================= settings ================= */
+var sizeSel = document.getElementById("sizeSel");
+var diffSel = document.getElementById("diffSel");
+var practiceBtn = document.getElementById("practiceBtn");
+function saveSettings(){ try{ localStorage.setItem("go.settings.v1", JSON.stringify(settings)); }catch(e){} }
+function reflectSettings(){
+  sizeSel.value = String(settings.size);
+  diffSel.value = settings.difficulty;
+  practiceBtn.setAttribute("aria-pressed", settings.practice ? "true" : "false");
+  practiceBtn.textContent = settings.practice ? "Practice mode: ON" : "Practice mode";
+  document.getElementById("practiceNote").classList.toggle("on", settings.practice);
+}
+sizeSel.addEventListener("change", function(){
+  settings.size = +sizeSel.value; saveSettings();
+  toast("Board size saved — starting a fresh "+settings.size+"×"+settings.size+" game.");
+  newGame();
+});
+diffSel.addEventListener("change", function(){
+  settings.difficulty = diffSel.value; saveSettings();
+  toast("AI strength saved: "+diffSel.options[diffSel.selectedIndex].text+". Applies from White's next move.");
+  render();
+});
+practiceBtn.addEventListener("click", function(){
+  settings.practice = !settings.practice; saveSettings(); reflectSettings();
+  toast(settings.practice ? "Practice mode on — fresh game, you play both colours." : "Practice mode off — fresh game against the AI.");
+  newGame();
+});
+var newArm = null;
+document.getElementById("newGameBtn").addEventListener("click", function(){
+  var btn=this;
+  if(S && S.moveNo>2 && !S.over && !newArm){
+    newArm = setTimeout(function(){ newArm=null; btn.textContent="New game"; btn.classList.remove("confirm"); }, 3000);
+    btn.textContent="Tap again to scrap this game"; btn.classList.add("confirm"); return;
+  }
+  clearTimeout(newArm); newArm=null; btn.textContent="New game"; btn.classList.remove("confirm");
+  newGame();
+});
+
+/* ================= save / restore ================= */
+function saveGame(){
+  try{
+    localStorage.setItem("go.save.v1", JSON.stringify({
+      size:S.size, board:S.board, turn:S.turn, captures:S.captures, passes:S.passes,
+      moveNo:S.moveNo, lastMove:S.lastMove, history:Object.keys(S.history),
+      over:S.over, scoring:S.scoring, resigned:S.resigned, dead:S.dead,
+      finalScore:S.finalScore, practice:settings.practice
+    }));
+  }catch(e){}
+}
+function restoreGame(){
+  try{
+    var raw = localStorage.getItem("go.save.v1"); if(!raw) return false;
+    var d = JSON.parse(raw);
+    if(!d || d.size!==settings.size || !d.board || d.board.length!==d.size) return false;
+    newGame();
+    S.board=d.board; S.turn=d.turn; S.captures=d.captures; S.passes=d.passes||0;
+    S.moveNo=d.moveNo||0; S.lastMove=d.lastMove; S.over=!!d.over; S.scoring=!!d.scoring;
+    S.resigned=d.resigned||null; S.dead=d.dead||{}; S.finalScore=d.finalScore||null;
+    S.history={}; (d.history||[]).forEach(function(h){ S.history[h]=1; });
+    if(S.scoring) showScorePanel(true);
+    else if(S.over) showScorePanel(false);
+    setMessage("Picked up your saved game where you left off. "+(S.over?"":(S.turn===BLACK?"Black":"White")+" to play."));
+    render();
+    if(!settings.practice && !S.over && !S.scoring && S.turn===WHITE) aiTakeTurn();
+    return true;
+  }catch(e){ return false; }
+}
+
+/* ================= modals ================= */
+function openModal(id){ document.getElementById(id).classList.add("on"); }
+function closeModal(id){ document.getElementById(id).classList.remove("on"); }
+document.querySelectorAll("[data-close]").forEach(function(b){
+  b.addEventListener("click", function(){ closeModal(b.getAttribute("data-close")); });
+});
+document.querySelectorAll(".modal").forEach(function(m){
+  m.addEventListener("click", function(e){ if(e.target===m) m.classList.remove("on"); });
+});
+document.getElementById("rulesBtn").addEventListener("click", function(){ openModal("rulesModal"); });
+
+/* ================= tutorial ================= */
+var TUT = [
+  { t:"Welcome to Go 👋", b:"<p>Go is a 4,000-year-old board game with very simple rules and endless depth. Two players take turns placing stones on the grid. You play <strong>Black</strong>, and Black always goes first.</p><p>The goal: end the game controlling more of the board than your opponent — empty points you've surrounded (territory) plus any stones you've captured.</p>" },
+  { t:"Placing stones", b:"<p>Stones go on the <strong>intersections</strong> of the lines, not inside the squares — tap any intersection to play. Once placed, a stone never moves. It can only leave the board by being captured.</p><p>Connected stones of the same colour (touching up/down/left/right) form a <strong>group</strong> and live or die together.</p>" },
+  { t:"Liberties & capturing", b:"<p>Every group has <strong>liberties</strong> — the empty points right next to it. Fill a group's <em>last</em> liberty and you capture the whole group:</p>"
+    + '<div class="demo-board">'
+    + '<i></i><i><span class="st b"></span></i><i></i><i></i><i></i>'
+    + '<i><span class="st b"></span></i><i><span class="st w"></span></i><i><span class="st b"></span></i><i></i><i></i>'
+    + '<i></i><i><span class="st b"></span></i><i><span class="mark">✕</span></i><i></i><i></i>'
+    + '<i></i><i></i><i></i><i></i><i></i>'
+    + '<i></i><i></i><i></i><i></i><i></i>'
+    + '</div>'
+    + "<p>The white stone has one liberty left — the ✕ below it. Black plays there and the white stone is captured. A group down to its last liberty is called <em>in atari</em>. In Practice mode, atari groups glow orange so you can spot them.</p>" },
+  { t:"Two forbidden moves", b:"<p><strong>Suicide:</strong> you can't place a stone where its group would have zero liberties — unless the move captures enemy stones and makes room.</p><p><strong>Ko:</strong> you can't immediately recreate a previous board position. If you capture one stone and your opponent could capture right back in the same spot, they must play somewhere else first. This stops endless capture loops.</p>" },
+  { t:"Passing & scoring", b:"<p>When there's nothing useful left to play for, <strong>Pass</strong>. When both players pass back-to-back, the game ends.</p><p>Then tap any <strong>dead</strong> groups — stones completely surrounded with no way to survive — to mark them. Dead stones become captures for the other side. Empty regions surrounded by only one colour are that colour's territory.</p><p><strong>Score = territory + captures.</strong> White gets <strong>6.5 komi</strong> points for going second, so games never tie.</p>" },
+  { t:"You're ready 🎉", b:"<p>Start on the <strong>9×9 board</strong> — games take about 10 minutes and every rule shows up fast. Try <strong>Practice mode</strong> to play both colours with hints and undo while you learn.</p><p>One beginner tip: stones near the corners and edges surround territory most efficiently. Grab a corner early and build from there. Good luck!</p>" }
+];
+var tutStep = 0;
+function renderTut(){
+  var s = TUT[tutStep];
+  document.getElementById("tutTitle").textContent = s.t;
+  document.getElementById("tutBody").innerHTML = s.b;
+  document.getElementById("tutDots").innerHTML = TUT.map(function(_,i){ return '<i class="'+(i===tutStep?"on":"")+'"></i>'; }).join("");
+  document.getElementById("tutBack").disabled = tutStep===0;
+  document.getElementById("tutNext").textContent = tutStep===TUT.length-1 ? "Start playing" : "Next";
+}
+document.getElementById("tutorialBtn").addEventListener("click", function(){ tutStep=0; renderTut(); openModal("tutorialModal"); });
+document.getElementById("tutBack").addEventListener("click", function(){ if(tutStep>0){ tutStep--; renderTut(); } });
+document.getElementById("tutNext").addEventListener("click", function(){
+  if(tutStep<TUT.length-1){ tutStep++; renderTut(); }
+  else closeModal("tutorialModal");
+});
+
+/* ================= feedback ================= */
+var fbStars = 0;
+function boardSnapshotText(){
+  if(!S) return "(no game)";
+  return S.board.map(function(r){ return r.map(function(v){ return v===BLACK?"B":v===WHITE?"W":"."; }).join(" "); }).join("\n");
+}
+function openFeedback(){
+  var lines = [
+    "— — — auto-captured game details — — —",
+    "Game: Go (Holo's Arcade)",
+    "Board: "+settings.size+"×"+settings.size+" · AI strength: "+settings.difficulty+" · Practice mode: "+(settings.practice?"on":"off"),
+    S ? ("Move: "+S.moveNo+" · Turn: "+(S.turn===BLACK?"Black":"White")+" · Captures — Black "+S.captures[BLACK]+", White "+S.captures[WHITE]+" · Passes in a row: "+S.passes) : "No game in progress",
+    "Screen: "+window.innerWidth+"×"+window.innerHeight+" · "+(navigator.userAgent||""),
+    "When: "+new Date().toLocaleString(),
+    "Board right now:",
+    boardSnapshotText()
+  ];
+  document.getElementById("fbText").value = "\n\n" + lines.join("\n");
+  document.getElementById("fbText").setSelectionRange(0,0);
+  paintStars();
+  openModal("feedbackModal");
+}
+function paintStars(){
+  document.querySelectorAll("#starRow button").forEach(function(b){
+    var on = +b.getAttribute("data-star") <= fbStars;
+    b.classList.toggle("off", !on);
+  });
+}
+document.querySelectorAll("#starRow button").forEach(function(b){
+  b.addEventListener("click", function(){ fbStars = +b.getAttribute("data-star"); paintStars(); });
+});
+document.getElementById("feedbackBtn").addEventListener("click", openFeedback);
+document.getElementById("feedbackBtnTop").addEventListener("click", openFeedback);
+document.getElementById("fbCopy").addEventListener("click", function(){
+  var kind = document.getElementById("fbKind").value;
+  /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+  try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "go-board-game", rating: (typeof fbStars!=="undefined"?fbStars:0), text: (document.getElementById("fbText").value||"").trim(), tag: kind||"", mode: (typeof settings!=="undefined"&&settings.practice)?"practice":"real", level: "", difficulty: (typeof settings!=="undefined"&&settings.difficulty)||"", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+  var text = "Go feedback — "+kind+(fbStars? " · "+fbStars+"★":"")+"\n"+document.getElementById("fbText").value;
+  function done(){ toast("Copied! Paste it wherever you send feedback."); }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(done, function(){ fallbackCopy(text); done(); });
+  } else { fallbackCopy(text); done(); }
+});
+function fallbackCopy(text){
+  var ta=document.getElementById("fbText"); var old=ta.value; ta.value=text; ta.select();
+  try{ document.execCommand("copy"); }catch(e){}
+  ta.value=old;
+}
+document.getElementById("fbMail").addEventListener("click", function(){
+  var kind = document.getElementById("fbKind").value;
+  var body = "Go feedback — "+kind+(fbStars? " · "+fbStars+" stars":"")+"\n"+document.getElementById("fbText").value;
+  var a = document.createElement("a");
+  a.href = "mailto:?subject="+encodeURIComponent("Go game feedback — "+kind)+"&body="+encodeURIComponent(body);
+  document.body.appendChild(a); a.click(); a.remove();
+});
+
+/* ================= boot ================= */
+reflectSettings();
+if(!restoreGame()) newGame();
+</script>
+</body>
+</html>

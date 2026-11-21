@@ -1,0 +1,1082 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Mancala</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2rem; }
+
+      :root {
+        --page: #e9dcc3;
+        --page-ink: #2b1c10;
+        --board: #8a5a33;
+        --board-edge: #6e4525;
+        --board-hi: #a06c3c;
+        --pit: #5f3c1f;
+        --pit-inner: #4c2f16;
+        --pit-ring: #c99a5f;
+        --store: #54341a;
+        --accent: #bc4b24;
+        --accent-ink: #ffffff;
+        --gold: #d9a441;
+        --card: #f7efdd;
+        --card-line: #d8c49c;
+        --muted: #6d5942;
+        --good: #2e7d46;
+        --bad: #b3372a;
+        --shadow: rgba(59, 36, 14, .28);
+        --glow: rgba(217, 164, 65, .85);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --page: #1c130c;
+          --page-ink: #f0e4cd;
+          --board: #7c4f2a;
+          --board-edge: #5d3a1e;
+          --board-hi: #96653a;
+          --pit: #4a2d14;
+          --pit-inner: #3a2310;
+          --pit-ring: #b98a52;
+          --store: #422a13;
+          --accent: #d2603a;
+          --accent-ink: #ffffff;
+          --gold: #e0af4e;
+          --card: #2b1e12;
+          --card-line: #57402a;
+          --muted: #bda888;
+          --good: #5cb877;
+          --bad: #e0705f;
+          --shadow: rgba(0, 0, 0, .5);
+          --glow: rgba(224, 175, 78, .9);
+        }
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Public Sans", system-ui, sans-serif;
+        background: var(--page);
+        color: var(--page-ink);
+        -webkit-tap-highlight-color: transparent;
+      }
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 14px 14px 40px;
+      }
+      h1, h2, h3 { font-family: "Bricolage Grotesque", "Public Sans", sans-serif; }
+
+      /* ---------- top bar ---------- */
+      .topbar {
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        justify-content: space-between; margin-bottom: 10px;
+      }
+      .topbar .left, .topbar .right { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .seg {
+        display: inline-flex; background: var(--card); border: 1px solid var(--card-line);
+        border-radius: 999px; padding: 3px; gap: 2px;
+      }
+      .seg button {
+        border: 0; background: transparent; color: var(--muted);
+        font: 600 13px "Public Sans", sans-serif; padding: 6px 12px;
+        border-radius: 999px; cursor: pointer; min-height: 36px;
+      }
+      .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+      .btn {
+        border: 1px solid var(--card-line); background: var(--card); color: var(--page-ink);
+        font: 600 13.5px "Public Sans", sans-serif; padding: 8px 14px;
+        border-radius: 999px; cursor: pointer; min-height: 38px;
+      }
+      .btn:hover { border-color: var(--gold); }
+      .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+      .btn:disabled { opacity: .45; cursor: default; }
+
+      /* ---------- score strip ---------- */
+      .score-strip {
+        display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: stretch;
+        margin-bottom: 12px;
+      }
+      .score-card {
+        background: var(--card); border: 1px solid var(--card-line); border-radius: 14px;
+        padding: 10px 14px; display: flex; align-items: center; gap: 12px;
+      }
+      .score-card.you { justify-content: flex-end; text-align: right; flex-direction: row-reverse; }
+      .score-card .who { font: 700 13px "Public Sans", sans-serif; letter-spacing: .02em; }
+      .score-card .sub { font-size: 11.5px; color: var(--muted); }
+      .score-card .num {
+        font: 800 30px "Bricolage Grotesque", sans-serif; line-height: 1; min-width: 44px; text-align: center;
+      }
+      .score-card.active { outline: 2px solid var(--gold); outline-offset: -1px; }
+      .turn-pill {
+        align-self: center; text-align: center; font: 700 12.5px "Public Sans", sans-serif;
+        color: var(--muted); max-width: 130px;
+      }
+      .turn-pill strong { display: block; font-size: 14px; color: var(--page-ink); }
+
+      /* ---------- practice banner ---------- */
+      .practice-banner {
+        display: none; margin-bottom: 12px; background: #fff7d6; border: 1px solid var(--gold);
+        border-radius: 14px; padding: 10px 14px; gap: 10px; align-items: flex-start;
+      }
+      @media (prefers-color-scheme: dark) { .practice-banner { background: #3a2d12; } }
+      .practice-banner.show { display: flex; }
+      .practice-banner .ico { font-size: 20px; line-height: 1; margin-top: 1px; }
+      .practice-banner .txt { font-size: 13.5px; line-height: 1.45; }
+      .practice-banner .txt strong { display: block; font-size: 14px; }
+      .practice-banner .txt span { color: var(--muted); }
+      .practice-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+      .practice-actions button {
+        border: 1px solid var(--card-line); background: var(--card); color: var(--page-ink);
+        font: 600 12.5px "Public Sans", sans-serif; padding: 6px 10px; border-radius: 999px; cursor: pointer; min-height: 32px;
+      }
+
+      /* ---------- board ---------- */
+      .board-wrap {
+        background: linear-gradient(160deg, var(--board-hi), var(--board) 55%, var(--board-edge));
+        border-radius: 26px; padding: clamp(10px, 2.6vw, 20px);
+        box-shadow: 0 14px 34px var(--shadow), inset 0 2px 0 rgba(255,255,255,.18), inset 0 -3px 0 rgba(0,0,0,.25);
+      }
+      .board {
+        display: grid; gap: clamp(6px, 1.6vw, 12px);
+        grid-template-columns: 1.15fr repeat(6, 1fr) 1.15fr;
+        grid-template-rows: 1fr 1fr;
+      }
+      .pit, .store {
+        position: relative; border: 0; cursor: default; padding: 0;
+        background: radial-gradient(ellipse at 50% 38%, var(--pit) 0%, var(--pit-inner) 78%);
+        box-shadow: inset 0 4px 10px rgba(0,0,0,.55), inset 0 -2px 4px rgba(255,255,255,.10), 0 1px 0 rgba(255,255,255,.14);
+        color: #fff;
+      }
+      .pit { border-radius: 50%; aspect-ratio: 1 / 1.08; width: 100%; }
+      .store {
+        grid-row: 1 / 3; border-radius: 999px; min-height: 100%;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .store.ai { grid-column: 1; }
+      .store.you { grid-column: 8; }
+      .pit.playable { cursor: pointer; }
+      .pit.playable::after {
+        content: ""; position: absolute; inset: -3px; border-radius: 50%;
+        border: 2px solid var(--glow); opacity: .9;
+        animation: pulse 1.6s ease-in-out infinite;
+      }
+      .pit.playable:hover, .pit.playable:focus-visible { filter: brightness(1.18); }
+      .pit.drop-now, .store.drop-now { filter: brightness(1.45); }
+      .pit.capture-flash { animation: capflash .7s ease; }
+      @keyframes pulse { 0%,100% { transform: scale(1); opacity:.85 } 50% { transform: scale(1.05); opacity:.4 } }
+      @keyframes capflash { 0% { filter: brightness(2) } 100% { filter: brightness(1) } }
+      @media (prefers-reduced-motion: reduce) {
+        .pit.playable::after, .pit.capture-flash { animation: none; }
+      }
+      .stones { position: absolute; inset: 12% 10%; pointer-events: none; }
+      .stone {
+        position: absolute; width: 30%; aspect-ratio: 1/1; border-radius: 50% 46% 52% 48%;
+        box-shadow: inset -2px -3px 4px rgba(0,0,0,.35), inset 2px 2px 3px rgba(255,255,255,.35), 0 1px 2px rgba(0,0,0,.4);
+      }
+      .store .stones { inset: 8% 16%; }
+      .count {
+        position: absolute; left: 50%; bottom: -4px; transform: translateX(-50%);
+        background: rgba(24, 13, 4, .82); color: #ffe9bd;
+        font: 700 clamp(10px, 2.6vw, 13px) "Public Sans", sans-serif;
+        min-width: 22px; height: 20px; padding: 0 5px; border-radius: 999px;
+        display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 3;
+      }
+      .store .count { bottom: 6px; }
+      .pit-label {
+        text-align: center; font: 600 11px "Public Sans", sans-serif; color: var(--muted);
+        margin-top: 2px;
+      }
+      .row-labels { display: grid; grid-template-columns: 1.15fr repeat(6,1fr) 1.15fr; gap: clamp(6px,1.6vw,12px); margin-top: 6px; }
+      .side-tag {
+        display: flex; justify-content: space-between; font: 700 12px "Public Sans", sans-serif;
+        letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 2px 4px 8px;
+      }
+
+      /* ---------- message + actions ---------- */
+      .message {
+        min-height: 48px; display: flex; align-items: center; justify-content: center; text-align: center;
+        font-size: 15.5px; font-weight: 600; padding: 10px 6px 2px;
+      }
+      .message .small { display: block; font-size: 13px; font-weight: 500; color: var(--muted); margin-top: 2px; }
+      .actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 8px; }
+
+      /* ---------- stats ---------- */
+      .stats {
+        margin-top: 20px; background: var(--card); border: 1px solid var(--card-line);
+        border-radius: 16px; padding: 14px 16px;
+      }
+      .stats h2 { margin: 0 0 10px; font-size: 16px; }
+      .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+      @media (min-width: 560px) { .stat-grid { grid-template-columns: repeat(6, 1fr); } }
+      .stat { text-align: center; }
+      .stat .v { font: 800 22px "Bricolage Grotesque", sans-serif; }
+      .stat .k { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+      .stats .note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+
+      /* ---------- modal / tutorial ---------- */
+      .overlay {
+        position: fixed; inset: 0; background: rgba(20, 11, 4, .62);
+        display: none; align-items: flex-end; justify-content: center; z-index: 40; padding: 0;
+      }
+      .overlay.open { display: flex; }
+      @media (min-width: 640px) { .overlay { align-items: center; padding: 18px; } }
+      .sheet {
+        position: relative;
+        background: var(--card); color: var(--page-ink); width: 100%; max-width: 560px;
+        max-height: 88vh; overflow-y: auto; border-radius: 20px 20px 0 0; padding: 22px 22px 26px;
+        box-shadow: 0 -8px 40px rgba(0,0,0,.35);
+      }
+      .sheet-x {
+        position: absolute; top: 10px; right: 10px; z-index: 2;
+        width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--card-line);
+        background: var(--card); color: var(--muted); font-size: 16px; cursor: pointer; line-height: 1;
+      }
+      @media (min-width: 640px) { .sheet { border-radius: 20px; } }
+      .sheet h2 { margin: 0 0 4px; font-size: 22px; }
+      .sheet h3 { margin: 18px 0 6px; font-size: 15.5px; }
+      .sheet p, .sheet li { font-size: 14.5px; line-height: 1.55; }
+      .sheet ul { padding-left: 20px; margin: 6px 0; }
+      .sheet .foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; flex-wrap: wrap; }
+      .tut-dots { display: flex; gap: 6px; justify-content: center; margin: 14px 0 2px; }
+      .tut-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--card-line); }
+      .tut-dots span.on { background: var(--accent); }
+      .mini-board {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 12px 0 4px;
+      }
+      .mini-board div {
+        background: var(--pit); color: #ffe9bd; border-radius: 10px; text-align: center;
+        font: 700 12px "Public Sans", sans-serif; padding: 9px 2px;
+      }
+      .mini-board div.store-cell { background: var(--accent); color: #fff; }
+      .result-big { font: 800 30px "Bricolage Grotesque", sans-serif; text-align: center; margin: 6px 0 2px; }
+      .result-sub { text-align: center; color: var(--muted); font-size: 14px; margin: 0 0 6px; }
+      .coach {
+        display: none; margin-top: 12px; background: var(--card); color: var(--muted);
+        border: 1px solid var(--card-line);
+        border-radius: 12px; padding: 8px 12px; font-size: 13.5px; font-weight: 500; text-align: center;
+      }
+      .coach.show { display: flex; align-items: center; justify-content: center; gap: 10px; }
+      .coach button {
+        border: 0; background: transparent; color: var(--muted); cursor: pointer;
+        font-size: 15px; line-height: 1; padding: 6px 8px; min-height: 32px; min-width: 32px;
+      }
+      .coach strong { color: var(--page-ink); }
+
+      /* ---------- feedback ---------- */
+      .fb-stars { display: flex; gap: 6px; margin: 8px 0 4px; }
+      .fb-stars button {
+        flex: 1; border: 1px solid var(--card-line); background: var(--card); border-radius: 12px;
+        font-size: 24px; line-height: 1; padding: 10px 0; cursor: pointer; min-height: 48px;
+        color: var(--muted); transition: transform .08s ease, border-color .08s ease, background .08s ease;
+      }
+      .fb-stars button[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #2b1c10; }
+      .fb-stars button:hover { border-color: var(--gold); }
+      .fb-label { font: 700 13px "Public Sans", sans-serif; letter-spacing: .02em; margin: 16px 0 0; display: block; }
+      .fb-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+      .fb-tags button {
+        border: 1px solid var(--card-line); background: var(--card); color: var(--muted);
+        font: 600 13px "Public Sans", sans-serif; padding: 8px 14px; border-radius: 999px; cursor: pointer; min-height: 38px;
+      }
+      .fb-tags button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+      .fb-text {
+        width: 100%; margin-top: 8px; border: 1px solid var(--card-line); border-radius: 12px;
+        background: var(--page); color: var(--page-ink); font: 400 14.5px/1.5 "Public Sans", sans-serif;
+        padding: 10px 12px; min-height: 96px; resize: vertical;
+      }
+      .fb-text:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+      .fb-note { font-size: 12.5px; color: var(--muted); line-height: 1.5; margin: 12px 0 0; }
+      .fb-thanks {
+        display: none; margin-top: 14px; text-align: center; font: 700 15px "Public Sans", sans-serif;
+        background: var(--page); border: 1px solid var(--card-line); border-radius: 12px; padding: 12px;
+      }
+      .fb-thanks.show { display: block; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="topbar">
+        <div class="left">
+          <div class="seg" role="group" aria-label="Opponent">
+            <button id="modeAi" aria-pressed="true">Vs Zuri (AI)</button>
+            <button id="modePractice" aria-pressed="false">Practice</button>
+            <button id="mode2p" aria-pressed="false">2 Players</button>
+          </div>
+          <div class="seg" role="group" aria-label="AI difficulty" id="diffSeg">
+            <button data-diff="easy" aria-pressed="false">Easy</button>
+            <button data-diff="normal" aria-pressed="true">Normal</button>
+            <button data-diff="hard" aria-pressed="false">Hard</button>
+          </div>
+        </div>
+        <div class="right">
+          <button class="btn" id="soundBtn" aria-pressed="true">Sound on</button>
+          <button class="btn" id="helpBtn">How to play</button>
+          <button class="btn" id="rulesBtn">Rules</button>
+          <button class="btn" id="feedbackBtn">Feedback</button>
+        </div>
+      </div>
+
+      <div class="score-strip">
+        <div class="score-card" id="cardAi">
+          <div class="num" id="scoreAi">0</div>
+          <div>
+            <div class="who" id="nameAi">Zuri</div>
+            <div class="sub" id="subAi">AI store</div>
+          </div>
+        </div>
+        <div class="turn-pill"><strong id="turnText">Your turn</strong><span id="turnSub">tap a glowing pit</span></div>
+        <div class="score-card you" id="cardYou">
+          <div class="num" id="scoreYou">0</div>
+          <div>
+            <div class="who" id="nameYou">You</div>
+            <div class="sub">your store</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="practice-banner" id="practiceBanner" role="status">
+        <div class="ico" aria-hidden="true">🎯</div>
+        <div class="txt">
+          <strong>Practice round — no pressure, no score kept</strong>
+          <span>Play against a gentle Zuri, try out captures and extra-turn chains, and undo as much as you like. This round won't change your record below. Use Hint anytime to see a strong move.</span>
+          <div class="practice-actions">
+            <button id="practiceHintBtn" type="button">Show me a good move</button>
+            <button id="practiceRestartBtn" type="button">Restart practice</button>
+            <button id="practicePlayRealBtn" type="button">Play a real game →</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="side-tag"><span id="tagTop">Zuri's side</span><span>Stores hold your score</span></div>
+      <div class="board-wrap">
+        <div class="board" id="board" role="group" aria-label="Mancala board"></div>
+        <div class="row-labels" aria-hidden="true">
+          <span></span>
+          <span class="pit-label">1</span><span class="pit-label">2</span><span class="pit-label">3</span>
+          <span class="pit-label">4</span><span class="pit-label">5</span><span class="pit-label">6</span>
+          <span></span>
+        </div>
+      </div>
+      <div class="side-tag" style="margin-top:8px"><span>Your side</span><span id="tagBottomRight">48 stones in play</span></div>
+
+      <div class="coach" id="coach"><span>New here? Tap <strong>How to play</strong> for a quick tour — or <strong>Rules</strong> for the full rulebook.</span><button id="coachDismiss" aria-label="Dismiss this hint">✕</button></div>
+
+      <div class="message" id="message" aria-live="polite"></div>
+
+      <div class="actions">
+        <button class="btn primary" id="newBtn">New game</button>
+        <button class="btn" id="hintBtn">Hint</button>
+        <button class="btn" id="undoBtn">Undo</button>
+      </div>
+
+      <section class="stats" aria-label="Your record against Zuri">
+        <h2>Your record vs Zuri</h2>
+        <div class="stat-grid">
+          <div class="stat"><div class="v" id="stPlayed">0</div><div class="k">Played</div></div>
+          <div class="stat"><div class="v" id="stWon">0</div><div class="k">Won</div></div>
+          <div class="stat"><div class="v" id="stLost">0</div><div class="k">Lost</div></div>
+          <div class="stat"><div class="v" id="stDrawn">0</div><div class="k">Drawn</div></div>
+          <div class="stat"><div class="v" id="stBest">–</div><div class="k">Best win by</div></div>
+          <div class="stat"><div class="v" id="stStreak">0</div><div class="k">Win streak</div></div>
+        </div>
+        <p class="note">Saved on this device. Two-player games aren't counted.</p>
+      </section>
+    </main>
+
+    <!-- Tutorial / help -->
+    <div class="overlay" id="tutOverlay" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+      <div class="sheet">
+        <button class="sheet-x" id="tutX" aria-label="Close tutorial">✕</button>
+        <h2 id="tutTitle">How to play Mancala</h2>
+        <div id="tutBody"></div>
+        <div class="tut-dots" id="tutDots"></div>
+        <div class="foot">
+          <button class="btn" id="tutSkip">Skip</button>
+          <button class="btn primary" id="tutNext">Next</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full rules -->
+    <div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+      <div class="sheet">
+        <button class="sheet-x" id="rulesX" aria-label="Close rules">✕</button>
+        <h2 id="rulesTitle">Mancala — full rules</h2>
+        <p>This game uses the classic <strong>Kalah</strong> rules for two players.</p>
+
+        <h3>The board &amp; setup</h3>
+        <ul>
+          <li>Each player has <strong>6 small pits</strong> on their side of the board and one large <strong>store</strong> at their right-hand end.</li>
+          <li>Every small pit starts with <strong>4 stones</strong> — 48 stones in total. Both stores start empty.</li>
+          <li>Against the AI, you play the bottom row and Zuri plays the top row. In 2 Players mode you share the device and take turns.</li>
+        </ul>
+
+        <h3>On your turn — sowing</h3>
+        <ul>
+          <li>Choose one of <strong>your own</strong> non-empty pits. You pick up <em>all</em> of its stones.</li>
+          <li>Moving <strong>counter-clockwise</strong>, drop one stone into each space you pass: your following pits, your store, then your opponent's pits, and so on around the board.</li>
+          <li>You <strong>skip your opponent's store</strong> entirely — no stone is ever dropped in it, and it doesn't count as a space.</li>
+          <li>If you have more stones than spaces in a full lap, you simply keep going around.</li>
+        </ul>
+
+        <h3>Special rule — extra turn</h3>
+        <ul>
+          <li>If the <strong>last stone</strong> you sow lands in <strong>your own store</strong>, you take another turn immediately.</li>
+          <li>Extra turns can chain: each time your last stone lands in your store, you go again.</li>
+        </ul>
+
+        <h3>Special rule — capture</h3>
+        <ul>
+          <li>If the <strong>last stone</strong> you sow lands in an <strong>empty pit on your own side</strong>, and the pit <strong>directly opposite</strong> on your opponent's side holds at least one stone, you <strong>capture</strong>: that last stone plus <em>all</em> stones in the opposite pit move straight into your store.</li>
+          <li>If the opposite pit is empty, there is no capture — the stone simply stays where it landed.</li>
+          <li>Captures only happen on your own side, and only with your final stone of the move.</li>
+        </ul>
+
+        <h3>Scoring &amp; how the game ends</h3>
+        <ul>
+          <li>Your score is the number of stones in <strong>your store</strong>. Stones still sitting in small pits don't count until they're captured, sown in, or swept.</li>
+          <li>The game ends <strong>as soon as all six pits on either side are empty</strong> — it doesn't matter whose turn it is.</li>
+          <li>When that happens, every stone remaining in the other player's pits is <strong>swept into that player's store</strong>.</li>
+        </ul>
+
+        <h3>Winning</h3>
+        <ul>
+          <li>After the final sweep, the player with the <strong>most stones in their store wins</strong>. With 48 stones in play, 25 or more guarantees the win.</li>
+          <li>A 24–24 finish is a <strong>draw</strong>.</li>
+          <li>In Vs Zuri games, wins, losses, draws, your best winning margin, and your current win streak are saved on this device. Two-player games aren't recorded.</li>
+        </ul>
+
+        <h3>Practice round</h3>
+        <ul>
+          <li>Tap <strong>Practice</strong> at the top to play a practice round. Same Kalah rules, but Zuri plays gently (like Easy) so you can learn at your own pace.</li>
+          <li>Practice rounds <strong>don't count</strong> — they never change your Played / Won / Lost record, best win, or streak.</li>
+          <li>Use <strong>Hint</strong> and <strong>Undo</strong> as much as you like, restart anytime with <strong>Restart practice</strong>, and switch to <strong>Vs Zuri</strong> when you're ready for a real game.</li>
+          <li>Short coaching notes appear under the board during practice to explain extra turns and captures as they happen.</li>
+        </ul>
+
+        <h3>Difficulty (Vs Zuri)</h3>
+        <ul>
+          <li><strong>Easy</strong> — Zuri plays casually, picks mostly at random, and only sometimes spots a capture or extra turn. Best while you're learning.</li>
+          <li><strong>Normal</strong> — Zuri thinks a few moves ahead and takes captures and extra turns when she sees them. A fair, standard game.</li>
+          <li><strong>Hard</strong> — Zuri plans many moves ahead, chains extra turns, and sets up captures. Beating her takes real strategy.</li>
+          <li>Pick a level with the <strong>Easy / Normal / Hard</strong> switch above the board. Changing it starts a fresh game, and your choice is remembered on this device. Difficulty doesn't apply in 2 Players mode.</li>
+        </ul>
+
+        <div class="foot">
+          <button class="btn primary" id="rulesClose">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback -->
+    <div class="overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+      <div class="sheet">
+        <button class="sheet-x" id="feedbackX" aria-label="Close feedback">✕</button>
+        <h2 id="feedbackTitle">Feedback</h2>
+        <p style="margin:0;color:var(--muted)">How was this game of Mancala?</p>
+
+        <span class="fb-label" id="fbRatingLabel">Your rating</span>
+        <div class="fb-stars" role="group" aria-labelledby="fbRatingLabel" id="fbStars">
+          <button type="button" data-rating="1" aria-pressed="false" aria-label="1 star">★</button>
+          <button type="button" data-rating="2" aria-pressed="false" aria-label="2 stars">★</button>
+          <button type="button" data-rating="3" aria-pressed="false" aria-label="3 stars">★</button>
+          <button type="button" data-rating="4" aria-pressed="false" aria-label="4 stars">★</button>
+          <button type="button" data-rating="5" aria-pressed="false" aria-label="5 stars">★</button>
+        </div>
+
+        <label class="fb-label" for="fbText">Comment</label>
+        <textarea class="fb-text" id="fbText" placeholder="What did you like? What could be better?" maxlength="1000"></textarea>
+
+        <span class="fb-label">Tag <span style="font-weight:500;color:var(--muted)">(optional)</span></span>
+        <div class="fb-tags" role="group" aria-label="Feedback tag" id="fbTags">
+          <button type="button" data-tag="Bug" aria-pressed="false">Bug</button>
+          <button type="button" data-tag="Suggestion" aria-pressed="false">Suggestion</button>
+          <button type="button" data-tag="Other" aria-pressed="false">Other</button>
+        </div>
+
+        <p class="fb-note">Saved on this device only. Please don't include personal info — feedback follows the same Terms as the games: keep it clean, and it may be used to improve them.</p>
+        <div class="fb-thanks" id="fbThanks" role="status">Thanks! Your feedback was saved. 💛</div>
+
+        <div class="foot">
+          <button class="btn" id="feedbackCancel">Cancel</button>
+          <button class="btn primary" id="feedbackSave">Save feedback</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game over -->
+    <div class="overlay" id="endOverlay" role="dialog" aria-modal="true" aria-labelledby="endTitle">
+      <div class="sheet">
+        <h2 id="endTitle" style="text-align:center">Game over</h2>
+        <p class="result-big" id="endBig">You win!</p>
+        <p class="result-sub" id="endSub"></p>
+        <div class="foot" style="justify-content:center">
+          <button class="btn" id="endClose">See the board</button>
+          <button class="btn primary" id="endAgain">Play again</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      "use strict";
+      /* ============ Mancala (Kalah rules) ============
+         Board indices: 0-5 = your pits (left→right), 6 = your store,
+         7-12 = Zuri's pits, 13 = Zuri's store.
+         On screen, Zuri's pits render right-to-left (12 → 7) so sowing
+         runs counter-clockwise for both players. */
+      var PITS = 6, START_STONES = 4;
+      var LS_STATS = "mancala_v1", LS_TUT = "mancala_tutSeen", LS_HINT = "mancala_hintSeen", LS_DIFF = "mancala_diff";
+
+      var board, turn, gameOver, busy, moveHistory;
+      var mode = "ai";               // "ai" | "practice" | "2p"
+      var difficulty = "normal";     // standard arcade levels: "easy" | "normal" | "hard"
+      try {
+        var savedDiff = localStorage.getItem(LS_DIFF);
+        if (savedDiff === "easy" || savedDiff === "normal" || savedDiff === "hard") difficulty = savedDiff;
+      } catch (e) {}
+      var soundOn = true;
+      var hintActive = false; // one-time, non-blocking "new here?" hint — never a forced walkthrough
+
+      var el = function (id) { return document.getElementById(id); };
+      var boardEl = el("board"), msgEl = el("message");
+
+      /* ---------- audio: soft stone clicks ---------- */
+      var actx = null;
+      function click(freq) {
+        if (!soundOn) return;
+        try {
+          if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+          if (actx.state === "suspended") actx.resume();
+          var t = actx.currentTime;
+          var o = actx.createOscillator(), g = actx.createGain();
+          o.type = "triangle"; o.frequency.value = freq || 340;
+          g.gain.setValueAtTime(0.12, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+          o.connect(g); g.connect(actx.destination);
+          o.start(t); o.stop(t + 0.08);
+        } catch (e) { /* audio unavailable — play silent */ }
+      }
+
+      /* ---------- stats (localStorage bests) ---------- */
+      function loadStats() {
+        try {
+          var s = JSON.parse(localStorage.getItem(LS_STATS) || "null");
+          if (s && typeof s.played === "number") return s;
+        } catch (e) {}
+        return { played: 0, won: 0, lost: 0, drawn: 0, bestMargin: 0, streak: 0 };
+      }
+      function saveStats(s) {
+        try { localStorage.setItem(LS_STATS, JSON.stringify(s)); } catch (e) {}
+      }
+      function renderStats() {
+        var s = loadStats();
+        el("stPlayed").textContent = s.played;
+        el("stWon").textContent = s.won;
+        el("stLost").textContent = s.lost;
+        el("stDrawn").textContent = s.drawn;
+        el("stBest").textContent = s.bestMargin > 0 ? s.bestMargin : "–";
+        el("stStreak").textContent = s.streak;
+      }
+      function recordResult(margin) { // margin = your store − Zuri store, AI games only
+        var s = loadStats();
+        s.played++;
+        if (margin > 0) { s.won++; s.streak++; if (margin > s.bestMargin) s.bestMargin = margin; }
+        else if (margin < 0) { s.lost++; s.streak = 0; }
+        else { s.drawn++; s.streak = 0; }
+        saveStats(s); renderStats();
+      }
+
+      /* ---------- board DOM ---------- */
+      var cellEls = []; // by board index
+      var STONE_COLORS = ["#c8552e", "#d9a441", "#5d8a4a", "#3e6f8e", "#8e4a6b", "#e3ddcf", "#7a4b21", "#4a7d74"];
+      function stonePos(i, n) {
+        // deterministic scatter inside the pit
+        var a = (i * 137.5) % 360, r = n <= 1 ? 0 : 14 + ((i * 53) % 26);
+        return { x: 50 + r * Math.cos(a * Math.PI / 180) * 0.9 - 15, y: 50 + r * Math.sin(a * Math.PI / 180) * 0.8 - 15 };
+      }
+      function buildBoard() {
+        boardEl.innerHTML = ""; cellEls = new Array(14);
+        function makeCell(idx, cls, label) {
+          var b = document.createElement("button");
+          b.className = cls; b.dataset.idx = idx;
+          b.setAttribute("aria-label", label);
+          b.innerHTML = '<span class="stones"></span><span class="count">0</span>';
+          b.addEventListener("click", function () { onPitTap(idx); });
+          boardEl.appendChild(b); cellEls[idx] = b;
+          return b;
+        }
+        makeCell(13, "store ai", "Zuri's store");
+        for (var i = 12; i >= 7; i--) makeCell(i, "pit", "Zuri pit " + (i - 6));
+        makeCell(6, "store you", "Your store");
+        for (var j = 0; j <= 5; j++) makeCell(j, "pit", "Your pit " + (j + 1));
+      }
+      function render(highlightIdx) {
+        for (var i = 0; i < 14; i++) {
+          var cell = cellEls[i], n = board[i];
+          var stonesEl = cell.querySelector(".stones");
+          var show = Math.min(n, 14), html = "";
+          for (var k = 0; k < show; k++) {
+            var p = stonePos(k + i * 3, show);
+            html += '<span class="stone" style="left:' + p.x + "%;top:" + p.y + "%;background:" + STONE_COLORS[(k + i) % STONE_COLORS.length] + '"></span>';
+          }
+          stonesEl.innerHTML = html;
+          cell.querySelector(".count").textContent = n;
+          cell.classList.toggle("drop-now", i === highlightIdx);
+          var playable = !gameOver && !busy && isHumanTurn() && i >= pitRange(turn)[0] && i <= pitRange(turn)[1] && n > 0;
+          cell.classList.toggle("playable", playable);
+          cell.disabled = !playable && i !== 6 && i !== 13 ? true : false;
+          if (i === 6 || i === 13) cell.disabled = true;
+        }
+        el("scoreYou").textContent = board[6];
+        el("scoreAi").textContent = board[13];
+        var inPlay = board.reduce(function (a, b) { return a + b; }, 0);
+        el("tagBottomRight").textContent = inPlay + " stones in play";
+        el("cardYou").classList.toggle("active", !gameOver && turn === 0);
+        el("cardAi").classList.toggle("active", !gameOver && turn === 1);
+        var tt = el("turnText"), ts = el("turnSub");
+        if (gameOver) { tt.textContent = "Game over"; ts.textContent = ""; }
+        else if (mode === "2p") { tt.textContent = turn === 0 ? "Player 1's turn" : "Player 2's turn"; ts.textContent = turn === 0 ? "bottom row" : "top row"; }
+        else if (turn === 0) { tt.textContent = mode === "practice" ? "Your turn — practice" : "Your turn"; ts.textContent = "tap a glowing pit"; }
+        else { tt.textContent = mode === "practice" ? "Zuri (practice)…" : "Zuri is thinking…"; ts.textContent = ""; }
+        el("undoBtn").disabled = busy || gameOver || moveHistory.length === 0 || ((mode === "ai" || mode === "practice") && turn === 1);
+      }
+      function setMessage(main, small) {
+        msgEl.innerHTML = main + (small ? '<span class="small">' + small + "</span>" : "");
+      }
+
+      /* ---------- rules ---------- */
+      function pitRange(p) { return p === 0 ? [0, 5] : [7, 12]; }
+      function storeOf(p) { return p === 0 ? 6 : 13; }
+      function sideEmpty(b, p) {
+        var r = pitRange(p);
+        for (var i = r[0]; i <= r[1]; i++) if (b[i] > 0) return false;
+        return true;
+      }
+      function isHumanTurn() {
+        if (mode === "2p") return true;
+        return turn === 0;
+      }
+      // Pure move application on a board copy. Returns {board, extraTurn, captured, lastPos, drops}
+      function applyMove(b, player, pit) {
+        var nb = b.slice(), drops = [];
+        var stones = nb[pit]; nb[pit] = 0;
+        var pos = pit, myStore = storeOf(player), oppStore = storeOf(1 - player);
+        while (stones > 0) {
+          pos = (pos + 1) % 14;
+          if (pos === oppStore) continue;
+          nb[pos]++; drops.push(pos); stones--;
+        }
+        var captured = 0, r = pitRange(player);
+        if (pos !== myStore && pos >= r[0] && pos <= r[1] && nb[pos] === 1) {
+          var opp = 12 - pos;
+          if (nb[opp] > 0) {
+            captured = nb[pos] + nb[opp];
+            nb[myStore] += captured; nb[pos] = 0; nb[opp] = 0;
+          }
+        }
+        var over = false;
+        if (sideEmpty(nb, 0) || sideEmpty(nb, 1)) {
+          over = true;
+          for (var p = 0; p <= 1; p++) {
+            var rr = pitRange(p), sum = 0;
+            for (var i = rr[0]; i <= rr[1]; i++) { sum += nb[i]; nb[i] = 0; }
+            nb[storeOf(p)] += sum;
+          }
+        }
+        return { board: nb, extraTurn: pos === myStore, captured: captured, lastPos: pos, drops: drops, over: over, capturePit: captured ? pos : -1, captureOpp: captured ? 12 - pos : -1 };
+      }
+      function legalMoves(b, player) {
+        var r = pitRange(player), out = [];
+        for (var i = r[0]; i <= r[1]; i++) if (b[i] > 0) out.push(i);
+        return out;
+      }
+
+      /* ---------- AI ---------- */
+      function evaluate(b) { // from Zuri's (player 1) perspective
+        var pitDiff = 0, i;
+        for (i = 7; i <= 12; i++) pitDiff += b[i];
+        for (i = 0; i <= 5; i++) pitDiff -= b[i];
+        return (b[13] - b[6]) * 3 + pitDiff * 0.4;
+      }
+      function minimax(b, player, depth, alpha, beta) {
+        if (depth === 0 || sideEmpty(b, 0) || sideEmpty(b, 1)) {
+          var bb = b.slice();
+          if (sideEmpty(bb, 0) || sideEmpty(bb, 1)) {
+            for (var p = 0; p <= 1; p++) {
+              var rr = pitRange(p), sum = 0;
+              for (var i = rr[0]; i <= rr[1]; i++) { sum += bb[i]; bb[i] = 0; }
+              bb[storeOf(p)] += sum;
+            }
+          }
+          return evaluate(bb);
+        }
+        var moves = legalMoves(b, player), i, res, v;
+        if (player === 1) {
+          v = -Infinity;
+          for (i = 0; i < moves.length; i++) {
+            res = applyMove(b, player, moves[i]);
+            v = Math.max(v, minimax(res.board, res.extraTurn ? 1 : 0, depth - 1, alpha, beta));
+            alpha = Math.max(alpha, v); if (beta <= alpha) break;
+          }
+          return v;
+        }
+        v = Infinity;
+        for (i = 0; i < moves.length; i++) {
+          res = applyMove(b, player, moves[i]);
+          v = Math.min(v, minimax(res.board, res.extraTurn ? 0 : 1, depth - 1, alpha, beta));
+          beta = Math.min(beta, v); if (beta <= alpha) break;
+        }
+        return v;
+      }
+      function aiChoose() {
+        var moves = legalMoves(board, 1);
+        if (moves.length === 1) return moves[0];
+        if (mode === "practice" || difficulty === "easy") {
+          // mostly random, but grabs an obvious capture or extra turn half the time
+          if (Math.random() < 0.5) {
+            var scored = moves.map(function (m) {
+              var r = applyMove(board, 1, m);
+              return { m: m, s: r.captured * 2 + (r.extraTurn ? 3 : 0) + Math.random() };
+            }).sort(function (a, b2) { return b2.s - a.s; });
+            return scored[0].m;
+          }
+          return moves[Math.floor(Math.random() * moves.length)];
+        }
+        var depth = difficulty === "hard" ? 9 : 5;
+        var best = -Infinity, bestMove = moves[0];
+        moves.forEach(function (m) {
+          var r = applyMove(board, 1, m);
+          var v = minimax(r.board, r.extraTurn ? 1 : 0, depth - 1, -Infinity, Infinity) + Math.random() * 0.01;
+          if (v > best) { best = v; bestMove = m; }
+        });
+        return bestMove;
+      }
+      function bestMoveFor(player) { // used by Hint (full-strength)
+        var moves = legalMoves(board, player), best = player === 1 ? -Infinity : Infinity, bestMove = moves[0];
+        moves.forEach(function (m) {
+          var r = applyMove(board, player, m);
+          var v = minimax(r.board, r.extraTurn ? player : 1 - player, 8, -Infinity, Infinity);
+          if (player === 1 ? v > best : v < best) { best = v; bestMove = m; }
+        });
+        return bestMove;
+      }
+
+      /* ---------- game flow ---------- */
+      function newGame() {
+        board = [];
+        for (var i = 0; i < 14; i++) board.push(i === 6 || i === 13 ? 0 : START_STONES);
+        turn = 0; gameOver = false; busy = false; moveHistory = [];
+        el("endOverlay").classList.remove("open");
+        var isPractice = mode === "practice";
+        el("nameAi").textContent = mode === "2p" ? "Player 2" : "Zuri";
+        el("subAi").textContent = mode === "2p" ? "top row store" : (isPractice ? "practice partner · gentle" : "AI store · " + difficulty);
+        el("nameYou").textContent = mode === "2p" ? "Player 1" : "You";
+        el("tagTop").textContent = mode === "2p" ? "Player 2's side" : (isPractice ? "Zuri's side — practice" : "Zuri's side");
+        el("practiceBanner").classList.toggle("show", isPractice);
+        el("newBtn").textContent = isPractice ? "Restart practice" : "New game";
+        document.querySelector(".stats").style.display = mode === "ai" ? "" : "none";
+        if (mode === "2p") {
+          setMessage("Player 1 starts — pick a pit on the bottom row.",
+            "Last stone in your store = another turn. Land in an empty pit on your side to capture.");
+        } else if (isPractice) {
+          setMessage("Practice round — your move. Pick any glowing pit to try it out.",
+            "No score is kept. Tap Hint for a strong move, Undo to take a move back, and restart anytime.");
+        } else {
+          setMessage("Your move — pick a pit on your side.",
+            "Last stone in your store = another turn. Land in an empty pit on your side to capture.");
+        }
+        if (hintActive && !isPractice) el("coach").classList.add("show");
+        if (isPractice) el("coach").classList.remove("show");
+        render(-1);
+      }
+      function snapshot() { return { board: board.slice(), turn: turn }; }
+      function dismissHint() {
+        hintActive = false;
+        el("coach").classList.remove("show");
+        try { localStorage.setItem(LS_HINT, "1"); } catch (e) {}
+      }
+      function onPitTap(idx) {
+        if (busy || gameOver) return;
+        var r = pitRange(turn);
+        if (idx < r[0] || idx > r[1] || board[idx] === 0) return;
+        if (!isHumanTurn()) return;
+        if (hintActive) dismissHint();
+        moveHistory.push(snapshot());
+        animateMove(turn, idx);
+      }
+      function animateMove(player, pit) {
+        busy = true; render(-1);
+        var sim = applyMove(board, player, pit);
+        var stones = board[pit];
+        board[pit] = 0; render(-1);
+        var drops = sim.drops, step = 0;
+        var who = mode === "2p" ? (player === 0 ? "Player 1" : "Player 2") : (player === 0 ? "You" : "Zuri");
+        var isPracticeMove = mode === "practice" && player === 0;
+        function next() {
+          if (step < drops.length) {
+            board[drops[step]]++;
+            click(player === 0 ? 320 + step * 22 : 260 + step * 18);
+            render(drops[step]);
+            step++;
+            setTimeout(next, 170);
+          } else {
+            // resolve captures / end-of-game sweep from the pure simulation
+            var preCapture = board.slice();
+            board = sim.board;
+            if (sim.captured > 0) {
+              if (cellEls[sim.capturePit]) cellEls[sim.capturePit].classList.add("capture-flash");
+              if (cellEls[sim.captureOpp]) cellEls[sim.captureOpp].classList.add("capture-flash");
+              click(520);
+            }
+            busy = false;
+            if (sim.over) { finishGame(); render(-1); return; }
+            if (sim.extraTurn) {
+              setMessage(who + " landed the last stone in the store — go again!",
+                isPracticeMove ? "Nice — that's an extra turn. Landing your last stone in your store lets you move again. Chain these when you can!" : (sim.captured ? "" : ""));
+              turn = player;
+            } else {
+              if (sim.captured > 0) setMessage(who + " captured " + sim.captured + " stones!", isPracticeMove ? "That's a capture — your last stone landed in an empty pit on your side, so you took the opposite pit too. Biggest swing in the game!" : "The last stone landed in an empty pit, so the opposite pit's stones are captured too.");
+              else setMessage(who + " sowed " + stones + " stones.", isPracticeMove ? "Practice tip: count a pit's stones — if it lands exactly in your store, you get another turn." : "");
+              turn = 1 - player;
+            }
+            render(-1);
+            maybeAiTurn();
+          }
+        }
+        setTimeout(next, 120);
+      }
+      function maybeAiTurn() {
+        if (gameOver || (mode !== "ai" && mode !== "practice") || turn !== 1) return;
+        busy = true; render(-1);
+        setTimeout(function () {
+          busy = false;
+          var pit = aiChoose();
+          moveHistory.push(snapshot());
+          animateMove(1, pit);
+        }, 650);
+      }
+      function finishGame() {
+        gameOver = true;
+        var you = board[6], ai = board[13], margin = you - ai;
+        var big, sub;
+        if (mode === "practice") {
+          big = you > ai ? "Practice done — nice work! 🎯" : (you === ai ? "Practice done — all tied!" : "Practice done!");
+          sub = "You " + you + " — Zuri " + ai + ". That was just practice, so nothing was added to your record. Play again or jump into a real game when you're ready.";
+        } else if (mode === "2p") {
+          big = you === ai ? "It's a tie!" : (you > ai ? "Player 1 wins!" : "Player 2 wins!");
+          sub = "Player 1: " + you + " · Player 2: " + ai;
+        } else if (margin > 0) {
+          big = "You win! 🎉"; sub = "You " + you + " — Zuri " + ai + ". You won by " + margin + " stones.";
+          recordResult(margin);
+        } else if (margin < 0) {
+          big = "Zuri wins"; sub = "Zuri " + ai + " — You " + you + ". Zuri won by " + (-margin) + " stones.";
+          recordResult(margin);
+        } else {
+          big = "It's a tie!"; sub = "24 stones each — perfectly matched.";
+          recordResult(0);
+        }
+        setMessage(big, sub);
+        el("endBig").textContent = big;
+        el("endSub").textContent = sub + (mode === "ai" ? " Your record has been updated below." : "");
+        el("endAgain").textContent = mode === "practice" ? "Practice again" : "Play again";
+        setTimeout(function () { el("endOverlay").classList.add("open"); }, 700);
+      }
+
+      /* ---------- controls ---------- */
+      el("newBtn").addEventListener("click", newGame);
+      el("endAgain").addEventListener("click", newGame);
+      el("endClose").addEventListener("click", function () { el("endOverlay").classList.remove("open"); });
+      el("undoBtn").addEventListener("click", function () {
+        if (busy || moveHistory.length === 0) return;
+        if (mode === "ai" || mode === "practice") {
+          // step back to the start of your last turn (undoes Zuri's reply too)
+          var s = null;
+          while (moveHistory.length) { s = moveHistory.pop(); if (s.turn === 0) break; }
+          if (!s) return;
+          board = s.board; turn = 0;
+        } else {
+          var s2 = moveHistory.pop();
+          board = s2.board; turn = s2.turn;
+        }
+        gameOver = false;
+        el("endOverlay").classList.remove("open");
+        setMessage("Undone.", "Pick a different pit.");
+        render(-1);
+      });
+      el("hintBtn").addEventListener("click", function () {
+        if (busy || gameOver || !isHumanTurn()) return;
+        var m = bestMoveFor(turn);
+        var cell = cellEls[m];
+        cell.classList.add("drop-now");
+        if (mode === "practice") {
+          var simHint = applyMove(board, turn, m);
+          var why = simHint.captured ? "That move captures " + simHint.captured + " stones." : (simHint.extraTurn ? "That move lands in your store, so you get an extra turn." : "It's the strongest move here — a good one to try in practice.");
+          setMessage("Practice hint: try pit " + (turn === 0 ? m + 1 : m - 6) + ".", why);
+        } else {
+          setMessage("Hint: try pit " + (turn === 0 ? m + 1 : m - 6) + ".", "It's the strongest move Zuri's brain can find — no promises it'll stay secret.");
+        }
+        setTimeout(function () { cell.classList.remove("drop-now"); }, 1600);
+      });
+      el("soundBtn").addEventListener("click", function () {
+        soundOn = !soundOn;
+        this.textContent = soundOn ? "Sound on" : "Muted";
+        this.setAttribute("aria-pressed", soundOn ? "true" : "false");
+        if (soundOn) click(420);
+      });
+      function setMode(m) {
+        mode = m;
+        el("modeAi").setAttribute("aria-pressed", m === "ai" ? "true" : "false");
+        el("modePractice").setAttribute("aria-pressed", m === "practice" ? "true" : "false");
+        el("mode2p").setAttribute("aria-pressed", m === "2p" ? "true" : "false");
+        el("diffSeg").style.visibility = m === "ai" ? "visible" : "hidden";
+        newGame();
+      }
+      el("modeAi").addEventListener("click", function () { setMode("ai"); });
+      el("modePractice").addEventListener("click", function () { setMode("practice"); });
+      el("mode2p").addEventListener("click", function () { setMode("2p"); });
+      el("practiceRestartBtn").addEventListener("click", newGame);
+      el("practicePlayRealBtn").addEventListener("click", function () { setMode("ai"); });
+      el("practiceHintBtn").addEventListener("click", function () { el("hintBtn").click(); });
+      function syncDiffSeg() {
+        Array.prototype.forEach.call(el("diffSeg").querySelectorAll("button"), function (x) {
+          x.setAttribute("aria-pressed", x.dataset.diff === difficulty ? "true" : "false");
+        });
+      }
+      el("diffSeg").addEventListener("click", function (e) {
+        var b = e.target.closest("button[data-diff]"); if (!b) return;
+        difficulty = b.dataset.diff;
+        try { localStorage.setItem(LS_DIFF, difficulty); } catch (err) {}
+        syncDiffSeg();
+        newGame();
+      });
+
+      /* ---------- tutorial (first-run walkthrough + How to play) ---------- */
+      var TUT_STEPS = [
+        {
+          title: "Welcome to Mancala 🌍",
+          body: "<p>Mancala is one of the world's oldest board games — a family of \"sowing\" games played across Africa and Asia for centuries. This version is <strong>Kalah</strong>, the classic two-player rules.</p><p>You and Zuri each have <strong>6 pits</strong> with 4 stones, plus a big <strong>store</strong> at your end. First to bank the most stones wins.</p>"
+        },
+        {
+          title: "Sowing stones 🌱",
+          body: "<p>On your turn, tap one of <strong>your</strong> pits (bottom row). You pick up all its stones and drop them <strong>one by one, counter-clockwise</strong> — into the next pits and into your store as you pass it.</p><div class=\"mini-board\"><div>Pit · 4</div><div>Pit · 4</div><div>Pit · 4</div><div class=\"store-cell\">Your store</div></div><p>You skip Zuri's store — your stones never land there.</p>"
+        },
+        {
+          title: "Two power moves ⭐",
+          body: "<ul><li><strong>Extra turn:</strong> if your <em>last</em> stone lands in your store, you go again. Chain these to run up your score.</li><li><strong>Capture:</strong> if your last stone lands in an <em>empty pit on your side</em>, that stone <em>and</em> all the stones in the pit directly opposite go straight into your store.</li></ul><p>Watch for captures — they're the biggest swings in the game.</p>"
+        },
+        {
+          title: "How a game ends 🏁",
+          body: "<p>The game ends the moment either side's six pits are all empty. Any stones left on the other side are swept into that player's store.</p><p><strong>Most stones in your store wins.</strong> There are 48 stones total, so 25 guarantees a win.</p><p>Tip: the Hint button shows the strongest move — handy while you're learning. Good luck!</p>"
+        }
+      ];
+      var tutStep = 0;
+      function showTutStep() {
+        var s = TUT_STEPS[tutStep];
+        el("tutTitle").textContent = s.title;
+        el("tutBody").innerHTML = s.body;
+        el("tutDots").innerHTML = TUT_STEPS.map(function (_, i) {
+          return "<span class=\"" + (i === tutStep ? "on" : "") + "\"></span>";
+        }).join("");
+        el("tutNext").textContent = tutStep === TUT_STEPS.length - 1 ? "Start playing" : "Next";
+      }
+      function openTut() { tutStep = 0; showTutStep(); el("tutOverlay").classList.add("open"); }
+      function closeTut() {
+        el("tutOverlay").classList.remove("open");
+        try { localStorage.setItem(LS_TUT, "1"); } catch (e) {}
+        if (hintActive) dismissHint(); // they've taken the tour — the hint has done its job
+      }
+      el("tutNext").addEventListener("click", function () {
+        if (tutStep < TUT_STEPS.length - 1) { tutStep++; showTutStep(); }
+        else closeTut();
+      });
+      el("tutSkip").addEventListener("click", closeTut);
+      el("helpBtn").addEventListener("click", openTut);
+      el("coachDismiss").addEventListener("click", dismissHint);
+
+      /* ---------- full rules (separate from the short tutorial) ---------- */
+      el("rulesBtn").addEventListener("click", function () { el("rulesOverlay").classList.add("open"); });
+      el("rulesClose").addEventListener("click", function () { el("rulesOverlay").classList.remove("open"); });
+      el("rulesX").addEventListener("click", function () { el("rulesOverlay").classList.remove("open"); });
+      el("tutX").addEventListener("click", closeTut);
+      el("rulesOverlay").addEventListener("click", function (e) {
+        if (e.target === this) this.classList.remove("open");
+      });
+
+      /* ---------- feedback (standard arcade: local only, no network) ---------- */
+      var fbRating = 0, fbTag = "";
+      function fbSyncStars() {
+        Array.prototype.forEach.call(el("fbStars").querySelectorAll("button"), function (b) {
+          b.setAttribute("aria-pressed", Number(b.dataset.rating) <= fbRating ? "true" : "false");
+        });
+      }
+      function fbSyncTags() {
+        Array.prototype.forEach.call(el("fbTags").querySelectorAll("button"), function (b) {
+          b.setAttribute("aria-pressed", b.dataset.tag === fbTag ? "true" : "false");
+        });
+      }
+      function openFeedback() {
+        fbRating = 0; fbTag = ""; el("fbText").value = "";
+        el("fbThanks").classList.remove("show");
+        el("feedbackSave").disabled = false;
+        fbSyncStars(); fbSyncTags();
+        el("feedbackOverlay").classList.add("open");
+      }
+      function closeFeedback() { el("feedbackOverlay").classList.remove("open"); }
+      el("feedbackBtn").addEventListener("click", openFeedback);
+      el("feedbackX").addEventListener("click", closeFeedback);
+      el("feedbackCancel").addEventListener("click", closeFeedback);
+      el("feedbackOverlay").addEventListener("click", function (e) { if (e.target === this) closeFeedback(); });
+      el("fbStars").addEventListener("click", function (e) {
+        var b = e.target.closest("button[data-rating]"); if (!b) return;
+        fbRating = Number(b.dataset.rating); fbSyncStars();
+      });
+      el("fbTags").addEventListener("click", function (e) {
+        var b = e.target.closest("button[data-tag]"); if (!b) return;
+        fbTag = fbTag === b.dataset.tag ? "" : b.dataset.tag; fbSyncTags();
+      });
+      el("feedbackSave").addEventListener("click", function () {
+        var record = {
+          game: "mancala",
+          rating: fbRating,
+          text: el("fbText").value.trim(),
+          tag: fbTag,
+          mode: mode,
+          difficulty: mode === "ai" ? difficulty : (mode === "practice" ? "practice (gentle)" : "n/a"),
+          scoreYou: board ? board[6] : null,
+          scoreOpponent: board ? board[13] : null,
+          gameOver: !!gameOver,
+          timestamp: new Date().toISOString()
+        };
+        try {
+          var key = "holos-arcade-feedback";
+          var arr = [];
+          try { var raw = localStorage.getItem(key); if (raw) { var parsed = JSON.parse(raw); if (Array.isArray(parsed)) arr = parsed; } } catch (e2) {}
+          arr.push(record);
+          localStorage.setItem(key, JSON.stringify(arr));
+        } catch (e) {}
+        el("fbThanks").classList.add("show");
+        el("feedbackSave").disabled = true;
+        setTimeout(closeFeedback, 1400);
+      });
+
+      /* ---------- init ---------- */
+      buildBoard();
+      syncDiffSeg();
+      renderStats();
+      // Tutorial is opt-in only: it opens solely from the "How to play" button.
+      // First-time players just get the small dismissible hint line under the board.
+      var tutSeen = false, hintSeen = false;
+      try {
+        tutSeen = localStorage.getItem(LS_TUT) === "1";
+        hintSeen = localStorage.getItem(LS_HINT) === "1";
+      } catch (e) {}
+      hintActive = !tutSeen && !hintSeen;
+      newGame();
+    </script>
+  </body>
+</html>

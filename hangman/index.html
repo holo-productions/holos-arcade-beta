@@ -1,0 +1,1228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Hangman</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#f3ead8; --panel:#fffaf0; --panel2:#fdf3dd; --ink:#2b2118; --muted:#756552;
+    --line:rgba(90,70,40,.28);
+    --accent:#c2491d; --accent-ink:#fff7ec; --accent-soft:#fbe3d3;
+    --good:#1e7a46; --good-soft:#d9efdd; --bad:#b3273a; --bad-soft:#f8d9dc;
+    --gold:#b8860b; --gold-soft:#f7e7bd;
+    --board:#274435; --board2:#1d3528; --chalk:#f2ecd8; --chalk-dim:rgba(242,236,216,.55);
+    --shadow:0 10px 28px rgba(60,40,15,.18);
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#171310; --panel:#241d17; --panel2:#2c231b; --ink:#f2e9d8; --muted:#b8a88f;
+      --line:rgba(230,200,150,.25);
+      --accent:#e0683a; --accent-soft:#4a2b1c;
+      --good:#4cc27a; --good-soft:#1e3a28; --bad:#ff7d8c; --bad-soft:#452228;
+      --gold:#e0aa3e; --gold-soft:#423311;
+      --board:#1d3528; --board2:#152a1f;
+      --shadow:0 10px 28px rgba(0,0,0,.55);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:Nunito,system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:var(--bg); color:var(--ink);
+    background-image:radial-gradient(rgba(120,90,40,.07) 1px, transparent 1px);
+    background-size:22px 22px;
+    -webkit-tap-highlight-color:transparent;
+  }
+  button,select,input{font:inherit; min-height:44px; cursor:pointer}
+  input{cursor:text}
+  button:focus-visible,select:focus-visible,input:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--gold); outline-offset:2px}
+  .wrap{max-width:920px; margin:0 auto; padding:14px 14px 30px}
+
+  /* ---------- top bar ---------- */
+  .topbar{display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-bottom:12px}
+  .title{font-family:Fredoka,Nunito,sans-serif; font-size:2rem; font-weight:700; letter-spacing:.02em; margin:0}
+  .title .rope{color:var(--accent)}
+  .scorebar{display:flex; gap:8px; flex-wrap:wrap}
+  .pill{
+    background:var(--panel); border:1px solid var(--line); border-radius:999px;
+    padding:8px 14px; font-weight:800; font-size:.95rem; box-shadow:0 2px 8px rgba(0,0,0,.07);
+  }
+  .pill span{color:var(--muted); font-weight:700; margin-right:6px; font-size:.78rem; text-transform:uppercase; letter-spacing:.06em}
+  .pill.flash{animation:flash .9s ease}
+  @keyframes flash{0%{background:var(--gold-soft)}100%{background:var(--panel)}}
+
+  .controls{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px}
+  .controls select,.controls input[type="text"],.controls input[type="password"]{
+    border-radius:10px; border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    padding:0 10px; font-weight:700;
+  }
+  .ghost-btn{
+    border-radius:10px; border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    padding:0 14px; font-weight:800;
+  }
+  .seg{display:inline-flex; border:1px solid var(--line); border-radius:11px; overflow:hidden; background:var(--panel)}
+  .seg button{border:none; background:transparent; color:var(--ink); padding:0 14px; font-weight:800; min-height:44px}
+  .seg button[aria-pressed="true"]{background:var(--accent); color:var(--accent-ink)}
+  #practiceBtn[aria-pressed="true"]{background:var(--gold); border-color:var(--gold); color:#fff8e6}
+  .practice-badge{
+    display:inline-flex; align-items:center; gap:6px; align-self:flex-start;
+    background:rgba(255,217,138,.16); border:1px dashed rgba(255,217,138,.65); color:#ffd98a;
+    border-radius:999px; padding:6px 12px; font-size:.82rem; font-weight:800; letter-spacing:.02em;
+  }
+  .practice-badge[hidden]{display:none}
+  .pill.practice-pill{background:var(--gold-soft); border-color:var(--gold)}
+
+  /* ---------- one-time new-player hint (non-blocking) ---------- */
+  .newbie-hint{
+    display:flex; gap:10px; align-items:flex-start; justify-content:space-between;
+    background:var(--gold-soft); border:1px solid var(--gold); border-radius:12px;
+    padding:10px 12px 10px 14px; margin-bottom:12px; font-size:.93rem; line-height:1.45; font-weight:600;
+  }
+  .newbie-hint[hidden]{display:none}
+  .newbie-dismiss{
+    flex:none; border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius:8px; min-width:36px; min-height:36px; padding:0; font-weight:900; line-height:1;
+  }
+
+  /* ---------- board ---------- */
+  .board{
+    background:linear-gradient(160deg, var(--board) 0%, var(--board2) 100%);
+    border:6px solid #6b4423; border-radius:22px; box-shadow:var(--shadow), inset 0 0 0 3px rgba(242,236,216,.14);
+    padding:16px; color:var(--chalk);
+  }
+  .board-grid{display:grid; grid-template-columns:250px 1fr; gap:10px; align-items:start}
+  @media (max-width:640px){ .board-grid{grid-template-columns:1fr} .gallows-wrap{max-width:260px; margin:0 auto; width:100%} }
+  .gallows-wrap svg{width:100%; height:auto; display:block}
+  .part{opacity:0; transition:opacity .3s ease}
+  .part.on{opacity:1}
+  .face-detail{opacity:0; transition:opacity .3s ease}
+  .face-detail.on{opacity:1}
+  .lives-row{display:flex; align-items:center; gap:6px; justify-content:center; margin-top:2px; flex-wrap:wrap}
+  .heart{font-size:1.15rem; line-height:1; filter:grayscale(0)}
+  .heart.lost{opacity:.22; filter:grayscale(1)}
+  .lives-label{font-weight:800; font-size:.85rem; color:var(--chalk-dim); letter-spacing:.04em}
+
+  .word-zone{min-height:200px; display:flex; flex-direction:column; gap:10px}
+  .cat-label{font-size:.8rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--chalk-dim)}
+  .cat-label b{color:var(--chalk)}
+  .word{
+    display:flex; flex-wrap:wrap; gap:7px 6px; align-items:flex-end; padding:8px 0 2px; min-height:64px;
+  }
+  .slot{
+    width:34px; height:48px; border-bottom:4px solid var(--chalk); display:flex; align-items:center; justify-content:center;
+    font-family:Fredoka,Nunito,sans-serif; font-size:1.7rem; font-weight:700; color:var(--chalk); text-transform:uppercase;
+  }
+  .slot.space{border-bottom:none; width:16px}
+  .slot.revealed{animation:pop .3s ease}
+  .slot.missed-letter{color:#ff9d9d; border-color:#ff9d9d}
+  @keyframes pop{0%{transform:scale(.4)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
+  @media (max-width:420px){ .slot{width:27px; height:40px; font-size:1.35rem} .slot.space{width:10px} }
+  .clue{
+    background:rgba(0,0,0,.28); border:1px dashed rgba(242,236,216,.4); border-radius:12px;
+    padding:10px 14px; font-size:.98rem; line-height:1.45;
+  }
+  .clue .clue-tag{font-weight:900; color:#ffd98a; margin-right:6px}
+  .clue[hidden]{display:none}
+  .msg{font-size:1.15rem; font-weight:900; min-height:1.4em; margin:2px 0 0; color:#ffe9a8}
+  .msg.small{font-size:.93rem; color:var(--chalk); font-weight:600; min-height:1.3em}
+  .wrong-row{font-size:.92rem; font-weight:700; color:var(--chalk-dim)}
+  .wrong-row b{color:#ff9d9d; letter-spacing:.18em; text-transform:uppercase}
+  .board.shake{animation:shake .35s ease}
+  @keyframes shake{0%,100%{transform:none}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+  /* ---------- panels ---------- */
+  .panel{background:var(--panel); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px; margin-top:14px}
+  .panel h2{font-family:Fredoka,Nunito,sans-serif; font-size:1.05rem; font-weight:600; margin:0 0 10px; letter-spacing:.02em}
+  .keyboard{display:grid; grid-template-columns:repeat(9,1fr); gap:6px}
+  @media (max-width:560px){ .keyboard{grid-template-columns:repeat(7,1fr)} }
+  .key{
+    border:1px solid var(--line); border-bottom:3px solid var(--line); border-radius:10px;
+    background:var(--panel2); color:var(--ink); font-weight:900; font-size:1.05rem; padding:0; min-height:48px;
+    text-transform:uppercase;
+  }
+  .key:active{transform:translateY(1px)}
+  .key.right{background:var(--good-soft); color:var(--good); border-color:var(--good); cursor:default}
+  .key.wrong{background:var(--bad-soft); color:var(--bad); border-color:var(--bad); opacity:.65; cursor:default; text-decoration:line-through}
+  .key:disabled{cursor:default}
+  .key.hint-flash{animation:keyflash 1s ease infinite}
+  @keyframes keyflash{0%,100%{box-shadow:0 0 0 0 rgba(184,134,11,0)}50%{box-shadow:0 0 0 4px var(--gold-soft); border-color:var(--gold)}}
+
+  .btn{
+    border:none; border-radius:11px; padding:0 18px; font-weight:800; background:var(--ink); color:var(--bg);
+    min-height:44px;
+  }
+  @media (prefers-color-scheme: dark){ .btn{background:#e8dfc8; color:#241d17} }
+  .btn.accent{background:var(--accent); color:var(--accent-ink)}
+  .btn.gold{background:var(--gold); color:#fff8e6}
+  .btn:disabled{opacity:.38; cursor:not-allowed}
+  .action-row{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  .solve-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:10px}
+  .solve-row input{
+    flex:1 1 200px; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+    padding:0 12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em;
+  }
+  .hint-note{font-size:.88rem; color:var(--muted); font-weight:600; margin:8px 0 0}
+
+  .friend-form{display:grid; gap:8px}
+  .friend-form label{font-weight:800; font-size:.9rem}
+  .friend-form input{
+    border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+    padding:0 12px; font-weight:700; width:100%;
+  }
+  .friend-form[hidden]{display:none}
+
+  /* ---------- feedback ---------- */
+  .fb-stars{display:flex; gap:6px; margin:4px 0 12px}
+  .fb-star{
+    border:1px solid var(--line); background:var(--panel2); color:var(--muted);
+    border-radius:10px; min-width:48px; min-height:48px; font-size:1.5rem; padding:0; line-height:1;
+  }
+  .fb-star[aria-pressed="true"]{color:var(--gold); border-color:var(--gold); background:var(--gold-soft)}
+  .fb-form label{font-weight:800; font-size:.9rem; display:block; margin:10px 0 4px}
+  .fb-form textarea,.fb-form select{
+    width:100%; border-radius:10px; border:1px solid var(--line); background:var(--panel2); color:var(--ink);
+    padding:10px 12px; font-weight:600;
+  }
+  .fb-form textarea{min-height:96px; resize:vertical}
+  .fb-thanks{font-weight:800; color:var(--good); margin:10px 0 0}
+  .fb-thanks[hidden]{display:none}
+
+  /* ---------- stats ---------- */
+  .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:14px}
+  @media (max-width:560px){ .stats{grid-template-columns:repeat(2,1fr)} }
+  .stat{background:var(--panel); border-radius:12px; box-shadow:0 3px 10px rgba(0,0,0,.08); padding:10px 12px; text-align:center}
+  .stat b{display:block; font-size:1.25rem}
+  .stat span{font-size:.72rem; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); font-weight:700}
+
+  /* ---------- result banner ---------- */
+  .result{
+    margin-top:14px; border-radius:var(--radius); padding:16px; text-align:center; box-shadow:var(--shadow);
+  }
+  .result[hidden]{display:none}
+  .result.win{background:var(--good-soft); border:2px solid var(--good)}
+  .result.lose{background:var(--bad-soft); border:2px solid var(--bad)}
+  .result h2{font-family:Fredoka,Nunito,sans-serif; margin:0 0 4px; font-size:1.5rem}
+  .result p{margin:4px 0 12px; line-height:1.5; font-weight:600}
+  .result .the-word{font-size:1.3rem; font-weight:900; letter-spacing:.14em; text-transform:uppercase}
+
+  /* ---------- modal / tour ---------- */
+  .overlay{position:fixed; inset:0; background:rgba(15,10,5,.62); display:flex; align-items:flex-end; justify-content:center; z-index:50; padding:0}
+  .overlay[hidden]{display:none}
+  .sheet{
+    background:var(--panel); color:var(--ink); width:100%; max-width:680px; max-height:88vh;
+    border-radius:20px 20px 0 0; box-shadow:var(--shadow);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .sheet-head{padding:20px 20px 4px; flex:none}
+  .sheet-body{overflow:auto; padding:0 20px; flex:1 1 auto}
+  .sheet-foot{flex:none; padding:12px 20px 18px; border-top:1px solid var(--line); background:var(--panel)}
+  @media (min-width:640px){ .overlay{align-items:center; padding:20px} .sheet{border-radius:20px} }
+  .sheet h2{font-family:Fredoka,Nunito,sans-serif; margin:0 0 6px; font-size:1.5rem; font-weight:600}
+  .sheet h3{margin:16px 0 6px; font-size:1rem}
+  .sheet p,.sheet li{line-height:1.5; font-size:.95rem}
+  .sheet ul{padding-left:20px; margin:6px 0}
+  .sheet table{border-collapse:collapse; width:100%; font-size:.92rem}
+  .sheet th,.sheet td{border-bottom:1px solid var(--line); padding:7px 6px; text-align:left}
+  .sheet .row-btns{display:flex; gap:8px; flex-wrap:wrap}
+  .tour-highlight{position:fixed; border:3px solid var(--gold); border-radius:14px; z-index:60; pointer-events:none; box-shadow:0 0 0 9999px rgba(15,10,5,.45); transition:all .25s ease}
+  .tour-card{
+    position:fixed; left:12px; right:12px; bottom:12px; z-index:61; background:var(--panel); color:var(--ink);
+    border-radius:16px; box-shadow:var(--shadow); padding:16px; max-width:560px; margin:0 auto;
+  }
+  .tour-card h3{margin:0 0 6px; font-family:Fredoka,Nunito,sans-serif; font-weight:600}
+  .tour-card p{margin:0 0 12px; line-height:1.5; font-size:.95rem}
+  .tour-card .row-btns{display:flex; gap:8px; justify-content:space-between; align-items:center}
+  .tour-count{font-size:.82rem; color:var(--muted); font-weight:700}
+
+  footer{margin-top:22px; text-align:center; color:var(--muted); font-size:.88rem; line-height:1.6}
+  footer a{color:inherit; font-weight:700; display:inline-block; padding:8px 4px; min-height:36px}
+  .sr-only{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0)}
+  @media (prefers-reduced-motion: reduce){
+    .slot.revealed,.board.shake,.pill.flash,.key.hint-flash{animation:none}
+    .part,.face-detail{transition:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <h1 class="title">Hangman <span class="rope" aria-hidden="true">?</span></h1>
+    <div class="scorebar" aria-label="Round score">
+      <div class="pill" id="scorePill"><span>Score</span><span id="score">0</span></div>
+      <div class="pill"><span>Streak</span><span id="streakNow">0</span></div>
+      <div class="pill"><span>Round</span><span id="roundNow">1</span></div>
+      <div class="pill practice-pill" id="practicePill" hidden><span>Mode</span>Practice</div>
+    </div>
+  </div>
+  <p class="hint-note" id="practiceNote" style="margin:-4px 0 12px">Practice rounds are just for warming up — no points, and your streak and records stay exactly as they are.</p>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Game mode" id="modeSeg">
+      <button type="button" id="modeAi" aria-pressed="true">vs Computer</button>
+      <button type="button" id="modeFriend" aria-pressed="false">Pass &amp; Play</button>
+    </div>
+    <button class="ghost-btn" id="practiceBtn" type="button" aria-pressed="false" aria-describedby="practiceNote">Practice round: Off</button>
+    <select id="category" aria-label="Word list">
+      <option value="mixed" selected>Mixed bag</option>
+      <option value="animals">Animals</option>
+      <option value="food">Food &amp; Drink</option>
+      <option value="places">Places &amp; Travel</option>
+      <option value="nature">Nature &amp; Weather</option>
+      <option value="sports">Sports &amp; Hobbies</option>
+      <option value="fun">Fun &amp; Fantasy</option>
+    </select>
+    <select id="difficulty" aria-label="Difficulty">
+      <option value="easy">Chill · 9 misses</option>
+      <option value="normal" selected>Classic · 7 misses</option>
+      <option value="hard">Expert · 6 misses, longer words</option>
+    </select>
+    <button class="ghost-btn" id="howBtn" type="button">How to play</button>
+    <button class="ghost-btn" id="rulesBtn" type="button">Rules</button>
+    <button class="ghost-btn" id="tourBtn" type="button">Take the tour</button>
+    <button class="ghost-btn" id="resetBtn" type="button">Reset stats</button>
+    <button class="ghost-btn" id="feedbackBtn" type="button">Feedback</button>
+  </div>
+
+  <div class="newbie-hint" id="newbieHint" hidden>
+    <span><strong>New here?</strong> Tap <strong>How to play</strong> for a quick tutorial, or <strong>Rules</strong> for the full rules — only if you want them. Otherwise, just start guessing!</span>
+    <button class="newbie-dismiss" id="newbieDismiss" type="button" aria-label="Dismiss this hint">✕</button>
+  </div>
+
+  <form class="panel friend-form" id="friendForm" hidden>
+    <h2 style="margin:0">Pass &amp; Play — set the secret word</h2>
+    <label for="friendWord">Secret word or short phrase (letters only)</label>
+    <input id="friendWord" type="password" autocomplete="off" maxlength="24" placeholder="e.g. birthday cake" />
+    <label for="friendClue">Clue for the guesser</label>
+    <input id="friendClue" type="text" autocomplete="off" maxlength="90" placeholder="e.g. You blow out candles on it" />
+    <p class="hint-note" style="margin:0">Pass the device to the guesser before you tap Start — the word stays hidden.</p>
+    <div class="action-row">
+      <button class="btn accent" id="friendStart" type="submit">Start guessing</button>
+      <button class="btn" id="friendCancel" type="button">Cancel</button>
+    </div>
+  </form>
+
+  <section class="board" id="board" aria-label="Hangman board">
+    <div class="board-grid">
+      <div class="gallows-wrap">
+        <svg viewBox="0 0 220 240" role="img" aria-label="Gallows and figure" id="gallows">
+          <!-- scaffold -->
+          <g stroke="#c9a86a" stroke-width="7" stroke-linecap="round">
+            <line x1="18" y1="228" x2="118" y2="228"/>
+            <line x1="48" y1="228" x2="48" y2="22"/>
+            <line x1="48" y1="22" x2="152" y2="22"/>
+            <line x1="48" y1="62" x2="86" y2="22"/>
+          </g>
+          <line x1="152" y1="22" x2="152" y2="46" stroke="#e8dcc0" stroke-width="4" stroke-linecap="round"/>
+          <!-- figure parts, revealed one per wrong guess -->
+          <g stroke="#f2ecd8" stroke-width="6" stroke-linecap="round" fill="none">
+            <circle class="part" data-part="1" cx="152" cy="66" r="19" fill="rgba(242,236,216,.12)"/>
+            <line class="part" data-part="2" x1="152" y1="85" x2="152" y2="140"/>
+            <line class="part" data-part="3" x1="152" y1="98" x2="126" y2="122"/>
+            <line class="part" data-part="4" x1="152" y1="98" x2="178" y2="122"/>
+            <line class="part" data-part="5" x1="152" y1="140" x2="130" y2="178"/>
+            <line class="part" data-part="6" x1="152" y1="140" x2="174" y2="178"/>
+          </g>
+          <g class="face-detail" id="faceSad" stroke="#f2ecd8" stroke-width="3" stroke-linecap="round" fill="none">
+            <line x1="143" y1="60" x2="149" y2="66"/><line x1="149" y1="60" x2="143" y2="66"/>
+            <line x1="155" y1="60" x2="161" y2="66"/><line x1="161" y1="60" x2="155" y2="66"/>
+            <path d="M144 78 Q152 72 160 78"/>
+          </g>
+          <g class="face-detail" id="faceHappy" stroke="#ffd98a" stroke-width="3" stroke-linecap="round" fill="none">
+            <circle cx="146" cy="63" r="1.6" fill="#ffd98a"/><circle cx="158" cy="63" r="1.6" fill="#ffd98a"/>
+            <path d="M144 72 Q152 80 160 72"/>
+          </g>
+        </svg>
+        <div class="lives-row" aria-label="Misses remaining">
+          <span class="lives-label">Misses left</span>
+          <span id="hearts" aria-hidden="true"></span>
+          <span class="lives-label" id="livesNum"></span>
+        </div>
+      </div>
+
+      <div class="word-zone">
+        <div class="practice-badge" id="practiceBadge" hidden>Practice round · No points · Streak &amp; records untouched</div>
+        <div class="cat-label">Word list · <b id="catName">Mixed bag</b> &nbsp;·&nbsp; <span id="wordLen"></span></div>
+        <div class="word" id="wordSlots" aria-label="Secret word"></div>
+        <div class="clue" id="clueBox" hidden><span class="clue-tag">Clue:</span><span id="clueText"></span></div>
+        <p class="msg" id="message" aria-live="polite"></p>
+        <p class="msg small" id="subMessage" aria-live="polite"></p>
+        <p class="wrong-row" id="wrongRow">Wrong guesses: <b id="wrongLetters">—</b></p>
+      </div>
+    </div>
+  </section>
+
+  <div class="result" id="resultBox" hidden>
+    <h2 id="resultTitle"></h2>
+    <p>The word was <span class="the-word" id="resultWord"></span></p>
+    <p id="resultDetail"></p>
+    <button class="btn accent" id="nextBtn" type="button">Next word</button>
+  </div>
+
+  <section class="panel" id="keyboardPanel" aria-label="Letter keyboard">
+    <h2>Pick a letter</h2>
+    <div class="keyboard" id="keyboard"></div>
+    <div class="solve-row">
+      <input id="solveInput" type="text" autocomplete="off" maxlength="30" placeholder="…or type the whole word to solve it" aria-label="Solve the whole word" />
+      <button class="btn gold" id="solveBtn" type="button">Solve it</button>
+    </div>
+    <p class="hint-note">A wrong solve costs 1 miss. You can also just type letters on a real keyboard.</p>
+  </section>
+
+  <section class="panel" id="actionsPanel" aria-label="Round actions">
+    <div class="action-row">
+      <button class="btn accent" id="newBtn" type="button">New word</button>
+      <button class="btn" id="clueBtn" type="button">Show clue</button>
+      <button class="btn" id="letterBtn" type="button">Reveal a letter</button>
+      <button class="btn" id="giveUpBtn" type="button">Give up</button>
+    </div>
+    <p class="hint-note" id="hintCostNote">Revealing a letter costs 1 miss — use it when you're truly stuck.</p>
+  </section>
+
+  <div class="stats" id="statsBar" aria-label="Your records">
+    <div class="stat"><b id="stPlayed">0</b><span>Words played</span></div>
+    <div class="stat"><b id="stWinRate">—</b><span>Win rate</span></div>
+    <div class="stat"><b id="stStreak">0</b><span>Best streak</span></div>
+    <div class="stat"><b id="stBestScore">0</b><span>Best score</span></div>
+  </div>
+
+  <footer>
+    <p>Words picked by the computer — or set one yourself in Pass &amp; Play and challenge a friend on the same device.<br />
+    A <a href="../games-hub/">Ridiculously Fit and Fed</a> game · <a href="../games-hub/">Back to the Games Hub</a><br />
+    <button class="ghost-btn" id="feedbackBtnFoot" type="button" style="margin-top:8px">Feedback</button></p>
+  </footer>
+</div>
+
+<!-- How to play -->
+<div class="overlay" id="howOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+    <div class="sheet-head">
+      <h2 id="howTitle">How to play Hangman</h2>
+      <p><strong>Goal:</strong> guess the secret word letter by letter before you run out of misses and the figure is complete.</p>
+    </div>
+    <div class="sheet-body">
+    <h3>The basics</h3>
+    <ul>
+      <li>The computer (or a friend, in Pass &amp; Play) picks a secret word. Each blank is one letter; spaces in a short phrase are shown for free.</li>
+      <li>Tap a letter on the keyboard — or type on a real keyboard. Right letters fill in everywhere they appear. Wrong letters cost 1 miss and add a piece to the figure.</li>
+      <li>Win by completing the word. Lose when your misses run out.</li>
+    </ul>
+    <h3>Word lists</h3>
+    <p>Pick a list from the menu: <strong>Mixed bag</strong> (everything), <strong>Animals</strong>, <strong>Food &amp; Drink</strong>, <strong>Places &amp; Travel</strong>, <strong>Nature &amp; Weather</strong>, <strong>Sports &amp; Hobbies</strong>, or <strong>Fun &amp; Fantasy</strong>. Changing the list or difficulty starts a fresh word.</p>
+    <h3>Help, when you're stuck</h3>
+    <ul>
+      <li><strong>Show clue</strong> — every word has a clue. It's free, always.</li>
+      <li><strong>Reveal a letter</strong> — fills in one letter for you, but costs 1 miss. It won't spend your last miss.</li>
+      <li><strong>Solve it</strong> — type the whole word if you think you know it. A wrong solve costs 1 miss.</li>
+      <li><strong>Give up</strong> — ends the round and shows the word. Counts as a loss.</li>
+    </ul>
+    <h3>Practice rounds</h3>
+    <p>Tap <strong>Practice round</strong> to warm up with a normal round — same words, misses, clue and Reveal a letter — but <strong>no points are scored</strong> and your streak and records don't change, win or lose. Tap it again to go back to scored play. Practice works in Pass &amp; Play too.</p>
+    <h3>Pass &amp; Play</h3>
+    <p>Switch to <strong>Pass &amp; Play</strong>, type a secret word and a clue (the word stays hidden like a password), then hand the device over.</p>
+    <p>That's the short version. For the full rules — scoring, difficulty levels, and the special cases — tap <strong>Rules</strong> any time.</p>
+    </div>
+    <div class="sheet-foot">
+      <div class="row-btns">
+        <button class="btn accent" id="howClose" type="button">Got it — let's play</button>
+        <button class="btn" id="howTour" type="button">Start the walkthrough</button>
+        <button class="btn" id="howRules" type="button">Read the full rules</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Full rules -->
+<div class="overlay" id="rulesOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+    <div class="sheet-head">
+      <h2 id="rulesTitle">Hangman — Full Rules</h2>
+      <p>The complete rulebook: how a round is won and lost, exactly how scoring works, and every special rule.</p>
+    </div>
+    <div class="sheet-body">
+    <h3>Win and loss conditions</h3>
+    <ul>
+      <li><strong>You win</strong> the round the moment every letter of the secret word is revealed — by guessing, by a correct Solve, or by Reveal a letter completing the word.</li>
+      <li><strong>You lose</strong> the round when your wrong guesses use up all your misses for the difficulty level (see below). The full word and its clue are then shown.</li>
+      <li><strong>Give up</strong> ends the round immediately and counts as a loss.</li>
+      <li><strong>New word (skip)</strong> during an unfinished round counts that round as played, ends your current win streak, and scores 0 for it.</li>
+      <li>There is no timer. Rounds are untimed, and your score carries from round to round until you change the word list or difficulty, or reset your stats.</li>
+    </ul>
+    <h3>Guessing rules</h3>
+    <ul>
+      <li>Each letter can be guessed only once. A correct guess reveals that letter in <em>every</em> position it appears — repeats are always free.</li>
+      <li>A wrong letter costs exactly 1 miss. Letters are never case-sensitive, and you can guess by tapping the on-screen keyboard or typing on a real keyboard.</li>
+      <li>Spaces in a short phrase (Pass &amp; Play, or “Pizza Party” in Fun &amp; Fantasy) are shown from the start and never need guessing. Only A–Z letters count.</li>
+      <li><strong>Solve it:</strong> typing the exact whole word or phrase wins instantly. A wrong solve costs 1 miss — and if that was your last miss, the round is lost.</li>
+    </ul>
+    <h3>Special rules — help actions</h3>
+    <ul>
+      <li><strong>Show clue</strong> is always free and can be used once per round. Every word-list word has its own clue; a Pass &amp; Play word uses the clue its setter typed (or a default note if they left it blank).</li>
+      <li><strong>Reveal a letter</strong> reveals one randomly chosen still-hidden letter and costs 1 miss. It is disabled when you have only 1 miss left — it can never spend your last miss — but if the revealed letter completes the word, you still win the round.</li>
+      <li>The figure on the gallows fills in proportionally: the same six body parts are spread across however many misses your difficulty allows, so on Chill (9 misses) some misses add no new part.</li>
+    </ul>
+    <h3>Difficulty levels</h3>
+    <table>
+      <tr><th>Level</th><th>Misses allowed</th><th>Word pool</th><th>Score multiplier</th></tr>
+      <tr><td>Chill</td><td>9</td><td>Any length</td><td>×1</td></tr>
+      <tr><td>Classic</td><td>7</td><td>Any length</td><td>×1.5</td></tr>
+      <tr><td>Expert</td><td>6</td><td>Words of 7+ letters preferred</td><td>×2</td></tr>
+    </table>
+    <p>Changing the word list or the difficulty starts a fresh game: score, streak and round counter reset. Your saved records (below) do not.</p>
+    <h3>Scoring — exact formula</h3>
+    <ul>
+      <li>Points are scored <strong>only for a win</strong>. A loss, a give-up, and a skip all score 0.</li>
+      <li>Base = (10 × number of letters in the word) + (15 × misses you had left when you won).</li>
+      <li>Round points = round(Base × difficulty multiplier) + streak bonus.</li>
+      <li>Streak bonus = 25 × your win streak <em>before</em> this round (so your first win in a row adds 0, the second consecutive win adds 25, the third adds 50, and so on).</li>
+      <li>Worked example: winning “ELEPHANT” (8 letters) on Classic with 3 misses left, on your second win in a row: (80 + 45) × 1.5 = 188, plus 25 streak bonus = <strong>213 points</strong>.</li>
+      <li>Winning by Reveal a letter scores the same as winning by guessing — the miss it cost is already reflected in your misses left.</li>
+    </ul>
+    <h3>Word lists</h3>
+    <p>There are six lists — Animals, Food &amp; Drink, Places &amp; Travel, Nature &amp; Weather, Sports &amp; Hobbies, and Fun &amp; Fantasy — plus Mixed bag, which draws from all of them. The computer avoids repeating any of your last six words. Every list word is a single word except “Pizza Party” in Fun &amp; Fantasy.</p>
+    <h3>Pass &amp; Play rules</h3>
+    <ul>
+      <li>The setter types a word or short phrase of at least 3 letters (letters and spaces only, up to 24 characters) and an optional clue. The word is entered in a masked field and is never displayed while typing.</li>
+      <li>All guessing, miss, help-action and scoring rules above apply exactly the same. The round is labelled “Pass &amp; Play” instead of a word list.</li>
+      <li>After a Pass &amp; Play round, “Next word” returns to the setter form so a new word can be set.</li>
+    </ul>
+    <h3>Practice rounds</h3>
+    <ul>
+      <li>Turn <strong>Practice round</strong> on from the controls above the board. A “Practice” badge shows on the board and in the score bar while it's on.</li>
+      <li>Practice rounds play exactly like scored rounds — same word lists, difficulty, misses, clue, Reveal a letter and Solve rules — except <strong>no points are scored</strong> for a win.</li>
+      <li>A practice win, loss, give-up or skip does <strong>not</strong> count in Words played, does not change your win streak or best streak, and does not change your score or best score.</li>
+      <li>Turning Practice on or off starts a fresh word. Turning it on part-way through a scored round counts that unfinished round as a skip, exactly like tapping New word. Turning it off returns you to scored play with your previous score and streak intact.</li>
+      <li>Practice can be combined with Pass &amp; Play: the practice setting applies to the friend-set word too.</li>
+    </ul>
+    <h3>Records</h3>
+    <p>Words played, wins (shown as win rate), best win streak and best total score are saved on this device only. <strong>Reset stats</strong> clears those records plus your current score and streak; it does not change the round in progress.</p>
+    </div>
+    <div class="sheet-foot">
+      <div class="row-btns">
+        <button class="btn accent" id="rulesClose" type="button">Close rules</button>
+        <button class="btn" id="rulesHow" type="button">Back to How to play</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback -->
+<div class="overlay" id="feedbackOverlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+    <div class="sheet-head">
+      <h2 id="feedbackTitle">Feedback — Hangman</h2>
+      <p>Tell us how this game is doing. Your feedback is saved on this device only.</p>
+    </div>
+    <div class="sheet-body">
+      <form class="fb-form" id="feedbackForm">
+        <label id="fbRatingLabel">Your rating</label>
+        <div class="fb-stars" role="group" aria-labelledby="fbRatingLabel" id="fbStars">
+          <button type="button" class="fb-star" data-rating="1" aria-pressed="false" aria-label="1 star">★</button>
+          <button type="button" class="fb-star" data-rating="2" aria-pressed="false" aria-label="2 stars">★</button>
+          <button type="button" class="fb-star" data-rating="3" aria-pressed="false" aria-label="3 stars">★</button>
+          <button type="button" class="fb-star" data-rating="4" aria-pressed="false" aria-label="4 stars">★</button>
+          <button type="button" class="fb-star" data-rating="5" aria-pressed="false" aria-label="5 stars">★</button>
+        </div>
+        <label for="fbTag">What's this about? (optional)</label>
+        <select id="fbTag">
+          <option value="Other" selected>Other</option>
+          <option value="Bug">Bug</option>
+          <option value="Suggestion">Suggestion</option>
+        </select>
+        <label for="fbText">Your comment</label>
+        <textarea id="fbText" maxlength="1000" placeholder="What did you like? What should change?"></textarea>
+        <p class="hint-note">Feedback follows the same Terms &amp; Conditions as the games: no personal info needed, please keep it clean, and it may be used to improve the games.</p>
+        <p class="fb-thanks" id="fbThanks" hidden>Thanks! Your feedback was saved. 💛</p>
+      </form>
+    </div>
+    <div class="sheet-foot">
+      <div class="row-btns">
+        <button class="btn accent" id="fbSave" type="button">Save feedback</button>
+        <button class="btn" id="fbClose" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Walkthrough (opt-in — opens only from How to play / Take the tour) -->
+<div class="tour-highlight" id="tourHi" hidden></div>
+<div class="tour-card" id="tourCard" hidden role="dialog" aria-label="Walkthrough">
+  <h3 id="tourTitle"></h3>
+  <p id="tourText"></p>
+  <div class="row-btns">
+    <span class="tour-count" id="tourCount"></span>
+    <span style="display:flex; gap:8px">
+      <button class="btn" id="tourSkip" type="button">Skip tour</button>
+      <button class="btn accent" id="tourNext" type="button">Next</button>
+    </span>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- word lists: [word, clue] ---------- */
+var LISTS = {
+  animals: {label:"Animals", words:[
+    ["ELEPHANT","The largest land animal, with a trunk and big ears"],
+    ["GIRAFFE","The tallest land animal, with a very long neck"],
+    ["PENGUIN","A flightless bird that waddles and swims in cold seas"],
+    ["OCTOPUS","A sea creature with eight arms and three hearts"],
+    ["BUTTERFLY","It starts life as a caterpillar, then grows wings"],
+    ["KANGAROO","An Australian animal that hops and carries babies in a pouch"],
+    ["CHEETAH","The fastest land animal over short distances"],
+    ["DOLPHIN","A smart sea mammal that clicks and whistles"],
+    ["FLAMINGO","A pink bird that often stands on one leg"],
+    ["HEDGEHOG","A small animal covered in spines that rolls into a ball"],
+    ["PLATYPUS","An egg-laying mammal with a duck-like bill"],
+    ["CHAMELEON","A lizard famous for changing colour"],
+    ["RACCOON","A masked nighttime animal that washes its food"],
+    ["BUFFALO","A huge grazing animal of the North American plains"],
+    ["JAGUAR","A spotted big cat from the Americas"],
+    ["KOALA","An Australian tree-dweller that munches eucalyptus leaves"],
+    ["OSTRICH","The biggest bird of all — and it cannot fly"],
+    ["GORILLA","The largest primate, a gentle giant of the forest"],
+    ["SEAHORSE","A tiny sea creature whose males carry the babies"],
+    ["PORCUPINE","Covered in sharp quills for protection"],
+    ["ANTEATER","It laps up insects with an extremely long tongue"],
+    ["ARMADILLO","A small mammal wearing a suit of armour"],
+    ["MEERKAT","A desert lookout that stands up to scan for danger"],
+    ["WALRUS","A tusked sea mammal with magnificent whiskers"]
+  ]},
+  food: {label:"Food & Drink", words:[
+    ["SPAGHETTI","Long thin pasta, often twirled on a fork"],
+    ["AVOCADO","A green fruit with a big stone — great on toast"],
+    ["CROISSANT","A flaky, crescent-shaped French pastry"],
+    ["BLUEBERRY","A small round fruit that turns pancakes blue-speckled"],
+    ["PANCAKES","A flat breakfast stack, lovely with maple syrup"],
+    ["CHOCOLATE","Made from cacao — milk, dark, or white"],
+    ["PINEAPPLE","A spiky tropical fruit with a leafy crown"],
+    ["SANDWICH","A filling between two slices of bread"],
+    ["BROCCOLI","A vegetable that looks like a tiny tree"],
+    ["CINNAMON","A warm spice that comes from tree bark"],
+    ["WAFFLES","A gridded breakfast treat with pockets for syrup"],
+    ["PRETZEL","A knotted, salted, baked snack"],
+    ["MUSHROOM","A fungus — some kinds are delicious, some are not"],
+    ["STRAWBERRY","A red fruit with its seeds on the outside"],
+    ["POPCORN","Kernels that burst into fluffy snacks at the movies"],
+    ["LEMONADE","A sweet-tart drink sold at many a summer stand"],
+    ["MEATBALL","A seasoned ball of ground meat, great on pasta"],
+    ["CUCUMBER","A cool, crunchy green vegetable — mostly water"],
+    ["DUMPLING","A little parcel of dough with a filling inside"],
+    ["MARSHMALLOW","A squishy sweet, best toasted over a fire"],
+    ["ESPRESSO","A tiny, strong shot of coffee"],
+    ["GUACAMOLE","A dip made mostly from avocados"],
+    ["BAGUETTE","A long, crusty French loaf"],
+    ["SMOOTHIE","Fruit blended into a thick, cold drink"]
+  ]},
+  places: {label:"Places & Travel", words:[
+    ["LIGHTHOUSE","A tower with a bright beam that guides ships"],
+    ["WATERFALL","A river pouring over a cliff edge"],
+    ["VOLCANO","A mountain that can erupt with lava"],
+    ["GLACIER","A slow-moving river of ice"],
+    ["CASTLE","A fortified home for royalty, with towers"],
+    ["HARBOUR","A sheltered place where boats are kept"],
+    ["DESERT","A dry land of sand and very little rain"],
+    ["ISLAND","Land completely surrounded by water"],
+    ["MOUNTAIN","A very high peak — Everest is the tallest"],
+    ["LIBRARY","A quiet building full of books to borrow"],
+    ["AIRPORT","Where planes take off and land"],
+    ["MARKET","An open place to buy food and goods"],
+    ["PYRAMID","An ancient triangular tomb in Egypt"],
+    ["JUNGLE","A dense, steamy forest full of wildlife"],
+    ["CANYON","A deep valley carved by a river — one is Grand"],
+    ["LAGOON","A shallow pool of sea water near the coast"],
+    ["PENINSULA","Land almost surrounded by water on three sides"],
+    ["OBSERVATORY","A building with telescopes for watching the stars"],
+    ["SANCTUARY","A safe place where animals are protected"],
+    ["TUNNEL","A passage dug through a hill or under a river"],
+    ["VINEYARD","Where grapes are grown for wine"],
+    ["COTTAGE","A small, cozy house in the countryside"],
+    ["SKYSCRAPER","An extremely tall city building"],
+    ["CAMPGROUND","Where you pitch a tent and sleep outside"]
+  ]},
+  nature: {label:"Nature & Weather", words:[
+    ["RAINBOW","A colourful arc after rain and sunshine mix"],
+    ["THUNDER","The rumble that follows a flash of lightning"],
+    ["SUNFLOWER","A tall yellow flower that follows the sun"],
+    ["EVERGREEN","A tree that stays green all winter long"],
+    ["BLIZZARD","A fierce snowstorm with strong winds"],
+    ["HURRICANE","A huge spinning storm that forms over warm oceans"],
+    ["TORNADO","A twisting funnel of wind that touches the ground"],
+    ["EARTHQUAKE","When the ground suddenly shakes"],
+    ["WILDFIRE","An uncontrolled fire in forests or grassland"],
+    ["AVALANCHE","A sudden slide of snow down a mountain"],
+    ["ECLIPSE","When the Moon blocks the Sun — or Earth's shadow falls on the Moon"],
+    ["METEOR","A shooting star streaking through the sky"],
+    ["CONSTELLATION","A pattern of stars, like the Big Dipper"],
+    ["TIDE","The daily rise and fall of the sea"],
+    ["MEADOW","A grassy field full of wildflowers"],
+    ["STREAM","A small, flowing river"],
+    ["BAMBOO","A giant grass that grows incredibly fast"],
+    ["CACTUS","A desert plant with spines instead of leaves"],
+    ["ACORN","An oak tree's seed, beloved by squirrels"],
+    ["HIBERNATION","A long winter sleep some animals take"],
+    ["MIGRATION","The long seasonal journey many birds make"],
+    ["PHOTOSYNTHESIS","How plants turn sunlight into food"],
+    ["GRAVITY","The force that keeps your feet on the ground"],
+    ["MAGNETISM","The invisible force that pulls some metals together"]
+  ]},
+  sports: {label:"Sports & Hobbies", words:[
+    ["BADMINTON","A racket sport played with a shuttlecock"],
+    ["ARCHERY","Shooting arrows at a target"],
+    ["MARATHON","A running race of about 42 kilometres"],
+    ["GYMNASTICS","Flips, balances and routines on bars and beams"],
+    ["KAYAKING","Paddling a small boat with a double-ended paddle"],
+    ["SKATEBOARD","A board on wheels for tricks and cruising"],
+    ["CURLING","Sliding stones on ice toward a target, with sweeping"],
+    ["FENCING","Dueling with thin swords and lots of footwork"],
+    ["VOLLEYBALL","Hitting a ball over a net — no catching allowed"],
+    ["SNOWBOARDING","Riding one wide board down a snowy slope"],
+    ["WEIGHTLIFTING","Lifting heavy barbells overhead"],
+    ["ORIGAMI","The art of folding paper into shapes"],
+    ["PHOTOGRAPHY","Capturing moments with a camera"],
+    ["GARDENING","Growing plants, flowers and vegetables"],
+    ["JUGGLING","Keeping several balls in the air at once"],
+    ["ASTRONOMY","Studying stars, planets and space as a hobby"],
+    ["KNITTING","Making fabric from yarn and two needles"],
+    ["ROCK CLIMBING","Scaling cliffs or indoor walls with your hands and feet"],
+    ["SURFING","Riding ocean waves on a board"],
+    ["CHECKERS","A board game of jumps and kings on a checkered board"],
+    ["BACKGAMMON","An ancient dice-and-board race game"],
+    ["BOWLING","Rolling a heavy ball at ten pins"],
+    ["DARTS","Throwing small projectiles at a round target board"],
+    ["FISHING","Catching dinner with a rod, line and patience"]
+  ]},
+  fun: {label:"Fun & Fantasy", words:[
+    ["DRAGON","A fire-breathing creature of legend"],
+    ["WIZARD","A magic-user with a staff, robe and long beard"],
+    ["UNICORN","A horse with a single spiral horn"],
+    ["TREASURE","A pirate's buried chest of gold"],
+    ["SPACESHIP","A vehicle for travelling between the stars"],
+    ["SUPERHERO","A cape-wearing do-gooder with special powers"],
+    ["MERMAID","Half person, half fish, living under the sea"],
+    ["HAUNTED HOUSE","A spooky home full of ghosts and creaky floors"],
+    ["TIME MACHINE","A device for visiting the past or future"],
+    ["ENCHANTED","A forest under a magical spell"],
+    ["POTION","A magical brew in a bubbling bottle"],
+    ["LABYRINTH","A maze with only one true path through"],
+    ["PHOENIX","A mythical bird reborn from its own ashes"],
+    ["GRIFFIN","Half eagle, half lion, all legend"],
+    ["CASTAWAY","A shipwreck survivor alone on an island"],
+    ["CARNIVAL","A travelling fair with rides and games"],
+    ["FIREWORKS","Explosions of colour in the night sky"],
+    ["SNOWGLOBE","A tiny winter scene you shake to make it snow"],
+    ["TREEHOUSE","A hideout built up among the branches"],
+    ["KALEIDOSCOPE","A tube of mirrors and colour that never repeats"],
+    ["VENTRILOQUIST","A performer who makes a dummy seem to talk"],
+    ["JUGGLE","What a clown does with balls at the circus — wait, that's an action"],
+    ["WEREWOLF","A person who changes under the full moon"],
+    ["PIZZA PARTY","The best kind of party, honestly"]
+  ]}
+};
+LISTS.fun.words = LISTS.fun.words.filter(function(w){ return w[0] !== "JUGGLE"; });
+
+var DIFFS = {
+  easy:   {label:"Chill",   maxWrong:9, mult:1,   longOnly:false},
+  normal: {label:"Classic", maxWrong:7, mult:1.5, longOnly:false},
+  hard:   {label:"Expert",  maxWrong:6, mult:2,   longOnly:true}
+};
+var CAT_KEYS = Object.keys(LISTS);
+var LS_BEST = "rff-hangman-bests-v1", LS_SEEN = "rff-hangman-seen-v1", LS_SET = "rff-hangman-settings-v1";
+
+function $(id){ return document.getElementById(id); }
+function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+
+/* ---------- persistent bests & settings ---------- */
+var bests = {played:0, wins:0, bestStreak:0, bestScore:0};
+try{ var b = JSON.parse(localStorage.getItem(LS_BEST)||"null"); if(b) bests = b; }catch(e){}
+var settings = {category:"mixed", difficulty:"normal", mode:"ai", practice:false};
+try{ var s = JSON.parse(localStorage.getItem(LS_SET)||"null"); if(s) settings = s; }catch(e){}
+function saveBests(){ try{ localStorage.setItem(LS_BEST, JSON.stringify(bests)); }catch(e){} }
+function saveSettings(){ try{ localStorage.setItem(LS_SET, JSON.stringify(settings)); }catch(e){} }
+
+/* ---------- game state ---------- */
+var G = null;
+function cfg(){ return DIFFS[G.difficulty]; }
+
+function poolFor(catKey, diffKey){
+  var pool = [];
+  if(catKey === "mixed"){
+    CAT_KEYS.forEach(function(k){ LISTS[k].words.forEach(function(w){ pool.push({word:w[0], clue:w[1], cat:LISTS[k].label}); }); });
+  } else {
+    LISTS[catKey].words.forEach(function(w){ pool.push({word:w[0], clue:w[1], cat:LISTS[catKey].label}); });
+  }
+  if(DIFFS[diffKey].longOnly){
+    var lettersOnly = function(w){ return w.word.replace(/[^A-Z]/g,"").length; };
+    var long = pool.filter(function(w){ return lettersOnly(w) >= 7; });
+    if(long.length >= 5) pool = long;
+  }
+  return pool;
+}
+
+function newRound(friendEntry){
+  var entry;
+  if(friendEntry){
+    entry = {word:friendEntry.word, clue:friendEntry.clue || "Your friend set this one — no clue given.", cat:"Pass & Play"};
+  } else {
+    var pool = poolFor(G ? G.category : settings.category, G ? G.difficulty : settings.difficulty);
+    /* avoid repeating the last few words */
+    var recent = G ? G.recent : [];
+    var fresh = pool.filter(function(w){ return recent.indexOf(w.word) === -1; });
+    if(fresh.length) pool = fresh;
+    entry = pool[Math.floor(Math.random()*pool.length)];
+  }
+  var prev = G;
+  G = {
+    category: prev ? prev.category : settings.category,
+    difficulty: prev ? prev.difficulty : settings.difficulty,
+    mode: prev ? prev.mode : settings.mode,
+    practice: prev ? !!prev.practice : !!settings.practice,
+    word: entry.word.toUpperCase(), clue: entry.clue, catLabel: entry.cat,
+    guessed: {}, wrong: [], wrongCount: 0,
+    clueShown: false, over: false, won: false, gaveUp: false,
+    score: prev ? prev.score : 0, streak: prev ? prev.streak : 0,
+    round: prev ? prev.round + (prev.over ? 1 : 0) : 1,
+    recent: prev ? prev.recent : []
+  };
+  if(prev && !prev.over && prev.started){ /* abandoned mid-round counts as played, not won */ }
+  G.started = true;
+  G.recent.push(G.word); if(G.recent.length > 6) G.recent.shift();
+  render();
+}
+
+function startFresh(){
+  G = null;
+  newRound(null);
+  G.score = 0; G.streak = 0; G.round = 1;
+  render();
+}
+
+/* ---------- rendering ---------- */
+function lettersNeeded(){
+  var set = {};
+  G.word.split("").forEach(function(ch){ if(/[A-Z]/.test(ch)) set[ch] = true; });
+  return set;
+}
+function isComplete(){
+  var need = lettersNeeded();
+  return Object.keys(need).every(function(ch){ return G.guessed[ch]; });
+}
+function missesLeft(){ return cfg().maxWrong - G.wrongCount; }
+
+function render(){
+  /* header */
+  $("score").textContent = G.score;
+  $("streakNow").textContent = G.streak;
+  $("roundNow").textContent = G.round;
+  /* practice state */
+  var isPractice = !!G.practice;
+  $("practiceBtn").setAttribute("aria-pressed", isPractice ? "true" : "false");
+  $("practiceBtn").textContent = isPractice ? "Practice round: On" : "Practice round: Off";
+  $("practicePill").hidden = !isPractice;
+  $("practiceBadge").hidden = !isPractice;
+  $("scorePill").classList.toggle("practice-pill", isPractice);
+  /* category + length */
+  $("catName").textContent = G.catLabel;
+  var n = G.word.replace(/[^A-Z]/g,"").length;
+  $("wordLen").textContent = n + (n === 1 ? " letter" : " letters");
+  /* word slots */
+  var ws = $("wordSlots"); ws.innerHTML = "";
+  G.word.split("").forEach(function(ch){
+    var d = document.createElement("div");
+    if(!/[A-Z]/.test(ch)){ d.className = "slot space"; d.textContent = ""; }
+    else {
+      d.className = "slot" + (G.guessed[ch] ? " revealed" : "") + (G.over && !G.guessed[ch] ? " missed-letter" : "");
+      d.textContent = (G.guessed[ch] || G.over) ? ch : "";
+    }
+    ws.appendChild(d);
+  });
+  ws.setAttribute("aria-label", "Word: " + G.word.split("").map(function(ch){
+    if(!/[A-Z]/.test(ch)) return "space";
+    return (G.guessed[ch] || G.over) ? ch : "blank";
+  }).join(", "));
+  /* clue */
+  $("clueBox").hidden = !G.clueShown;
+  $("clueText").textContent = G.clue;
+  $("clueBtn").textContent = G.clueShown ? "Clue shown ✓" : "Show clue";
+  $("clueBtn").disabled = G.clueShown || G.over;
+  /* gallows: map wrong count onto 6 figure parts + sad face */
+  var maxW = cfg().maxWrong;
+  var partsOn = Math.round(G.wrongCount / maxW * 6);
+  document.querySelectorAll("#gallows .part").forEach(function(p){
+    p.classList.toggle("on", parseInt(p.getAttribute("data-part"),10) <= partsOn);
+  });
+  $("faceSad").classList.toggle("on", G.over && !G.won && G.wrongCount > 0);
+  $("faceHappy").classList.toggle("on", G.over && G.won);
+  /* hearts */
+  var hearts = "";
+  for(var i=0;i<maxW;i++) hearts += '<span class="heart' + (i < G.wrongCount ? " lost" : "") + '">♥</span>';
+  $("hearts").innerHTML = hearts;
+  $("livesNum").textContent = missesLeft() + " left";
+  /* wrong letters */
+  $("wrongLetters").textContent = G.wrong.length ? G.wrong.join(" ") : "—";
+  /* keyboard */
+  document.querySelectorAll("#keyboard .key").forEach(function(k){
+    var L = k.getAttribute("data-letter");
+    k.classList.remove("right","wrong","hint-flash");
+    if(G.guessed[L]){ k.classList.add("right"); k.disabled = true; }
+    else if(G.wrong.indexOf(L) !== -1){ k.classList.add("wrong"); k.disabled = true; }
+    else k.disabled = G.over;
+  });
+  /* actions */
+  $("letterBtn").disabled = G.over || missesLeft() <= 1;
+  $("giveUpBtn").disabled = G.over;
+  $("solveBtn").disabled = G.over;
+  $("solveInput").disabled = G.over;
+  $("newBtn").textContent = G.over ? "Next word" : "New word (skip)";
+  /* stats */
+  $("stPlayed").textContent = bests.played;
+  $("stWinRate").textContent = bests.played ? Math.round(bests.wins / bests.played * 100) + "%" : "—";
+  $("stStreak").textContent = bests.bestStreak;
+  $("stBestScore").textContent = bests.bestScore;
+  /* result */
+  if(!G.over) $("resultBox").hidden = true;
+}
+function setMsg(main, sub){ $("message").textContent = main || ""; $("subMessage").textContent = sub || ""; }
+function shakeBoard(){
+  var bd = $("board");
+  bd.classList.remove("shake"); void bd.offsetWidth; bd.classList.add("shake");
+}
+
+/* ---------- guessing ---------- */
+function guessLetter(L){
+  if(!G || G.over || G.guessed[L] || G.wrong.indexOf(L) !== -1) return;
+  if(G.word.indexOf(L) !== -1){
+    G.guessed[L] = true;
+    var count = G.word.split("").filter(function(ch){ return ch === L; }).length;
+    if(isComplete()){ winRound(); return; }
+    setMsg("Nice — " + L + " is in there" + (count > 1 ? " ×" + count : "") + "!", missesLeft() + (missesLeft() === 1 ? " miss" : " misses") + " left.");
+    render();
+  } else {
+    G.wrong.push(L); G.wrongCount++;
+    shakeBoard();
+    if(missesLeft() <= 0){ loseRound(false); return; }
+    setMsg("No " + L + " — that's a miss.", missesLeft() === 1 ? "Careful: one miss left!" : missesLeft() + " misses left.");
+    render();
+  }
+}
+function revealLetter(){
+  if(G.over || missesLeft() <= 1) return;
+  var need = Object.keys(lettersNeeded()).filter(function(ch){ return !G.guessed[ch]; });
+  if(!need.length) return;
+  var L = need[Math.floor(Math.random()*need.length)];
+  G.guessed[L] = true; G.wrongCount++;
+  if(isComplete()){ winRound(true); return; }
+  setMsg("Revealed: " + L + " — cost you 1 miss.", missesLeft() + (missesLeft() === 1 ? " miss" : " misses") + " left.");
+  render();
+}
+function solveAttempt(){
+  var val = $("solveInput").value.toUpperCase().replace(/[^A-Z ]/g,"").replace(/\s+/g," ").trim();
+  if(!val || G.over) return;
+  $("solveInput").value = "";
+  if(val === G.word){
+    G.word.split("").forEach(function(ch){ if(/[A-Z]/.test(ch)) G.guessed[ch] = true; });
+    winRound();
+  } else {
+    G.wrongCount++;
+    shakeBoard();
+    if(missesLeft() <= 0){ loseRound(false); return; }
+    setMsg("“" + val + "” isn't it — 1 miss.", missesLeft() + (missesLeft() === 1 ? " miss" : " misses") + " left.");
+    render();
+  }
+}
+function recordRound(won, points){
+  if(G.practice) return; /* practice never touches score, streak or records */
+  bests.played++;
+  if(won){
+    bests.wins++;
+    G.streak++;
+    if(G.streak > bests.bestStreak) bests.bestStreak = G.streak;
+    G.score += points;
+    if(G.score > bests.bestScore) bests.bestScore = G.score;
+  } else {
+    G.streak = 0;
+  }
+  saveBests();
+}
+function winRound(viaReveal){
+  G.over = true; G.won = true;
+  var letterPts = G.word.replace(/[^A-Z]/g,"").length * 10;
+  var bonus = missesLeft() * 15;
+  var streakBonus = G.streak * 25;
+  var points = G.practice ? 0 : Math.round((letterPts + bonus) * cfg().mult) + streakBonus;
+  recordRound(true, points);
+  if(!G.practice){ $("scorePill").classList.remove("flash"); void $("scorePill").offsetWidth; $("scorePill").classList.add("flash"); }
+  setMsg("You got it!", "");
+  var rb = $("resultBox");
+  rb.hidden = false; rb.className = "result win";
+  $("resultTitle").textContent = viaReveal ? "Finished it — with a little help!" : (missesLeft() >= cfg().maxWrong - 1 ? "Flawless!" : "You saved them!");
+  $("resultWord").textContent = G.word;
+  $("resultDetail").textContent = G.practice
+    ? "Practice round complete — no points scored, and your streak and records are untouched. Turn Practice off when you're ready to play for points."
+    : "+" + points + " points (" + letterPts + " for the letters, " + bonus + " for spare misses"
+    + (cfg().mult !== 1 ? ", ×" + cfg().mult + " " + cfg().label + " bonus" : "")
+    + (streakBonus ? ", +" + streakBonus + " streak bonus" : "") + ")."
+    + (G.streak > 1 ? " That's " + G.streak + " wins in a row!" : "");
+  render();
+  $("resultBox").scrollIntoView({block:"nearest", behavior:"smooth"});
+}
+function loseRound(gaveUp){
+  G.over = true; G.won = false; G.gaveUp = !!gaveUp;
+  recordRound(false, 0);
+  setMsg(gaveUp ? "You gave up this one." : "Out of misses!", "");
+  var rb = $("resultBox");
+  rb.hidden = false; rb.className = "result lose";
+  $("resultTitle").textContent = gaveUp ? "The word was…" : "So close — out of misses";
+  $("resultWord").textContent = G.word;
+  $("resultDetail").textContent = "The clue was: " + G.clue + " — tap Next word to try another."
+    + (G.practice ? " Practice round — no points lost and your streak is untouched." : "");
+  render();
+  $("resultBox").scrollIntoView({block:"nearest", behavior:"smooth"});
+}
+
+/* ---------- keyboard build + input ---------- */
+(function buildKeyboard(){
+  var kb = $("keyboard");
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach(function(L){
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "key"; b.textContent = L;
+    b.setAttribute("data-letter", L);
+    b.setAttribute("aria-label", "Guess letter " + L);
+    b.addEventListener("click", function(){ guessLetter(L); });
+    kb.appendChild(b);
+  });
+})();
+document.addEventListener("keydown", function(e){
+  if(!$("howOverlay").hidden || !$("rulesOverlay").hidden || !$("feedbackOverlay").hidden || !$("tourCard").hidden) return;
+  var tag = (e.target && e.target.tagName) || "";
+  if(tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+  if(e.metaKey || e.ctrlKey || e.altKey) return;
+  var L = (e.key || "").toUpperCase();
+  if(/^[A-Z]$/.test(L)) guessLetter(L);
+});
+$("solveBtn").addEventListener("click", solveAttempt);
+$("solveInput").addEventListener("keydown", function(e){ if(e.key === "Enter"){ e.preventDefault(); solveAttempt(); } });
+$("clueBtn").addEventListener("click", function(){ G.clueShown = true; setMsg("Clue's up — no cost.", ""); render(); });
+$("letterBtn").addEventListener("click", revealLetter);
+$("giveUpBtn").addEventListener("click", function(){ if(!G.over) loseRound(true); });
+$("newBtn").addEventListener("click", function(){
+  if(!G.over && !G.practice){ bests.played++; saveBests(); G.streak = 0; }
+  nextRound();
+});
+$("nextBtn").addEventListener("click", nextRound);
+function nextRound(){
+  if(G.mode === "friend"){ $("friendForm").hidden = false; $("friendForm").scrollIntoView({block:"nearest", behavior:"smooth"}); setMsg("Pass & Play: set a new word above.", ""); return; }
+  newRound(null);
+  setMsg("New word — good luck!", "Pick a letter to start.");
+}
+
+/* ---------- controls: category, difficulty, mode, reset ---------- */
+var catSel = $("category"), diffSel = $("difficulty");
+catSel.value = settings.category in LISTS || settings.category === "mixed" ? settings.category : "mixed";
+diffSel.value = settings.difficulty in DIFFS ? settings.difficulty : "normal";
+function syncModeButtons(){
+  $("modeAi").setAttribute("aria-pressed", settings.mode === "ai" ? "true" : "false");
+  $("modeFriend").setAttribute("aria-pressed", settings.mode === "friend" ? "true" : "false");
+}
+$("practiceBtn").addEventListener("click", function(){
+  /* abandoning a scored mid-round counts as a skip, like New word does */
+  if(G && !G.over && G.started && !G.practice){ bests.played++; saveBests(); G.streak = 0; }
+  settings.practice = !settings.practice; saveSettings();
+  if(settings.mode === "friend"){
+    if(G){ G.practice = settings.practice; render(); }
+    setMsg(settings.practice ? "Practice round on — set a word above to practise with." : "Practice off — Pass & Play rounds count again.", "No points, streak or records change in practice.");
+    return;
+  }
+  if(G) G.practice = settings.practice;
+  newRound(null);
+  if(G) G.practice = settings.practice;
+  render();
+  setMsg(settings.practice ? "Practice round — guess freely!" : "Scored play — good luck!", settings.practice ? "No points, and your streak and records stay untouched." : "Pick a letter to start.");
+});
+catSel.addEventListener("change", function(){
+  settings.category = catSel.value; saveSettings();
+  if(G){ G.category = catSel.value; }
+  if(settings.mode === "ai"){
+    if(settings.practice){ newRound(null); render(); setMsg("New list — practice word!", "No points in practice — just warm up."); }
+    else { startFresh(); setMsg("New list, new word!", "Pick a letter to start."); }
+  }
+});
+diffSel.addEventListener("change", function(){
+  settings.difficulty = diffSel.value; saveSettings();
+  if(G){ G.difficulty = diffSel.value; }
+  if(settings.mode === "ai"){
+    if(settings.practice){ newRound(null); render(); setMsg(cfg().label + " mode — " + cfg().maxWrong + " misses.", "Practice word — score and streak untouched."); }
+    else { startFresh(); setMsg(cfg().label + " mode — " + cfg().maxWrong + " misses.", "Fresh word, fresh score."); }
+  }
+});
+$("modeAi").addEventListener("click", function(){
+  if(settings.mode === "ai") return;
+  settings.mode = "ai"; saveSettings(); syncModeButtons();
+  $("friendForm").hidden = true;
+  if(G) G.mode = "ai";
+  if(settings.practice){ newRound(null); render(); setMsg("The computer picks the word — practice round.", "No points, streak or records change in practice."); }
+  else { startFresh(); setMsg("The computer picks the word.", "Pick a letter to start."); }
+});
+$("modeFriend").addEventListener("click", function(){
+  if(settings.mode === "friend") return;
+  settings.mode = "friend"; saveSettings(); syncModeButtons();
+  if(G) G.mode = "friend";
+  $("friendForm").hidden = false;
+  $("friendForm").scrollIntoView({block:"nearest", behavior:"smooth"});
+  setMsg("Pass & Play: someone sets a word above.", "Then hand the device to the guesser.");
+});
+$("friendForm").addEventListener("submit", function(e){
+  e.preventDefault();
+  var w = $("friendWord").value.toUpperCase().replace(/[^A-Z ]/g,"").replace(/\s+/g," ").trim();
+  if(w.replace(/ /g,"").length < 3){ setMsg("That word's too short.", "Give the guesser at least 3 letters to work with."); return; }
+  var clue = $("friendClue").value.trim();
+  $("friendWord").value = ""; $("friendClue").value = "";
+  $("friendForm").hidden = true;
+  newRound({word:w, clue:clue});
+  setMsg("Guesser, you're up!", "Your friend set a " + w.replace(/ /g,"").length + "-letter word. Pick a letter.");
+});
+$("friendCancel").addEventListener("click", function(){
+  $("friendForm").hidden = true;
+  settings.mode = "ai"; saveSettings(); syncModeButtons();
+  if(G) G.mode = "ai";
+});
+$("resetBtn").addEventListener("click", function(){
+  bests = {played:0, wins:0, bestStreak:0, bestScore:0}; saveBests();
+  if(G){ G.score = 0; G.streak = 0; }
+  render();
+  setMsg("Stats reset.", "Score and streak cleared too — fresh start.");
+});
+
+/* ---------- how to play + walkthrough ---------- */
+var howOverlay = $("howOverlay");
+$("howBtn").addEventListener("click", function(){ markSeen(); howOverlay.hidden = false; });
+$("howClose").addEventListener("click", function(){ howOverlay.hidden = true; });
+howOverlay.addEventListener("click", function(e){ if(e.target === howOverlay) howOverlay.hidden = true; });
+
+/* ---------- full rules (opt-in, separate from the tutorial) ---------- */
+var rulesOverlay = $("rulesOverlay");
+$("rulesBtn").addEventListener("click", function(){ markSeen(); rulesOverlay.hidden = false; });
+$("rulesClose").addEventListener("click", function(){ rulesOverlay.hidden = true; });
+$("rulesHow").addEventListener("click", function(){ rulesOverlay.hidden = true; howOverlay.hidden = false; });
+$("howRules").addEventListener("click", function(){ howOverlay.hidden = true; rulesOverlay.hidden = false; });
+rulesOverlay.addEventListener("click", function(e){ if(e.target === rulesOverlay) rulesOverlay.hidden = true; });
+
+/* ---------- one-time, non-blocking new-player hint ---------- */
+function markSeen(){
+  try{ localStorage.setItem(LS_SEEN, "1"); }catch(e){}
+  $("newbieHint").hidden = true;
+}
+$("newbieDismiss").addEventListener("click", markSeen);
+
+var TOUR = [
+  {sel:"#board", title:"1 · The board", text:"The blanks are your secret word, picked by the computer from the word list you chose. Every wrong guess adds a piece to the figure — run out of misses and the round is over."},
+  {sel:"#keyboardPanel", title:"2 · Guess letters", text:"Tap letters here, type on a real keyboard, or — if you're sure — type the whole word in the Solve box. Right letters fill in everywhere; wrong ones cost a miss."},
+  {sel:"#category", title:"3 · Pick a word list", text:"Six lists plus a Mixed bag: Animals, Food & Drink, Places & Travel, Nature & Weather, Sports & Hobbies, and Fun & Fantasy. Changing the list starts a fresh word."},
+  {sel:"#difficulty", title:"4 · Set the challenge", text:"Chill gives you 9 misses, Classic 7, and Expert just 6 with longer words — but Expert wins pay double points."},
+  {sel:"#actionsPanel", title:"5 · Stuck? Get help", text:"The clue is always free. Revealing a letter costs 1 miss (it won't spend your last one). Give up ends the round and shows the word."},
+  {sel:"#modeSeg", title:"6 · Pass & Play", text:"Switch modes and a friend can set the secret word and clue instead — the word stays hidden while they type, then you pass the device and guess."},
+  {sel:"#statsBar", title:"7 · Your records", text:"Words played, win rate, best streak and best score are saved on this device, ready to beat next visit."}
+];
+var tourIdx = -1;
+function showTourStep(i){
+  tourIdx = i;
+  if(i >= TOUR.length){ endTour(); return; }
+  var step = TOUR[i], target = document.querySelector(step.sel);
+  $("tourTitle").textContent = step.title;
+  $("tourText").textContent = step.text;
+  $("tourCount").textContent = "Step " + (i+1) + " of " + TOUR.length;
+  $("tourNext").textContent = i === TOUR.length - 1 ? "Finish" : "Next";
+  $("tourCard").hidden = false;
+  var hi = $("tourHi");
+  if(target){
+    target.scrollIntoView({block:"nearest", behavior:"smooth"});
+    setTimeout(function(){
+      var r = target.getBoundingClientRect();
+      hi.hidden = false;
+      hi.style.left = (r.left - 6) + "px"; hi.style.top = (r.top - 6) + "px";
+      hi.style.width = (r.width + 12) + "px"; hi.style.height = (r.height + 12) + "px";
+    }, 60);
+  } else hi.hidden = true;
+}
+function endTour(){
+  tourIdx = -1; $("tourCard").hidden = true; $("tourHi").hidden = true;
+  markSeen();
+}
+$("tourNext").addEventListener("click", function(){ showTourStep(tourIdx + 1); });
+$("tourSkip").addEventListener("click", endTour);
+$("tourBtn").addEventListener("click", function(){ showTourStep(0); });
+$("howTour").addEventListener("click", function(){ howOverlay.hidden = true; showTourStep(0); });
+window.addEventListener("resize", function(){ if(tourIdx >= 0) showTourStep(tourIdx); });
+
+/* ---------- feedback (saved locally only) ---------- */
+var FB_KEY = "holos-arcade-feedback";
+var fbRating = 0;
+var feedbackOverlay = $("feedbackOverlay");
+function openFeedback(){
+  fbRating = 0;
+  document.querySelectorAll("#fbStars .fb-star").forEach(function(b){ b.setAttribute("aria-pressed","false"); });
+  $("fbText").value = "";
+  $("fbTag").value = "Other";
+  $("fbThanks").hidden = true;
+  $("fbSave").disabled = false;
+  feedbackOverlay.hidden = false;
+}
+$("feedbackBtn").addEventListener("click", openFeedback);
+$("feedbackBtnFoot").addEventListener("click", openFeedback);
+$("fbClose").addEventListener("click", function(){ feedbackOverlay.hidden = true; });
+feedbackOverlay.addEventListener("click", function(e){ if(e.target === feedbackOverlay) feedbackOverlay.hidden = true; });
+document.querySelectorAll("#fbStars .fb-star").forEach(function(b){
+  b.addEventListener("click", function(){
+    fbRating = parseInt(b.getAttribute("data-rating"), 10);
+    document.querySelectorAll("#fbStars .fb-star").forEach(function(x){
+      x.setAttribute("aria-pressed", parseInt(x.getAttribute("data-rating"), 10) <= fbRating ? "true" : "false");
+    });
+  });
+});
+$("fbSave").addEventListener("click", function(){
+  var record = {
+    game: "hangman",
+    rating: fbRating,
+    text: $("fbText").value.trim(),
+    tag: $("fbTag").value,
+    timestamp: new Date().toISOString()
+  };
+  var arr = [];
+  try{ var raw = JSON.parse(localStorage.getItem(FB_KEY) || "null"); if(Array.isArray(raw)) arr = raw; }catch(e){}
+  arr.push(record);
+  try{ localStorage.setItem(FB_KEY, JSON.stringify(arr)); }catch(e){}
+  $("fbThanks").hidden = false;
+  $("fbSave").disabled = true;
+  setTimeout(function(){ feedbackOverlay.hidden = true; }, 1200);
+});
+
+/* ---------- init ---------- */
+syncModeButtons();
+if(settings.mode === "friend"){
+  G = {category:settings.category, difficulty:settings.difficulty, mode:"friend", practice:!!settings.practice, score:0, streak:0, round:0, recent:[], over:true, started:false,
+       word:"WELCOME", clue:"", catLabel:"Pass & Play", guessed:{}, wrong:[], wrongCount:0, clueShown:false, won:false};
+  render();
+  $("friendForm").hidden = false;
+  setMsg("Pass & Play: set a word above to start.", "");
+} else {
+  startFresh();
+  setMsg("Guess the word before the figure is complete!", "Pick a letter to start — vowels are a classic opener.");
+}
+/* Tutorial and rules are opt-in only — never auto-opened. First visit just
+   gets the small, dismissible, non-blocking hint above the board. */
+var seen = false;
+try{ seen = !!localStorage.getItem(LS_SEEN); }catch(e){}
+if(!seen){ $("newbieHint").hidden = false; }
+})();
+</script>
+</body>
+</html>

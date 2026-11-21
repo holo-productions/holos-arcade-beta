@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
+<title>Nonogram — Picture Logic Puzzles</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,700;0,6..72,900;1,6..72,700&family=IBM+Plex+Mono:wght@500;600;700&family=Inter:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f6f1e6; --paper:#fffdf6; --ink:#1c1a15; --muted:#6f6a5e; --line:#ddd3bd;
+  --grid-line:#c9bfa6; --grid-major:#1c1a15;
+  --fill:#1c1a15; --accent:#c73e1d; --accent2:#0f766e; --gold:#e9b949;
+  --cell:#fffdf6; --cell-hover:#f3e9cf; --clue-bg:#efe7d3; --clue-done:#b9b09a;
+  --btn:#1c1a15; --btn-text:#fffdf6; --chip:#efe7d3;
+  --shadow:0 10px 30px rgba(28,26,21,.12);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14120f; --paper:#1e1b16; --ink:#f2ecdc; --muted:#a89f8d; --line:#3a352b;
+    --grid-line:#3f3a30; --grid-major:#f2ecdc;
+    --fill:#f2ecdc; --accent:#ff6b4a; --accent2:#2dd4bf; --gold:#e9b949;
+    --cell:#24211b; --cell-hover:#322d22; --clue-bg:#2a261e; --clue-done:#6b6352;
+    --btn:#f2ecdc; --btn-text:#1c1a15; --chip:#2a261e;
+    --shadow:0 10px 30px rgba(0,0,0,.4);
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+button,select{min-height:44px}
+.wrap{max-width:860px;margin:0 auto;padding:18px 16px 40px}
+.top{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:space-between;border-bottom:3px solid var(--ink);padding-bottom:14px}
+h1{font-family:Newsreader,Georgia,serif;font-weight:900;font-size:clamp(38px,7vw,58px);line-height:.9;letter-spacing:-.02em;margin:0}
+h1 em{font-style:italic;font-weight:700;color:var(--accent)}
+.tagline{color:var(--muted);font-size:14.5px;line-height:1.45;max-width:46ch;margin:8px 0 0}
+.top-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{appearance:none;border:2px solid var(--ink);background:var(--paper);color:var(--ink);font-weight:700;font-size:14px;padding:10px 16px;border-radius:999px;cursor:pointer;min-height:44px;display:inline-flex;align-items:center;gap:7px}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--btn);color:var(--btn-text)}
+.btn.accent{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.small{padding:8px 13px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:default}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}
+@media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--paper);border:1.5px solid var(--line);border-radius:14px;padding:10px 12px}
+.stat b{display:block;font-family:"IBM Plex Mono",monospace;font-size:20px;line-height:1}
+.stat span{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700}
+
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px}
+.controls label{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+select{font:inherit;font-weight:700;font-size:14px;padding:10px 12px;border-radius:999px;border:2px solid var(--ink);background:var(--paper);color:var(--ink);cursor:pointer}
+
+.board-card{background:var(--paper);border:2px solid var(--ink);border-radius:20px;box-shadow:var(--shadow);padding:16px 12px 14px;overflow:hidden}
+.board-card.practicing{border-color:var(--accent2)}
+.practice-bar{background:var(--clue-bg);border:1.5px solid var(--accent2);border-radius:12px;padding:10px 13px;font-size:13.5px;line-height:1.5;margin-bottom:12px}
+.board-scroll{display:flex;justify-content:center}
+.board{display:grid;gap:0;user-select:none;-webkit-user-select:none;touch-action:none;width:fit-content}
+.corner{background:var(--clue-bg);border-right:2px solid var(--grid-major);border-bottom:2px solid var(--grid-major);display:flex;align-items:center;justify-content:center;padding:2px;font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--muted);text-align:center;line-height:1.2;overflow:hidden;white-space:nowrap}
+.clue{display:flex;background:var(--clue-bg);font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--ink)}
+.clue.col{flex-direction:column;align-items:center;justify-content:flex-end;border-bottom:2px solid var(--grid-major);padding:4px 0 5px;gap:1px}
+.clue.row{flex-direction:row;align-items:center;justify-content:flex-end;border-right:2px solid var(--grid-major);padding:0 6px 0 2px;gap:5px}
+.clue span{line-height:1.05}
+.clue.done{color:var(--clue-done)}
+.clue.hl{background:var(--gold);background:color-mix(in srgb, var(--gold) 38%, var(--clue-bg))}
+.cell{background:var(--cell);border-right:1px solid var(--grid-line);border-bottom:1px solid var(--grid-line);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;padding:0;margin:0;border-top:0;border-left:0;border-radius:0;min-height:0;font-family:"IBM Plex Mono",monospace;color:var(--accent);font-weight:700}
+.cell:hover{background:var(--cell-hover)}
+.cell.hl{background:var(--cell-hover)}
+.cell.filled{background:var(--fill)}
+.cell.filled:hover{background:var(--fill);opacity:.88}
+.cell.wrong{box-shadow:inset 0 0 0 3px var(--accent)}
+.cell.hintflash{box-shadow:inset 0 0 0 3px var(--accent2)}
+.cell.major-r{border-right:2px solid var(--grid-major)}
+.cell.major-b{border-bottom:2px solid var(--grid-major)}
+
+.modebar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-top:16px}
+.seg{display:flex;background:var(--chip);border:2px solid var(--ink);border-radius:999px;padding:3px;gap:3px}
+.seg button{border:0;background:transparent;color:var(--ink);font-weight:800;font-size:13.5px;padding:9px 15px;border-radius:999px;cursor:pointer;min-height:40px;display:inline-flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+@media (prefers-color-scheme: dark){.seg button[aria-pressed="true"]{color:#1c1a15}}
+.swatch{width:14px;height:14px;border-radius:3px;border:1.5px solid currentColor;display:inline-block}
+.swatch.fillsw{background:currentColor}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.msg{min-height:24px;margin:12px 2px 0;font-size:14.5px;line-height:1.45}
+.msg strong{color:var(--accent2)}
+.hintline{font-size:13px;color:var(--muted);margin:6px 2px 0;line-height:1.5}
+kbd{font-family:"IBM Plex Mono",monospace;font-size:11.5px;background:var(--chip);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 5px}
+
+.winbanner{display:none;margin-top:14px;background:var(--accent2);color:#fff;border-radius:16px;padding:16px 18px}
+.winbanner.show{display:block}
+.winbanner h2{font-family:Newsreader,Georgia,serif;margin:0 0 4px;font-size:26px}
+.winbanner p{margin:0;font-size:14.5px;line-height:1.5;opacity:.95}
+
+dialog{border:2px solid var(--ink);border-radius:20px;background:var(--paper);color:var(--ink);max-width:620px;width:calc(100% - 28px);padding:0;box-shadow:var(--shadow)}
+dialog::backdrop{background:rgba(20,18,15,.55)}
+.modal-in{padding:22px 22px 18px;max-height:78vh;overflow:auto}
+.modal-in h2{font-family:Newsreader,Georgia,serif;font-size:30px;margin:0 0 6px;line-height:1.05}
+.modal-in h3{font-size:15px;margin:18px 0 6px}
+.modal-in p,.modal-in li{font-size:14.5px;line-height:1.6;color:var(--ink)}
+.modal-in ul,.modal-in ol{padding-left:20px;margin:6px 0}
+.modal-in .muted{color:var(--muted)}
+.mini{display:grid;grid-template-columns:repeat(5,30px);gap:0;width:fit-content;border:2px solid var(--ink);margin:10px 0}
+.mini div{width:30px;height:30px;border-right:1px solid var(--grid-line);border-bottom:1px solid var(--grid-line);background:var(--cell)}
+.mini div.f{background:var(--fill)}
+.mini div.x{display:flex;align-items:center;justify-content:center;color:var(--accent);font-weight:700;font-family:"IBM Plex Mono",monospace}
+.modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 22px 20px;flex-wrap:wrap}
+.score-table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0}
+.score-table th,.score-table td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+.score-table th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+footer{margin-top:22px;color:var(--muted);font-size:13px;line-height:1.6;border-top:1px solid var(--line);padding-top:12px}
+.stars{display:flex;gap:6px;margin:10px 0 4px}
+.stars button{width:48px;height:48px;border-radius:12px;border:2px solid var(--line);background:var(--paper);font-size:26px;line-height:1;cursor:pointer;color:var(--muted);padding:0}
+.stars button.on{background:var(--gold);border-color:var(--ink);color:var(--ink)}
+.fb-text{width:100%;min-height:110px;border:2px solid var(--ink);border-radius:14px;background:var(--paper);color:var(--ink);font:inherit;font-size:14.5px;line-height:1.5;padding:12px;resize:vertical}
+.fb-note{font-size:12.5px;color:var(--muted);line-height:1.55;margin-top:10px}
+.fb-thanks{display:none;background:var(--clue-bg);border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;margin-top:12px;font-size:14.5px;line-height:1.5}
+.fb-thanks.show{display:block}
+.fb-tags{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 2px}
+.fb-tags button{border:2px solid var(--line);background:var(--paper);color:var(--ink);font-weight:700;font-size:13.5px;padding:9px 16px;border-radius:999px;cursor:pointer;min-height:44px}
+.fb-tags button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+@media (prefers-color-scheme: dark){.fb-tags button.on{color:#1c1a15;background:var(--ink)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <h1>Non<em>o</em>gram</h1>
+      <p class="tagline">Picture logic. Read the numbers, fill the right squares, and a hidden picture appears — one row and column at a time.</p>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="howBtn" type="button">? How to play</button>
+      <button class="btn" id="rulesBtn" type="button">§ Rules</button>
+      <button class="btn" id="feedbackBtn" type="button">★ Feedback</button>
+    </div>
+  </header>
+
+  <div class="stats" aria-live="polite">
+    <div class="stat"><span>Time</span><b id="statTime">0:00</b></div>
+    <div class="stat"><span>Progress</span><b id="statProg">0%</b></div>
+    <div class="stat"><span>Score</span><b id="statScore">0</b></div>
+    <div class="stat"><span>Best time · this puzzle</span><b id="statBest">—</b></div>
+  </div>
+
+  <div class="controls">
+    <label id="diffLabel">Difficulty</label>
+    <div class="seg" role="group" aria-labelledby="diffLabel">
+      <button type="button" data-diff="easy" aria-pressed="false">Easy · 5×5</button>
+      <button type="button" data-diff="normal" aria-pressed="true">Normal · 10×10</button>
+      <button type="button" data-diff="hard" aria-pressed="false">Hard · 15×15</button>
+    </div>
+    <label id="roundLabel">Round</label>
+    <div class="seg" role="group" aria-labelledby="roundLabel">
+      <button type="button" data-round="scored" aria-pressed="true">🏆 Scored</button>
+      <button type="button" data-round="practice" aria-pressed="false">🧘 Practice</button>
+    </div>
+    <label for="puzzleSel">Puzzle</label>
+    <select id="puzzleSel"></select>
+    <button class="btn small" id="randomBtn" type="button">🎲 Random puzzle</button>
+    <button class="btn small" id="newBtn" type="button">↺ Restart</button>
+  </div>
+
+  <section class="board-card" id="boardCard" aria-label="Nonogram board">
+    <div class="practice-bar" id="practiceBar" style="display:none" role="status">🧘 <strong>Practice round</strong> — no clock, no score, and hints &amp; checks are free. Nothing is recorded; switch back to Scored when you want it to count.</div>
+    <div class="board-scroll">
+      <div class="board" id="board" role="grid" aria-label="Puzzle grid"></div>
+    </div>
+
+    <div class="modebar">
+      <div class="seg" role="group" aria-label="Paint mode">
+        <button type="button" data-mode="fill" aria-pressed="true"><span class="swatch fillsw"></span> Fill</button>
+        <button type="button" data-mode="cross" aria-pressed="false">✕ Mark</button>
+        <button type="button" data-mode="erase" aria-pressed="false">⌫ Erase</button>
+      </div>
+      <div class="actions">
+        <button class="btn small" id="hintBtn" type="button">💡 Hint <span id="hintCount"></span></button>
+        <button class="btn small" id="checkBtn" type="button">✓ Check</button>
+        <button class="btn small primary" id="revealBtn" type="button">Show picture name</button>
+      </div>
+    </div>
+
+    <p class="msg" id="msg">Pick a square to start. The timer starts on your first tap.</p>
+    <p class="hintline">Drag to paint a run of squares. Right-click (or long-press with Mark mode on) drops an ✕. <kbd>1</kbd> Fill · <kbd>2</kbd> Mark · <kbd>3</kbd> Erase. Filled clues grey out when a line is exactly right.</p>
+
+    <div class="winbanner" id="winBanner" role="status">
+      <h2 id="winTitle">Picture complete! 🎉</h2>
+      <p id="winText"></p>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" id="nextBtn" type="button" style="background:#fff;color:#1c1a15;border-color:#fff">Next puzzle →</button>
+        <button class="btn" id="againBtn" type="button" style="background:transparent;color:#fff;border-color:#fff">Play again</button>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Six hand-made pictures plus endless random boards. Bigger grids score more — hints and checks cost points, so a clean solve pays best. Your best time for each puzzle is saved on this device, so it's still here next visit — finish a puzzle and try to beat your own clock. Or take the pressure off entirely with a Practice round: no clock, no score, free hints and checks. &nbsp;·&nbsp; <a href="#" id="feedbackLink">Leave feedback</a>
+  </footer>
+</div>
+
+<!-- HOW TO PLAY -->
+<dialog id="howDlg" aria-labelledby="howTitle">
+  <div class="modal-in">
+    <h2 id="howTitle">How to play</h2>
+    <p class="muted">A 2-minute walkthrough. No account, no timer pressure while you read — the clock only starts when you tap the grid.</p>
+
+    <h3>1 · The numbers are the whole puzzle</h3>
+    <p>Every row and column has numbers beside it. Each number is one solid run of filled squares, in that order. <strong>“3 1”</strong> means: a run of 3 filled, at least one blank, then a run of 1 filled. A single <strong>“0”</strong> means the whole line is blank.</p>
+
+    <h3>2 · A worked mini-example</h3>
+    <p>This 5×5 row clue is <strong>1 1</strong> and the column clues force the picture below — a tiny heart:</p>
+    <div class="mini" aria-hidden="true">
+      <div></div><div class="f"></div><div></div><div class="f"></div><div></div>
+      <div class="f"></div><div class="f"></div><div class="f"></div><div class="f"></div><div class="f"></div>
+      <div class="f"></div><div class="f"></div><div class="f"></div><div class="f"></div><div class="f"></div>
+      <div></div><div class="f"></div><div class="f"></div><div class="f"></div><div></div>
+      <div></div><div></div><div class="f"></div><div></div><div></div>
+    </div>
+    <p>Start with the biggest numbers — a “5” in a 5-wide row fills the whole row. Then cross-reference: a square filled by its row must also fit its column.</p>
+
+    <h3>3 · Three tools</h3>
+    <ul>
+      <li><strong>Fill</strong> — paint squares you're sure are part of the picture. Drag to paint a run.</li>
+      <li><strong>✕ Mark</strong> — mark squares you're sure are blank. Marks are notes only; they never count for or against you.</li>
+      <li><strong>Erase</strong> — clear a fill or a mark.</li>
+    </ul>
+
+    <h3>4 · Stuck?</h3>
+    <p>Look for overlaps: if a row of 10 has a run of 7, that run must cover the middle squares no matter where it starts — fill those first. Still stuck? <strong>Hint</strong> fills one correct square for you, and <strong>Check</strong> flags any wrong fills. Both cost points in a scored round (see Rules) — or flip the Round switch to <strong>Practice</strong>, where there's no clock, no score, and hints and checks are free while you learn.</p>
+  </div>
+  <div class="modal-foot">
+    <button class="btn primary" data-close="howDlg" type="button">Start playing</button>
+  </div>
+</dialog>
+
+<!-- RULES -->
+<dialog id="rulesDlg" aria-labelledby="rulesTitle">
+  <div class="modal-in">
+    <h2 id="rulesTitle">Rules</h2>
+    <p class="muted">The full rules — scoring, tools, and exactly what counts as a win.</p>
+
+    <h3>Objective &amp; win condition</h3>
+    <p>Reveal the hidden picture by filling squares so that <strong>every row and every column exactly matches its clues</strong>. You win the moment every square that belongs in the picture is filled. Squares left blank or marked ✕ are treated the same — only fills are judged. There is no move limit and no way to lose; the clock and your score are the challenge.</p>
+
+    <h3>Difficulty</h3>
+    <p>Pick a difficulty above the board — it sets the grid size for both the picture library and random boards, and your choice is saved on this device:</p>
+    <ul>
+      <li><strong>Easy · 5×5</strong> — quick warm-ups: one picture plus random boards.</li>
+      <li><strong>Normal · 10×10</strong> — the classic size: four pictures plus random boards.</li>
+      <li><strong>Hard · 15×15</strong> — the big grid: one picture plus random boards.</li>
+    </ul>
+    <p>Switching difficulty loads the first picture at that size right away. Bigger grids score more (see Scoring).</p>
+
+    <h3>Clues</h3>
+    <ul>
+      <li>Numbers list the lengths of consecutive filled runs in that line, in order.</li>
+      <li>Separate runs are always divided by <strong>at least one</strong> blank square.</li>
+      <li>A clue of <strong>0</strong> means no squares in that line are filled.</li>
+      <li>When a line's fills exactly satisfy its clue, the clue greys out.</li>
+    </ul>
+
+    <h3>Scoring</h3>
+    <table class="score-table">
+      <tr><th>Board</th><th>Base points</th><th>Clean-solve bonus</th></tr>
+      <tr><td>5 × 5</td><td>250</td><td>+100</td></tr>
+      <tr><td>10 × 10</td><td>1,000</td><td>+400</td></tr>
+      <tr><td>15 × 15</td><td>2,250</td><td>+900</td></tr>
+    </table>
+    <ul>
+      <li><strong>Hint:</strong> −50 points each, and fills one correct square.</li>
+      <li><strong>Check:</strong> −25 points each use. It outlines wrong fills in red for a few seconds; wrong fills it flags stay until you fix them — Check never changes the board for you.</li>
+      <li><strong>Speed bonus on a win:</strong> +2 points per second under par (par: 2 min for 5×5, 6 min for 10×10, 12 min for 15×15).</li>
+      <li>Score never drops below 0. The “clean-solve bonus” needs zero hints and zero checks.</li>
+    </ul>
+
+    <h3>Practice rounds</h3>
+    <p>Flip the <strong>Round</strong> switch above the board to <strong>Practice</strong> for a no-pressure round on any library puzzle or random board: the clock never starts, no score is kept, and <strong>Hint and Check are free and unlimited</strong>. Practice solves don't save a best time, and switching rounds restarts the current puzzle with a clean board. Your round choice is saved on this device.</p>
+
+    <h3>Special rules</h3>
+    <ul>
+      <li><strong>Random puzzles</strong> are generated fresh and always have at least one valid solution — the one that was generated. They score as their size, and their picture has no name to reveal.</li>
+      <li><strong>Show picture name</strong> just tells you what you're drawing. It costs nothing and doesn't affect your score.</li>
+      <li><strong>Restart</strong> clears the board, the clock, and your score for that attempt. Your best time for the puzzle is saved on this device.</li>
+      <li>Marks (✕) are private notes. They don't score, don't block a win, and get ignored by Check.</li>
+    </ul>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" data-close="rulesDlg" type="button">Close</button>
+  </div>
+</dialog>
+
+<!-- FEEDBACK -->
+<dialog id="feedbackDlg" aria-labelledby="feedbackTitle">
+  <div class="modal-in">
+    <h2 id="feedbackTitle">Feedback</h2>
+    <p class="muted">How's Nonogram playing? Rate it and leave a note — what worked, what didn't, what you'd love to see next.</p>
+
+    <h3 style="margin-top:14px">Your rating</h3>
+    <div class="stars" id="fbStars" role="radiogroup" aria-label="Star rating">
+      <button type="button" data-star="1" aria-label="1 star">★</button>
+      <button type="button" data-star="2" aria-label="2 stars">★</button>
+      <button type="button" data-star="3" aria-label="3 stars">★</button>
+      <button type="button" data-star="4" aria-label="4 stars">★</button>
+      <button type="button" data-star="5" aria-label="5 stars">★</button>
+    </div>
+    <p class="muted" id="fbRatingLabel" style="margin:2px 0 0;font-size:13px">Tap a star to rate.</p>
+
+    <h3>What's this about? <span class="muted" style="font-weight:400">(optional)</span></h3>
+    <div class="fb-tags" id="fbTags" role="group" aria-label="Feedback type">
+      <button type="button" data-tag="Bug" aria-pressed="false">Bug</button>
+      <button type="button" data-tag="Suggestion" aria-pressed="false">Suggestion</button>
+      <button type="button" data-tag="Other" aria-pressed="false">Other</button>
+    </div>
+
+    <h3>Your comment</h3>
+    <label for="fbText" class="muted" style="display:block;font-size:13px;margin-bottom:6px">Optional — bugs, ideas, difficulty notes, anything.</label>
+    <textarea class="fb-text" id="fbText" maxlength="1000" placeholder="Tell us what you think…"></textarea>
+
+    <p class="fb-note">Saved on this device for now. No personal info needed — please don't include any. Feedback follows the same Terms &amp; Conditions: keep it clean (moderation rules apply), and feedback may be used to improve the games.</p>
+    <div class="fb-thanks" id="fbThanks" role="status"></div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" data-close="feedbackDlg" type="button">Close</button>
+    <button class="btn primary" id="fbSubmit" type="button">Save feedback</button>
+  </div>
+</dialog>
+
+<script>
+(function(){
+"use strict";
+// ---------- Puzzle library: '#' = filled, '.' = blank ----------
+var PUZZLES=[
+ {id:"tiny-heart",name:"Tiny Heart · 5×5",pic:"a heart",rows:[".#.#.","#####","#####",".###.","..#.."]},
+ {id:"heart",name:"Heart · 10×10",pic:"a heart",rows:[".##....##.","####..####","##########","##########","##########",".########.","..######..","...####...","....##....","....##...."]},
+ {id:"cat",name:"Cat · 10×10",pic:"a cat's face",rows:["#........#","##......##","###....###","##########","##########","##########","##########","##########",".########.","..######.."]},
+ {id:"house",name:"House · 10×10",pic:"a house",rows:["....##....","...####...","..######..",".########.","##########","..######..","..#....#..","..#....#..","..#....#..","..######.."]},
+ {id:"rocket",name:"Rocket · 10×10",pic:"a rocket",rows:["....##....","...####...","...####...","..######..","..######..","..######..",".########.","##########","#..####..#","....##...."]},
+ {id:"tree",name:"Pine Tree · 15×15",pic:"a pine tree",rows:[
+   ".......#.......",
+   "......###......",
+   ".....#####.....",
+   "....#######....",
+   "...#########...",
+   "..###########..",
+   ".#############.",
+   "###############",
+   "..###########..",
+   ".#############.",
+   "###############",
+   ".......#.......",
+   ".......#.......",
+   ".......#.......",
+   "......###......"]}
+];
+
+var boardEl=document.getElementById("board"),
+    sel=document.getElementById("puzzleSel"),
+    msgEl=document.getElementById("msg"),
+    timeEl=document.getElementById("statTime"),
+    progEl=document.getElementById("statProg"),
+    scoreEl=document.getElementById("statScore"),
+    bestEl=document.getElementById("statBest"),
+    winBanner=document.getElementById("winBanner"),
+    winText=document.getElementById("winText"),
+    winTitle=document.getElementById("winTitle"),
+    hintCountEl=document.getElementById("hintCount");
+
+var sol=[], player=[], R=0, C=0, curPuzzle=null, isRandom=false;
+var mode="fill", painting=false, paintVal=null, started=false, won=false;
+var seconds=0, timerId=null, hintsUsed=0, checksUsed=0, totalFilled=0;
+var bests={};
+try{ bests=JSON.parse(localStorage.getItem("nonogram-bests-v1")||"{}")||{}; }catch(e){ bests={}; }
+function saveBests(){ try{ localStorage.setItem("nonogram-bests-v1", JSON.stringify(bests)); }catch(e){} }
+
+// ---------- Difficulty: grid size (Easy 5×5 · Normal 10×10 · Hard 15×15) ----------
+var DIFFS={easy:{label:"Easy",size:5},normal:{label:"Normal",size:10},hard:{label:"Hard",size:15}};
+var diff="normal";
+try{ var sd=localStorage.getItem("nonogram-diff-v1"); if(sd&&DIFFS[sd]) diff=sd; }catch(e){}
+function saveDiff(){ try{ localStorage.setItem("nonogram-diff-v1", diff); }catch(e){} }
+function puzzlesForDiff(){ return PUZZLES.filter(function(p){ return p.rows.length===DIFFS[diff].size; }); }
+function buildPuzzleList(){
+  sel.innerHTML="";
+  puzzlesForDiff().forEach(function(p){ var o=document.createElement("option"); o.value=p.id; o.textContent=p.name; sel.appendChild(o); });
+}
+function syncDiffBtns(){
+  document.querySelectorAll("[data-diff]").forEach(function(x){ x.setAttribute("aria-pressed", x.dataset.diff===diff?"true":"false"); });
+}
+
+// ---------- Round type: Scored vs Practice (no clock, no score, free help) ----------
+var practice=false;
+try{ practice=localStorage.getItem("nonogram-round-v1")==="practice"; }catch(e){}
+function saveRound(){ try{ localStorage.setItem("nonogram-round-v1", practice?"practice":"scored"); }catch(e){} }
+function syncRoundBtns(){
+  document.querySelectorAll("[data-round]").forEach(function(x){ x.setAttribute("aria-pressed", x.dataset.round===(practice?"practice":"scored")?"true":"false"); });
+  document.getElementById("boardCard").classList.toggle("practicing", practice);
+  document.getElementById("practiceBar").style.display = practice?"block":"none";
+}
+var hoverR=-1, hoverC=-1;
+
+buildPuzzleList();
+
+function parseRows(rows){ return rows.map(function(r){ return r.split("").map(function(ch){ return ch==="#"?1:0; }); }); }
+function cluesFor(line){
+  var out=[], run=0;
+  line.forEach(function(v){ if(v){run++;} else if(run){out.push(run); run=0;} });
+  if(run) out.push(run);
+  return out.length?out:[0];
+}
+function fmt(s){ var m=Math.floor(s/60), ss=s%60; return m+":"+(ss<10?"0":"")+ss; }
+function parFor(size){ return size<=5?120 : size<=10?360 : 720; }
+function baseFor(size){ return size<=5?250 : size<=10?1000 : 2250; }
+function cleanFor(size){ return size<=5?100 : size<=10?400 : 900; }
+
+function loadPuzzle(p, randomGrid){
+  stopTimer(); seconds=0; started=false; won=false; hintsUsed=0; checksUsed=0; hoverR=hoverC=-1;
+  curPuzzle=p; isRandom=!!randomGrid;
+  if(!isRandom) sel.value=p.id;
+  sol = randomGrid || parseRows(p.rows);
+  R=sol.length; C=sol[0].length;
+  player = sol.map(function(r){ return r.map(function(){ return 0; }); }); // 0 empty, 1 fill, 2 cross
+  totalFilled = sol.reduce(function(a,r){ return a+r.reduce(function(x,y){return x+y;},0); },0);
+  winBanner.classList.remove("show");
+  msgEl.innerHTML = practice
+    ? "<strong>Practice round.</strong> No clock, no score — take your time, and use hints and checks as much as you like."
+    : isRandom
+    ? "A fresh random "+R+"×"+C+" board. Nobody knows what it makes — that's the fun."
+    : "“"+p.name.split(" · ")[0]+"” loaded. The timer starts on your first tap.";
+  buildBoard(); updateStats(); updateBest();
+}
+function buildBoard(){
+  var rowClues=sol.map(cluesFor);
+  var colClues=[]; for(var c=0;c<C;c++){ colClues.push(cluesFor(sol.map(function(r){return r[c];}))); }
+  var maxRow=Math.max.apply(null,rowClues.map(function(a){return a.length;}));
+  var maxCol=Math.max.apply(null,colClues.map(function(a){return a.length;}));
+  // cell size: fit phone width (~358px usable) and cap on desktop
+  var avail=Math.min(window.innerWidth-56, 620);
+  var clueW=Math.max(maxRow*13+12,48), cell=Math.floor((avail-clueW)/C);
+  cell=Math.max(17, Math.min(34, cell));
+  var clueH=Math.max(maxCol*13+10,30), clueColW=cell;
+  boardEl.style.gridTemplateColumns="auto repeat("+C+","+cell+"px)";
+  boardEl.innerHTML="";
+  // corner
+  var corner=document.createElement("div"); corner.className="corner";
+  corner.style.width=clueW+"px"; corner.style.height=clueH+"px";
+  corner.innerHTML=R+"×"+C;
+  corner.title=totalFilled+" squares to fill";
+  boardEl.appendChild(corner);
+  // column clues
+  colClues.forEach(function(cl,ci){
+    var d=document.createElement("div"); d.className="clue col"; d.dataset.col=ci;
+    d.style.width=clueColW+"px"; d.style.height=clueH+"px"; d.style.fontSize=(cell<22?10:11.5)+"px";
+    if((ci+1)%5===0 && ci!==C-1) d.style.borderRight="2px solid var(--grid-major)";
+    d.innerHTML=cl.map(function(n){return "<span>"+n+"</span>";}).join("");
+    boardEl.appendChild(d);
+  });
+  // rows
+  for(var r=0;r<R;r++){
+    var rc=document.createElement("div"); rc.className="clue row"; rc.dataset.row=r;
+    rc.style.width=clueW+"px"; rc.style.height=cell+"px"; rc.style.fontSize=(cell<22?10:11.5)+"px";
+    if((r+1)%5===0 && r!==R-1) rc.style.borderBottom="2px solid var(--grid-major)";
+    rc.innerHTML=rowClues[r].map(function(n){return "<span>"+n+"</span>";}).join("");
+    boardEl.appendChild(rc);
+    for(var cc=0;cc<C;cc++){
+      var b=document.createElement("button"); b.type="button";
+      b.className="cell"+(((cc+1)%5===0&&cc!==C-1)?" major-r":"")+(((r+1)%5===0&&r!==R-1)?" major-b":"");
+      b.style.width=cell+"px"; b.style.height=cell+"px"; b.style.fontSize=Math.round(cell*0.62)+"px";
+      b.dataset.r=r; b.dataset.c=cc;
+      b.setAttribute("role","gridcell");
+      b.setAttribute("aria-label","Row "+(r+1)+", column "+(cc+1));
+      boardEl.appendChild(b);
+    }
+  }
+  refreshClues();
+}
+function cellEl(r,c){ return boardEl.querySelector('.cell[data-r="'+r+'"][data-c="'+c+'"]'); }
+function lineDone(lineSol, linePlayer){
+  var a=lineSol.map(function(v,i){ return linePlayer[i]===1?1:0; });
+  return JSON.stringify(cluesFor(a))===JSON.stringify(cluesFor(lineSol));
+}
+function refreshClues(){
+  for(var r=0;r<R;r++){
+    var el=boardEl.querySelector('.clue.row[data-row="'+r+'"]');
+    if(el) el.classList.toggle("done", lineDone(sol[r], player[r]));
+  }
+  for(var c=0;c<C;c++){
+    var col=sol.map(function(row){return row[c];}), pl=player.map(function(row){return row[c];});
+    var el2=boardEl.querySelector('.clue.col[data-col="'+c+'"]');
+    if(el2) el2.classList.toggle("done", lineDone(col, pl));
+  }
+}
+function currentScore(finalWin){
+  var s=baseFor(Math.max(R,C)) - hintsUsed*50 - checksUsed*25;
+  if(finalWin){
+    if(hintsUsed===0 && checksUsed===0) s+=cleanFor(Math.max(R,C));
+    var under=parFor(Math.max(R,C))-seconds; if(under>0) s+=under*2;
+  }
+  return Math.max(0,s);
+}
+function updateStats(){
+  timeEl.textContent= practice ? "—" : fmt(seconds);
+  var done=0; for(var r=0;r<R;r++) for(var c=0;c<C;c++) if(sol[r][c]===1&&player[r][c]===1) done++;
+  progEl.textContent=(totalFilled?Math.round(done/totalFilled*100):0)+"%";
+  scoreEl.textContent= practice ? "—" : currentScore(won);
+  hintCountEl.textContent= practice ? (hintsUsed?("· "+hintsUsed+" used · free"):"· free") : (hintsUsed?("· "+hintsUsed+" used"):"");
+}
+function updateBest(){
+  var b=bests[curPuzzle.id];
+  bestEl.textContent=b?fmt(b):"—";
+}
+function startTimer(){
+  if(timerId||practice) return;
+  timerId=setInterval(function(){ seconds++; timeEl.textContent=fmt(seconds); },1000);
+}
+function stopTimer(){ if(timerId){ clearInterval(timerId); timerId=null; } }
+
+function applyCell(r,c,val){
+  if(won) return;
+  if(player[r][c]===val) return;
+  player[r][c]=val;
+  var el=cellEl(r,c);
+  el.classList.toggle("filled", val===1);
+  el.textContent = val===2 ? "✕" : "";
+  if(!started){ started=true; if(!practice) startTimer(); }
+  refreshClues(); updateStats(); checkWin();
+}
+function paintTarget(r,c){
+  // decide value from mode on pointerdown, then drag applies same value
+  if(mode==="fill") return player[r][c]===1?0:1;
+  if(mode==="cross") return player[r][c]===2?0:2;
+  return 0;
+}
+function checkWin(){
+  for(var r=0;r<R;r++) for(var c=0;c<C;c++){
+    if(sol[r][c]===1 && player[r][c]!==1) return;
+    if(sol[r][c]===0 && player[r][c]===1) return;
+  }
+  won=true; stopTimer();
+  var key=curPuzzle.id;
+  var isBest=false;
+  if(!practice && (!bests[key] || seconds<bests[key])){ bests[key]=seconds; isBest=true; saveBests(); }
+  updateBest(); updateStats();
+  winTitle.textContent = practice ? "Practice complete! 🎉" : (isRandom ? "Random board solved! 🎉" : "It's "+curPuzzle.pic+"! 🎉");
+  winText.innerHTML = practice
+    ? "You solved it"+(isRandom?"":" — it's <strong>"+curPuzzle.pic+"</strong>")+" with "+hintsUsed+" hint"+(hintsUsed===1?"":"s")+" and "+checksUsed+" check"+(checksUsed===1?"":"s")+", all free. No time or score was recorded — flip back to Scored when you're ready to make it count."
+    : "Finished in <strong>"+fmt(seconds)+"</strong> · Score <strong>"+currentScore(true)+"</strong>"+
+    (hintsUsed||checksUsed ? " · "+hintsUsed+" hint"+(hintsUsed===1?"":"s")+", "+checksUsed+" check"+(checksUsed===1?"":"s")+" used." : " · Clean solve — no hints, no checks. Bonus banked!")+
+    (isBest?" · <strong>New best time for this puzzle!</strong>":"");
+  winBanner.classList.add("show");
+  msgEl.innerHTML= practice ? "<strong>Practice solved.</strong> Every row and column matches its clues." : "<strong>Solved.</strong> Every row and column matches its clues.";
+  winBanner.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+
+// pointer painting (mouse + touch via pointer events)
+boardEl.addEventListener("pointerdown",function(e){
+  var t=e.target.closest(".cell"); if(!t||won) return;
+  e.preventDefault();
+  var r=+t.dataset.r, c=+t.dataset.c;
+  if(e.button===2){ paintVal = player[r][c]===2?0:2; }
+  else paintVal=paintTarget(r,c);
+  painting=true; applyCell(r,c,paintVal);
+});
+boardEl.addEventListener("pointerover",function(e){
+  var t=e.target.closest(".cell"); if(!t) return;
+  var r=+t.dataset.r, c=+t.dataset.c; hoverR=r; hoverC=c; highlight();
+  if(painting && paintVal!==null) applyCell(r,c,paintVal);
+});
+document.addEventListener("pointerup",function(){ painting=false; paintVal=null; });
+boardEl.addEventListener("contextmenu",function(e){ e.preventDefault(); });
+boardEl.addEventListener("pointerleave",function(){ hoverR=hoverC=-1; highlight(); });
+function highlight(){
+  boardEl.querySelectorAll(".clue.hl").forEach(function(el){ el.classList.remove("hl"); });
+  boardEl.querySelectorAll(".cell.hl").forEach(function(el){ el.classList.remove("hl"); });
+  if(hoverR<0) return;
+  var rc=boardEl.querySelector('.clue.row[data-row="'+hoverR+'"]'); if(rc) rc.classList.add("hl");
+  var cc=boardEl.querySelector('.clue.col[data-col="'+hoverC+'"]'); if(cc) cc.classList.add("hl");
+  boardEl.querySelectorAll(".cell").forEach(function(el){
+    if(+el.dataset.r===hoverR||+el.dataset.c===hoverC) el.classList.add("hl");
+  });
+}
+
+// mode segmented control
+document.querySelectorAll(".seg button[data-mode]").forEach(function(b){
+  b.addEventListener("click",function(){
+    mode=b.dataset.mode;
+    document.querySelectorAll(".seg button[data-mode]").forEach(function(x){ x.setAttribute("aria-pressed", x===b?"true":"false"); });
+  });
+});
+function setMode(m){
+  mode=m;
+  document.querySelectorAll(".seg button[data-mode]").forEach(function(x){ x.setAttribute("aria-pressed", x.dataset.mode===m?"true":"false"); });
+}
+document.addEventListener("keydown",function(e){
+  if(e.target.tagName==="SELECT"||e.target.tagName==="INPUT") return;
+  if(e.key==="1") setMode("fill"); else if(e.key==="2") setMode("cross"); else if(e.key==="3") setMode("erase");
+});
+
+// controls
+document.querySelectorAll("[data-diff]").forEach(function(b){
+  b.addEventListener("click",function(){
+    if(b.dataset.diff===diff) return;
+    diff=b.dataset.diff; saveDiff(); syncDiffBtns(); buildPuzzleList();
+    var list=puzzlesForDiff(); if(list.length) loadPuzzle(list[0]);
+  });
+});
+document.querySelectorAll("[data-round]").forEach(function(b){
+  b.addEventListener("click",function(){
+    var want = b.dataset.round==="practice";
+    if(want===practice||!curPuzzle) return;
+    practice=want; saveRound(); syncRoundBtns();
+    if(isRandom){ loadPuzzle(curPuzzle, sol); } else loadPuzzle(curPuzzle);
+  });
+});
+sel.addEventListener("change",function(){
+  var p=PUZZLES.find(function(x){return x.id===sel.value;}); if(p) loadPuzzle(p);
+});
+document.getElementById("newBtn").addEventListener("click",function(){
+  if(isRandom){ loadPuzzle(curPuzzle, sol); } else loadPuzzle(curPuzzle);
+});
+document.getElementById("againBtn").addEventListener("click",function(){
+  if(isRandom){ loadPuzzle(curPuzzle, sol); } else loadPuzzle(curPuzzle);
+});
+document.getElementById("nextBtn").addEventListener("click",function(){
+  var list=puzzlesForDiff();
+  var idx=list.findIndex(function(x){return x.id===curPuzzle.id;});
+  var nxt=list[(idx+1)%list.length]; sel.value=nxt.id; loadPuzzle(nxt);
+});
+document.getElementById("randomBtn").addEventListener("click",function(){
+  var size=DIFFS[diff].size;
+  var grid=[]; for(var r=0;r<size;r++){ var row=[]; for(var c=0;c<size;c++) row.push(Math.random()<0.55?1:0); grid.push(row); }
+  // avoid empty rows/cols making it trivial: nudge one cell in any empty line
+  for(var i=0;i<size;i++){
+    if(grid[i].every(function(v){return v===0;})) grid[i][Math.floor(Math.random()*size)]=1;
+    if(grid.every(function(row){return row[i]===0;})) grid[Math.floor(Math.random()*size)][i]=1;
+  }
+  var rp={id:"random-"+size+"-"+Date.now(), name:"Random · "+size+"×"+size, pic:"a mystery picture"};
+  sel.value=""; loadPuzzle(rp, grid);
+  msgEl.innerHTML= practice ? "<strong>Practice round.</strong> Random "+size+"×"+size+" board — no clock, no score, free hints and checks." : "Random "+size+"×"+size+" board generated. Timer starts on your first tap.";
+});
+document.getElementById("hintBtn").addEventListener("click",function(){
+  if(won) return;
+  var opts=[];
+  for(var r=0;r<R;r++) for(var c=0;c<C;c++) if(sol[r][c]===1&&player[r][c]!==1) opts.push([r,c]);
+  if(!opts.length){ msgEl.textContent="Nothing left to hint — every picture square is already filled."; return; }
+  var pick=opts[Math.floor(Math.random()*opts.length)];
+  hintsUsed++;
+  applyCell(pick[0],pick[1],1);
+  var el=cellEl(pick[0],pick[1]); el.classList.add("hintflash");
+  setTimeout(function(){ el.classList.remove("hintflash"); },1600);
+  if(!won) msgEl.innerHTML= practice ? "Hint used (free in Practice). One correct square filled, outlined in teal." : "Hint used (−50). One correct square filled, outlined in teal.";
+  updateStats();
+});
+document.getElementById("checkBtn").addEventListener("click",function(){
+  if(won) return;
+  checksUsed++;
+  var wrong=[];
+  for(var r=0;r<R;r++) for(var c=0;c<C;c++) if(player[r][c]===1&&sol[r][c]===0) wrong.push([r,c]);
+  wrong.forEach(function(rc){ var el=cellEl(rc[0],rc[1]); el.classList.add("wrong"); setTimeout(function(){ el.classList.remove("wrong"); },2600); });
+  var costTxt = practice ? "Check used (free in Practice)." : "Check used (−25).";
+  msgEl.innerHTML = wrong.length
+    ? costTxt+" <strong>"+wrong.length+" filled square"+(wrong.length===1?" is":"s are")+" wrong</strong> — outlined in red. Erase them and rethink those lines."
+    : costTxt+" <strong>No wrong fills.</strong> Everything you've filled belongs in the picture — the rest is still to find.";
+  updateStats();
+});
+document.getElementById("revealBtn").addEventListener("click",function(){
+  msgEl.innerHTML = isRandom
+    ? "It's a random board — even we don't know what it is. The clues know. Trust the clues."
+    : "You're drawing <strong>"+curPuzzle.pic+"</strong>. No charge — now go earn it with logic.";
+});
+
+// dialogs
+function wireDlg(btnId, dlgId){
+  var d=document.getElementById(dlgId);
+  document.getElementById(btnId).addEventListener("click",function(){ if(d.showModal) d.showModal(); else d.setAttribute("open",""); });
+}
+wireDlg("howBtn","howDlg"); wireDlg("rulesBtn","rulesDlg"); wireDlg("feedbackBtn","feedbackDlg");
+var fbLink=document.getElementById("feedbackLink");
+if(fbLink){ fbLink.addEventListener("click",function(e){ e.preventDefault(); var d=document.getElementById("feedbackDlg"); if(d.showModal) d.showModal(); else d.setAttribute("open",""); }); }
+// ---------- Feedback (standard: rating + comment + tag, saved on this device) ----------
+var FB_KEY="holos-arcade-feedback";
+var fbRating=0;
+var fbTag="";
+var fbStars=document.querySelectorAll("#fbStars button");
+var fbLabel=document.getElementById("fbRatingLabel");
+var fbLabels=["Tap a star to rate.","1 star — needs work","2 stars — okay","3 stars — good","4 stars — great","5 stars — love it!"];
+function paintStars(){
+  fbStars.forEach(function(b){ b.classList.toggle("on", +b.dataset.star<=fbRating); b.setAttribute("aria-checked", +b.dataset.star===fbRating?"true":"false"); });
+  if(fbLabel) fbLabel.textContent=fbLabels[fbRating]||fbLabels[0];
+}
+fbStars.forEach(function(b){ b.addEventListener("click",function(){ fbRating=+b.dataset.star; paintStars(); }); });
+var fbTagBtns=document.querySelectorAll("#fbTags button");
+function paintTags(){
+  fbTagBtns.forEach(function(b){ var on=b.dataset.tag===fbTag; b.classList.toggle("on",on); b.setAttribute("aria-pressed",on?"true":"false"); });
+}
+fbTagBtns.forEach(function(b){ b.addEventListener("click",function(){ fbTag=(fbTag===b.dataset.tag)?"":b.dataset.tag; paintTags(); }); });
+document.getElementById("fbSubmit").addEventListener("click",function(){
+  var text=document.getElementById("fbText").value.trim();
+  var thanks=document.getElementById("fbThanks");
+  if(!fbRating && !text){ thanks.textContent="Add a star rating or a short comment first — either one helps."; thanks.classList.add("show"); return; }
+  var entry={game:"nonogram",rating:fbRating,text:text,tag:fbTag,timestamp:new Date().toISOString()};
+  try{
+    var all=JSON.parse(localStorage.getItem(FB_KEY)||"[]"); if(!Array.isArray(all)) all=[];
+    all.push(entry); localStorage.setItem(FB_KEY, JSON.stringify(all));
+  }catch(e){}
+  thanks.innerHTML="<strong>Thanks!</strong> Feedback saved on this device."+(fbRating?" You rated it "+fbRating+"★.":"");
+  thanks.classList.add("show");
+  document.getElementById("fbText").value=""; fbRating=0; fbTag=""; paintStars(); paintTags();
+});
+document.querySelectorAll("[data-close]").forEach(function(b){
+  b.addEventListener("click",function(){ document.getElementById(b.dataset.close).close(); });
+});
+window.addEventListener("resize",function(){ /* keep board fitted */ });
+
+syncDiffBtns(); syncRoundBtns();
+loadPuzzle(puzzlesForDiff()[0] || PUZZLES[1]);
+})();
+</script>
+</body>
+</html>

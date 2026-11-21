@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Soundscape Mixer</title>
+<style>
+  :root{
+    --bg:#eef3f1; --card:#ffffff; --ink:#2f3a38; --muted:#6b7a76;
+    --accent:#4a7c6f; --accent-soft:#dcebe6; --line:#d8e2de; --radius:16px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+  header{padding:20px 16px 8px;text-align:center}
+  h1{margin:0 0 4px;font-size:28px;font-weight:700}
+  .tagline{color:var(--muted);margin:0;font-size:15px}
+  .wellness-note{max-width:640px;margin:14px auto 0;padding:10px 14px;background:#fff8e6;border:1px solid #ecd9a0;border-radius:12px;font-size:14px;text-align:center}
+  main{max-width:640px;margin:0 auto;padding:16px}
+  section.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px}
+  h2{margin:0 0 12px;font-size:18px}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  button{font:inherit;cursor:pointer;border-radius:999px;border:1px solid var(--line);background:#fff;color:var(--ink);padding:10px 18px;min-height:44px}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-size:17px;padding:12px 28px}
+  button:active{opacity:.75}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .diff-group{display:flex;gap:8px;flex-wrap:wrap}
+  .diff-group button[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);font-weight:700}
+  .layer{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px}
+  .layer.locked{opacity:.55;background:#f5f7f6}
+  .layer-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .layer-name{font-weight:600;font-size:16px}
+  .layer-desc{color:var(--muted);font-size:13px;margin:2px 0 10px}
+  .lock-note{font-size:13px;color:var(--muted)}
+  input[type="range"]{width:100%;height:36px;accent-color:var(--accent)}
+  .vol-val{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px;min-width:40px;text-align:right}
+  .slider-row{display:flex;align-items:center;gap:10px}
+  .slider-row input{flex:1}
+  input[type="text"],select,textarea{font:inherit;width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+  .mix-list{list-style:none;margin:12px 0 0;padding:0}
+  .mix-list li{display:flex;gap:8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;flex-wrap:wrap}
+  .mix-name{flex:1;font-weight:600;min-width:120px}
+  .hint{color:var(--muted);font-size:13px}
+  .banner{display:none;background:var(--accent-soft);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:14px}
+  .banner.on{display:block}
+  .modal-overlay{position:fixed;inset:0;background:rgba(30,40,38,.5);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+  .modal-overlay.open{display:flex}
+  .modal{background:#fff;border-radius:16px;max-width:520px;width:100%;max-height:85vh;overflow:auto;padding:22px}
+  .modal h2{margin-top:0}
+  .modal .close-row{margin-top:16px;text-align:right}
+  .stars{display:flex;gap:6px;margin:8px 0 12px}
+  .stars button{font-size:26px;line-height:1;border:none;background:none;padding:6px;min-width:44px;min-height:44px;color:#c9d4d0}
+  .stars button.on{color:#e8a33d}
+  .timer-status{font-variant-numeric:tabular-nums;color:var(--muted);font-size:14px}
+  footer{text-align:center;padding:20px 16px 32px;color:var(--muted);font-size:14px}
+  footer a{color:var(--accent);font-weight:600}
+  .top-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+  label.field{display:block;font-size:14px;font-weight:600;margin:12px 0 6px}
+  @media (prefers-reduced-motion: reduce){ *{transition:none !important} }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎧 Soundscape Mixer</h1>
+  <p class="tagline">Blend gentle ambient sounds and make a soundscape that feels just right.</p>
+  <div class="wellness-note" role="note">For relaxation and fun. Not medical advice.</div>
+  <div class="top-actions">
+    <button type="button" id="howToBtn">❓ How to play</button>
+    <button type="button" id="rulesBtn">📜 Rules</button>
+    <button type="button" id="feedbackBtn">💬 Feedback</button>
+  </div>
+</header>
+
+<main>
+  <section class="card" aria-labelledby="diffH">
+    <h2 id="diffH">Difficulty</h2>
+    <div class="diff-group" role="group" aria-label="Difficulty">
+      <button type="button" data-diff="gentle" aria-pressed="false">🌿 Gentle</button>
+      <button type="button" data-diff="normal" aria-pressed="false">🎯 Normal</button>
+      <button type="button" data-diff="challenge" aria-pressed="false">🔥 Challenge</button>
+    </div>
+    <p class="hint" id="diffHint"></p>
+    <label class="field" for="practiceToggle">Practice mode</label>
+    <div class="row">
+      <button type="button" id="practiceToggle" aria-pressed="false">Practice mode: Off</button>
+      <span class="hint">Free mixing — nothing is saved or tracked.</span>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="mixH">
+    <h2 id="mixH">Your soundscape</h2>
+    <div class="banner" id="practiceBanner">🎧 Practice mode is on — mix freely. Saved mixes are hidden and nothing is stored.</div>
+    <div class="row" style="margin-bottom:14px">
+      <button type="button" class="primary" id="playBtn">▶ Play</button>
+      <span class="hint" id="playHint">Tap Play to start the sound.</span>
+    </div>
+    <label class="field" for="masterVol">Master volume</label>
+    <div class="slider-row">
+      <input type="range" id="masterVol" min="0" max="100" value="80" aria-label="Master volume">
+      <span class="vol-val" id="masterVolVal">80%</span>
+    </div>
+    <div id="layers" style="margin-top:16px"></div>
+  </section>
+
+  <section class="card" id="timerCard" aria-labelledby="timerH">
+    <h2 id="timerH">Sleep timer</h2>
+    <p class="hint">Set a timer and the sound gently fades out on its own. (Challenge difficulty)</p>
+    <label class="field" for="timerSelect">Fade out after</label>
+    <select id="timerSelect">
+      <option value="0">Off</option>
+      <option value="5">5 minutes</option>
+      <option value="15">15 minutes</option>
+      <option value="30">30 minutes</option>
+      <option value="45">45 minutes</option>
+      <option value="60">60 minutes</option>
+    </select>
+    <div class="row" style="margin-top:12px">
+      <button type="button" id="timerBtn">Start timer</button>
+      <span class="timer-status" id="timerStatus" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <section class="card" id="saveCard" aria-labelledby="saveH">
+    <h2 id="saveH">Save this mix</h2>
+    <label class="field" for="mixName">Mix name</label>
+    <input type="text" id="mixName" maxlength="40" placeholder="e.g. Rainy evening" autocomplete="off">
+    <div class="row" style="margin-top:12px">
+      <button type="button" id="saveBtn">💾 Save mix</button>
+      <span class="hint" id="saveHint" aria-live="polite"></span>
+    </div>
+    <h2 style="margin-top:22px">My mixes</h2>
+    <ul class="mix-list" id="mixList"></ul>
+    <p class="hint" id="noMixes">No saved mixes yet. Mix something you like, name it, and tap Save.</p>
+  </section>
+</main>
+
+<footer>
+  <p>More ridiculous health &amp; fitness fun: <a href="https://instagram.com/ridiculouslyfitandfed" target="_blank" rel="noopener">Ridiculously Fit and Fed</a></p>
+  <p>For relaxation and fun. Not medical advice.</p>
+</footer>
+
+<!-- How to play (opt-in only; never shown automatically) -->
+<div class="modal-overlay" id="howToOverlay" role="dialog" aria-modal="true" aria-label="How to play">
+  <div class="modal">
+    <h2>❓ How to play</h2>
+    <ol>
+      <li>Tap <strong>▶ Play</strong> to start the sound.</li>
+      <li>Slide each layer's volume up or down to blend your soundscape. Layers at 0% are silent.</li>
+      <li>Use the <strong>Master volume</strong> slider to set the overall level.</li>
+      <li>Pick a <strong>difficulty</strong>: Gentle gives you 3 layers, Normal gives you 5, and Challenge unlocks all 6 layers plus the sleep timer.</li>
+      <li>On Challenge, set the <strong>sleep timer</strong> and the sound fades out gently when time is up.</li>
+      <li>Name your blend and tap <strong>Save mix</strong> to keep it. Load or delete saved mixes any time.</li>
+      <li>Turn on <strong>Practice mode</strong> to experiment freely — nothing is saved.</li>
+    </ol>
+    <p class="hint">All sounds are created live in your browser — no audio files are used.</p>
+    <div class="close-row"><button type="button" data-close="howToOverlay">Close</button></div>
+  </div>
+</div>
+
+<!-- Rules (separate section) -->
+<div class="modal-overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-label="Rules">
+  <div class="modal">
+    <h2>📜 Rules</h2>
+    <ul>
+      <li>This is a relaxation toy for fun. It is not medical advice, and it does not promise any health or sleep outcome.</li>
+      <li>Sound only starts after you tap Play — nothing plays on its own.</li>
+      <li>Keep the volume at a comfortable level for your ears.</li>
+      <li>Difficulty controls which layers are available: Gentle 3, Normal 5, Challenge all 6 plus the sleep timer.</li>
+      <li>Saved mixes and settings live only in this browser on this device (localStorage). Clearing browser data removes them.</li>
+      <li>In Practice mode, mixes are not saved and nothing is tracked.</li>
+      <li>All ambient sounds are synthesized live with WebAudio. No recorded samples are used.</li>
+    </ul>
+    <div class="close-row"><button type="button" data-close="rulesOverlay">Close</button></div>
+  </div>
+</div>
+
+<!-- Feedback -->
+<div class="modal-overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-label="Send feedback">
+  <div class="modal">
+    <h2>💬 Feedback</h2>
+    <div id="fbForm">
+      <div class="stars" id="fbStars" role="radiogroup" aria-label="Rating">
+        <button type="button" data-v="1" aria-label="1 star">★</button>
+        <button type="button" data-v="2" aria-label="2 stars">★</button>
+        <button type="button" data-v="3" aria-label="3 stars">★</button>
+        <button type="button" data-v="4" aria-label="4 stars">★</button>
+        <button type="button" data-v="5" aria-label="5 stars">★</button>
+      </div>
+      <label class="field" for="fbText">Your feedback</label>
+      <textarea id="fbText" rows="4" placeholder="Tell us what you think…"></textarea>
+      <label class="field" for="fbTag">Tag (optional)</label>
+      <select id="fbTag">
+        <option value="">Tag (optional)</option>
+        <option value="Bug">Bug</option>
+        <option value="Suggestion">Suggestion</option>
+        <option value="Other">Other</option>
+      </select>
+      <div class="row" style="margin-top:14px">
+        <button type="button" id="fbCancel">Cancel</button>
+        <button type="button" class="primary" id="fbSave" style="font-size:15px;padding:10px 22px">Save</button>
+      </div>
+      <p class="hint" style="margin-top:12px">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+    </div>
+    <p id="fbThanks" style="display:none;text-align:center;font-size:17px">Thanks! 💜</p>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var SLUG = 'soundscape-mixer';
+var LS_DIFF = 'soundscape-mixer-difficulty';
+var LS_MIXES = 'soundscape-mixer-mixes';
+var LS_FEEDBACK = 'holos-arcade-feedback';
+
+var LAYERS = [
+  { id:'rain',      name:'🌧️ Rain',      desc:'Soft steady rainfall.',            minDiff:'gentle' },
+  { id:'ocean',     name:'🌊 Ocean',     desc:'Waves rolling in and out.',        minDiff:'gentle' },
+  { id:'fireplace', name:'🔥 Fireplace', desc:'Warm crackle and glow.',           minDiff:'gentle' },
+  { id:'forest',    name:'🌲 Forest',    desc:'Leaves, breeze and distant birds.',minDiff:'normal' },
+  { id:'night',     name:'🦗 Night',     desc:'Crickets and a gentle wind.',      minDiff:'normal' },
+  { id:'chimes',    name:'🔔 Chimes',    desc:'Slow, gentle wind chimes.',        minDiff:'challenge' }
+];
+var DIFF_ORDER = { gentle:0, normal:1, challenge:2 };
+var DIFF_HINTS = {
+  gentle:'Gentle: 3 layers available (Rain, Ocean, Fireplace).',
+  normal:'Normal: 5 layers available (adds Forest and Night).',
+  challenge:'Challenge: all 6 layers plus the sleep timer.'
+};
+
+var state = {
+  difficulty: 'gentle',
+  practice: false,
+  playing: false,
+  volumes: { rain:50, ocean:40, fireplace:0, forest:0, night:0, chimes:0 },
+  master: 80
+};
+try {
+  var savedDiff = localStorage.getItem(LS_DIFF);
+  if (savedDiff && DIFF_ORDER[savedDiff] !== undefined) state.difficulty = savedDiff;
+} catch(e){}
+
+/* ---------- WebAudio engine (all synthesized, no audio files) ---------- */
+var actx = null, masterGain = null, noiseBuffer = null;
+var layerNodes = {};   // id -> { gain, stopFns:[], timers:[] }
+var timerId = null, timerEndsAt = 0, fadeStarted = false;
+
+function ensureContext(){
+  if (actx) return;
+  var AC = window.AudioContext || window.webkitAudioContext;
+  actx = new AC();
+  masterGain = actx.createGain();
+  masterGain.gain.value = state.master / 100;
+  masterGain.connect(actx.destination);
+  // 2-second white-noise buffer, reused by every noise layer
+  var len = actx.sampleRate * 2;
+  noiseBuffer = actx.createBuffer(1, len, actx.sampleRate);
+  var d = noiseBuffer.getChannelData(0);
+  for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+}
+function noiseSource(){
+  var s = actx.createBufferSource();
+  s.buffer = noiseBuffer; s.loop = true;
+  return s;
+}
+function lfo(rate, depth, base){
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.frequency.value = rate; g.gain.value = depth;
+  o.connect(g); g.connect(base); o.start();
+  return o;
+}
+function buildLayer(id){
+  var out = actx.createGain();
+  out.gain.value = (state.volumes[id] || 0) / 100;
+  out.connect(masterGain);
+  var stops = [], timers = [];
+  function track(node){ stops.push(node); }
+  if (id === 'rain'){
+    var src = noiseSource(), lp = actx.createBiquadFilter(), hp = actx.createBiquadFilter();
+    lp.type = 'lowpass'; lp.frequency.value = 1400;
+    hp.type = 'highpass'; hp.frequency.value = 250;
+    src.connect(lp); lp.connect(hp); hp.connect(out); src.start(); track(src);
+    track(lfo(0.07, 0.08, out.gain));
+  } else if (id === 'ocean'){
+    var src2 = noiseSource(), bp = actx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 500; bp.Q.value = 0.6;
+    src2.connect(bp); bp.connect(out); src2.start(); track(src2);
+    track(lfo(0.08, 220, bp.frequency));       // slow swell of the surf band
+    track(lfo(0.08, 0.22, out.gain));          // matching volume swell
+  } else if (id === 'fireplace'){
+    var src3 = noiseSource(), lp3 = actx.createBiquadFilter();
+    lp3.type = 'lowpass'; lp3.frequency.value = 420;
+    src3.connect(lp3); lp3.connect(out); src3.start(); track(src3);
+    (function crackle(){
+      var t = setTimeout(function(){
+        if (!layerNodes.fireplace) return;
+        var pop = noiseSource(), pf = actx.createBiquadFilter(), pg = actx.createGain();
+        pf.type = 'bandpass'; pf.frequency.value = 900 + Math.random() * 1600; pf.Q.value = 2;
+        var now = actx.currentTime;
+        pg.gain.setValueAtTime(0.0001, now);
+        pg.gain.exponentialRampToValueAtTime(0.25 + Math.random() * 0.3, now + 0.01);
+        pg.gain.exponentialRampToValueAtTime(0.0001, now + 0.07 + Math.random() * 0.06);
+        pop.connect(pf); pf.connect(pg); pg.connect(out);
+        pop.start(); pop.stop(now + 0.2);
+        crackle();
+      }, 120 + Math.random() * 700);
+      timers.push(t);
+    })();
+  } else if (id === 'forest'){
+    var src4 = noiseSource(), lp4 = actx.createBiquadFilter();
+    lp4.type = 'lowpass'; lp4.frequency.value = 700;
+    src4.connect(lp4); lp4.connect(out); src4.start(); track(src4);
+    track(lfo(0.05, 0.06, out.gain));
+    (function bird(){
+      var t = setTimeout(function(){
+        if (!layerNodes.forest) return;
+        var o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'sine';
+        var now = actx.currentTime, f0 = 2100 + Math.random() * 900;
+        o.frequency.setValueAtTime(f0, now);
+        o.frequency.exponentialRampToValueAtTime(f0 * (1.15 + Math.random() * 0.25), now + 0.09);
+        o.frequency.exponentialRampToValueAtTime(f0 * 0.95, now + 0.2);
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.05, now + 0.04);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+        o.connect(g); g.connect(out); o.start(now); o.stop(now + 0.25);
+        bird();
+      }, 2500 + Math.random() * 6000);
+      timers.push(t);
+    })();
+  } else if (id === 'night'){
+    var src5 = noiseSource(), bp5 = actx.createBiquadFilter();
+    bp5.type = 'bandpass'; bp5.frequency.value = 400; bp5.Q.value = 0.8;
+    src5.connect(bp5); bp5.connect(out); src5.start(); track(src5);
+    track(lfo(0.06, 160, bp5.frequency));      // wind drifting
+    var crick = actx.createOscillator(), cg = actx.createGain(), am = actx.createOscillator(), amg = actx.createGain();
+    crick.type = 'sine'; crick.frequency.value = 4200;
+    am.type = 'square'; am.frequency.value = 18; amg.gain.value = 0.012;
+    cg.gain.value = 0.012;
+    am.connect(amg); amg.connect(cg.gain);
+    crick.connect(cg); cg.connect(out); crick.start(); am.start(); track(crick); track(am);
+  } else if (id === 'chimes'){
+    var notes = [523.25, 587.33, 659.25, 783.99, 880.00, 1046.50]; // gentle pentatonic-ish set
+    (function chime(){
+      var t = setTimeout(function(){
+        if (!layerNodes.chimes) return;
+        var o = actx.createOscillator(), g = actx.createGain();
+        o.type = 'sine';
+        o.frequency.value = notes[Math.floor(Math.random() * notes.length)];
+        var now = actx.currentTime;
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 2.8);
+        o.connect(g); g.connect(out); o.start(now); o.stop(now + 3);
+        chime();
+      }, 1800 + Math.random() * 4200);
+      timers.push(t);
+    })();
+  }
+  layerNodes[id] = { gain: out, stops: stops, timers: timers };
+}
+function stopLayer(id){
+  var n = layerNodes[id]; if (!n) return;
+  n.timers.forEach(function(t){ clearTimeout(t); });
+  n.stops.forEach(function(s){ try { s.stop(); } catch(e){} try { s.disconnect(); } catch(e){} });
+  try { n.gain.disconnect(); } catch(e){}
+  delete layerNodes[id];
+}
+function unlocked(id){
+  var layer = null;
+  LAYERS.forEach(function(l){ if (l.id === id) layer = l; });
+  return layer && DIFF_ORDER[layer.minDiff] <= DIFF_ORDER[state.difficulty];
+}
+function startAll(){
+  ensureContext();
+  if (actx.state === 'suspended') actx.resume();
+  LAYERS.forEach(function(l){
+    if (unlocked(l.id) && !layerNodes[l.id]) buildLayer(l.id);
+    if (layerNodes[l.id]) layerNodes[l.id].gain.gain.value = (state.volumes[l.id] || 0) / 100;
+  });
+}
+function stopAll(){
+  Object.keys(layerNodes).forEach(stopLayer);
+  cancelTimer(true);
+}
+
+/* ---------- UI ---------- */
+var $ = function(id){ return document.getElementById(id); };
+var layersEl = $('layers');
+LAYERS.forEach(function(l){
+  var div = document.createElement('div');
+  div.className = 'layer'; div.id = 'layer-' + l.id;
+  div.innerHTML =
+    '<div class="layer-head"><span class="layer-name">' + l.name + '</span>' +
+    '<span class="vol-val" id="val-' + l.id + '"></span></div>' +
+    '<p class="layer-desc">' + l.desc + '</p>' +
+    '<div class="slider-row"><input type="range" min="0" max="100" id="vol-' + l.id + '" aria-label="' + l.name + ' volume"></div>' +
+    '<p class="lock-note" id="lock-' + l.id + '" style="display:none"></p>';
+  layersEl.appendChild(div);
+  var slider = div.querySelector('input[type="range"]');
+  slider.value = state.volumes[l.id];
+  slider.addEventListener('input', function(){
+    state.volumes[l.id] = Number(slider.value);
+    $('val-' + l.id).textContent = slider.value + '%';
+    if (layerNodes[l.id]) layerNodes[l.id].gain.gain.value = Number(slider.value) / 100;
+  });
+  $('val-' + l.id).textContent = slider.value + '%';
+});
+
+function applyDifficulty(){
+  document.querySelectorAll('[data-diff]').forEach(function(b){
+    b.setAttribute('aria-pressed', b.getAttribute('data-diff') === state.difficulty ? 'true' : 'false');
+  });
+  $('diffHint').textContent = DIFF_HINTS[state.difficulty];
+  LAYERS.forEach(function(l){
+    var ok = unlocked(l.id);
+    var card = $('layer-' + l.id), slider = $('vol-' + l.id), lock = $('lock-' + l.id);
+    card.classList.toggle('locked', !ok);
+    slider.disabled = !ok;
+    lock.style.display = ok ? 'none' : 'block';
+    if (!ok) lock.textContent = '🔒 Available on ' + (l.minDiff === 'normal' ? 'Normal' : 'Challenge') + ' difficulty.';
+    if (!ok && layerNodes[l.id]) stopLayer(l.id);
+    if (ok && state.playing && actx && !layerNodes[l.id]) buildLayer(l.id);
+  });
+  var timerOk = state.difficulty === 'challenge';
+  $('timerSelect').disabled = !timerOk;
+  $('timerBtn').disabled = !timerOk;
+  if (!timerOk) cancelTimer(true);
+}
+document.querySelectorAll('[data-diff]').forEach(function(b){
+  b.addEventListener('click', function(){
+    state.difficulty = b.getAttribute('data-diff');
+    try { localStorage.setItem(LS_DIFF, state.difficulty); } catch(e){}
+    applyDifficulty();
+  });
+});
+
+$('masterVol').addEventListener('input', function(){
+  state.master = Number(this.value);
+  $('masterVolVal').textContent = this.value + '%';
+  if (masterGain && !fadeStarted) masterGain.gain.value = state.master / 100;
+});
+
+var playBtn = $('playBtn');
+playBtn.addEventListener('click', function(){
+  if (!state.playing){
+    startAll(); state.playing = true;
+    playBtn.textContent = '⏸ Pause';
+    $('playHint').textContent = 'Playing — adjust the sliders to blend.';
+  } else {
+    stopAll(); state.playing = false;
+    playBtn.textContent = '▶ Play';
+    $('playHint').textContent = 'Paused. Tap Play to start the sound again.';
+  }
+});
+
+/* ---------- Sleep timer (fade out) ---------- */
+function cancelTimer(silent){
+  if (timerId) { clearInterval(timerId); timerId = null; }
+  timerEndsAt = 0; fadeStarted = false;
+  if (masterGain && actx) { masterGain.gain.cancelScheduledValues(actx.currentTime); masterGain.gain.value = state.master / 100; }
+  if (!silent) $('timerStatus').textContent = '';
+  $('timerBtn').textContent = 'Start timer';
+}
+$('timerBtn').addEventListener('click', function(){
+  if (timerId){ cancelTimer(); return; }
+  var mins = Number($('timerSelect').value);
+  if (!mins){ $('timerStatus').textContent = 'Pick a time first.'; return; }
+  if (!state.playing){ $('timerStatus').textContent = 'Tap Play first, then start the timer.'; return; }
+  timerEndsAt = Date.now() + mins * 60000;
+  fadeStarted = false;
+  $('timerBtn').textContent = 'Cancel timer';
+  timerId = setInterval(function(){
+    var left = Math.max(0, timerEndsAt - Date.now());
+    var m = Math.floor(left / 60000), s = Math.floor((left % 60000) / 1000);
+    $('timerStatus').textContent = 'Fading out in ' + m + ':' + (s < 10 ? '0' : '') + s;
+    if (left <= 30000 && !fadeStarted && masterGain){
+      fadeStarted = true;
+      masterGain.gain.cancelScheduledValues(actx.currentTime);
+      masterGain.gain.setValueAtTime(masterGain.gain.value, actx.currentTime);
+      masterGain.gain.linearRampToValueAtTime(0.0001, actx.currentTime + left / 1000);
+    }
+    if (left <= 0){
+      stopAll(); state.playing = false;
+      playBtn.textContent = '▶ Play';
+      $('playHint').textContent = 'Timer finished — tap Play any time.';
+      $('timerStatus').textContent = 'Done. Rest easy. 🌙';
+      cancelTimer(true);
+      $('timerStatus').textContent = 'Done. Rest easy. 🌙';
+    }
+  }, 500);
+});
+
+/* ---------- Saved mixes (localStorage) ---------- */
+function loadMixes(){
+  try {
+    var arr = JSON.parse(localStorage.getItem(LS_MIXES) || '[]');
+    return Array.isArray(arr) ? arr : [];
+  } catch(e){ return []; }
+}
+function renderMixes(){
+  var list = $('mixList'); list.innerHTML = '';
+  var mixes = loadMixes();
+  $('noMixes').style.display = mixes.length ? 'none' : 'block';
+  mixes.forEach(function(mix, idx){
+    var li = document.createElement('li');
+    var name = document.createElement('span'); name.className = 'mix-name'; name.textContent = mix.name;
+    var load = document.createElement('button'); load.type = 'button'; load.textContent = 'Load';
+    var del = document.createElement('button'); del.type = 'button'; del.textContent = 'Delete';
+    load.addEventListener('click', function(){
+      LAYERS.forEach(function(l){
+        if (typeof mix.volumes[l.id] === 'number'){
+          state.volumes[l.id] = mix.volumes[l.id];
+          $('vol-' + l.id).value = mix.volumes[l.id];
+          $('val-' + l.id).textContent = mix.volumes[l.id] + '%';
+          if (layerNodes[l.id]) layerNodes[l.id].gain.gain.value = mix.volumes[l.id] / 100;
+        }
+      });
+      if (typeof mix.master === 'number'){
+        state.master = mix.master;
+        $('masterVol').value = mix.master;
+        $('masterVolVal').textContent = mix.master + '%';
+        if (masterGain && !fadeStarted) masterGain.gain.value = mix.master / 100;
+      }
+      $('saveHint').textContent = 'Loaded “' + mix.name + '”. Tap Play if the sound is off.';
+    });
+    del.addEventListener('click', function(){
+      var arr = loadMixes(); arr.splice(idx, 1);
+      try { localStorage.setItem(LS_MIXES, JSON.stringify(arr)); } catch(e){}
+      renderMixes();
+      $('saveHint').textContent = 'Deleted “' + mix.name + '”.';
+    });
+    li.appendChild(name); li.appendChild(load); li.appendChild(del);
+    list.appendChild(li);
+  });
+}
+$('saveBtn').addEventListener('click', function(){
+  if (state.practice){ $('saveHint').textContent = 'Practice mode is on — turn it off to save mixes.'; return; }
+  var name = $('mixName').value.trim();
+  if (!name){ $('saveHint').textContent = 'Give your mix a name first.'; $('mixName').focus(); return; }
+  var mixes = loadMixes();
+  var rec = { name: name, volumes: {}, master: state.master, difficulty: state.difficulty, savedAt: new Date().toISOString() };
+  LAYERS.forEach(function(l){ rec.volumes[l.id] = state.volumes[l.id]; });
+  var existing = -1;
+  mixes.forEach(function(m, i){ if (m.name.toLowerCase() === name.toLowerCase()) existing = i; });
+  if (existing >= 0) mixes[existing] = rec; else mixes.push(rec);
+  try { localStorage.setItem(LS_MIXES, JSON.stringify(mixes)); } catch(e){}
+  $('mixName').value = '';
+  $('saveHint').textContent = 'Saved “' + name + '”.';
+  renderMixes();
+});
+
+/* ---------- Practice mode ---------- */
+$('practiceToggle').addEventListener('click', function(){
+  state.practice = !state.practice;
+  this.textContent = 'Practice mode: ' + (state.practice ? 'On' : 'Off');
+  this.setAttribute('aria-pressed', state.practice ? 'true' : 'false');
+  $('practiceBanner').classList.toggle('on', state.practice);
+  $('saveCard').style.display = state.practice ? 'none' : '';
+});
+
+/* ---------- Modals ---------- */
+function openModal(id){ $(id).classList.add('open'); }
+function closeModal(id){ $(id).classList.remove('open'); }
+$('howToBtn').addEventListener('click', function(){ openModal('howToOverlay'); });
+$('rulesBtn').addEventListener('click', function(){ openModal('rulesOverlay'); });
+$('feedbackBtn').addEventListener('click', function(){
+  $('fbForm').style.display = ''; $('fbThanks').style.display = 'none';
+  openModal('feedbackOverlay');
+});
+document.querySelectorAll('[data-close]').forEach(function(b){
+  b.addEventListener('click', function(){ closeModal(b.getAttribute('data-close')); });
+});
+document.querySelectorAll('.modal-overlay').forEach(function(ov){
+  ov.addEventListener('click', function(e){ if (e.target === ov) ov.classList.remove('open'); });
+});
+
+/* ---------- Feedback (localStorage, arcade standard) ---------- */
+var fbRating = 0;
+var fbStars = $('fbStars').querySelectorAll('button');
+function paintStars(){ fbStars.forEach(function(s){ s.classList.toggle('on', Number(s.getAttribute('data-v')) <= fbRating); }); }
+fbStars.forEach(function(s){ s.addEventListener('click', function(){ fbRating = Number(s.getAttribute('data-v')); paintStars(); }); });
+$('fbCancel').addEventListener('click', function(){ closeModal('feedbackOverlay'); });
+$('fbSave').addEventListener('click', function(){
+  var rec = { game: SLUG, rating: fbRating, text: $('fbText').value.trim(), tag: $('fbTag').value, timestamp: new Date().toISOString() };
+  try {
+    var arr = [];
+    try { arr = JSON.parse(localStorage.getItem(LS_FEEDBACK) || '[]'); if (!Array.isArray(arr)) arr = []; } catch(e){ arr = []; }
+    arr.push(rec);
+    localStorage.setItem(LS_FEEDBACK, JSON.stringify(arr));
+  } catch(e){}
+  $('fbForm').style.display = 'none';
+  $('fbThanks').style.display = 'block';
+  fbRating = 0; paintStars(); $('fbText').value = ''; $('fbTag').value = '';
+  setTimeout(function(){ closeModal('feedbackOverlay'); }, 1200);
+});
+
+applyDifficulty();
+renderMixes();
+})();
+</script>
+</body>
+</html>

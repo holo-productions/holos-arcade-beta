@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Note Memory</title>
+<style>
+  :root{
+    --bg:#f6f2fb; --surface:#ffffff; --ink:#1d1830; --ink-soft:#5d5578;
+    --line:#ddd3f0; --accent:#7c3aed; --accent-ink:#ffffff;
+    --shadow:0 16px 36px rgba(29,24,48,.16);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#14101f; --surface:#201a33; --ink:#f1edfb; --ink-soft:#b6abcf;
+      --line:#3a3157; --accent:#a78bfa; --accent-ink:#1d1830; --shadow:0 16px 36px rgba(0,0,0,.5); }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+  .wrap{max-width:560px;margin:0 auto;padding:18px 16px 36px}
+  h1{font-size:1.7rem;margin:4px 0 2px;letter-spacing:-.02em}
+  .sub{color:var(--ink-soft);margin:0 0 14px;font-size:.95rem}
+  .topbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+  .topbar .spacer{flex:1}
+  .btn{font:inherit;font-weight:700;font-size:.9rem;border:1.5px solid var(--line);
+    background:var(--surface);color:var(--ink);border-radius:999px;padding:9px 16px;
+    cursor:pointer;min-height:44px;display:inline-flex;align-items:center;gap:6px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-size:1.05rem;padding:12px 28px}
+  .btn:focus-visible,.pad:focus-visible,.seg button:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .card{background:var(--surface);border:1.5px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:18px}
+  .mode-lbl{font-weight:800;font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);display:block;margin-bottom:8px}
+  .seg{display:flex;gap:8px;margin-bottom:10px}
+  .seg button{flex:1;font:inherit;font-weight:800;padding:12px 6px;min-height:48px;border-radius:12px;
+    border:1.5px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;font-size:.95rem}
+  .seg button.active{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .diff-desc{color:var(--ink-soft);font-size:.9rem;min-height:2.6em;margin:0 0 12px}
+  .mode-desc{color:var(--ink-soft);font-size:.9rem;min-height:2.6em;margin:0 0 14px}
+  .start-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .practice-banner{text-align:center;font-weight:800;font-size:.85rem;letter-spacing:.04em;
+    background:var(--bg);border:1.5px dashed var(--accent);color:var(--ink);
+    border-radius:12px;padding:8px 10px;margin:12px 0 0}
+  .game-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:14px}
+  .hud{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 10px}
+  .hud .stat{flex:1;min-width:100px;text-align:center;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:8px 4px}
+  .hud .stat b{display:block;font-size:1.3rem}
+  .hud .stat span{font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-soft);font-weight:700}
+  .status{text-align:center;font-weight:800;font-size:1.05rem;min-height:1.5em;margin:6px 0 10px}
+  .dots{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;min-height:14px;margin-bottom:12px}
+  .dots i{width:11px;height:11px;border-radius:50%;background:var(--line);display:block}
+  .dots i.done{background:var(--accent)}
+  .pads{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .pad{border:none;border-radius:16px;min-height:88px;cursor:pointer;color:#fff;
+    font:inherit;font-weight:900;font-size:1.25rem;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:2px;opacity:.82;
+    transition:transform .08s,opacity .08s,box-shadow .08s;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  .pad small{font-size:.68rem;font-weight:700;opacity:.85;letter-spacing:.05em}
+  .pad.lit{opacity:1;transform:scale(1.06);box-shadow:0 0 0 4px rgba(255,255,255,.65),0 10px 24px rgba(0,0,0,.28)}
+  .pad:disabled{cursor:default}
+  .pad.wrong{animation:shake .35s}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-7px)}75%{transform:translateX(7px)}}
+  .over{text-align:center;padding:8px 0 2px}
+  .over .big{font-size:2.2rem;font-weight:900;margin:2px 0}
+  .hidden{display:none!important}
+  footer{margin-top:22px;text-align:center;color:var(--ink-soft);font-size:.9rem;line-height:1.6}
+  footer a{color:var(--accent);font-weight:700}
+  .overlay{position:fixed;inset:0;z-index:9000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:16px}
+  .overlay.open{display:flex}
+  .sheet{background:var(--surface);color:var(--ink);border-radius:18px;max-width:480px;width:100%;max-height:86vh;overflow:auto;padding:20px;box-shadow:var(--shadow)}
+  .sheet h2{margin:0 0 10px}
+  .sheet h3{margin:16px 0 6px}
+  .sheet p,.sheet li{line-height:1.55;font-size:.95rem}
+  .sheet ul{padding-left:20px}
+  .close-row{display:flex;justify-content:flex-end;margin-top:16px}
+  /* Feedback */
+  .fb-btn{display:inline-block;margin:8px;padding:10px 18px;min-height:44px;font:inherit;font-size:15px;border-radius:999px;border:1px solid rgba(128,128,128,.45);background:transparent;color:inherit;cursor:pointer}
+  .fb-overlay{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:16px}
+  .fb-overlay.open{display:flex}
+  .fb-card{background:#fff;color:#111;border-radius:14px;max-width:420px;width:100%;padding:18px;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+  .fb-card h2{margin:0 0 10px;font-size:18px}
+  .fb-stars{display:flex;gap:6px;margin:6px 0 12px}
+  .fb-star{font-size:28px;line-height:1;background:none;border:none;cursor:pointer;padding:6px;min-width:44px;min-height:44px;color:#bbb}
+  .fb-star.on{color:#f5a623}
+  .fb-card textarea{width:100%;min-height:90px;font:inherit;padding:10px;border:1px solid #ccc;border-radius:8px;resize:vertical}
+  .fb-card select{width:100%;font:inherit;padding:10px;margin-top:10px;border:1px solid #ccc;border-radius:8px;background:#fff}
+  .fb-row{display:flex;gap:10px;margin-top:14px}
+  .fb-save,.fb-cancel{flex:1;padding:12px;min-height:44px;font:inherit;font-size:15px;border-radius:10px;cursor:pointer}
+  .fb-save{background:#2e7d32;color:#fff;border:none}
+  .fb-cancel{background:transparent;border:1px solid #ccc;color:#111}
+  .fb-terms{margin:12px 0 0;font-size:13px;line-height:1.45;color:#555}
+  .fb-thanks{display:none;text-align:center;font-size:17px;padding:14px 0 4px}
+  @media (max-width:420px){ .pad{min-height:76px;font-size:1.1rem} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <button class="btn" id="btnHow" type="button">❓ How to play</button>
+    <button class="btn" id="btnRules" type="button">📜 Rules</button>
+    <span class="spacer"></span>
+    <button class="btn" id="btnSound" type="button" aria-pressed="true">🔊 Sound on</button>
+  </div>
+
+  <h1>🎵 Note Memory</h1>
+  <p class="sub">Watch the notes light up, listen to the melody, then play it back. How long a tune can your memory hold?</p>
+
+  <div class="card">
+    <div id="setupView">
+      <span class="mode-lbl" id="diffLbl">Difficulty</span>
+      <div class="seg" role="group" aria-labelledby="diffLbl">
+        <button type="button" data-diff="easy" id="diffEasy">😌 Easy</button>
+        <button type="button" data-diff="normal" id="diffNormal">🎯 Normal</button>
+        <button type="button" data-diff="hard" id="diffHard">🔥 Hard</button>
+      </div>
+      <p class="diff-desc" id="diffDesc"></p>
+      <span class="mode-lbl" id="modeLbl">Mode</span>
+      <div class="seg" role="group" aria-labelledby="modeLbl">
+        <button type="button" data-mode="scored" id="modeScored">🏆 Scored</button>
+        <button type="button" data-mode="practice" id="modePractice">🎓 Practice</button>
+      </div>
+      <p class="mode-desc" id="modeDesc"></p>
+      <div class="start-row">
+        <button class="btn primary" id="btnStart" type="button">▶ Start game</button>
+        <button class="btn" id="btnPractice" type="button">🎓 Practice round</button>
+      </div>
+    </div>
+
+    <div id="gameView" class="hidden">
+      <div class="practice-banner hidden" id="practiceBanner">🎓 Practice round — no score, no game over. Mistakes just replay the tune.</div>
+      <div class="hud">
+        <div class="stat"><b id="hudRound">1</b><span>Round</span></div>
+        <div class="stat"><b id="hudScore">0</b><span id="hudScoreLbl">Longest tune</span></div>
+        <div class="stat"><b id="hudBest">0</b><span id="hudBestLbl">Best</span></div>
+      </div>
+      <div class="status" id="status" aria-live="polite">Get ready…</div>
+      <div class="dots" id="dots" aria-hidden="true"></div>
+      <div class="pads" id="pads"></div>
+      <div class="over hidden" id="overBox">
+        <div class="big" id="overScore">0</div>
+        <p id="overMsg" style="margin:4px 0 14px"></p>
+        <button class="btn primary" id="btnAgain" type="button">↻ Play again</button>
+        <button class="btn" id="btnChangeDiff" type="button">Change difficulty</button>
+      </div>
+      <div class="game-actions">
+        <button class="btn hidden" id="btnReplay" type="button">🔁 Hear it again</button>
+        <button class="btn" id="btnQuit" type="button">Quit to start</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div>More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener">Ridiculously Fit and Fed</a></div>
+    <div>🎵 Music Games — a Holo's Arcade game</div>
+  </footer>
+</div>
+
+<!-- How to play (opt-in tutorial; never shown automatically) -->
+<div class="overlay" id="howOverlay" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+  <div class="sheet">
+    <h2 id="howTitle">How to play</h2>
+    <ol>
+      <li>Pick a difficulty and tap <strong>Start game</strong>.</li>
+      <li><strong>Watch &amp; listen</strong> — the pads light up and play a short melody, one note at a time. You can't tap during playback.</li>
+      <li><strong>Your turn</strong> — tap the same pads in the same order. Each pad is a musical note (C, D, E, F, G, A, B, C) with its own colour and pitch. Keys 1–8 work too.</li>
+      <li>Get the whole tune right and the next round adds more notes. One wrong note ends the game.</li>
+      <li>Your score is the <strong>longest tune you repeated correctly</strong>. Beat your best!</li>
+      <li><strong>Just warming up?</strong> Tap <strong>🎓 Practice round</strong> (or pick Practice under Mode). Nothing is scored, a wrong note never ends the game — the tune simply plays again so you can retry it — and you can tap <strong>🔁 Hear it again</strong> any time on your turn to replay the tune. Quit whenever you're ready for the real thing.</li>
+    </ol>
+    <p>Tip: hum the melody back to yourself as it plays — your ears remember tunes your eyes forget.</p>
+    <div class="close-row"><button class="btn primary" type="button" data-close>Got it</button></div>
+  </div>
+</div>
+
+<!-- Rules (full rules + scoring, separate from tutorial) -->
+<div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="sheet">
+    <h2 id="rulesTitle">Rules</h2>
+    <h3>The game</h3>
+    <ul>
+      <li>Note Memory is a sequence-memory game. Each round, the game plays a melody on 8 note pads (C4–C5). Repeat the exact sequence, in order, by tapping the pads.</li>
+      <li>The sequence grows every round (see Difficulty). A single wrong note ends the game immediately — there are no retries within a round.</li>
+      <li>Pads are locked while the melody plays back; taps during playback are ignored.</li>
+      <li>Keyboard: keys <strong>1–8</strong> play the pads left to right, top row first.</li>
+    </ul>
+    <h3>Scoring</h3>
+    <ul>
+      <li>Your score is the length of the <strong>longest sequence you repeated fully correctly</strong> in that game.</li>
+      <li>Example: complete the 5-note tune, then miss a note in the 6-note tune — your score is 5.</li>
+      <li>Best scores are saved on this device, separately for each difficulty.</li>
+    </ul>
+    <h3>Practice rounds</h3>
+    <ul>
+      <li>Practice rounds are <strong>unscored</strong>: nothing is saved, and your best score is never affected.</li>
+      <li>A wrong note does <strong>not</strong> end a practice round. The game names the note that should have come next, replays the whole tune, and you try the same round again.</li>
+      <li>On your turn in practice, tap <strong>🔁 Hear it again</strong> to replay the current tune as many times as you like; your progress on that tune resets.</li>
+      <li>Tunes grow at the same rate as the chosen difficulty. End a practice round any time with <strong>Quit to start</strong>.</li>
+      <li>Mode (Scored / Practice) can only be changed between games, never mid-game. Your choice is remembered on this device.</li>
+    </ul>
+    <h3>Difficulty</h3>
+    <ul>
+      <li><strong>😌 Easy</strong> — slow playback (700 ms per note), starts at 2 notes, grows by 1 note per round.</li>
+      <li><strong>🎯 Normal</strong> — medium playback (500 ms per note), starts at 3 notes, grows by 1 note per round.</li>
+      <li><strong>🔥 Hard</strong> — fast playback (350 ms per note), starts at 4 notes, grows by 2 notes per round.</li>
+      <li>Difficulty can only be changed between games, never mid-game. Your choice is remembered on this device.</li>
+    </ul>
+    <h3>Sound</h3>
+    <ul>
+      <li>Every tone is synthesized live with WebAudio — no songs, recordings, or samples are used. Use the Sound button to mute.</li>
+    </ul>
+    <div class="close-row"><button class="btn primary" type="button" data-close>Close</button></div>
+  </div>
+</div>
+
+<!-- Feedback (standard) -->
+<div class="fb-overlay" id="fbOverlay" role="dialog" aria-modal="true" aria-label="Send feedback">
+  <div class="fb-card">
+    <h2>Feedback</h2>
+    <div id="fbForm">
+      <div class="fb-stars" id="fbStars" role="radiogroup" aria-label="Rating">
+        <button type="button" class="fb-star" data-v="1" aria-label="1 star">★</button>
+        <button type="button" class="fb-star" data-v="2" aria-label="2 stars">★</button>
+        <button type="button" class="fb-star" data-v="3" aria-label="3 stars">★</button>
+        <button type="button" class="fb-star" data-v="4" aria-label="4 stars">★</button>
+        <button type="button" class="fb-star" data-v="5" aria-label="5 stars">★</button>
+      </div>
+      <textarea id="fbText" placeholder="Tell us what you think…" aria-label="Your feedback"></textarea>
+      <select id="fbTag" aria-label="Feedback type">
+        <option value="">Tag (optional)</option>
+        <option value="Bug">Bug</option>
+        <option value="Suggestion">Suggestion</option>
+        <option value="Other">Other</option>
+      </select>
+      <p class="fb-terms">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+      <div class="fb-row">
+        <button type="button" class="fb-cancel" id="fbCancel">Cancel</button>
+        <button type="button" class="fb-save" id="fbSave">Save</button>
+      </div>
+    </div>
+    <div class="fb-thanks" id="fbThanks">Thanks! 💜</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var GAME_SLUG = "note-memory";
+  var LS_DIFF = "noteMemory_diff";
+  var LS_MODE = "noteMemory_mode";
+  var LS_BEST = "noteMemory_best";
+  var LS_SOUND = "noteMemory_sound";
+
+  // 8 pads: C major scale, distinct pitch + colour each. Frequencies in Hz.
+  var NOTES = [
+    {name:"C", label:"C4", freq:261.63, color:"#e23b3b"},
+    {name:"D", label:"D4", freq:293.66, color:"#f08a1d"},
+    {name:"E", label:"E4", freq:329.63, color:"#f2c618"},
+    {name:"F", label:"F4", freq:349.23, color:"#2fa84f"},
+    {name:"G", label:"G4", freq:392.00, color:"#1d9e9e"},
+    {name:"A", label:"A4", freq:440.00, color:"#2b6fd9"},
+    {name:"B", label:"B4", freq:493.88, color:"#7c3aed"},
+    {name:"C", label:"C5", freq:523.25, color:"#d6338f"}
+  ];
+
+  var DIFFS = {
+    easy:   {on:700, gap:320, start:2, growth:1, desc:"😌 Easy — slow playback, starts at 2 notes, +1 note per round. A gentle warm-up for your memory."},
+    normal: {on:500, gap:220, start:3, growth:1, desc:"🎯 Normal — medium playback, starts at 3 notes, +1 note per round. The classic challenge."},
+    hard:   {on:350, gap:140, start:4, growth:2, desc:"🔥 Hard — fast playback, starts at 4 notes, +2 notes per round. For serious tune-trackers."}
+  };
+
+  function $(id){ return document.getElementById(id); }
+  function load(key, fallback){
+    try { var v = localStorage.getItem(key); return v === null ? fallback : JSON.parse(v); }
+    catch(e){ return fallback; }
+  }
+  function save(key, value){ try { localStorage.setItem(key, JSON.stringify(value)); } catch(e){} }
+
+  var diff = load(LS_DIFF, "normal");
+  if (!DIFFS[diff]) diff = "normal";
+  var best = load(LS_BEST, {easy:0, normal:0, hard:0});
+  if (!best || typeof best !== "object") best = {easy:0, normal:0, hard:0};
+  var soundOn = load(LS_SOUND, true) !== false;
+  var mode = load(LS_MODE, "scored");
+  if (mode !== "practice" && mode !== "scored") mode = "scored";
+  function isPractice(){ return mode === "practice"; }
+
+  // ----- Audio: all tones synthesized with WebAudio (no samples/songs) -----
+  var audioCtx = null;
+  function ensureAudio(){
+    if (!audioCtx){
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+  function playTone(freq, durMs){
+    if (!soundOn) return;
+    var ctx = ensureAudio();
+    if (!ctx) return;
+    var t = ctx.currentTime;
+    var dur = Math.max(0.12, durMs/1000);
+    var gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.32, t + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    // Triangle fundamental + soft sine octave = warm bell-ish synth tone.
+    var osc1 = ctx.createOscillator(); osc1.type = "triangle"; osc1.frequency.value = freq;
+    var osc2 = ctx.createOscillator(); osc2.type = "sine"; osc2.frequency.value = freq * 2;
+    var g2 = ctx.createGain(); g2.gain.value = 0.35;
+    osc1.connect(gain); osc2.connect(g2); g2.connect(gain); gain.connect(ctx.destination);
+    osc1.start(t); osc2.start(t); osc1.stop(t + dur + 0.05); osc2.stop(t + dur + 0.05);
+  }
+  function playBuzz(){
+    if (!soundOn) return;
+    var ctx = ensureAudio(); if (!ctx) return;
+    var t = ctx.currentTime;
+    var osc = ctx.createOscillator(); osc.type = "sawtooth"; osc.frequency.value = 110;
+    var gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.18, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(t); osc.stop(t + 0.45);
+  }
+
+  // ----- Pads -----
+  var padsEl = $("pads"), padEls = [];
+  NOTES.forEach(function(n, i){
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "pad"; b.style.background = n.color;
+    b.setAttribute("aria-label", "Note " + n.label);
+    b.innerHTML = n.name + "<small>" + n.label + " · key " + (i+1) + "</small>";
+    b.addEventListener("click", function(){ onPad(i); });
+    padsEl.appendChild(b); padEls.push(b);
+  });
+  function lightPad(i, ms){
+    var el = padEls[i];
+    el.classList.add("lit");
+    playTone(NOTES[i].freq, ms);
+    setTimeout(function(){ el.classList.remove("lit"); }, ms);
+  }
+  function setPadsEnabled(on){ padEls.forEach(function(el){ el.disabled = !on; }); }
+
+  // ----- Game state -----
+  var sequence = [], inputIdx = 0, round = 0, score = 0, mistakes = 0;
+  var phase = "idle"; // idle | playback | input | over
+  var timers = [];
+  function later(fn, ms){ var id = setTimeout(fn, ms); timers.push(id); return id; }
+  function clearTimers(){ timers.forEach(clearTimeout); timers = []; }
+
+  function setStatus(txt){ $("status").textContent = txt; }
+  function paintDots(){
+    var d = $("dots"); d.innerHTML = "";
+    sequence.forEach(function(_, i){
+      var dot = document.createElement("i");
+      if (phase === "input" && i < inputIdx) dot.className = "done";
+      d.appendChild(dot);
+    });
+  }
+  function paintHud(){
+    $("hudRound").textContent = round;
+    if (isPractice()){
+      $("hudScore").textContent = sequence.length;
+      $("hudScoreLbl").textContent = "Notes in tune";
+      $("hudBest").textContent = mistakes;
+      $("hudBestLbl").textContent = "Mistakes";
+    } else {
+      $("hudScore").textContent = score;
+      $("hudScoreLbl").textContent = "Longest tune";
+      $("hudBest").textContent = best[diff] || 0;
+      $("hudBestLbl").textContent = "Best";
+    }
+  }
+  function paintModeChrome(){
+    var practice = isPractice();
+    $("practiceBanner").classList.toggle("hidden", !practice);
+    $("btnReplay").classList.toggle("hidden", !practice);
+  }
+
+  function startGame(){
+    ensureAudio();
+    clearTimers();
+    sequence = []; inputIdx = 0; round = 0; score = 0; mistakes = 0; phase = "playback";
+    $("setupView").classList.add("hidden");
+    $("gameView").classList.remove("hidden");
+    $("overBox").classList.add("hidden");
+    paintModeChrome();
+    paintHud();
+    nextRound();
+  }
+  function nextRound(){
+    round++;
+    var cfg = DIFFS[diff];
+    var add = (round === 1) ? cfg.start : cfg.growth;
+    for (var k = 0; k < add; k++) sequence.push(Math.floor(Math.random() * NOTES.length));
+    inputIdx = 0;
+    paintHud(); paintDots();
+    playSequence();
+  }
+  function playSequence(){
+    phase = "playback";
+    setPadsEnabled(false);
+    setStatus("👂 Listen…");
+    var cfg = DIFFS[diff];
+    var step = cfg.on + cfg.gap;
+    later(function(){
+      sequence.forEach(function(noteIdx, i){
+        later(function(){ lightPad(noteIdx, cfg.on); }, i * step);
+      });
+      later(function(){
+        phase = "input"; inputIdx = 0;
+        setPadsEnabled(true);
+        setStatus(isPractice() ? "🎹 Your turn — play it back! (🔁 replays the tune)" : "🎹 Your turn — play it back!");
+        paintDots();
+      }, sequence.length * step + 150);
+    }, 600);
+  }
+  function onPad(i){
+    if (phase !== "input") return;
+    lightPad(i, 260);
+    if (i === sequence[inputIdx]){
+      inputIdx++;
+      paintDots();
+      if (inputIdx >= sequence.length){
+        score = sequence.length;
+        phase = "playback"; setPadsEnabled(false);
+        paintHud();
+        setStatus(isPractice() ? "✅ Nailed it! Here's a longer one…" : "✅ Nailed it! Next round…");
+        later(nextRound, 900);
+      }
+    } else if (isPractice()){
+      // Practice: no game over. Name the right note, replay the tune, retry the round.
+      var expected = sequence[inputIdx];
+      mistakes++;
+      paintHud();
+      padEls[i].classList.add("wrong");
+      setTimeout(function(){ padEls[i].classList.remove("wrong"); }, 400);
+      phase = "playback"; setPadsEnabled(false);
+      setStatus("🎓 Not quite — that note should be " + NOTES[expected].label + ". Listen again…");
+      inputIdx = 0;
+      paintDots();
+      later(playSequence, 1100);
+    } else {
+      padEls[i].classList.add("wrong");
+      setTimeout(function(){ padEls[i].classList.remove("wrong"); }, 400);
+      gameOver();
+    }
+  }
+  function replayTune(){
+    if (!isPractice() || phase !== "input") return;
+    inputIdx = 0;
+    playSequence();
+  }
+  function gameOver(){
+    phase = "over";
+    clearTimers();
+    setPadsEnabled(false);
+    playBuzz();
+    var isBest = score > (best[diff] || 0);
+    if (isBest){ best[diff] = score; save(LS_BEST, best); }
+    paintHud();
+    setStatus("💥 Wrong note!");
+    $("overScore").textContent = score;
+    $("overMsg").textContent = isBest
+      ? "🏆 New best on " + diff + "! Longest tune: " + score + " notes."
+      : "Longest tune: " + score + " notes. Best on " + diff + ": " + (best[diff] || 0) + ".";
+    $("overBox").classList.remove("hidden");
+  }
+  function quitToStart(){
+    clearTimers();
+    phase = "idle";
+    $("gameView").classList.add("hidden");
+    $("setupView").classList.remove("hidden");
+  }
+
+  // ----- Difficulty (selectable at start, saved) -----
+  function paintDiff(){
+    document.querySelectorAll("[data-diff]").forEach(function(b){
+      b.classList.toggle("active", b.getAttribute("data-diff") === diff);
+    });
+    $("diffDesc").textContent = DIFFS[diff].desc + "  Best so far: " + (best[diff] || 0) + " notes.";
+  }
+  document.querySelectorAll("[data-diff]").forEach(function(b){
+    b.addEventListener("click", function(){
+      diff = b.getAttribute("data-diff");
+      save(LS_DIFF, diff);
+      paintDiff();
+    });
+  });
+
+  // ----- Mode: Scored / Practice (selectable at start, saved) -----
+  var MODE_DESCS = {
+    scored: "🏆 Scored — the real game. One wrong note ends it, and your longest tune can beat your best.",
+    practice: "🎓 Practice — just for warming up. Nothing is scored or saved, a wrong note never ends the round (the tune replays so you can retry), and you can replay the tune any time on your turn."
+  };
+  function paintMode(){
+    document.querySelectorAll("[data-mode]").forEach(function(b){
+      b.classList.toggle("active", b.getAttribute("data-mode") === mode);
+    });
+    $("modeDesc").textContent = MODE_DESCS[mode];
+    $("btnStart").textContent = isPractice() ? "▶ Start practice" : "▶ Start game";
+  }
+  document.querySelectorAll("[data-mode]").forEach(function(b){
+    b.addEventListener("click", function(){
+      mode = b.getAttribute("data-mode");
+      save(LS_MODE, mode);
+      paintMode();
+    });
+  });
+
+  // ----- Sound toggle -----
+  function paintSound(){
+    $("btnSound").textContent = soundOn ? "🔊 Sound on" : "🔇 Sound off";
+    $("btnSound").setAttribute("aria-pressed", soundOn ? "true" : "false");
+  }
+  $("btnSound").addEventListener("click", function(){
+    soundOn = !soundOn; save(LS_SOUND, soundOn); paintSound();
+    if (soundOn) playTone(440, 200);
+  });
+
+  // ----- Buttons / keyboard -----
+  $("btnStart").addEventListener("click", startGame);
+  $("btnPractice").addEventListener("click", function(){
+    mode = "practice"; save(LS_MODE, mode); paintMode();
+    startGame();
+  });
+  $("btnReplay").addEventListener("click", replayTune);
+  $("btnAgain").addEventListener("click", startGame);
+  $("btnQuit").addEventListener("click", quitToStart);
+  $("btnChangeDiff").addEventListener("click", quitToStart);
+  document.addEventListener("keydown", function(e){
+    if (phase !== "input") return;
+    var n = parseInt(e.key, 10);
+    if (n >= 1 && n <= 8) onPad(n - 1);
+  });
+
+  // ----- Overlays (How to play + Rules) -----
+  function wireOverlay(btnId, overlayId){
+    var ov = $(overlayId);
+    $(btnId).addEventListener("click", function(){ ov.classList.add("open"); });
+    ov.addEventListener("click", function(e){ if (e.target === ov) ov.classList.remove("open"); });
+    ov.querySelectorAll("[data-close]").forEach(function(b){
+      b.addEventListener("click", function(){ ov.classList.remove("open"); });
+    });
+  }
+  wireOverlay("btnHow", "howOverlay");
+  wireOverlay("btnRules", "rulesOverlay");
+
+  // ----- Feedback (standard: rating + comment -> localStorage) -----
+  (function(){
+    var KEY = "holos-arcade-feedback";
+    var btn = document.createElement("button");
+    btn.type = "button"; btn.className = "fb-btn"; btn.id = "fbBtn"; btn.textContent = "💬 Feedback";
+    var foot = document.querySelector("footer");
+    if (foot) foot.appendChild(btn); else document.body.appendChild(btn);
+    var overlay = $("fbOverlay"), rating = 0;
+    var stars = overlay.querySelectorAll(".fb-star");
+    function paint(){ stars.forEach(function(s){ s.classList.toggle("on", Number(s.getAttribute("data-v")) <= rating); }); }
+    stars.forEach(function(s){ s.addEventListener("click", function(){ rating = Number(s.getAttribute("data-v")); paint(); }); });
+    function open(){ $("fbForm").style.display = ""; $("fbThanks").style.display = "none"; overlay.classList.add("open"); }
+    function close(){ overlay.classList.remove("open"); }
+    btn.addEventListener("click", open);
+    $("fbCancel").addEventListener("click", close);
+    overlay.addEventListener("click", function(e){ if (e.target === overlay) close(); });
+    $("fbSave").addEventListener("click", function(){
+      var rec = { game: GAME_SLUG, rating: rating, text: $("fbText").value.trim(), tag: $("fbTag").value, timestamp: new Date().toISOString(),
+        details: { mode: mode, difficulty: diff, phase: phase, round: round, score: score, longestTune: score, best: best[diff] || 0, mistakes: mistakes } };
+      try {
+        var arr = [];
+        try { arr = JSON.parse(localStorage.getItem(KEY) || "[]"); if (!Array.isArray(arr)) arr = []; } catch(e){ arr = []; }
+        arr.push(rec);
+        localStorage.setItem(KEY, JSON.stringify(arr));
+      } catch(e){}
+      $("fbForm").style.display = "none";
+      $("fbThanks").style.display = "block";
+      rating = 0; paint();
+      $("fbText").value = ""; $("fbTag").value = "";
+      setTimeout(close, 1200);
+    });
+  })();
+
+  paintDiff(); paintMode(); paintSound(); paintHud();
+})();
+</script>
+</body>
+</html>

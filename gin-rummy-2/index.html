@@ -1,0 +1,1318 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Gin Rummy — vs AI</title>
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2.75rem; }
+      * { box-sizing: border-box; }
+      :root{
+        --felt:#0d4d2c; --felt-deep:#072e1a; --felt-line:#0a3d23;
+        --gold:#d9a441; --gold-ink:#2a1c05;
+        --panel:#f7f1e3; --panel-2:#efe6d0; --ink:#1c2420; --ink-soft:#4c554e;
+        --card:#fffdf6; --red:#b3272d; --black:#1d2733;
+        --good:#1e7d46; --warn:#b3272d;
+        --shadow:0 10px 28px rgba(0,0,0,.35);
+        --radius:14px;
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --panel:#122a1e; --panel-2:#0e2318; --ink:#f0ead8; --ink-soft:#b9c4b4;
+        }
+      }
+      html,body{ margin:0; padding:0; }
+      body{
+        font-family: ui-sans-system, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        background: radial-gradient(120% 90% at 50% 0%, #14663a 0%, var(--felt) 42%, var(--felt-deep) 100%);
+        color:var(--ink);
+        min-height:100vh;
+      }
+      .wrap{ max-width:920px; margin:0 auto; padding:14px 14px 40px; }
+      header.top{ display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; color:#f5efdd; }
+      header.top h1{ font-family: Georgia, "Times New Roman", serif; font-size:clamp(28px,5.4vw,40px); margin:0; letter-spacing:.5px; font-weight:700; }
+      header.top h1 .suit{ color:var(--gold); }
+      header.top p.sub{ margin:4px 0 0; color:#d8e4cf; font-size:14px; max-width:52ch; }
+      .top-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+      .btn{
+        appearance:none; border:1px solid transparent; border-radius:999px; padding:10px 16px;
+        font:inherit; font-weight:650; cursor:pointer; background:var(--gold); color:var(--gold-ink);
+        display:inline-flex; align-items:center; justify-content:center; gap:8px; text-decoration:none;
+      }
+      .btn:hover{ filter:brightness(1.06); }
+      .btn:disabled{ opacity:.45; cursor:not-allowed; filter:none; }
+      .btn.ghost{ background:rgba(255,255,255,.08); color:#f5efdd; border-color:rgba(245,239,221,.4); }
+      .btn.dark{ background:#123524; color:#f5efdd; border-color:#2c5c40; }
+      .btn.danger{ background:var(--warn); color:#fff; }
+      .btn.small{ padding:7px 12px; min-height:2.25rem; font-size:14px; }
+      /* score strip */
+      .scorebar{
+        margin-top:14px; background:var(--panel); border-radius:var(--radius); box-shadow:var(--shadow);
+        padding:12px 14px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+      }
+      .score-chip{ background:var(--panel-2); border-radius:10px; padding:8px 12px; min-width:104px; }
+      .score-chip b{ display:block; font-size:20px; line-height:1.1; }
+      .score-chip span{ font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em; }
+      .score-chip.lead{ outline:2px solid var(--gold); }
+      .diff{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; min-width:0; }
+      .diff label{ font-size:13px; font-weight:650; color:var(--ink-soft); }
+      .seg{ display:flex; background:var(--panel-2); border-radius:999px; padding:3px; gap:2px; max-width:100%; }
+      .seg button{ border:0; background:transparent; font:inherit; font-size:14px; font-weight:650; padding:6px 12px; border-radius:999px; cursor:pointer; color:var(--ink); min-height:2.25rem; white-space:nowrap; }
+      .seg button[aria-pressed="true"]{ background:var(--gold); color:var(--gold-ink); }
+      /* difficulty bar — always visible above the table, before the first draw */
+      .diffbar{
+        margin-top:12px; background:var(--panel); border-radius:var(--radius); box-shadow:var(--shadow);
+        padding:10px 14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+      }
+      .diffbar .diff-note{ font-size:13px; color:var(--ink-soft); margin:0; }
+      .modebar{
+        margin-top:12px; background:var(--panel); border-radius:var(--radius); box-shadow:var(--shadow);
+        padding:10px 14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+        border:2px solid transparent;
+      }
+      .modebar.practice-on{ border-color:var(--gold); background:color-mix(in srgb, var(--panel) 88%, var(--gold)); }
+      .modebar .diff-note{ font-size:13px; color:var(--ink-soft); margin:0; }
+      .practice-banner{
+        margin-top:12px; background:var(--gold); color:var(--gold-ink); border-radius:12px;
+        padding:10px 14px; font-weight:700; font-size:14.5px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+        box-shadow:var(--shadow);
+      }
+      .practice-banner span{ font-weight:500; }
+      .practice-banner .btn{ margin-left:auto; }
+      @media (max-width:560px){
+        .scorebar{ gap:8px; }
+        .score-chip{ flex:1 1 40%; min-width:0; }
+        .diffbar, .modebar{ align-items:stretch; }
+        .diffbar .diff, .modebar .diff{ width:100%; }
+        .diffbar .seg, .modebar .seg{ flex:1; }
+        .diffbar .seg button, .modebar .seg button{ flex:1 1 0; padding:6px 4px; }
+        .diffbar .diff-note, .modebar .diff-note{ width:100%; }
+        .practice-banner .btn{ margin-left:0; width:100%; }
+      }
+      /* table */
+      .table{
+        margin-top:14px; border-radius:20px; border:2px solid var(--felt-line);
+        background: radial-gradient(90% 100% at 50% 40%, #116035 0%, var(--felt) 60%, #0a4023 100%);
+        box-shadow: inset 0 0 0 6px rgba(217,164,65,.16), var(--shadow);
+        padding:16px 14px 18px; color:#f5efdd;
+      }
+      .seat-label{ display:flex; align-items:center; gap:10px; font-weight:700; letter-spacing:.02em; }
+      .avatar{ width:38px; height:38px; border-radius:50%; background:var(--gold); color:var(--gold-ink); display:flex; align-items:center; justify-content:center; font-family:Georgia,serif; font-weight:700; flex:none; }
+      .avatar.you{ background:#f5efdd; color:#0d4d2c; }
+      .seat-label small{ font-weight:500; color:#cfe0c6; }
+      .turn-dot{ margin-left:auto; font-size:13px; font-weight:700; background:rgba(0,0,0,.28); padding:6px 10px; border-radius:999px; }
+      .turn-dot.on{ background:var(--gold); color:var(--gold-ink); }
+      .backs{ display:flex; margin-top:10px; min-height:74px; align-items:flex-start; }
+      .backs .card{ margin-left:-26px; }
+      .backs .card:first-child{ margin-left:0; }
+      .center-row{ display:flex; gap:18px; align-items:flex-start; justify-content:center; margin:18px 0 6px; flex-wrap:wrap; }
+      .pilebox{ text-align:center; }
+      .pilebox .cap{ font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:#cfe0c6; margin-top:6px; }
+      .pilebox .count{ font-size:12px; color:#f5efdd; opacity:.85; }
+      button.pile{ background:none; border:0; padding:0; cursor:pointer; border-radius:10px; min-height:0; }
+      button.pile:disabled{ cursor:default; }
+      button.pile.ready:focus-visible, button.pile.ready:hover{ outline:3px solid var(--gold); outline-offset:3px; }
+      .message{
+        text-align:center; font-size:16px; font-weight:600; color:#fdf6dd; min-height:24px; margin:8px auto 2px; max-width:60ch;
+      }
+      .message.small{ font-size:13.5px; font-weight:500; color:#d8e4cf; }
+      /* cards */
+      .card{
+        width:58px; height:82px; border-radius:9px; background:var(--card); color:var(--black);
+        box-shadow:0 3px 8px rgba(0,0,0,.35); position:relative; flex:none;
+        font-family: Georgia, "Times New Roman", serif; user-select:none;
+      }
+      .card .tl{ position:absolute; top:4px; left:6px; font-size:15px; font-weight:700; line-height:1.05; text-align:center; }
+      .card .tl i{ display:block; font-style:normal; font-size:13px; }
+      .card .big{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:30px; }
+      .card .br{ position:absolute; bottom:4px; right:6px; font-size:15px; font-weight:700; line-height:1.05; text-align:center; transform:rotate(180deg); }
+      .card .br i{ display:block; font-style:normal; font-size:13px; }
+      .card.red{ color:var(--red); }
+      .card.back{
+        background:
+          repeating-linear-gradient(45deg, #a52a30 0 6px, #8e2126 6px 12px);
+        border:3px solid #f3ead2;
+      }
+      .card.empty{ background:rgba(255,255,255,.07); border:2px dashed rgba(245,239,221,.45); box-shadow:none; }
+      .card.mini{ width:44px; height:62px; border-radius:7px; }
+      .card.mini .tl{ font-size:12px; } .card.mini .tl i{ font-size:10px; }
+      .card.mini .big{ font-size:21px; }
+      .card.mini .br{ display:none; }
+      /* player hand */
+      .hand{ display:flex; justify-content:center; margin-top:10px; min-height:96px; padding:14px 4px 2px; }
+      .hand .card{ margin-left:-16px; cursor:pointer; transition:transform .12s ease; }
+      .hand .card:first-child{ margin-left:0; }
+      .hand .card:hover{ transform:translateY(-6px); }
+      .hand .card.sel{ transform:translateY(-14px); outline:3px solid var(--gold); outline-offset:1px; z-index:3; }
+      .hand .card.dead::after{
+        content:""; position:absolute; top:-5px; right:-5px; width:12px; height:12px; border-radius:50%;
+        background:var(--gold); border:2px solid #0d4d2c;
+      }
+      .hand .card.newc{ outline:3px solid #7fc8f8; outline-offset:1px; }
+      @media (max-width:560px){
+        .card{ width:50px; height:71px; }
+        .hand .card{ margin-left:-20px; }
+        .backs .card{ margin-left:-30px; }
+        .card .big{ font-size:24px; }
+      }
+      /* action bar */
+      .actions{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:12px; }
+      .meter{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:10px; }
+      .meter .pill{ background:rgba(0,0,0,.3); color:#f5efdd; border-radius:999px; padding:6px 12px; font-size:13.5px; font-weight:600; }
+      .meter .pill.good{ background:var(--good); color:#fff; }
+      .meter .pill.gin{ background:var(--gold); color:var(--gold-ink); }
+      /* panels under table */
+      .panels{ display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+      @media (max-width:720px){ .panels{ grid-template-columns:1fr; } }
+      .panel{ background:var(--panel); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px 16px; }
+      .panel h2{ font-family:Georgia,serif; font-size:19px; margin:0 0 8px; }
+      .panel p, .panel li{ font-size:14.5px; line-height:1.5; color:var(--ink); }
+      .panel ul{ margin:6px 0; padding-left:18px; }
+      .history{ list-style:none; margin:0; padding:0; }
+      .history li{ display:flex; justify-content:space-between; gap:10px; padding:7px 0; border-bottom:1px solid rgba(120,120,100,.25); font-size:14px; }
+      .history li:last-child{ border-bottom:0; }
+      .bests{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; text-align:center; }
+      .bests div{ background:var(--panel-2); border-radius:10px; padding:8px 4px; }
+      .bests b{ display:block; font-size:19px; }
+      .bests span{ font-size:11.5px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.05em; }
+      details.rules{ margin-top:14px; background:var(--panel); border-radius:var(--radius); box-shadow:var(--shadow); padding:6px 16px 12px; }
+      details.rules summary{ font-family:Georgia,serif; font-size:19px; font-weight:700; cursor:pointer; padding:10px 0; }
+      details.rules h3{ margin:14px 0 4px; font-size:15.5px; }
+      details.rules p, details.rules li{ font-size:14.5px; line-height:1.55; }
+      details.rules ul{ padding-left:18px; }
+      footer.foot{ margin-top:22px; text-align:center; color:#d8e4cf; font-size:14px; }
+      footer.foot a{ color:var(--gold); font-weight:700; }
+      footer.foot .tiny{ font-size:12.5px; opacity:.85; margin-top:6px; }
+      /* modal */
+      .scrim{ position:fixed; inset:0; background:rgba(4,20,11,.72); display:none; align-items:center; justify-content:center; padding:14px; z-index:40; }
+      .scrim.open{ display:flex; }
+      .modal{ background:var(--panel); color:var(--ink); border-radius:18px; max-width:620px; width:100%; max-height:88vh; overflow:auto; padding:20px; box-shadow:var(--shadow); }
+      .modal h2{ font-family:Georgia,serif; margin:0 0 6px; font-size:24px; }
+      .modal h3{ margin:16px 0 4px; font-size:16px; }
+      .modal p, .modal li{ font-size:14.5px; line-height:1.55; }
+      .modal ul{ padding-left:18px; }
+      .reveal-row{ display:flex; flex-wrap:wrap; gap:4px; margin:6px 0 2px; }
+      .reveal-row .card{ margin-left:-8px; } .reveal-row .card:first-child{ margin-left:0; }
+      .score-line{ display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid rgba(120,120,100,.25); font-size:15px; }
+      .score-line.total{ border-bottom:0; font-weight:800; font-size:17px; }
+      .banner{ background:var(--gold); color:var(--gold-ink); border-radius:12px; padding:10px 14px; font-weight:800; text-align:center; margin:10px 0; }
+      /* walkthrough */
+      .coach{
+        position:fixed; left:50%; transform:translateX(-50%); bottom:14px; z-index:50;
+        width:min(560px, calc(100vw - 24px)); background:var(--panel); color:var(--ink);
+        border-radius:16px; box-shadow:var(--shadow); padding:16px; display:none;
+      }
+      .coach.open{ display:block; }
+      .coach h2{ font-family:Georgia,serif; margin:0 0 4px; font-size:20px; }
+      .coach p{ margin:0 0 12px; font-size:14.5px; line-height:1.5; }
+      .coach .row{ display:flex; gap:8px; justify-content:space-between; align-items:center; }
+      .coach .dots{ font-size:12px; color:var(--ink-soft); font-weight:700; letter-spacing:.2em; }
+      .spot{ outline:4px solid var(--gold) !important; outline-offset:3px; border-radius:12px; position:relative; z-index:5; }
+      .hint{
+        margin-top:12px; background:var(--panel); color:var(--ink); border-radius:12px;
+        padding:10px 8px 10px 14px; display:flex; align-items:center; gap:10px;
+        font-size:14px; box-shadow:var(--shadow);
+      }
+      .hint span{ flex:1; line-height:1.45; }
+      .hint-x{
+        appearance:none; border:0; background:var(--panel-2); color:var(--ink); border-radius:50%;
+        width:2.25rem; height:2.25rem; min-height:2.25rem; font-size:14px; cursor:pointer; flex:none;
+      }
+      .hidden{ display:none !important; }
+      /* feedback */
+      .fb-stars{ display:flex; gap:6px; margin:6px 0 4px; }
+      .fb-stars button{
+        appearance:none; border:1px solid rgba(120,120,100,.4); background:var(--panel-2); color:var(--ink-soft);
+        border-radius:10px; font-size:22px; line-height:1; padding:8px 10px; cursor:pointer; min-height:2.75rem; min-width:2.75rem;
+      }
+      .fb-stars button[aria-pressed="true"]{ background:var(--gold); color:var(--gold-ink); border-color:var(--gold); }
+      .fb-label{ display:block; font-size:13.5px; font-weight:650; margin:12px 0 4px; color:var(--ink); }
+      .fb-text, .fb-select{
+        width:100%; font:inherit; font-size:15px; color:var(--ink); background:var(--card);
+        border:1px solid rgba(120,120,100,.45); border-radius:10px; padding:10px 12px;
+      }
+      .fb-text{ min-height:88px; resize:vertical; }
+      .fb-thanks{ background:var(--good); color:#fff; border-radius:12px; padding:10px 14px; font-weight:700; text-align:center; margin-top:12px; }
+      .fb-note{ font-size:12.5px; color:var(--ink-soft); margin:10px 0 0; line-height:1.45; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <div>
+          <h1>Gin Rummy <span class="suit">♥</span></h1>
+          <p class="sub">You vs Nova, the house AI. Build sets and runs, keep your deadwood low, and knock — or go all the way to gin. First to 100 wins the match.</p>
+        </div>
+        <div class="top-actions">
+          <button class="btn ghost" id="howBtn" type="button">How to play</button>
+          <button class="btn ghost" id="rulesBtn" type="button">Rules</button>
+          <button class="btn ghost" id="newMatchBtn" type="button">New match</button>
+        </div>
+      </header>
+
+      <div class="hint hidden" id="hintBar">
+        <span>New here? Tap <strong>How to play</strong> for a quick guided tour, or <strong>Rules</strong> for the full rulebook.</span>
+        <button class="hint-x" id="hintClose" type="button" aria-label="Dismiss this hint">✕</button>
+      </div>
+
+      <section class="modebar" id="modeBar" aria-label="Game mode">
+        <div class="diff">
+          <label for="modeSeg">Mode</label>
+          <div class="seg" id="modeSeg" role="group" aria-label="Game mode">
+            <button type="button" data-mode="match" aria-pressed="true">Match play</button>
+            <button type="button" data-mode="practice" aria-pressed="false">Practice round</button>
+          </div>
+        </div>
+        <p class="diff-note" id="modeNote">Match play: first to 100 wins. Scores and bests count.</p>
+      </section>
+
+      <div class="practice-banner hidden" id="practiceBanner" role="status">
+        🧩 Practice round <span>— no points count toward your match or bests. Play one hand at a time, just to learn.</span>
+        <button class="btn dark small" id="exitPracticeBtn" type="button">Back to match play</button>
+      </div>
+
+      <section class="diffbar" aria-label="AI difficulty">
+        <div class="diff">
+          <label for="diffSeg">Difficulty — Nova (AI)</label>
+          <div class="seg" id="diffSeg" role="group" aria-label="AI difficulty">
+            <button type="button" data-diff="easy">Easy</button>
+            <button type="button" data-diff="medium" aria-pressed="true">Medium</button>
+            <button type="button" data-diff="hard">Hard</button>
+          </div>
+        </div>
+        <p class="diff-note">Pick before you draw — changes apply right away, to Nova's very next decision.</p>
+      </section>
+
+      <section class="scorebar" id="scoreBar" aria-label="Match score">
+        <div class="score-chip" id="chipYou"><span id="labelYou">You</span><b id="scoreYou">0</b></div>
+        <div class="score-chip" id="chipAi"><span id="labelAi">Nova (AI)</span><b id="scoreAi">0</b></div>
+        <div class="score-chip"><span>Hand</span><b id="handNo">1</b></div>
+        <div class="score-chip" id="chipTarget"><span id="labelTarget">Target</span><b id="targetVal">100</b></div>
+      </section>
+
+      <section class="table" aria-label="Gin rummy table">
+        <div class="seat-label">
+          <div class="avatar" aria-hidden="true">N</div>
+          <div>Nova <small id="aiNote">· AI opponent</small></div>
+          <div class="turn-dot" id="aiTurnDot">Waiting</div>
+        </div>
+        <div class="backs" id="aiHand" aria-label="Nova's cards"></div>
+
+        <div class="center-row">
+          <div class="pilebox">
+            <button class="pile" id="stockPile" type="button" aria-label="Draw from the stock pile"></button>
+            <div class="cap">Stock</div>
+            <div class="count" id="stockCount"></div>
+          </div>
+          <div class="pilebox">
+            <button class="pile" id="discardPileBtn" type="button" aria-label="Take the top discard"></button>
+            <div class="cap">Discard pile</div>
+            <div class="count" id="discardCount"></div>
+          </div>
+        </div>
+
+        <p class="message" id="message" role="status" aria-live="polite"></p>
+        <p class="message small" id="subMessage"></p>
+
+        <div class="meter" id="meter">
+          <span class="pill" id="deadwoodPill">Deadwood: –</span>
+          <span class="pill" id="knockPill">Knock needs deadwood ≤ 10</span>
+        </div>
+
+        <div class="actions" id="actionBar">
+          <button class="btn hidden" id="takeUpBtn" type="button">Take the upcard</button>
+          <button class="btn dark hidden" id="passBtn" type="button">Pass</button>
+          <button class="btn hidden" id="discardBtn" type="button">Discard selected</button>
+          <button class="btn danger hidden" id="knockBtn" type="button">Knock</button>
+          <button class="btn hidden" id="ginBtn" type="button">Declare Big Gin!</button>
+          <button class="btn dark" id="sortBtn" type="button">Sort: Melds</button>
+        </div>
+
+        <div class="seat-label" style="margin-top:14px;">
+          <div class="avatar you" aria-hidden="true">Y</div>
+          <div>Your hand <small>· gold dot = deadwood (not in a meld)</small></div>
+          <div class="turn-dot" id="youTurnDot">Your turn</div>
+        </div>
+        <div class="hand" id="playerHand" aria-label="Your cards"></div>
+      </section>
+
+      <div class="panels">
+        <section class="panel" aria-label="Hand history">
+          <h2>Hand history</h2>
+          <ul class="history" id="historyList">
+            <li><span>No hands scored yet.</span><span>—</span></li>
+          </ul>
+        </section>
+        <section class="panel" aria-label="Your bests">
+          <h2>Your bests</h2>
+          <div class="bests">
+            <div><b id="bestWins">0</b><span>Matches won</span></div>
+            <div><b id="bestHandPts">0</b><span>Best hand pts</span></div>
+            <div><b id="bestGins">0</b><span>Gins</span></div>
+            <div><b id="bestPlayed">0</b><span>Matches played</span></div>
+          </div>
+          <p style="margin:10px 0 0;">Bests are saved on this device only, and only Match play counts — Practice rounds never change them. Difficulty changes apply right away, to Nova's next decision — she plays looser on Easy, and on Hard she remembers what you pick up and knocks early.</p>
+        </section>
+      </div>
+
+      <footer class="foot">
+        <p>More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener noreferrer">Ridiculously Fit and Fed</a></p>
+        <p class="tiny">Gin Rummy is part of Holo's Arcade. Play money — no real gambling: points, pride, and bragging rights only. No real-money wagering, prizes, or side bets.</p>
+        <p style="margin:12px 0 0;"><button class="btn ghost" id="feedbackBtn" type="button">Feedback</button></p>
+      </footer>
+    </div>
+
+    <!-- Round / match result modal -->
+    <div class="scrim" id="resultScrim" role="dialog" aria-modal="true" aria-labelledby="resultTitle">
+      <div class="modal">
+        <h2 id="resultTitle">Hand over</h2>
+        <div id="resultBody"></div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
+          <button class="btn" id="nextHandBtn" type="button">Next hand</button>
+          <button class="btn dark hidden" id="againBtn" type="button">Play a new match</button>
+          <button class="btn dark hidden" id="toMatchBtn" type="button">Switch to match play</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- How to play modal -->
+    <div class="scrim" id="howScrim" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+      <div class="modal">
+        <h2 id="howTitle">How to play Gin Rummy</h2>
+        <p><strong>Goal:</strong> meld your cards into sets and runs, keep deadwood (unmatched cards) low, and be first to 100 points.</p>
+        <p><strong>New to the game?</strong> Switch to <strong>Practice round</strong> above the table. Practice hands don't count toward your match score or bests — play one hand at a time, try knocking, and learn at your own pace. Switch back to Match play whenever you're ready.</p>
+        <h3>On your turn</h3>
+        <ul>
+          <li>Draw from the <strong>stock</strong> or take the top <strong>discard</strong>.</li>
+          <li>Tap one of your cards to select it, then <strong>Discard</strong> it — or <strong>Knock</strong> with it if your remaining deadwood is 10 or less.</li>
+        </ul>
+        <h3>Scoring</h3>
+        <ul>
+          <li><strong>Knock:</strong> score the difference in deadwood — unless the defender ties or beats you (after laying off on your melds), which is an <strong>undercut</strong>: they score the difference + 10.</li>
+          <li><strong>Gin</strong> (zero deadwood): their whole deadwood + 25.</li>
+          <li><strong>Big Gin</strong> (all 11 cards melded): their whole deadwood + 31.</li>
+        </ul>
+        <p>For scoring details, laying off, undercuts, and Big Gin, tap <strong>Rules</strong> in the header — that's the full rulebook.</p>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+          <button class="btn" id="howTourBtn" type="button">Start walkthrough</button>
+          <button class="btn dark" id="howCloseBtn" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full rules modal -->
+    <div class="scrim" id="rulesScrim" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+      <div class="modal">
+        <h2 id="rulesTitle">Gin Rummy — full rules</h2>
+        <h3>The goal</h3>
+        <p>Each hand, gather your 10 cards into <strong>melds</strong> — sets of 3–4 cards of the same rank (7♠ 7♥ 7♦) or runs of 3+ cards in the same suit (4♣ 5♣ 6♣). Cards left over are <strong>deadwood</strong>, and they count against you: Ace = 1, 2–10 = face value, J/Q/K = 10. Win hands to score points; first to <strong>100</strong> wins the match.</p>
+        <h3>Your turn</h3>
+        <ul>
+          <li><strong>Draw</strong> the top card of the stock pile, or take the face-up top card of the discard pile.</li>
+          <li><strong>Discard</strong> one card face-up onto the discard pile. You can't discard the card you just took from the discard pile on that same turn.</li>
+          <li>The first card of the hand (the upcard) is offered to the non-dealer first, then the dealer. If both pass, the non-dealer draws normally.</li>
+          <li>The dealer alternates each hand. If the stock runs down to two cards with no knock, the hand is a draw — nobody scores and the same dealer deals again.</li>
+        </ul>
+        <h3>Ending a hand</h3>
+        <ul>
+          <li><strong>Knock</strong> — if, after your discard, your deadwood totals <strong>10 or less</strong>, you may knock instead of discarding normally. The hand ends and both hands are scored.</li>
+          <li><strong>Gin</strong> — knock with <strong>zero</strong> deadwood. You score the opponent's full deadwood plus a <strong>25-point bonus</strong>.</li>
+          <li><strong>Big Gin</strong> — if all 11 cards (before discarding) form melds, declare Big Gin: opponent's deadwood plus a <strong>31-point bonus</strong>, no discard needed.</li>
+          <li><strong>Laying off</strong> — after a regular knock (not gin), the defender may lay off deadwood cards that extend the knocker's melds, lowering their deadwood before scoring. There is no laying off against gin or Big Gin.</li>
+          <li><strong>Undercut</strong> — if the defender's deadwood (after laying off) is equal to or lower than the knocker's, the defender steals the hand: they score the difference plus a <strong>10-point bonus</strong>.</li>
+          <li>Otherwise the knocker scores the difference between the two deadwood totals.</li>
+        </ul>
+        <h3>Win condition</h3>
+        <p>Hands keep dealing until one player reaches <strong>100 points</strong> at the end of a hand — that player wins the match. If both cross 100 on the same hand, the higher total wins.</p>
+        <p><strong>Play money only:</strong> this game is scored in points. There is no real-money wagering, no prizes, and no side betting — just points and bragging rights.</p>
+        <h3>Quick tips</h3>
+        <ul>
+          <li>Watch the gold dots on your cards — those are deadwood in Melds sort. Aim to shrink them.</li>
+          <li>High deadwood (queens, kings) is expensive — ditch it early unless it's one card from a meld.</li>
+          <li>Watch what Nova picks up from the discard pile. On Hard, she is watching you back.</li>
+        </ul>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+          <button class="btn" id="rulesTourBtn" type="button">Start the walkthrough</button>
+          <button class="btn dark" id="rulesCloseBtn" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback modal -->
+    <div class="scrim" id="fbScrim" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+      <div class="modal">
+        <h2 id="fbTitle">Feedback — Gin Rummy</h2>
+        <p>Tell us how this game is playing. Your feedback is saved on this device only.</p>
+        <span class="fb-label" id="fbRatingLabel">Your rating</span>
+        <div class="fb-stars" role="group" aria-labelledby="fbRatingLabel" id="fbStars">
+          <button type="button" data-star="1" aria-pressed="false" aria-label="1 star">★</button>
+          <button type="button" data-star="2" aria-pressed="false" aria-label="2 stars">★</button>
+          <button type="button" data-star="3" aria-pressed="false" aria-label="3 stars">★</button>
+          <button type="button" data-star="4" aria-pressed="false" aria-label="4 stars">★</button>
+          <button type="button" data-star="5" aria-pressed="false" aria-label="5 stars">★</button>
+        </div>
+        <label class="fb-label" for="fbTag">What's this about? (optional)</label>
+        <select class="fb-select" id="fbTag">
+          <option value="">No tag</option>
+          <option value="Bug">Bug</option>
+          <option value="Suggestion">Suggestion</option>
+          <option value="Other">Other</option>
+        </select>
+        <label class="fb-label" for="fbText">Your comment</label>
+        <textarea class="fb-text" id="fbText" placeholder="What worked, what didn't, what you'd love to see…" maxlength="1000"></textarea>
+        <p class="fb-note">Please don't include personal information. Feedback follows the same Terms as the rest of Holo's Arcade — keep it clean, and it may be used to improve the games.</p>
+        <div class="fb-thanks hidden" id="fbThanks" role="status">Thanks! Your feedback was saved. 🙌</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
+          <button class="btn" id="fbSaveBtn" type="button">Save feedback</button>
+          <button class="btn dark" id="fbCloseBtn" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Walkthrough coach -->
+    <div class="coach" id="coach" role="dialog" aria-label="Walkthrough">
+      <h2 id="coachTitle">Welcome</h2>
+      <p id="coachText"></p>
+      <div class="row">
+        <span class="dots" id="coachDots"></span>
+        <span style="display:flex; gap:8px;">
+          <button class="btn dark small" id="coachSkip" type="button">Skip</button>
+          <button class="btn small" id="coachNext" type="button">Next</button>
+        </span>
+      </div>
+    </div>
+
+<script>
+(function(){
+"use strict";
+function $(id){ return document.getElementById(id); }
+function lsGet(k, d){ try{ var v=localStorage.getItem(k); return v?JSON.parse(v):d; }catch(e){ return d; } }
+function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+
+var SUITS=['♠','♥','♦','♣'];
+var RANKS=['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+function cardVal(c){ return Math.min(c.r,10); }
+function key(c){ return c.r+'-'+c.s; }
+function cname(c){ return RANKS[c.r-1]+SUITS[c.s]; }
+function isRed(c){ return c.s===1||c.s===2; }
+
+function maskOf(idxs){ var m=0; idxs.forEach(function(i){ m|=(1<<i); }); return m; }
+function meldMasks(hand){
+  var n=hand.length, melds=[], i, j, k;
+  var byRank={};
+  hand.forEach(function(c,idx){ (byRank[c.r]=byRank[c.r]||[]).push(idx); });
+  Object.keys(byRank).forEach(function(r){
+    var idx=byRank[r];
+    if(idx.length>=3){
+      melds.push(maskOf(idx));
+      if(idx.length===4){ idx.forEach(function(drop){ melds.push(maskOf(idx.filter(function(x){ return x!==drop; }))); }); }
+    }
+  });
+  var bySuit={};
+  hand.forEach(function(c,idx){ (bySuit[c.s]=bySuit[c.s]||[]).push(idx); });
+  Object.keys(bySuit).forEach(function(s){
+    var idx=bySuit[s].slice().sort(function(a,b){ return hand[a].r-hand[b].r; });
+    for(i=0;i<idx.length;i++){
+      for(j=i+2;j<idx.length;j++){
+        var ok=true;
+        for(k=i+1;k<=j;k++){ if(hand[idx[k]].r!==hand[idx[k-1]].r+1){ ok=false; break; } }
+        if(ok) melds.push(maskOf(idx.slice(i,j+1)));
+      }
+    }
+  });
+  return melds;
+}
+function analyze(hand){
+  var n=hand.length, full=(1<<n)-1;
+  var melds=meldMasks(hand);
+  var containing=[]; for(var i=0;i<n;i++) containing.push([]);
+  melds.forEach(function(m){ for(var i=0;i<n;i++){ if((m>>i)&1) containing[i].push(m); } });
+  var memo={};
+  function solve(mask){
+    if(mask===full) return 0;
+    if(memo[mask]!==undefined) return memo[mask];
+    var i=0; while((mask>>i)&1) i++;
+    var best=cardVal(hand[i])+solve(mask|(1<<i));
+    containing[i].forEach(function(m){ if((mask&m)===0){ var v=solve(mask|m); if(v<best) best=v; } });
+    memo[mask]=best; return best;
+  }
+  var dw=solve(0);
+  var mask=0, used=[];
+  while(mask!==full){
+    var i2=0; while((mask>>i2)&1) i2++;
+    var cur=solve(mask), adv=false;
+    for(var j=0;j<containing[i2].length;j++){
+      var m=containing[i2][j];
+      if((mask&m)===0 && solve(mask|m)===cur){ used.push(m); mask|=m; adv=true; break; }
+    }
+    if(!adv) mask|=(1<<i2);
+  }
+  var inMeld={};
+  used.forEach(function(m){ for(var x=0;x<n;x++){ if((m>>x)&1) inMeld[x]=true; } });
+  var meldCards=used.map(function(m){ var arr=[]; for(var x=0;x<n;x++){ if((m>>x)&1) arr.push(hand[x]); } return arr; });
+  var dead=hand.filter(function(c,idx){ return !inMeld[idx]; });
+  return { deadwood:dw, melds:meldCards, dead:dead };
+}
+function layOff(dead, melds){
+  var ms=melds.map(function(m){ return m.slice(); });
+  var remaining=dead.slice(), laid=[], changed=true;
+  while(changed){
+    changed=false;
+    for(var i=0;i<remaining.length;i++){
+      var c=remaining[i], placed=false;
+      for(var j=0;j<ms.length;j++){
+        var m=ms[j];
+        var isSet=m.every(function(x){ return x.r===m[0].r; });
+        if(isSet){
+          if(c.r===m[0].r && !m.some(function(x){ return x.s===c.s; })){ m.push(c); placed=true; break; }
+        } else if(c.s===m[0].s){
+          var rs=m.map(function(x){ return x.r; });
+          var lo=Math.min.apply(null,rs), hi=Math.max.apply(null,rs);
+          if(c.r===lo-1 || c.r===hi+1){ m.push(c); placed=true; break; }
+        }
+      }
+      if(placed){ laid.push(c); remaining.splice(i,1); changed=true; break; }
+    }
+  }
+  return { remaining:remaining, laid:laid, deadwood:remaining.reduce(function(a,c){ return a+cardVal(c); },0) };
+}
+function bestDiscard(hand, forbiddenKey){
+  var best=null;
+  hand.forEach(function(c){
+    if(forbiddenKey && key(c)===forbiddenKey) return;
+    var rest=hand.filter(function(x){ return x!==c; });
+    var a=analyze(rest);
+    if(!best || a.deadwood<best.dw) best={ card:c, dw:a.deadwood, analysis:a };
+  });
+  return best;
+}
+
+/* ---------- state ---------- */
+var S={
+  player:[], ai:[], stock:[], pile:[],
+  phase:'offer', offerStage:null, turn:'you',
+  dealer:'ai', handNo:1, scores:{you:0, ai:0},
+  selected:null, drawnKey:null, drawnFrom:null,
+  sortMode:'melds', difficulty:lsGet('ginRummy2.diff','medium'),
+  practice: !!lsGet('ginRummy2.practice', false),
+  history:[], seq:0, over:false,
+  playerPickups:{}, discardSeen:{}
+};
+var bests=lsGet('ginRummy2.bests', {wins:0, played:0, bestHand:0, gins:0});
+function saveBests(){ lsSet('ginRummy2.bests', bests); renderBests(); }
+function renderBests(){
+  $('bestWins').textContent=bests.wins;
+  $('bestHandPts').textContent=bests.bestHand;
+  $('bestGins').textContent=bests.gins;
+  $('bestPlayed').textContent=bests.played;
+}
+function later(fn, ms){ var s=S.seq; setTimeout(function(){ if(s===S.seq) fn(); }, ms); }
+
+/* ---------- rendering ---------- */
+function cardEl(c, mini){
+  var d=document.createElement('div');
+  d.className='card'+(mini?' mini':'')+(isRed(c)?' red':'');
+  d.setAttribute('aria-label', cname(c));
+  d.innerHTML='<span class="tl">'+RANKS[c.r-1]+'<i>'+SUITS[c.s]+'</i></span><span class="big">'+SUITS[c.s]+'</span><span class="br">'+RANKS[c.r-1]+'<i>'+SUITS[c.s]+'</i></span>';
+  return d;
+}
+function backEl(mini){
+  var d=document.createElement('div');
+  d.className='card back'+(mini?' mini':'');
+  d.setAttribute('aria-hidden','true');
+  return d;
+}
+function sortedPlayerHand(){
+  var hand=S.player.slice();
+  if(S.sortMode==='rank'){
+    hand.sort(function(a,b){ return a.r-b.r || a.s-b.s; });
+    return {order:hand, deadKeys:{}};
+  }
+  var a=analyze(hand);
+  var deadKeys={}; a.dead.forEach(function(c){ deadKeys[key(c)]=true; });
+  var order=[];
+  a.melds.forEach(function(m){
+    m.slice().sort(function(x,y){ return x.r-y.r || x.s-y.s; }).forEach(function(c){ order.push(c); });
+  });
+  a.dead.slice().sort(function(x,y){ return cardVal(y)-cardVal(x); }).forEach(function(c){ order.push(c); });
+  return {order:order, deadKeys:deadKeys};
+}
+function setMsg(main, sub){
+  $('message').textContent=main||'';
+  $('subMessage').textContent=sub||'';
+}
+function renderModeUI(){
+  var isP=S.practice;
+  document.querySelectorAll('#modeSeg button').forEach(function(b){
+    var on=(b.getAttribute('data-mode')==='practice')===isP;
+    b.setAttribute('aria-pressed', on?'true':'false');
+  });
+  $('modeBar').classList.toggle('practice-on', isP);
+  $('practiceBanner').classList.toggle('hidden', !isP);
+  $('modeNote').textContent=isP
+    ? 'Practice: one hand at a time, no score pressure. Nothing counts toward your match or bests.'
+    : 'Match play: first to 100 wins. Scores and bests count.';
+  $('newMatchBtn').textContent=isP?'Restart practice':'New match';
+}
+function render(){
+  renderModeUI();
+  if(S.practice){
+    $('scoreYou').textContent='—';
+    $('scoreAi').textContent='—';
+    $('labelYou').textContent='You · Practice';
+    $('labelAi').textContent='Nova · Practice';
+    $('labelTarget').textContent='Scoring';
+    $('targetVal').textContent='Off';
+    $('chipYou').classList.remove('lead');
+    $('chipAi').classList.remove('lead');
+  } else {
+    $('scoreYou').textContent=S.scores.you;
+    $('scoreAi').textContent=S.scores.ai;
+    $('labelYou').textContent='You';
+    $('labelAi').textContent='Nova (AI)';
+    $('labelTarget').textContent='Target';
+    $('targetVal').textContent='100';
+    $('chipYou').classList.toggle('lead', S.scores.you>S.scores.ai);
+    $('chipAi').classList.toggle('lead', S.scores.ai>S.scores.you);
+  }
+  $('handNo').textContent=S.handNo;
+  // AI backs
+  var ah=$('aiHand'); ah.innerHTML='';
+  S.ai.forEach(function(){ ah.appendChild(backEl(false)); });
+  $('aiNote').textContent='· AI opponent · '+S.ai.length+' cards';
+  // stock
+  var sp=$('stockPile'); sp.innerHTML='';
+  if(S.stock.length) sp.appendChild(backEl(false));
+  else { var e=document.createElement('div'); e.className='card empty'; sp.appendChild(e); }
+  $('stockCount').textContent=S.stock.length+(S.stock.length===1?' card':' cards');
+  var canDraw = S.phase==='draw' && S.turn==='you' && !S.over;
+  sp.disabled=!canDraw; sp.classList.toggle('ready', canDraw);
+  // discard pile
+  var dp=$('discardPileBtn'); dp.innerHTML='';
+  if(S.pile.length) dp.appendChild(cardEl(S.pile[S.pile.length-1], false));
+  else { var e2=document.createElement('div'); e2.className='card empty'; dp.appendChild(e2); }
+  $('discardCount').textContent=S.pile.length? S.pile.length+(S.pile.length===1?' card':' cards')+' · top: '+cname(S.pile[S.pile.length-1]) : 'empty';
+  dp.disabled=!canDraw; dp.classList.toggle('ready', canDraw);
+  // player hand
+  var ph=$('playerHand'); ph.innerHTML='';
+  var srt=sortedPlayerHand();
+  srt.order.forEach(function(c){
+    var el=cardEl(c,false);
+    if(S.sortMode==='melds' && srt.deadKeys[key(c)]) el.classList.add('dead');
+    if(S.drawnKey===key(c) && S.phase==='discard') el.classList.add('newc');
+    if(S.selected===key(c)) el.classList.add('sel');
+    el.setAttribute('role','button');
+    el.setAttribute('tabindex','0');
+    el.title=cname(c);
+    el.addEventListener('click', function(){ selectCard(c); });
+    el.addEventListener('keydown', function(ev){ if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); selectCard(c); } });
+    ph.appendChild(el);
+  });
+  // turn dots
+  var youActive=(S.turn==='you' && (S.phase==='draw'||S.phase==='discard'||S.phase==='offer'));
+  $('youTurnDot').textContent=youActive?'Your move':'Waiting';
+  $('youTurnDot').classList.toggle('on', youActive);
+  var aiActive=(S.turn==='ai');
+  $('aiTurnDot').textContent=aiActive?'Thinking…':'Waiting';
+  $('aiTurnDot').classList.toggle('on', aiActive);
+  renderMeter();
+  renderActions();
+}
+function currentBestDw(){
+  if(S.player.length<=10) return analyze(S.player).deadwood;
+  var b=bestDiscard(S.player, null);
+  return b?b.dw:null;
+}
+function renderMeter(){
+  var pill=$('deadwoodPill'), kp=$('knockPill');
+  if(!S.player.length){ pill.textContent='Deadwood: –'; return; }
+  if(S.phase==='discard' && S.selected){
+    var sel=S.player.filter(function(c){ return key(c)===S.selected; })[0];
+    if(sel){
+      var rest=S.player.filter(function(c){ return c!==sel; });
+      var dw=analyze(rest).deadwood;
+      pill.textContent='Deadwood if you drop '+cname(sel)+': '+dw;
+      pill.className='pill'+(dw===0?' gin':(dw<=10?' good':''));
+      kp.textContent=dw===0?'That discard is GIN — knock!':(dw<=10?'You can knock with this discard':'Too much deadwood to knock');
+      kp.className='pill'+(dw<=10?' good':'');
+      return;
+    }
+  }
+  var dw=currentBestDw();
+  pill.textContent=(S.player.length>10?'Best deadwood after a discard: ':'Deadwood: ')+dw;
+  pill.className='pill'+(dw===0?' gin':(dw<=10?' good':''));
+  kp.textContent=dw<=10?'Knock is available this turn':'Knock needs deadwood ≤ 10';
+  kp.className='pill'+(dw<=10?' good':'');
+}
+function renderActions(){
+  var offer = S.phase==='offer' && S.turn==='you';
+  $('takeUpBtn').classList.toggle('hidden', !offer);
+  $('passBtn').classList.toggle('hidden', !offer);
+  var disc = S.phase==='discard' && S.turn==='you';
+  var selCard = S.selected? S.player.filter(function(c){ return key(c)===S.selected; })[0] : null;
+  var canDiscard = disc && selCard && key(selCard)!==(S.drawnFrom==='discard'?S.drawnKey:null);
+  $('discardBtn').classList.toggle('hidden', !disc);
+  $('discardBtn').disabled=!canDiscard;
+  $('discardBtn').textContent=selCard? 'Discard '+cname(selCard) : 'Discard selected';
+  var dw=null;
+  if(disc && selCard && canDiscard){
+    dw=analyze(S.player.filter(function(c){ return c!==selCard; })).deadwood;
+  }
+  var canKnock = disc && dw!==null && dw<=10;
+  $('knockBtn').classList.toggle('hidden', !disc);
+  $('knockBtn').disabled=!canKnock;
+  $('knockBtn').textContent=dw===0?'Knock — GIN!':(canKnock?'Knock (deadwood '+dw+')':'Knock');
+  var bigGin = disc && analyze(S.player).deadwood===0;
+  $('ginBtn').classList.toggle('hidden', !bigGin);
+  $('sortBtn').textContent='Sort: '+(S.sortMode==='melds'?'Melds':'Rank');
+}
+function renderHistory(){
+  var ul=$('historyList'); ul.innerHTML='';
+  if(!S.history.length){
+    ul.innerHTML='<li><span>No hands scored yet.</span><span>—</span></li>'; return;
+  }
+  S.history.slice().reverse().forEach(function(h){
+    var li=document.createElement('li');
+    var l=document.createElement('span'); l.textContent='Hand '+h.n+' — '+h.label;
+    var r=document.createElement('span'); r.textContent=h.points;
+    li.appendChild(l); li.appendChild(r); ul.appendChild(li);
+  });
+}
+
+/* ---------- game flow ---------- */
+function newDeck(){
+  var d=[];
+  for(var s=0;s<4;s++) for(var r=1;r<=13;r++) d.push({r:r,s:s});
+  for(var i=d.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=d[i]; d[i]=d[j]; d[j]=t; }
+  return d;
+}
+function startMatch(){
+  S.seq++; S.scores={you:0, ai:0}; S.handNo=1; S.history=[]; S.over=false;
+  S.dealer='ai'; S.playerPickups={}; S.discardSeen={};
+  renderHistory();
+  startHand();
+}
+function startPractice(){
+  S.seq++; S.handNo=1; S.history=[]; S.over=false;
+  S.dealer='ai'; S.playerPickups={}; S.discardSeen={};
+  renderHistory();
+  startHand();
+}
+function setPracticeMode(on){
+  if(S.practice===on) return;
+  S.practice=on;
+  lsSet('ginRummy2.practice', on);
+  $('resultScrim').classList.remove('open');
+  if(on){ startPractice(); }
+  else { startMatch(); }
+  render();
+}
+function startHand(){
+  S.seq++;
+  var deck=newDeck();
+  S.player=deck.splice(0,10); S.ai=deck.splice(0,10);
+  S.stock=deck; S.pile=[S.stock.pop()];
+  S.discardSeen={}; S.discardSeen[key(S.pile[0])]=true;
+  S.selected=null; S.drawnKey=null; S.drawnFrom=null;
+  S.over=false;
+  var nonDealer = S.dealer==='you' ? 'ai' : 'you';
+  S.phase='offer'; S.offerStage='nondealer';
+  render();
+  var up=S.pile[0];
+  var pfx=S.practice?'Practice · ':'';
+  if(nonDealer==='you'){
+    S.turn='you';
+    setMsg(pfx+'Hand '+S.handNo+' — Nova dealt. The upcard is '+cname(up)+'.',
+      S.practice?'Practice — no points count. Take it to start with 11 cards, or pass and let Nova decide.':'Take it to start your hand with 11 cards, or pass and let Nova decide.');
+    render();
+  } else {
+    S.turn='ai';
+    setMsg(pfx+'Hand '+S.handNo+' — you dealt. Nova is eyeing the '+cname(up)+'…', S.practice?'Practice round — just for learning.':'');
+    render();
+    later(aiOfferDecision, 800);
+  }
+}
+function aiOfferDecision(){
+  // AI is the non-dealer (first offer) or dealer (second offer)
+  var up=S.pile[S.pile.length-1];
+  var takeVal=bestDiscard(S.ai.concat([up]), key(up));
+  var curDw=analyze(S.ai).deadwood;
+  var take=false;
+  if(takeVal){
+    if(S.difficulty==='easy') take = takeVal.dw<curDw && Math.random()<0.6;
+    else if(S.difficulty==='medium') take = takeVal.dw<=curDw-2 || takeVal.dw===0;
+    else take = takeVal.dw<curDw || takeVal.dw===0;
+  }
+  if(take){
+    S.ai.push(S.pile.pop());
+    aiDiscardOnly(key(up), false);
+    setMsg('Nova took the upcard and discarded.','Your turn — draw from the stock or take the discard.');
+    beginPlayerDraw();
+  } else if(S.offerStage==='nondealer'){
+    S.offerStage='dealer'; S.turn='you'; S.phase='offer';
+    setMsg('Nova passed on the '+cname(up)+'.','As dealer, you get the second chance: take the upcard or pass.');
+    render();
+  } else {
+    setMsg('Nova passed too.','Nova draws to start the hand.');
+    render();
+    later(aiPlayTurn, 700);
+  }
+}
+function playerTakeUp(){
+  if(S.phase!=='offer') return;
+  var up=S.pile.pop();
+  S.player.push(up);
+  S.drawnKey=key(up); S.drawnFrom='discard'; S.phase='discard'; S.turn='you';
+  S.playerPickups[key(up)]=true;
+  setMsg('You took the '+cname(up)+'.','Tap a card, then discard. (You can\'t discard the '+cname(up)+' this turn.)');
+  render();
+}
+function playerPass(){
+  if(S.phase!=='offer') return;
+  if(S.offerStage==='nondealer'){
+    S.offerStage='dealer'; S.turn='ai';
+    setMsg('You passed. Nova, as dealer, decides…','');
+    render();
+    later(function(){
+      var up=S.pile[S.pile.length-1];
+      var takeVal=bestDiscard(S.ai.concat([up]), key(up));
+      var curDw=analyze(S.ai).deadwood;
+      var take=false;
+      if(takeVal){
+        if(S.difficulty==='easy') take=takeVal.dw<curDw && Math.random()<0.6;
+        else if(S.difficulty==='medium') take=takeVal.dw<=curDw-2 || takeVal.dw===0;
+        else take=takeVal.dw<curDw || takeVal.dw===0;
+      }
+      if(take){
+        S.ai.push(S.pile.pop());
+        aiDiscardOnly(key(up), false);
+        setMsg('Nova took the upcard and discarded.','Your turn — draw from the stock or take the discard.');
+        beginPlayerDraw();
+      } else {
+        setMsg('Nova passed too. You draw first.','Draw from the stock or take the '+cname(S.pile[S.pile.length-1])+'.');
+        beginPlayerDraw();
+      }
+    }, 800);
+  } else {
+    // player is dealer, passed second chance -> AI (non-dealer) starts a normal turn
+    S.turn='ai';
+    setMsg('You passed. Nova starts the hand.','');
+    render();
+    later(aiPlayTurn, 700);
+  }
+}
+function beginPlayerDraw(){
+  S.turn='you'; S.phase='draw'; S.selected=null; S.drawnKey=null; S.drawnFrom=null;
+  if(S.stock.length<=2){ drawnHand(); return; }
+  render();
+}
+function selectCard(c){
+  if(S.turn!=='you') return;
+  S.selected = (S.selected===key(c)) ? null : key(c);
+  render();
+}
+function playerDraw(from){
+  if(S.phase!=='draw' || S.turn!=='you') return;
+  var c;
+  if(from==='discard'){
+    if(!S.pile.length) return;
+    c=S.pile.pop();
+    S.drawnFrom='discard'; S.playerPickups[key(c)]=true;
+  } else {
+    if(!S.stock.length) return;
+    c=S.stock.pop();
+    S.drawnFrom='stock';
+  }
+  S.player.push(c); S.drawnKey=key(c); S.phase='discard';
+  setMsg(from==='discard' ? 'You took the '+cname(c)+' from the discard pile.' : 'You drew from the stock.',
+    'Tap a card to select it, then discard — or knock if your deadwood is 10 or less.');
+  render();
+}
+function playerDiscard(knock){
+  if(S.phase!=='discard' || S.turn!=='you' || !S.selected) return;
+  var sel=S.player.filter(function(c){ return key(c)===S.selected; })[0];
+  if(!sel) return;
+  if(S.drawnFrom==='discard' && key(sel)===S.drawnKey){
+    setMsg('You can\'t discard the '+cname(sel)+' — you just picked it up from the discard pile.','Pick a different card.');
+    return;
+  }
+  var rest=S.player.filter(function(c){ return c!==sel; });
+  var dw=analyze(rest).deadwood;
+  if(knock && dw>10){ setMsg('Deadwood would be '+dw+' — too high to knock.','Knocking needs 10 or less.'); return; }
+  S.player=rest;
+  S.pile.push(sel); S.discardSeen[key(sel)]=true;
+  S.selected=null; S.drawnKey=null; S.drawnFrom=null;
+  render();
+  if(knock){ endHand('you', {gin:dw===0, bigGin:false}); return; }
+  S.turn='ai';
+  setMsg('You discarded the '+cname(sel)+'. Nova\'s turn…','');
+  render();
+  later(aiPlayTurn, 750);
+}
+function playerBigGin(){
+  if(S.phase!=='discard') return;
+  if(analyze(S.player).deadwood!==0) return;
+  endHand('you', {gin:true, bigGin:true});
+}
+
+/* ---------- AI ---------- */
+function aiDiscardOnly(forbiddenKey, thenPlayer){
+  var choice=aiChooseDiscard(S.ai, forbiddenKey);
+  if(!choice) return;
+  S.ai=S.ai.filter(function(c){ return c!==choice.card; });
+  S.pile.push(choice.card); S.discardSeen[key(choice.card)]=true;
+  render();
+}
+function aiChooseDiscard(hand, forbiddenKey){
+  var cands=[];
+  hand.forEach(function(c){
+    if(forbiddenKey && key(c)===forbiddenKey) return;
+    var rest=hand.filter(function(x){ return x!==c; });
+    cands.push({card:c, dw:analyze(rest).deadwood});
+  });
+  if(!cands.length) return null;
+  var minDw=Math.min.apply(null, cands.map(function(x){ return x.dw; }));
+  var pool=cands.filter(function(x){ return x.dw===minDw; });
+  if(S.difficulty==='easy'){
+    var loose=cands.filter(function(x){ return x.dw<=minDw+4; });
+    return loose[Math.floor(Math.random()*loose.length)];
+  }
+  if(S.difficulty==='hard' && pool.length>1){
+    pool.sort(function(a,b){ return danger(a.card)-danger(b.card); });
+    return pool[0];
+  }
+  // medium/hard tie-break: throw the heaviest dead card
+  pool.sort(function(a,b){ return cardVal(b.card)-cardVal(a.card); });
+  return pool[0];
+}
+function danger(c){
+  var d=0;
+  Object.keys(S.playerPickups).forEach(function(k){
+    var parts=k.split('-'); var r=+parts[0], s=+parts[1];
+    if(c.r===r) d+=3;
+    if(c.s===s && Math.abs(c.r-r)<=2) d+=2;
+  });
+  // a rank already seen twice in discards is safer to throw
+  var seen=0;
+  Object.keys(S.discardSeen).forEach(function(k){ if(+k.split('-')[0]===c.r) seen++; });
+  if(seen>=2) d-=2;
+  return d;
+}
+function aiPlayTurn(){
+  if(S.over) return;
+  S.turn='ai'; S.phase='ai';
+  if(S.stock.length<=2){ drawnHand(); return; }
+  render();
+  setMsg('Nova is thinking…','');
+  later(function(){
+    // draw decision
+    var top=S.pile[S.pile.length-1];
+    var curDw=analyze(S.ai).deadwood;
+    var takeVal=top? bestDiscard(S.ai.concat([top]), key(top)) : null;
+    var take=false;
+    if(takeVal){
+      if(S.difficulty==='easy') take=takeVal.dw<curDw && Math.random()<0.45;
+      else if(S.difficulty==='medium') take=takeVal.dw<=curDw-3 || takeVal.dw===0;
+      else take=takeVal.dw<curDw || (takeVal.dw===curDw && cardVal(top)<=3);
+    }
+    var drawnFromStock=true, forbidden=null;
+    if(take){
+      S.ai.push(S.pile.pop()); drawnFromStock=false; forbidden=key(top);
+      setMsg('Nova took the '+cname(top)+' from the discard pile.','');
+    } else {
+      S.ai.push(S.stock.pop());
+      setMsg('Nova drew from the stock.','');
+    }
+    render();
+    later(function(){
+      // big gin?
+      if(analyze(S.ai).deadwood===0 && S.ai.length===11){
+        endHand('ai', {gin:true, bigGin:true}); return;
+      }
+      var choice=aiChooseDiscard(S.ai, forbidden);
+      if(!choice){ beginPlayerDraw(); return; }
+      var dw=choice.dw;
+      var knock=false;
+      if(dw===0) knock=true;
+      else if(dw<=10){
+        if(S.difficulty==='easy') knock=dw<=3;
+        else if(S.difficulty==='medium') knock=dw<=6 || S.stock.length<=12;
+        else knock=dw<=7 || S.stock.length<=18;
+      }
+      S.ai=S.ai.filter(function(c){ return c!==choice.card; });
+      S.pile.push(choice.card); S.discardSeen[key(choice.card)]=true;
+      render();
+      if(knock){ endHand('ai', {gin:dw===0, bigGin:false}); return; }
+      setMsg('Nova discarded the '+cname(choice.card)+'. Your turn.',
+        'Draw from the stock or take the '+cname(choice.card)+'.');
+      beginPlayerDraw();
+    }, 650);
+  }, 550);
+}
+
+/* ---------- scoring ---------- */
+function drawnHand(){
+  S.phase='over';
+  S.history.push({n:S.handNo, label:(S.practice?'Practice · ':'')+'Drawn hand — stock ran out, no score', points:S.practice?'Practice':'0 – 0'});
+  renderHistory(); render();
+  showResult({
+    title:(S.practice?'Practice · ':'')+'Hand '+S.handNo+' — drawn',
+    body:'<div class="banner">No score — the stock ran down to two cards.</div><p>Nobody knocked, so nobody scores. '+(S.practice?'This was a practice hand, so nothing counts anyway. Try another one!':'The same dealer deals the hand again.')+'</p>',
+    nextLabel:S.practice?'Another practice hand':'Redeal hand '+S.handNo
+  });
+}
+function endHand(knocker, opts){
+  S.phase='over'; S.over=false;
+  var kHand = knocker==='you' ? S.player : S.ai;
+  var dHand = knocker==='you' ? S.ai : S.player;
+  var kA=analyze(kHand), dA=analyze(dHand);
+  var kDw=kA.deadwood, dDw=dA.deadwood, laid=[];
+  if(!opts.gin){
+    var lo=layOff(dA.dead, kA.melds);
+    laid=lo.laid; dDw=lo.deadwood;
+  }
+  var youPts=0, aiPts=0, banner='', detail='';
+  var kName = knocker==='you' ? 'You' : 'Nova';
+  if(opts.bigGin){
+    var pts=dDw+31;
+    if(knocker==='you') youPts=pts; else aiPts=pts;
+    banner=kName+' declared BIG GIN — all 11 cards melded!';
+    detail='Big Gin bonus 31 + defender deadwood '+dDw+' = '+pts+' points.';
+  } else if(opts.gin){
+    var pts2=dDw+25;
+    if(knocker==='you') youPts=pts2; else aiPts=pts2;
+    banner=kName+' knocked with GIN — zero deadwood!';
+    detail='Gin bonus 25 + defender deadwood '+dDw+' = '+pts2+' points. No laying off against gin.';
+  } else if(dDw<=kDw){
+    var upts=(kDw-dDw)+10;
+    if(knocker==='you') aiPts=upts; else youPts=upts;
+    banner='UNDERCUT! The defender\'s deadwood ('+dDw+') matched or beat the knocker\'s ('+kDw+').';
+    detail='Defender scores the difference ('+(kDw-dDw)+') + 10 bonus = '+upts+' points.';
+  } else {
+    var kpts=dDw-kDw;
+    if(knocker==='you') youPts=kpts; else aiPts=kpts;
+    banner=kName+' knocked with '+kDw+' deadwood.';
+    detail='Knocker scores '+dDw+' − '+kDw+' = '+kpts+' points.';
+  }
+  var isPractice=S.practice;
+  if(!isPractice){
+    S.scores.you+=youPts; S.scores.ai+=aiPts;
+    if(knocker==='you' && (opts.gin||opts.bigGin)) { bests.gins++; }
+    if(youPts>bests.bestHand) bests.bestHand=youPts;
+  }
+  var label=(isPractice?'Practice · ':'')+(opts.bigGin?'Big Gin':opts.gin?'Gin':'Knock')+' by '+(knocker==='you'?'You':'Nova')+(dDw<=kDw && !opts.gin && !opts.bigGin?' — undercut!':'');
+  S.history.push({n:S.handNo, label:label, points:isPractice?'Would be: You +'+youPts+' · Nova +'+aiPts:'You +'+youPts+' · Nova +'+aiPts});
+  renderHistory(); if(!isPractice) saveBests(); render();
+
+  var body='';
+  body+='<div class="banner">'+banner+'</div>';
+  body+='<p>'+detail+'</p>';
+  if(!opts.gin && laid.length){
+    body+='<p>Laid off on the knocker\'s melds: '+laid.map(cname).join(', ')+'.</p>';
+  }
+  // Explicit deadwood breakdown so the arithmetic is checkable at a glance:
+  // a regular knock scores ONLY the difference (defender after layoff − knocker).
+  var dName = knocker==='you' ? 'Nova' : 'You';
+  body+='<div class="score-line"><span>Knocker deadwood — '+kName+'</span><span>'+kDw+'</span></div>';
+  body+='<div class="score-line"><span>Defender deadwood — '+dName+(opts.gin?' (no laying off vs gin)':' after laying off')+'</span><span>'+dDw+'</span></div>';
+  if(!opts.gin){
+    var diffPts = dDw>=kDw ? (dDw-kDw) : (kDw-dDw);
+    body+='<div class="score-line"><span>Deadwood difference scored</span><span>'+diffPts+(dDw<=kDw?' + 10 undercut bonus':'')+'</span></div>';
+  } else {
+    body+='<div class="score-line"><span>Gin bonus</span><span>'+(opts.bigGin?31:25)+'</span></div>';
+  }
+  body+='<div id="revealYou"></div><div id="revealAi"></div>';
+  if(isPractice){
+    body+='<div class="score-line"><span>Points this hand (practice — not counted)</span><span>Would be: You +'+youPts+' · Nova +'+aiPts+'</span></div>';
+    body+='<div class="score-line total"><span>Practice round</span><span>No match score — just learning</span></div>';
+    body+='<p style="margin-top:10px;">Nice work practising! Play another practice hand, or switch to Match play above the table when you\'re ready for points to count.</p>';
+  } else {
+    body+='<div class="score-line"><span>Points this hand</span><span>You +'+youPts+' · Nova +'+aiPts+'</span></div>';
+    body+='<div class="score-line total"><span>Match score</span><span>You '+S.scores.you+' · Nova '+S.scores.ai+'</span></div>';
+  }
+
+  var matchOver = !isPractice && (S.scores.you>=100 || S.scores.ai>=100);
+  var title=(isPractice?'Practice · ':'')+'Hand '+S.handNo+' — '+(opts.bigGin?'Big Gin!':opts.gin?'Gin!':'Knock');
+  if(matchOver){
+    var youWon=S.scores.you>S.scores.ai;
+    bests.played++; if(youWon) bests.wins++; saveBests();
+    title=youWon?'🏆 You win the match!':'Nova wins the match';
+    body+='<div class="banner">'+(youWon?'First to 100 — the match is yours, '+S.scores.you+' to '+S.scores.ai+'.':'Nova reached '+S.scores.ai+' to your '+S.scores.you+'. Rematch?')+'</div>';
+  }
+  showResult({title:title, body:body, matchOver:matchOver, nextLabel:isPractice?'Another practice hand':undefined});
+  // fill reveals with a fresh analysis of each final hand
+  var yA=analyze(S.player), aA=analyze(S.ai);
+  var yDw = knocker==='you'? kDw : dDw;
+  var aDw = knocker==='you'? dDw : kDw;
+  fillReveal($('revealYou'), 'Your hand', S.player, yA, yDw);
+  fillReveal($('revealAi'), 'Nova\'s hand', S.ai, aA, aDw);
+  S.dealer = S.dealer==='you' ? 'ai' : 'you';
+  S.handNo++;
+}
+function fillReveal(container, title, hand, a, dw){
+  if(!container) return;
+  var h=document.createElement('h3');
+  h.textContent=title+' — deadwood '+dw;
+  container.appendChild(h);
+  var row=document.createElement('div'); row.className='reveal-row';
+  var srt=[];
+  a.melds.forEach(function(m){ m.slice().sort(function(x,y){ return x.r-y.r||x.s-y.s; }).forEach(function(c){ srt.push(c); }); });
+  a.dead.slice().sort(function(x,y){ return cardVal(y)-cardVal(x); }).forEach(function(c){ srt.push(c); });
+  srt.forEach(function(c){ row.appendChild(cardEl(c,true)); });
+  container.appendChild(row);
+  var p=document.createElement('p');
+  var meldTxt=a.melds.map(function(m){ return m.map(cname).join(' '); }).join(' · ');
+  p.textContent=(meldTxt? 'Melds: '+meldTxt : 'No melds')+(a.dead.length? ' · Deadwood: '+a.dead.map(cname).join(', ') : ' · No deadwood');
+  container.appendChild(p);
+}
+function showResult(r){
+  $('resultTitle').textContent=r.title;
+  $('resultBody').innerHTML=r.body||'';
+  $('nextHandBtn').textContent=r.nextLabel||'Next hand';
+  $('nextHandBtn').classList.toggle('hidden', !!r.matchOver);
+  $('againBtn').classList.toggle('hidden', !r.matchOver);
+  $('toMatchBtn').classList.toggle('hidden', !S.practice);
+  $('resultScrim').classList.add('open');
+}
+
+/* ---------- walkthrough ---------- */
+var tourSteps=[
+  {t:'Welcome to Gin Rummy 👋', x:'You\'re playing Nova over a series of hands. Score points by melding cards and knocking — first to 100 wins the match. This quick tour shows you the table.', el:null},
+  {t:'Try a practice round first', x:'Tap Practice round up top to play a hand with no score pressure — points don\'t count toward your match or bests. Perfect for learning when to knock. Switch back to Match play any time.', el:'modeSeg'},
+  {t:'Draw to start your turn', x:'Tap the stock pile for a mystery card, or tap the discard pile to take the face-up card you can see. Right now the first upcard is being offered to you — take it or pass.', el:'stockPile'},
+  {t:'Watch your deadwood', x:'Cards that aren\'t in a set or run are deadwood, and they cost points. This meter shows your deadwood total — 10 or less means you can knock, and 0 is gin.', el:'meter'},
+  {t:'Your hand', x:'Tap a card to select it. In Melds sort, your melds group together and deadwood cards get a gold dot — those are the ones to fix or ditch.', el:'playerHand'},
+  {t:'Discard — or knock', x:'After drawing, discard one card to end your turn. If your remaining deadwood is 10 or less, the Knock button lights up: knocking ends the hand and scores the difference. Zero deadwood is gin, worth a 25-point bonus.', el:'actionBar'},
+  {t:'Pick your challenge', x:'Easy Nova plays loose. Medium plays a solid game. On Hard she remembers every card you pick up and knocks early — don\'t feed her discards.', el:'diffSeg'},
+  {t:'You\'re ready', x:'Take or pass the upcard to start hand 1. The full rulebook is behind the Rules button any time you need it. Good luck!', el:null}
+];
+var tourIdx=0, tourActive=false;
+function clearSpot(){ document.querySelectorAll('.spot').forEach(function(e){ e.classList.remove('spot'); }); }
+function showTourStep(){
+  var st=tourSteps[tourIdx];
+  $('coachTitle').textContent=st.t;
+  $('coachText').textContent=st.x;
+  $('coachDots').textContent='●'.repeat(tourIdx+1)+'○'.repeat(tourSteps.length-tourIdx-1);
+  $('coachNext').textContent=tourIdx===tourSteps.length-1?'Start playing':'Next';
+  clearSpot();
+  if(st.el){ var el=$(st.el); if(el) el.classList.add('spot'); }
+}
+function startTour(){
+  tourActive=true; tourIdx=0;
+  $('coach').classList.add('open');
+  showTourStep();
+}
+function endTour(){
+  tourActive=false;
+  $('coach').classList.remove('open');
+  $('hintBar').classList.add('hidden');
+  clearSpot();
+  lsSet('ginRummy2.seen', true);
+}
+
+/* ---------- wiring ---------- */
+$('stockPile').addEventListener('click', function(){ playerDraw('stock'); });
+$('discardPileBtn').addEventListener('click', function(){ playerDraw('discard'); });
+$('takeUpBtn').addEventListener('click', playerTakeUp);
+$('passBtn').addEventListener('click', playerPass);
+$('discardBtn').addEventListener('click', function(){ playerDiscard(false); });
+$('knockBtn').addEventListener('click', function(){ playerDiscard(true); });
+$('ginBtn').addEventListener('click', playerBigGin);
+$('sortBtn').addEventListener('click', function(){
+  S.sortMode=S.sortMode==='melds'?'rank':'melds'; render();
+});
+$('newMatchBtn').addEventListener('click', function(){
+  $('resultScrim').classList.remove('open');
+  if(S.practice){ startPractice(); }
+  else { startMatch(); }
+});
+document.querySelectorAll('#modeSeg button').forEach(function(b){
+  b.addEventListener('click', function(){ setPracticeMode(b.getAttribute('data-mode')==='practice'); });
+});
+$('exitPracticeBtn').addEventListener('click', function(){ setPracticeMode(false); });
+$('toMatchBtn').addEventListener('click', function(){ setPracticeMode(false); });
+$('nextHandBtn').addEventListener('click', function(){
+  $('resultScrim').classList.remove('open');
+  startHand();
+});
+$('againBtn').addEventListener('click', function(){
+  $('resultScrim').classList.remove('open'); startMatch();
+});
+$('howBtn').addEventListener('click', function(){ $('howScrim').classList.add('open'); });
+$('howCloseBtn').addEventListener('click', function(){ $('howScrim').classList.remove('open'); });
+$('howTourBtn').addEventListener('click', function(){ $('howScrim').classList.remove('open'); startTour(); });
+$('rulesBtn').addEventListener('click', function(){ $('rulesScrim').classList.add('open'); });
+$('rulesCloseBtn').addEventListener('click', function(){ $('rulesScrim').classList.remove('open'); });
+$('rulesTourBtn').addEventListener('click', function(){ $('rulesScrim').classList.remove('open'); startTour(); });
+$('coachNext').addEventListener('click', function(){
+  if(tourIdx>=tourSteps.length-1){ endTour(); return; }
+  tourIdx++; showTourStep();
+});
+$('coachSkip').addEventListener('click', endTour);
+document.querySelectorAll('#diffSeg button').forEach(function(b){
+  b.setAttribute('aria-pressed', b.getAttribute('data-diff')===S.difficulty?'true':'false');
+  b.addEventListener('click', function(){
+    S.difficulty=b.getAttribute('data-diff');
+    lsSet('ginRummy2.diff', S.difficulty);
+    document.querySelectorAll('#diffSeg button').forEach(function(x){ x.setAttribute('aria-pressed', x===b?'true':'false'); });
+    setMsg('Difficulty set to '+S.difficulty+'.','It applies to Nova\'s decisions from here on.');
+  });
+});
+
+/* ---------- feedback ---------- */
+var fbRating=0;
+function fbPaintStars(){
+  document.querySelectorAll('#fbStars button').forEach(function(b){
+    b.setAttribute('aria-pressed', (+b.getAttribute('data-star'))<=fbRating ? 'true':'false');
+  });
+}
+document.querySelectorAll('#fbStars button').forEach(function(b){
+  b.addEventListener('click', function(){
+    fbRating=+b.getAttribute('data-star');
+    fbPaintStars();
+  });
+});
+$('feedbackBtn').addEventListener('click', function(){
+  fbRating=0; fbPaintStars();
+  $('fbText').value=''; $('fbTag').value='';
+  $('fbThanks').classList.add('hidden');
+  $('fbSaveBtn').disabled=false;
+  $('fbScrim').classList.add('open');
+});
+$('fbCloseBtn').addEventListener('click', function(){ $('fbScrim').classList.remove('open'); });
+$('fbSaveBtn').addEventListener('click', function(){
+  var record={
+    game:'gin-rummy-2',
+    rating:fbRating||null,
+    text:$('fbText').value.trim(),
+    tag:$('fbTag').value||null,
+    timestamp:new Date().toISOString()
+  };
+  var all=lsGet('holos-arcade-feedback', []);
+  if(!Array.isArray(all)) all=[];
+  all.push(record);
+  lsSet('holos-arcade-feedback', all);
+  $('fbThanks').classList.remove('hidden');
+  $('fbSaveBtn').disabled=true;
+  setTimeout(function(){ $('fbScrim').classList.remove('open'); }, 1400);
+});
+
+/* ---------- init ---------- */
+renderBests();
+if(S.practice){ startPractice(); }
+else startMatch();
+/* Tutorial is opt-in only: no auto-launched walkthrough. First-time players
+   get one small, dismissible hint pointing at How to play / Rules. */
+if(!lsGet('ginRummy2.seen', false)){
+  $('hintBar').classList.remove('hidden');
+}
+$('hintClose').addEventListener('click', function(){
+  $('hintBar').classList.add('hidden');
+  lsSet('ginRummy2.seen', true);
+});
+})();
+</script>
+</body>
+</html>

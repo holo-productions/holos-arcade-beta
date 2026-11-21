@@ -1,0 +1,1049 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Mahjong Solitaire</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Marcellus&family=Noto+Serif+SC:wght@600;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#edf2ea; --panel:#ffffff; --panel-2:#f4f7f1; --ink:#1c2a22; --ink-soft:#54655a;
+    --line:#d5ded2; --accent:#14614a; --accent-ink:#ffffff; --gold:#b98a1c; --red:#b3392e;
+    --felt:#0e3d2d; --felt-2:#0a2f22; --tile:#faf5e3; --tile-edge:#d9cfae; --tile-ink:#22301f;
+    --shadow:0 10px 30px rgba(20,40,28,.14);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0b100d; --panel:#141c17; --panel-2:#18221b; --ink:#e8efe7; --ink-soft:#9db3a4;
+      --line:#26362c; --accent:#2f9e77; --accent-ink:#06110c; --gold:#d9ab3c; --red:#e0685c;
+      --felt:#0d3527; --felt-2:#082419; --tile:#f3ecd4; --tile-edge:#cbbd92; --tile-ink:#22301f;
+      --shadow:0 10px 30px rgba(0,0,0,.45);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:ui-rounded,"Avenir Next","Segoe UI",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font:inherit; cursor:pointer; min-height:40px}
+  .wrap{max-width:1060px; margin:0 auto; padding:18px 14px 40px}
+
+  header.top{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:14px}
+  h1{font-family:"Marcellus",serif; font-weight:400; font-size:clamp(28px,5vw,40px); margin:0; letter-spacing:.01em}
+  h1 .zh{font-family:"Noto Serif SC",serif; color:var(--red); font-size:.62em; margin-left:8px; letter-spacing:.2em}
+  .tagline{margin:4px 0 0; color:var(--ink-soft); font-size:15px; max-width:52ch}
+  .head-btns{display:flex; gap:8px; flex-wrap:wrap}
+  .btn{
+    border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius:10px; padding:8px 14px; font-weight:600; font-size:14px;
+    display:inline-flex; align-items:center; gap:7px; min-height:40px;
+  }
+  .btn:hover{border-color:var(--accent); color:var(--accent)}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+  .btn.primary:hover{filter:brightness(1.08); color:var(--accent-ink)}
+  .btn:disabled{opacity:.45; cursor:not-allowed}
+  .btn:disabled:hover{border-color:var(--line); color:var(--ink)}
+
+  .layout-row{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px}
+  .layout-row .lbl{font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft)}
+  .chip{
+    border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius:999px; padding:7px 14px; font-size:14px; font-weight:600; min-height:38px;
+  }
+  .chip[aria-pressed="true"]{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+  .diff-row{margin-top:-4px}
+  .diff-desc{font-size:13.5px; color:var(--ink-soft); flex-basis:100%; line-height:1.45}
+  @media (min-width:720px){ .diff-desc{flex-basis:auto; flex:1; min-width:220px} }
+  .chip.practice-chip[aria-pressed="true"]{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+  .practice-banner{
+    display:none; align-items:center; gap:8px; margin-bottom:12px;
+    background:#e6f2e9; border:1px solid var(--accent); color:#123b2a;
+    border-radius:12px; padding:10px 14px; font-size:14.5px; line-height:1.45;
+  }
+  @media (prefers-color-scheme: dark){ .practice-banner{background:#143325; color:#d8efe0} }
+  .practice-banner.show{display:flex}
+  .practice-banner strong{white-space:nowrap}
+  .tile.practice-match .face{box-shadow:inset 0 -5px 0 #e2d5ab, inset 0 2px 0 #fff, 3px 4px 0 #c9ba8a, 0 0 0 2px rgba(217,171,60,.85), 5px 7px 10px rgba(0,0,0,.35)}
+
+  .stats{
+    display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px;
+  }
+  .stat{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:9px 12px}
+  .stat .k{font-size:11px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-soft)}
+  .stat .v{font-size:21px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1.15}
+  @media (max-width:560px){ .stats{grid-template-columns:repeat(2,1fr)} }
+
+  .progress{height:8px; background:var(--panel-2); border:1px solid var(--line); border-radius:99px; overflow:hidden; margin-bottom:12px}
+  .progress > div{height:100%; background:linear-gradient(90deg,var(--accent),var(--gold)); width:0%; transition:width .35s ease}
+
+  .board-shell{
+    background:
+      radial-gradient(120% 90% at 50% 0%, rgba(255,255,255,.07), transparent 55%),
+      linear-gradient(160deg,var(--felt),var(--felt-2));
+    border-radius:18px; box-shadow:var(--shadow), inset 0 0 0 1px rgba(255,255,255,.06), inset 0 0 60px rgba(0,0,0,.35);
+    padding:14px 8px; overflow:hidden; position:relative;
+  }
+  .board-scale{margin:0 auto; position:relative}
+  .board{position:absolute; left:0; top:0; transform-origin:top left}
+
+  .tile{
+    position:absolute; width:52px; height:70px; padding:0; border:none; background:transparent;
+    perspective:200px;
+  }
+  .tile .face{
+    position:absolute; inset:0; border-radius:8px;
+    background:linear-gradient(155deg,#fffdf4 0%,var(--tile) 55%,#efe6c8 100%);
+    border:1px solid var(--tile-edge);
+    box-shadow: inset 0 -5px 0 #e2d5ab, inset 0 2px 0 #ffffff, 3px 4px 0 #c9ba8a, 5px 7px 10px rgba(0,0,0,.35);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0;
+    color:var(--tile-ink); transition:transform .12s ease, filter .12s ease, box-shadow .12s ease;
+    user-select:none; -webkit-user-select:none;
+  }
+  .tile .glyph{font-family:"Noto Serif SC",serif; font-weight:900; font-size:30px; line-height:1.05}
+  .tile .lbl{font-size:8.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; opacity:.75; line-height:1.1; text-align:center; padding:0 2px}
+  .tile.c-red .glyph{color:#b3392e} .tile.c-green .glyph{color:#1d7a3f}
+  .tile.c-blue .glyph{color:#2456a6} .tile.c-ink .glyph{color:#22301f}
+  .tile.c-gold .glyph{color:#9a7414}
+  .tile:not(.free) .face{filter:brightness(.82) saturate(.75)}
+  .tile.free{cursor:pointer}
+  .tile.free .face{filter:brightness(1.03)}
+  .tile.free:hover .face{transform:translateY(-3px)}
+  .tile.free:focus-visible{outline:3px solid var(--gold); outline-offset:2px; border-radius:8px; z-index:99 !important}
+  .tile.selected .face{
+    box-shadow: inset 0 -5px 0 #e2d5ab, 0 0 0 3px var(--gold), 5px 9px 14px rgba(0,0,0,.4);
+    transform:translateY(-4px); background:linear-gradient(155deg,#fffbe8,#fdf3c9);
+  }
+  .tile.hinted .face{animation:pulse .55s ease-in-out 3}
+  @keyframes pulse{0%,100%{box-shadow:inset 0 -5px 0 #e2d5ab,0 0 0 0 rgba(217,171,60,0)}50%{box-shadow:inset 0 -5px 0 #e2d5ab,0 0 0 5px rgba(217,171,60,.95)}}
+  .tile.removing .face{animation:pop .22s ease forwards}
+  @keyframes pop{to{transform:scale(1.18); opacity:0}}
+  @media (prefers-reduced-motion: reduce){
+    .tile.hinted .face,.tile.removing .face{animation:none}
+    .progress > div{transition:none}
+  }
+
+  .controls{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px}
+  .controls .spacer{flex:1}
+  .status-line{min-height:24px; margin-top:10px; font-size:15px; color:var(--ink-soft)}
+  .status-line strong{color:var(--ink)}
+  .status-line .warn{color:var(--red); font-weight:700}
+
+  .bests{
+    margin-top:16px; background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px;
+    display:flex; flex-wrap:wrap; gap:8px 26px; align-items:baseline;
+  }
+  .bests h2{font-family:"Marcellus",serif; font-weight:400; font-size:19px; margin:0 8px 0 0}
+  .bests .b{font-size:14px; color:var(--ink-soft)}
+  .bests .b strong{color:var(--ink); font-variant-numeric:tabular-nums}
+
+  .hintbar{
+    margin-top:14px; background:var(--panel-2); border:1px dashed var(--gold); color:var(--ink);
+    border-radius:12px; padding:10px 14px; font-size:14.5px; display:flex; gap:10px; align-items:center; justify-content:space-between;
+  }
+  .hintbar button{border:none; background:none; font-size:18px; line-height:1; padding:6px 10px; min-height:36px; color:var(--ink-soft)}
+
+  /* Modals */
+  .overlay{
+    position:fixed; inset:0; background:rgba(8,14,10,.55); backdrop-filter:blur(3px);
+    display:none; align-items:flex-end; justify-content:center; z-index:200; padding:0;
+  }
+  .overlay.open{display:flex}
+  .sheet{
+    background:var(--panel); color:var(--ink); width:100%; max-width:640px; max-height:88dvh; overflow:auto;
+    border-radius:18px 18px 0 0; padding:22px 22px 30px; box-shadow:var(--shadow);
+  }
+  @media (min-width:640px){ .overlay{align-items:center; padding:20px} .sheet{border-radius:18px} }
+  .sheet h2{font-family:"Marcellus",serif; font-weight:400; font-size:26px; margin:0 0 4px}
+  .sheet h3{font-size:15px; margin:18px 0 6px; letter-spacing:.02em}
+  .sheet p,.sheet li{font-size:15px; line-height:1.55; color:var(--ink)}
+  .sheet ul,.sheet ol{margin:6px 0 6px 20px; padding:0}
+  .sheet li{margin-bottom:5px}
+  .sheet table{width:100%; border-collapse:collapse; margin:8px 0; font-size:14.5px}
+  .sheet th,.sheet td{padding:7px 8px; border-bottom:1px solid var(--line); text-align:left}
+  .sheet th{color:var(--ink-soft); font-size:12px; text-transform:uppercase; letter-spacing:.07em}
+  .sheet td:last-child,.sheet th:last-child{text-align:right; font-variant-numeric:tabular-nums}
+  .sheet .close-row{display:flex; justify-content:flex-end; margin-top:18px}
+  .free-demo{display:flex; gap:14px; align-items:center; background:var(--felt); border-radius:12px; padding:14px; margin:10px 0}
+  .free-demo .tile{position:relative; flex:none}
+  .free-demo p{color:#e9f2e6; font-size:14px; margin:0}
+  .win-stats{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:14px 0}
+  .win-stats .stat{background:var(--panel-2)}
+  .newbest{display:inline-block; background:var(--gold); color:#241a02; font-weight:800; font-size:12px; border-radius:99px; padding:3px 10px; margin-left:8px; vertical-align:middle}
+
+  /* Feedback */
+  .fb-label{font-size:13px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-soft); margin:16px 0 0}
+  .fb-stars{display:flex; gap:6px; margin:8px 0 2px}
+  .fb-star{
+    border:1px solid var(--line); background:var(--panel-2); color:var(--ink-soft);
+    border-radius:10px; width:48px; height:48px; font-size:24px; line-height:1; padding:0;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  .fb-star[aria-pressed="true"]{background:var(--gold); border-color:var(--gold); color:#241a02}
+  .fb-tags{display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 2px}
+  .fb-tag{
+    border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius:999px; padding:7px 14px; font-size:14px; font-weight:600; min-height:38px;
+  }
+  .fb-tag[aria-pressed="true"]{background:var(--ink); color:var(--bg); border-color:var(--ink)}
+  .fb-textarea{
+    width:100%; margin-top:8px; padding:11px 12px; min-height:96px; resize:vertical;
+    border:1px solid var(--line); border-radius:10px; background:var(--panel-2); color:var(--ink);
+    font:inherit; font-size:15px; line-height:1.5;
+  }
+  .fb-textarea:focus{outline:2px solid var(--accent); outline-offset:1px}
+  .fb-note{font-size:13px; color:var(--ink-soft); line-height:1.5; margin:10px 0 0}
+  .fb-thanks{
+    display:none; margin-top:16px; background:var(--panel-2); border:1px solid var(--accent);
+    border-radius:12px; padding:12px 14px; font-size:15px; font-weight:700; color:var(--ink);
+  }
+  .fb-thanks.show{display:block}
+  .fb-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:18px; flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Mahjong Solitaire<span class="zh">麻雀</span></h1>
+      <p class="tagline">Clear the board by matching pairs of free tiles. A tile is free when nothing sits on top of it and at least one of its long sides is open.</p>
+    </div>
+    <div class="head-btns">
+      <button class="btn" id="btnHow">How to play</button>
+      <button class="btn" id="btnRules">Rules</button>
+      <button class="btn" id="btnFeedback">Feedback</button>
+    </div>
+  </header>
+
+  <div class="layout-row" role="group" aria-label="Board layout">
+    <span class="lbl">Layout</span>
+    <button class="chip" data-layout="garden" aria-pressed="true">Garden · 88 tiles</button>
+    <button class="chip" data-layout="fortress" aria-pressed="false">Fortress · 72 tiles</button>
+    <button class="chip" data-layout="bridge" aria-pressed="false">Bridge · 64 tiles</button>
+  </div>
+
+  <div class="layout-row" role="group" aria-label="Game mode">
+    <span class="lbl">Mode</span>
+    <button class="chip" data-mode="standard" aria-pressed="true">Standard game</button>
+    <button class="chip practice-chip" data-mode="practice" aria-pressed="false">🧘 Practice round</button>
+    <span class="diff-desc" id="modeDesc">The full game — timer, scoring, and your bests all count.</span>
+  </div>
+
+  <div class="layout-row diff-row" role="group" aria-label="Difficulty">
+    <span class="lbl">Difficulty</span>
+    <button class="chip" data-diff="easy" aria-pressed="false">Easy</button>
+    <button class="chip" data-diff="normal" aria-pressed="true">Normal</button>
+    <button class="chip" data-diff="hard" aria-pressed="false">Hard</button>
+    <span class="diff-desc" id="diffDesc">The classic game — hints cost 25 pts, shuffles cost 50, and the time bonus runs under 10:00.</span>
+  </div>
+
+  <div class="practice-banner" id="practiceBanner" role="status">
+    <strong>🧘 Practice round</strong>
+    <span>No pressure — hints &amp; shuffles are free, matching free tiles glow gold, the move count is always shown, and this round won't touch your score bests or win count. Switch back to Standard game anytime.</span>
+  </div>
+
+  <div class="stats" aria-live="off">
+    <div class="stat"><div class="k" id="timeLbl">Time</div><div class="v" id="stTime">0:00</div></div>
+    <div class="stat"><div class="k" id="scoreLbl">Score</div><div class="v" id="stScore">0</div></div>
+    <div class="stat"><div class="k">Tiles left</div><div class="v" id="stLeft">88</div></div>
+    <div class="stat"><div class="k">Pairs found</div><div class="v" id="stPairs">0</div></div>
+  </div>
+  <div class="progress" aria-hidden="true"><div id="progFill"></div></div>
+
+  <div class="board-shell">
+    <div class="board-scale" id="boardScale">
+      <div class="board" id="board"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" id="btnNew">↻ New game</button>
+    <button class="btn" id="btnHint">💡 Hint <span aria-hidden="true" id="hintCostLbl">(−25)</span></button>
+    <button class="btn" id="btnUndo">↩ Undo</button>
+    <button class="btn" id="btnShuffle">🔀 Shuffle <span aria-hidden="true" id="shuffleCostLbl">(−50)</span></button>
+    <span class="spacer"></span>
+    <button class="btn" id="btnMoves">Moves available: <strong id="stMoves">–</strong></button>
+  </div>
+  <p class="status-line" id="statusLine">Pick a free tile — free tiles are brighter and lift when you hover. Match it with an identical free tile.</p>
+
+  <div class="hintbar" id="hintbar">
+    <span>💡 <strong>First time?</strong> Only the bright tiles on the edges and top layer can move. Tap one, then tap its match.</span>
+    <button id="hintDismiss" aria-label="Dismiss tip">✕</button>
+  </div>
+
+  <section class="bests" aria-label="Your best results">
+    <h2>Your bests · <span id="bDiff">Normal</span></h2>
+    <span class="b">Best score <strong id="bScore">—</strong></span>
+    <span class="b">Fastest clear <strong id="bTime">—</strong></span>
+    <span class="b">Boards cleared <strong id="bWins">0</strong></span>
+    <span class="b">Games played <strong id="bPlayed">0</strong></span>
+  </section>
+</div>
+
+<!-- HOW TO PLAY -->
+<div class="overlay" id="ovHow" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+  <div class="sheet">
+    <h2 id="howTitle">How to play</h2>
+    <p>Mahjong Solitaire is a one-player matching puzzle played with a full set of mahjong tiles stacked in a pattern. Your job is to remove every tile from the board.</p>
+    <ol>
+      <li><strong>Look for a matching pair.</strong> Two tiles match when they show the same picture — same suit and number, same wind, or same dragon.</li>
+      <li><strong>Check that both tiles are free.</strong> A free tile has no tile on top of it, and no tile pressed against at least one of its long sides (left or right). Free tiles are shown bright; blocked tiles are dimmed.</li>
+      <li><strong>Tap one tile, then its match.</strong> Both tiles lift off the board and you score 100 points.</li>
+      <li><strong>Keep going until the board is empty.</strong> Removing tiles opens up the ones underneath and beside them.</li>
+      <li><strong>Stuck?</strong> Use <strong>Hint</strong> to flash a matching pair, <strong>Undo</strong> to take back your last pair, or <strong>Shuffle</strong> to rearrange the tiles still on the board. What Hint and Shuffle cost depends on your difficulty (below).</li>
+      <li><strong>Pick a difficulty.</strong> Changing difficulty starts a fresh deal. <strong>Easy</strong> makes hints and shuffles free, <strong>Normal</strong> is the classic game, and <strong>Hard</strong> charges double for help, hides the move count, and pays a bigger clear bonus.</li>
+      <li><strong>New to the game? Try a Practice round.</strong> Tap <strong>🧘 Practice round</strong> above the board. Hints and shuffles are free, every free tile that has a match glows with a gold outline, the move count is always shown (even on Hard), and there's no time bonus to chase. Practice rounds don't change your best score, fastest clear, or win count — they're just for learning the board.</li>
+    </ol>
+    <div class="free-demo" aria-hidden="true">
+      <div class="tile free" aria-hidden="true"><span class="face"><span class="glyph" style="color:#b3392e">中</span><span class="lbl">Red Dragon</span></span></div>
+      <p><strong>Bright = free.</strong> This Red Dragon has nothing on top and its right side is open, so it can be picked up. Dimmed tiles are covered or boxed in — free them first.</p>
+    </div>
+    <h3>Quick tips</h3>
+    <ul>
+      <li>Free up the top layers and the long edges first — they block the most tiles.</li>
+      <li>If you see three identical free tiles, think about which pair to take: leave the one that unblocks more.</li>
+      <li>Flowers match any other flower, and seasons match any other season — save them for when you're stuck.</li>
+    </ul>
+    <div class="close-row"><button class="btn primary" data-close="ovHow">Start playing</button></div>
+  </div>
+</div>
+
+<!-- RULES -->
+<div class="overlay" id="ovRules" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="sheet">
+    <h2 id="rulesTitle">Rules</h2>
+    <h3>Objective</h3>
+    <p>Remove all tiles from the board by matching them in pairs. You win when the board is completely empty. If tiles remain but no free matching pair exists, the board is blocked — undo a move or shuffle the remaining tiles to continue.</p>
+    <h3>The free-tile rule</h3>
+    <p>A tile may be selected only when it is <strong>free</strong>:</p>
+    <ul>
+      <li>No other tile overlaps it from above, <em>and</em></li>
+      <li>It has no neighbouring tile on its left side <em>or</em> no neighbouring tile on its right side (at least one long side must be open).</li>
+    </ul>
+    <p>Both tiles of a pair must be free at the moment you match them. Blocked tiles are dimmed on the board and cannot be selected.</p>
+    <h3>What counts as a match</h3>
+    <ul>
+      <li><strong>Suits (Dots, Bamboo, Characters 1–9):</strong> both tiles must be the same suit <em>and</em> the same number.</li>
+      <li><strong>Winds (East, South, West, North)</strong> and <strong>Dragons (Red, Green, White):</strong> both tiles must be identical.</li>
+      <li><strong>Flowers:</strong> any flower tile matches any other flower tile.</li>
+      <li><strong>Seasons:</strong> any season tile matches any other season tile.</li>
+      <li>Flowers do <em>not</em> match seasons.</li>
+    </ul>
+    <h3>Difficulty</h3>
+    <p>Pick <strong>Easy</strong>, <strong>Normal</strong>, or <strong>Hard</strong> above the board — changing it starts a fresh deal, and your bests are kept separately for each difficulty. Difficulty changes what help costs and what a clear pays; the tiles, layouts, and free-tile rule never change.</p>
+    <table>
+      <tr><th></th><th>Easy</th><th>Normal</th><th>Hard</th></tr>
+      <tr><td>Hint</td><td>Free</td><td>−25</td><td>−50</td></tr>
+      <tr><td>Shuffle</td><td>Free</td><td>−50</td><td>−100</td></tr>
+      <tr><td>Clear bonus</td><td>+300</td><td>+500</td><td>+800</td></tr>
+      <tr><td>Time bonus</td><td>+2/sec under 15:00</td><td>+2/sec under 10:00</td><td>+3/sec under 7:00</td></tr>
+      <tr><td>Moves counter</td><td>Shown</td><td>Shown</td><td>Hidden</td></tr>
+    </table>
+    <h3>Scoring</h3>
+    <table>
+      <tr><th>Action</th><th>Points</th></tr>
+      <tr><td>Match a pair</td><td>+100</td></tr>
+      <tr><td>Clear the whole board (win bonus)</td><td>By difficulty — see above</td></tr>
+      <tr><td>Time bonus on a win</td><td>By difficulty — see above</td></tr>
+      <tr><td>Use a hint</td><td>By difficulty — see above</td></tr>
+      <tr><td>Shuffle remaining tiles</td><td>By difficulty — see above</td></tr>
+      <tr><td>Undo</td><td>Free — but the pair's 100 points are removed</td></tr>
+    </table>
+    <p>Your score never drops below zero. The timer starts on your first match and stops when the board is cleared.</p>
+    <h3>Deals &amp; shuffling</h3>
+    <p>Every deal is generated so that at least one complete solution exists. Shuffling rearranges only the faces of the tiles still on the board — tiles never change position or layer, and shuffling is allowed any number of times while tiles remain.</p>
+    <h3>Practice round</h3>
+    <p>Practice is a learning mode, not a scored game. It uses the same layouts, tiles, and free-tile rule, with extra help switched on:</p>
+    <ul>
+      <li>Hints and shuffles are <strong>free</strong> on every difficulty.</li>
+      <li>Free tiles that are part of an available match get a <strong>gold outline</strong>.</li>
+      <li>The <strong>moves counter is always shown</strong>, even on Hard.</li>
+      <li>Pairs still show +100 as you play so you can learn the scoring, but there is <strong>no clear bonus or time bonus</strong>, and the round is <strong>not recorded</strong> in your bests, fastest clear, games played, or boards cleared.</li>
+      <li>Switching between Practice round and Standard game starts a fresh deal.</li>
+    </ul>
+    <h3>Layouts</h3>
+    <ul>
+      <li><strong>Garden</strong> — 88 tiles, three layers, wide and forgiving.</li>
+      <li><strong>Fortress</strong> — 72 tiles with a hollow centre; the inner walls free up late.</li>
+      <li><strong>Bridge</strong> — 64 tiles, the shortest board — good for a quick game.</li>
+    </ul>
+    <div class="close-row"><button class="btn primary" data-close="ovRules">Got it</button></div>
+  </div>
+</div>
+
+<!-- FEEDBACK -->
+<div class="overlay" id="ovFeedback" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+  <div class="sheet">
+    <h2 id="fbTitle">Feedback</h2>
+    <p>Tell us what you think of Mahjong Solitaire — what worked, what didn't, or what you'd love to see next.</p>
+
+    <p class="fb-label" id="fbRatingLbl">Your rating</p>
+    <div class="fb-stars" role="group" aria-labelledby="fbRatingLbl">
+      <button type="button" class="fb-star" data-star="1" aria-pressed="false" aria-label="1 star">★</button>
+      <button type="button" class="fb-star" data-star="2" aria-pressed="false" aria-label="2 stars">★</button>
+      <button type="button" class="fb-star" data-star="3" aria-pressed="false" aria-label="3 stars">★</button>
+      <button type="button" class="fb-star" data-star="4" aria-pressed="false" aria-label="4 stars">★</button>
+      <button type="button" class="fb-star" data-star="5" aria-pressed="false" aria-label="5 stars">★</button>
+    </div>
+
+    <p class="fb-label" id="fbTagLbl">What's this about? <span style="text-transform:none; letter-spacing:0; font-weight:600">(optional)</span></p>
+    <div class="fb-tags" role="group" aria-labelledby="fbTagLbl">
+      <button type="button" class="fb-tag" data-fbtag="Bug" aria-pressed="false">Bug</button>
+      <button type="button" class="fb-tag" data-fbtag="Suggestion" aria-pressed="false">Suggestion</button>
+      <button type="button" class="fb-tag" data-fbtag="Other" aria-pressed="false">Other</button>
+    </div>
+
+    <label class="fb-label" for="fbText" style="display:block">Your comment</label>
+    <textarea class="fb-textarea" id="fbText" placeholder="What did you think? Anything confusing, broken, or missing?" maxlength="2000"></textarea>
+    <p class="fb-note">No personal info needed — please keep it clean. Feedback follows the same Terms &amp; Conditions as the games, and may be used to improve them. Saved on this device only.</p>
+
+    <div class="fb-thanks" id="fbThanks" role="status">Thanks! Your feedback has been saved. 💚</div>
+
+    <div class="fb-actions">
+      <button class="btn" data-close="ovFeedback">Cancel</button>
+      <button class="btn primary" id="btnFbSave">Save feedback</button>
+    </div>
+  </div>
+</div>
+
+<!-- WIN -->
+<div class="overlay" id="ovWin" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+  <div class="sheet">
+    <h2 id="winTitle">Board cleared! 🎉<span class="newbest" id="winBest" style="display:none">New best!</span></h2>
+    <p id="winText">You matched every pair.</p>
+    <div class="win-stats">
+      <div class="stat"><div class="k">Final score</div><div class="v" id="wScore">0</div></div>
+      <div class="stat"><div class="k">Time</div><div class="v" id="wTime">0:00</div></div>
+      <div class="stat"><div class="k">Hints used</div><div class="v" id="wHints">0</div></div>
+      <div class="stat"><div class="k">Shuffles used</div><div class="v" id="wShuffles">0</div></div>
+    </div>
+    <div class="close-row" style="justify-content:space-between">
+      <button class="btn" data-close="ovWin">Admire the empty board</button>
+      <button class="btn primary" id="btnAgain">Play again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var TILE_W = 52, TILE_H = 70;
+
+  /* ---------- Tile faces ---------- */
+  // match = matching group id; glyph/label/cls describe the face.
+  var FACES = [];
+  var suits = [
+    {id:'dot', name:'Dots', cls:'c-blue', glyphs:['➀','➁','➂','➃','➄','➅','➆','➇','➈']},
+    {id:'bam', name:'Bamboo', cls:'c-green', glyphs:['𝄋','𝄋','𝄋','𝄋','𝄋','𝄋','𝄋','𝄋','𝄋']},
+    {id:'chr', name:'Characters', cls:'c-red', glyphs:['一','二','三','四','五','六','七','八','九']}
+  ];
+  // Bamboo glyphs need to be distinct visually — use numbered bamboo-style marks:
+  suits[1].glyphs = ['🎍','🎍','🎍','🎍','🎍','🎍','🎍','🎍','🎍'];
+  suits.forEach(function(s){
+    for (var n=1;n<=9;n++){
+      FACES.push({match:s.id+'-'+n, glyph:s.glyphs[n-1], label:s.name+' '+n, num:n, cls:s.cls, suit:s.id});
+    }
+  });
+  [['east','東','East Wind','c-ink'],['south','南','South Wind','c-ink'],['west','西','West Wind','c-ink'],['north','北','North Wind','c-ink'],
+   ['dred','中','Red Dragon','c-red'],['dgrn','發','Green Dragon','c-green'],['dwht','□','White Dragon','c-blue']
+  ].forEach(function(h){ FACES.push({match:h[0], glyph:h[1], label:h[2], cls:h[3]}); });
+  var FLOWERS = [
+    {glyph:'🌸', label:'Plum Flower', cls:'c-red'},
+    {glyph:'🌺', label:'Orchid Flower', cls:'c-red'},
+    {glyph:'🌼', label:'Chrysanthemum', cls:'c-gold'},
+    {glyph:'🎋', label:'Bamboo Flower', cls:'c-green'}
+  ];
+  var SEASONS = [
+    {glyph:'🌱', label:'Spring', cls:'c-green'},
+    {glyph:'☀️', label:'Summer', cls:'c-gold'},
+    {glyph:'🍂', label:'Autumn', cls:'c-red'},
+    {glyph:'❄️', label:'Winter', cls:'c-blue'}
+  ];
+
+  function faceFor(match){
+    for (var i=0;i<FACES.length;i++) if (FACES[i].match===match) return FACES[i];
+    return FACES[0];
+  }
+
+  /* ---------- Layouts ---------- */
+  function P(x,y,z){ return {x:x,y:y,z:z}; }
+  var LAYOUTS = {
+    garden: function(){
+      var p=[], x, y;
+      for (y=0;y<6;y++) for (x=0;x<10;x++){
+        if ((x===0||x===9)&&(y===0||y===5)) continue;
+        p.push(P(x,y,0));
+      }
+      for (y=1;y<5;y++) for (x=2;x<8;x++) p.push(P(x,y,1));
+      for (y=2;y<4;y++) for (x=3;x<7;x++) p.push(P(x,y,2));
+      return p; // 56 + 24 + 8 = 88
+    },
+    fortress: function(){
+      var p=[], x, y;
+      for (y=0;y<5;y++) for (x=0;x<11;x++){
+        if ((x===0||x===10)&&(y===0||y===4)) continue;
+        if (x===5&&y===2) continue;
+        p.push(P(x,y,0));
+      }
+      for (y=1;y<4;y++) for (x=2;x<9;x++){
+        if (x===2&&y===1) continue;
+        p.push(P(x,y,1));
+      }
+      p.push(P(5,1,2)); p.push(P(5,3,2));
+      return p; // 50 + 20 + 2 = 72
+    },
+    bridge: function(){
+      var p=[], x, y;
+      for (y=0;y<4;y++) for (x=0;x<12;x++){
+        if ((x===0||x===11)&&(y===0||y===3)) continue;
+        p.push(P(x,y,0));
+      }
+      for (y=1;y<3;y++) for (x=2;x<10;x++) p.push(P(x,y,1));
+      p.push(P(5,1,2)); p.push(P(6,1,2)); p.push(P(5,2,2)); p.push(P(6,2,2));
+      return p; // 44 + 16 + 4 = 64
+    }
+  };
+
+  /* ---------- Difficulty ---------- */
+  var DIFFS = {
+    easy:   {label:'Easy',   hintCost:0,  shuffleCost:0,   winBonus:300, timeWindow:900, timeRate:2, hideMoves:false,
+             desc:'Relaxed — hints and shuffles are free, and the time bonus runs under 15:00. Clear bonus +300.'},
+    normal: {label:'Normal', hintCost:25, shuffleCost:50,  winBonus:500, timeWindow:600, timeRate:2, hideMoves:false,
+             desc:'The classic game — hints cost 25 pts, shuffles cost 50, and the time bonus runs under 10:00.'},
+    hard:   {label:'Hard',   hintCost:50, shuffleCost:100, winBonus:800, timeWindow:420, timeRate:3, hideMoves:true,
+             desc:'No safety net — hints cost 50 pts, shuffles cost 100, the move count is hidden, but a clear pays +800 and time bonus runs at +3/sec under 7:00.'}
+  };
+  var currentDiff = 'normal';
+  var currentMode = 'standard'; // 'standard' | 'practice'
+  function isPractice(){ return currentMode === 'practice'; }
+  function diff(){ return DIFFS[currentDiff]; }
+  // What actually applies this round: practice makes help free and always shows moves.
+  function playDiff(){
+    var d = diff();
+    if (!isPractice()) return d;
+    return {label:d.label, hintCost:0, shuffleCost:0, winBonus:0, timeWindow:0, timeRate:0, hideMoves:false, desc:d.desc};
+  }
+  function costText(c){ return c === 0 ? '(free)' : '(−' + c + ')'; }
+  function costNote(c){
+    if (isPractice()) return '(free in Practice)';
+    return c === 0 ? '(free on Easy)' : '(−' + c + ' points)';
+  }
+
+  /* ---------- Free-tile logic ---------- */
+  function isFree(t, remaining){
+    var i, o, covered=false, left=false, right=false;
+    for (i=0;i<remaining.length;i++){
+      o = remaining[i];
+      if (o===t) continue;
+      var dx = o.x - t.x, dy = o.y - t.y;
+      if (o.z > t.z && Math.abs(dx) < 1 && Math.abs(dy) < 1) covered = true;
+      if (o.z === t.z && Math.abs(dy) < 1){
+        if (dx === -1) left = true;
+        if (dx === 1) right = true;
+      }
+    }
+    return !covered && (!left || !right);
+  }
+
+  /* ---------- Solvable deal ---------- */
+  function buildPairFaces(pairCount){
+    // Normal faces: each may appear as up to 2 pairs (4 tiles), like a real set.
+    var pool = [];
+    FACES.forEach(function(f){ pool.push(f.match); pool.push(f.match); });
+    shuffleArr(pool);
+    var chosen = pool.slice(0, Math.max(0, pairCount-2));
+    while (chosen.length < Math.max(0, pairCount-2)){
+      chosen.push(FACES[Math.floor(Math.random()*FACES.length)].match);
+    }
+    var list = chosen.map(function(m){ return {match:m, face:faceFor(m)}; });
+    if (pairCount >= 1) { // one flower pair (two different flowers, same match group)
+      var f1 = FLOWERS[Math.floor(Math.random()*4)], f2;
+      do { f2 = FLOWERS[Math.floor(Math.random()*4)]; } while (f2===f1);
+      list.push({match:'flower', face:{glyph:f1.glyph,label:f1.label,cls:f1.cls}, face2:{glyph:f2.glyph,label:f2.label,cls:f2.cls}});
+    }
+    if (pairCount >= 2) { // one season pair
+      var s1 = SEASONS[Math.floor(Math.random()*4)], s2;
+      do { s2 = SEASONS[Math.floor(Math.random()*4)]; } while (s2===s1);
+      list.push({match:'season', face:{glyph:s1.glyph,label:s1.label,cls:s1.cls}, face2:{glyph:s2.glyph,label:s2.label,cls:s2.cls}});
+    }
+    shuffleArr(list);
+    return list;
+  }
+
+  function deal(positions){
+    var pairFaces = buildPairFaces(positions.length/2);
+    for (var attempt=0; attempt<60; attempt++){
+      var pool = positions.slice();
+      var assign = new Array(positions.length);
+      var ok = true;
+      var pi = 0;
+      while (pool.length >= 2){
+        var free = pool.filter(function(t){ return isFree(t, pool); });
+        if (free.length < 2){ ok = false; break; }
+        var a = free[Math.floor(Math.random()*free.length)];
+        var b;
+        do { b = free[Math.floor(Math.random()*free.length)]; } while (b===a);
+        var pf = pairFaces[pi++];
+        var ia = positions.indexOf(a), ib = positions.indexOf(b);
+        assign[ia] = pf.face;
+        assign[ib] = pf.face2 || pf.face;
+        // store match id on the face copies
+        assign[ia] = Object.assign({}, assign[ia], {match:pf.match});
+        assign[ib] = Object.assign({}, assign[ib], {match:pf.match});
+        pool.splice(pool.indexOf(a),1);
+        pool.splice(pool.indexOf(b),1);
+      }
+      if (ok && pool.length===0) return assign;
+    }
+    // Fallback (extremely unlikely): simple paired assignment.
+    var faces = buildPairFaces(positions.length/2);
+    var out = [];
+    faces.forEach(function(pf){
+      out.push(Object.assign({}, pf.face, {match:pf.match}));
+      out.push(Object.assign({}, pf.face2 || pf.face, {match:pf.match}));
+    });
+    return out;
+  }
+
+  function shuffleArr(a){
+    for (var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; }
+    return a;
+  }
+
+  /* ---------- Bests (localStorage, kept per difficulty) ---------- */
+  var BEST_KEY = 'mahjongSolitaireBestsV2';
+  function blankBests(){ return {bestScore:0, bestTime:0, wins:0, played:0}; }
+  var bestsByDiff = {easy:blankBests(), normal:blankBests(), hard:blankBests()};
+  try {
+    var raw2 = localStorage.getItem(BEST_KEY);
+    if (raw2){
+      var parsed = JSON.parse(raw2);
+      ['easy','normal','hard'].forEach(function(k){ if (parsed[k]) bestsByDiff[k] = Object.assign(blankBests(), parsed[k]); });
+    } else {
+      // Migrate pre-difficulty bests into Normal, where they were earned.
+      var raw1 = localStorage.getItem('mahjongSolitaireBestsV1');
+      if (raw1) bestsByDiff.normal = Object.assign(blankBests(), JSON.parse(raw1));
+    }
+  } catch(e){}
+  function bests(){ return bestsByDiff[currentDiff]; }
+  function saveBests(){ try { localStorage.setItem(BEST_KEY, JSON.stringify(bestsByDiff)); } catch(e){} }
+  function renderBests(){
+    var b = bests();
+    document.getElementById('bDiff').textContent = diff().label;
+    document.getElementById('bScore').textContent = b.bestScore ? b.bestScore.toLocaleString() : '—';
+    document.getElementById('bTime').textContent = b.bestTime ? fmtTime(b.bestTime) : '—';
+    document.getElementById('bWins').textContent = b.wins;
+    document.getElementById('bPlayed').textContent = b.played;
+  }
+
+  /* ---------- Game state ---------- */
+  var boardEl = document.getElementById('board');
+  var scaleEl = document.getElementById('boardScale');
+  var statusEl = document.getElementById('statusLine');
+  var state = null;
+
+  function fmtTime(s){ var m=Math.floor(s/60), r=s%60; return m+':'+(r<10?'0':'')+r; }
+
+  function newGame(layoutName, diffName, modeName){
+    if (diffName && DIFFS[diffName]) currentDiff = diffName;
+    if (modeName === 'practice' || modeName === 'standard') currentMode = modeName;
+    var positions = LAYOUTS[layoutName]();
+    var faces = deal(positions);
+    state = {
+      layout: layoutName,
+      difficulty: currentDiff,
+      mode: currentMode,
+      practice: isPractice(),
+      tiles: positions.map(function(p,i){
+        return {x:p.x, y:p.y, z:p.z, face:faces[i], removed:false, el:null};
+      }),
+      total: positions.length,
+      selected: null,
+      score: 0, pairs: 0, hints: 0, shuffles: 0,
+      history: [],
+      seconds: 0, started: false, timer: null, over: false
+    };
+    if (!state.practice){ bests().played++; saveBests(); }
+    renderBests();
+    document.getElementById('diffDesc').textContent = diff().desc;
+    document.getElementById('modeDesc').textContent = state.practice
+      ? 'Just for learning — free help, gold outlines on matching free tiles, and nothing is saved to your bests.'
+      : 'The full game — timer, scoring, and your bests all count.';
+    document.getElementById('practiceBanner').classList.toggle('show', state.practice);
+    document.getElementById('timeLbl').textContent = state.practice ? 'Time · practice' : 'Time';
+    document.getElementById('scoreLbl').textContent = state.practice ? 'Score · practice' : 'Score';
+    document.getElementById('hintCostLbl').textContent = costText(playDiff().hintCost);
+    document.getElementById('shuffleCostLbl').textContent = costText(playDiff().shuffleCost);
+    buildBoard();
+    refresh();
+    setStatus(state.practice
+      ? '<strong>Practice round.</strong> Free tiles with a gold outline have a match waiting — tap one, then tap its partner. Hints and shuffles are free, take as long as you like.'
+      : 'Pick a free tile — free tiles are brighter and lift when you hover. Match it with an identical free tile. <strong>' + diff().label + '</strong> difficulty.');
+    document.getElementById('stTime').textContent = '0:00';
+  }
+
+  function buildBoard(){
+    boardEl.innerHTML = '';
+    var maxX = 0, maxY = 0;
+    state.tiles.forEach(function(t){ if (t.x>maxX) maxX=t.x; if (t.y>maxY) maxY=t.y; });
+    var W = (maxX+1)*TILE_W + 18, H = (maxY+1)*TILE_H + 18;
+    boardEl.style.width = W+'px'; boardEl.style.height = H+'px';
+    boardEl.dataset.w = W; boardEl.dataset.h = H;
+    state.tiles.forEach(function(t){
+      var b = document.createElement('div');
+      b.className = 'tile ' + t.face.cls;
+      b.style.left = (9 + t.x*TILE_W - t.z*3) + 'px';
+      b.style.top = (9 + t.y*TILE_H - t.z*3) + 'px';
+      b.style.zIndex = t.z*20 + t.y;
+      b.setAttribute('aria-label', t.face.label + (t.face.num ? '' : ''));
+      var label = t.face.label;
+      if (t.face.suit === 'bam') label = 'Bamboo ' + t.face.num;
+      if (t.face.suit === 'dot') label = 'Dots ' + t.face.num;
+      if (t.face.suit === 'chr') label = 'Char ' + t.face.num;
+      var glyphHtml;
+      if (t.face.suit === 'bam'){
+        glyphHtml = '<span class="glyph" aria-hidden="true" style="font-size:19px;letter-spacing:-2px;color:#1d7a3f">' + '❘'.repeat(Math.min(t.face.num,5)) + '<br>' + '❘'.repeat(Math.max(0,t.face.num-5)) + '</span>';
+        if (t.face.num === 1) glyphHtml = '<span class="glyph" aria-hidden="true">🦚</span>';
+      } else if (t.face.suit === 'dot'){
+        var dots = '';
+        for (var d=0; d<t.face.num; d++) dots += '●';
+        glyphHtml = '<span class="glyph" aria-hidden="true" style="font-size:13px;line-height:1.25;max-width:44px;word-break:break-all">' + dots + '</span>';
+      } else if (t.face.suit === 'chr'){
+        glyphHtml = '<span class="glyph" aria-hidden="true" style="font-size:22px;line-height:1">' + t.face.glyph + '<span style="color:#b3392e">萬</span></span>';
+      } else {
+        glyphHtml = '<span class="glyph" aria-hidden="true">' + t.face.glyph + '</span>';
+      }
+      b.innerHTML = '<span class="face">' + glyphHtml + '<span class="lbl">' + label + '</span></span>';
+      b.addEventListener('click', function(){ onTile(t); });
+      b.addEventListener('keydown', function(e){
+        if ((e.key === 'Enter' || e.key === ' ') && b.getAttribute('role') === 'button'){ e.preventDefault(); onTile(t); }
+      });
+      t.el = b;
+      boardEl.appendChild(b);
+    });
+    fitBoard();
+  }
+
+  function fitBoard(){
+    var shell = scaleEl.parentElement;
+    var avail = shell.clientWidth - 16;
+    var W = parseFloat(boardEl.dataset.w || 600), H = parseFloat(boardEl.dataset.h || 440);
+    var s = Math.min(1, avail / W);
+    boardEl.style.transform = 'scale(' + s + ')';
+    scaleEl.style.width = (W*s) + 'px';
+    scaleEl.style.height = (H*s) + 'px';
+  }
+  window.addEventListener('resize', fitBoard);
+
+  function remainingTiles(){ return state.tiles.filter(function(t){ return !t.removed; }); }
+
+  function findMoves(){
+    var rem = remainingTiles();
+    var free = rem.filter(function(t){ return isFree(t, rem); });
+    var moves = [];
+    for (var i=0;i<free.length;i++) for (var j=i+1;j<free.length;j++){
+      if (free[i].face.match === free[j].face.match) moves.push([free[i], free[j]]);
+    }
+    return moves;
+  }
+
+  function refresh(){
+    var rem = remainingTiles();
+    var earlyMoves = state.over ? [] : findMoves();
+    var matchSet = {};
+    if (state.practice) earlyMoves.forEach(function(m){ matchSet[state.tiles.indexOf(m[0])] = true; matchSet[state.tiles.indexOf(m[1])] = true; });
+    state.tiles.forEach(function(t, ti){
+      if (!t.el) return;
+      if (t.removed){ t.el.style.display = 'none'; return; }
+      t.el.style.display = '';
+      var free = isFree(t, rem);
+      t.el.classList.toggle('free', free);
+      t.el.classList.toggle('practice-match', !!(state.practice && free && matchSet[ti]));
+      t.el.classList.toggle('selected', state.selected === t);
+      // Covered/stacked tiles are display-only until uncovered (the covering
+      // tile physically sits on top of them); free tiles become buttons.
+      t.el.setAttribute('role', free ? 'button' : 'img');
+      t.el.setAttribute('tabindex', free ? '0' : '-1');
+      t.el.setAttribute('aria-label', t.face.label + (free ? ', free tile' : ', blocked tile'));
+    });
+    var left = rem.length;
+    document.getElementById('stLeft').textContent = left;
+    document.getElementById('stScore').textContent = state.score.toLocaleString();
+    document.getElementById('stPairs').textContent = state.pairs;
+    document.getElementById('progFill').style.width = (state.total ? ((state.total-left)/state.total*100) : 0) + '%';
+    document.getElementById('btnUndo').disabled = state.history.length === 0;
+    var moves = earlyMoves;
+    document.getElementById('stMoves').textContent = state.over ? '0' : (playDiff().hideMoves ? '?' : moves.length);
+    document.getElementById('btnHint').disabled = state.over || moves.length === 0;
+    document.getElementById('btnShuffle').disabled = state.over || left === 0;
+    if (!state.over && left > 0 && moves.length === 0){
+      setStatus('<span class="warn">No moves left.</span> The remaining tiles don\'t include a free matching pair — <strong>Undo</strong> your last pair or <strong>Shuffle</strong> the tiles to keep going.');
+    }
+    return moves;
+  }
+
+  function setStatus(html){ statusEl.innerHTML = html; }
+
+  function startTimer(){
+    if (state.started) return;
+    state.started = true;
+    state.timer = setInterval(function(){
+      state.seconds++;
+      document.getElementById('stTime').textContent = fmtTime(state.seconds);
+    }, 1000);
+  }
+  function stopTimer(){ if (state.timer){ clearInterval(state.timer); state.timer = null; } }
+
+  function onTile(t){
+    if (state.over || t.removed) return;
+    var rem = remainingTiles();
+    if (!isFree(t, rem)) return;
+    if (!state.selected){
+      state.selected = t; refresh(); return;
+    }
+    if (state.selected === t){ state.selected = null; refresh(); return; }
+    if (state.selected.face.match === t.face.match){
+      var a = state.selected, b = t;
+      state.selected = null;
+      startTimer();
+      a.el.classList.add('removing'); b.el.classList.add('removing');
+      state.history.push([a, b]);
+      setTimeout(function(){
+        a.removed = true; b.removed = true;
+        a.el.classList.remove('removing'); b.el.classList.remove('removing');
+        state.pairs++;
+        state.score += 100;
+        var moves = refresh();
+        if (remainingTiles().length === 0){ win(); return; }
+        if (moves.length > 0) setStatus('<strong>Matched!</strong> ' + a.face.label + ' pair removed — +100 points.' + (playDiff().hideMoves ? '' : ' ' + moves.length + (moves.length===1 ? ' move' : ' moves') + ' available.'));
+      }, 180);
+    } else {
+      state.selected = t;
+      setStatus('Those don\'t match — <strong>' + t.face.label + '</strong> is now selected. Find another free <strong>' + t.face.label + '</strong> tile.');
+      refresh();
+    }
+  }
+
+  function win(){
+    state.over = true;
+    stopTimer();
+    var d = diff();
+    var isPracticeWin = !!state.practice;
+    var timeBonus = isPracticeWin ? 0 : Math.max(0, d.timeWindow - state.seconds) * d.timeRate;
+    if (!isPracticeWin) state.score += d.winBonus + timeBonus;
+    document.getElementById('stScore').textContent = state.score.toLocaleString();
+    var isBest = false;
+    if (!isPracticeWin){
+      var b = bests();
+      if (state.score > b.bestScore){ b.bestScore = state.score; isBest = true; }
+      if (!b.bestTime || state.seconds < b.bestTime){ b.bestTime = state.seconds; isBest = true; }
+      b.wins++; saveBests(); renderBests();
+    }
+    document.getElementById('winTitle').firstChild.textContent = isPracticeWin ? 'Practice board cleared! 🧘' : 'Board cleared! 🎉';
+    document.getElementById('btnAgain').textContent = isPracticeWin ? 'Another practice round' : 'Play again';
+    document.getElementById('wScore').textContent = state.score.toLocaleString();
+    document.getElementById('wTime').textContent = fmtTime(state.seconds);
+    document.getElementById('wHints').textContent = state.hints;
+    document.getElementById('wShuffles').textContent = state.shuffles;
+    document.getElementById('winText').textContent = isPracticeWin
+      ? 'You matched every pair on the ' + state.layout.charAt(0).toUpperCase()+state.layout.slice(1) + ' board in Practice on ' + d.label + '. Nice work — this practice clear wasn\'t added to your bests. Ready to try it for real in Standard game?'
+      : 'You matched every pair on the ' + state.layout.charAt(0).toUpperCase()+state.layout.slice(1) + ' board on ' + d.label + ' — including a +' + d.winBonus + ' clear bonus and +' + timeBonus + ' time bonus.';
+    document.getElementById('winBest').style.display = isBest ? '' : 'none';
+    refresh();
+    openOverlay('ovWin');
+  }
+
+  /* ---------- Controls ---------- */
+  document.getElementById('btnNew').addEventListener('click', function(){ stopTimer(); newGame(state.layout); });
+  document.getElementById('btnAgain').addEventListener('click', function(){ closeOverlay('ovWin'); stopTimer(); newGame(state.layout); });
+  document.getElementById('btnUndo').addEventListener('click', function(){
+    var last = state.history.pop();
+    if (!last) return;
+    last[0].removed = false; last[1].removed = false;
+    state.pairs--; state.score = Math.max(0, state.score - 100);
+    state.selected = null;
+    var moves = refresh();
+    setStatus('<strong>Undone.</strong> The ' + last[0].face.label + ' pair is back on the board.' + (playDiff().hideMoves ? '' : ' ' + moves.length + (moves.length===1 ? ' move' : ' moves') + ' available.'));
+  });
+  document.getElementById('btnHint').addEventListener('click', function(){
+    var moves = findMoves();
+    if (!moves.length) return;
+    state.hints++;
+    state.score = Math.max(0, state.score - playDiff().hintCost);
+    var m = moves[Math.floor(Math.random()*moves.length)];
+    refresh();
+    [m[0], m[1]].forEach(function(t){ t.el.classList.add('hinted'); setTimeout(function(){ t.el.classList.remove('hinted'); }, 1700); });
+    setStatus('<strong>Hint:</strong> the two flashing <strong>' + m[0].face.label + '</strong> tiles match. ' + costNote(playDiff().hintCost));
+  });
+  document.getElementById('btnShuffle').addEventListener('click', function(){
+    var rem = remainingTiles();
+    if (rem.length < 2) return;
+    state.shuffles++;
+    state.score = Math.max(0, state.score - playDiff().shuffleCost);
+    state.selected = null;
+    for (var attempt=0; attempt<12; attempt++){
+      var faces = shuffleArr(rem.map(function(t){ return t.face; }));
+      rem.forEach(function(t, i){ t.face = faces[i]; });
+      if (findMoves().length > 0) break;
+    }
+    // Re-render faces in place
+    rem.forEach(function(t){
+      var b = t.el;
+      b.className = 'tile ' + t.face.cls;
+      var label = t.face.label;
+      if (t.face.suit === 'chr') label = 'Char ' + t.face.num;
+      var glyphHtml;
+      if (t.face.suit === 'bam'){
+        glyphHtml = t.face.num === 1 ? '<span class="glyph" aria-hidden="true">🦚</span>'
+          : '<span class="glyph" aria-hidden="true" style="font-size:19px;letter-spacing:-2px;color:#1d7a3f">' + '❘'.repeat(Math.min(t.face.num,5)) + '<br>' + '❘'.repeat(Math.max(0,t.face.num-5)) + '</span>';
+      } else if (t.face.suit === 'dot'){
+        var dots=''; for (var d=0; d<t.face.num; d++) dots += '●';
+        glyphHtml = '<span class="glyph" aria-hidden="true" style="font-size:13px;line-height:1.25;max-width:44px;word-break:break-all">' + dots + '</span>';
+      } else if (t.face.suit === 'chr'){
+        glyphHtml = '<span class="glyph" aria-hidden="true" style="font-size:22px;line-height:1">' + t.face.glyph + '<span style="color:#b3392e">萬</span></span>';
+      } else {
+        glyphHtml = '<span class="glyph" aria-hidden="true">' + t.face.glyph + '</span>';
+      }
+      b.innerHTML = '<span class="face">' + glyphHtml + '<span class="lbl">' + label + '</span></span>';
+    });
+    var moves = refresh();
+    setStatus('<strong>Shuffled.</strong> The remaining tiles have new faces. ' + costNote(playDiff().shuffleCost) + (playDiff().hideMoves ? '' : ' ' + moves.length + (moves.length===1 ? ' move' : ' moves') + ' available.'));
+  });
+  document.getElementById('btnMoves').addEventListener('click', function(){
+    if (playDiff().hideMoves){
+      setStatus('<strong>Hard difficulty:</strong> the move count stays hidden — trust your eyes, or use a <strong>Hint</strong> to reveal one pair.');
+      return;
+    }
+    var moves = findMoves();
+    setStatus(moves.length ? 'There ' + (moves.length===1 ? 'is <strong>1 move</strong>' : 'are <strong>' + moves.length + ' moves</strong>') + ' available right now. Tap <strong>Hint</strong> to see one of them.' : '<span class="warn">No moves available</span> — undo or shuffle to continue.');
+  });
+  document.querySelectorAll('[data-layout]').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      document.querySelectorAll('[data-layout]').forEach(function(c){ c.setAttribute('aria-pressed','false'); });
+      chip.setAttribute('aria-pressed','true');
+      stopTimer();
+      newGame(chip.dataset.layout);
+    });
+  });
+  document.querySelectorAll('[data-diff]').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      if (chip.dataset.diff === currentDiff && state) return;
+      document.querySelectorAll('[data-diff]').forEach(function(c){ c.setAttribute('aria-pressed','false'); });
+      chip.setAttribute('aria-pressed','true');
+      stopTimer();
+      newGame(state ? state.layout : 'garden', chip.dataset.diff);
+    });
+  });
+  document.querySelectorAll('[data-mode]').forEach(function(chip){
+    chip.addEventListener('click', function(){
+      if (chip.dataset.mode === currentMode && state) return;
+      document.querySelectorAll('[data-mode]').forEach(function(c){ c.setAttribute('aria-pressed','false'); });
+      chip.setAttribute('aria-pressed','true');
+      stopTimer();
+      newGame(state ? state.layout : 'garden', null, chip.dataset.mode);
+    });
+  });
+  document.getElementById('hintDismiss').addEventListener('click', function(){
+    document.getElementById('hintbar').style.display = 'none';
+  });
+
+  /* ---------- Overlays ---------- */
+  function openOverlay(id){ document.getElementById(id).classList.add('open'); }
+  function closeOverlay(id){ document.getElementById(id).classList.remove('open'); }
+  document.getElementById('btnHow').addEventListener('click', function(){ openOverlay('ovHow'); });
+  document.getElementById('btnRules').addEventListener('click', function(){ openOverlay('ovRules'); });
+  document.querySelectorAll('[data-close]').forEach(function(b){
+    b.addEventListener('click', function(){ closeOverlay(b.dataset.close); });
+  });
+  document.querySelectorAll('.overlay').forEach(function(ov){
+    ov.addEventListener('click', function(e){ if (e.target === ov) ov.classList.remove('open'); });
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape') document.querySelectorAll('.overlay.open').forEach(function(o){ o.classList.remove('open'); });
+  });
+
+  /* ---------- Feedback (saved locally only, no network) ---------- */
+  var FEEDBACK_KEY = 'holos-arcade-feedback';
+  var fbRating = 0;
+  var fbTag = '';
+  var fbStars = document.querySelectorAll('[data-star]');
+  var fbTags = document.querySelectorAll('[data-fbtag]');
+  function renderFbStars(){
+    fbStars.forEach(function(s){
+      var on = parseInt(s.dataset.star, 10) <= fbRating;
+      s.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+  fbStars.forEach(function(s){
+    s.addEventListener('click', function(){
+      var v = parseInt(s.dataset.star, 10);
+      fbRating = (v === fbRating) ? 0 : v;
+      renderFbStars();
+    });
+  });
+  fbTags.forEach(function(t){
+    t.addEventListener('click', function(){
+      if (fbTag === t.dataset.fbtag){
+        fbTag = '';
+        t.setAttribute('aria-pressed', 'false');
+      } else {
+        fbTag = t.dataset.fbtag;
+        fbTags.forEach(function(o){ o.setAttribute('aria-pressed', o === t ? 'true' : 'false'); });
+      }
+    });
+  });
+  document.getElementById('btnFeedback').addEventListener('click', function(){
+    document.getElementById('fbThanks').classList.remove('show');
+    document.getElementById('btnFbSave').disabled = false;
+    openOverlay('ovFeedback');
+  });
+  document.getElementById('btnFbSave').addEventListener('click', function(){
+    var text = document.getElementById('fbText').value.trim();
+    var record = {
+      game: 'mahjong-solitaire',
+      rating: fbRating,
+      text: text,
+      tag: fbTag,
+      mode: state ? state.mode : currentMode,
+      layout: state ? state.layout : null,
+      difficulty: state ? state.difficulty : currentDiff,
+      score: state ? state.score : null,
+      pairs: state ? state.pairs : null,
+      tilesLeft: state ? remainingTiles().length : null,
+      hints: state ? state.hints : null,
+      shuffles: state ? state.shuffles : null,
+      seconds: state ? state.seconds : null,
+      timestamp: new Date().toISOString()
+    };
+    try {
+      var arr = [];
+      var rawFb = localStorage.getItem(FEEDBACK_KEY);
+      if (rawFb){
+        var parsedFb = JSON.parse(rawFb);
+        if (Array.isArray(parsedFb)) arr = parsedFb;
+      }
+      arr.push(record);
+      localStorage.setItem(FEEDBACK_KEY, JSON.stringify(arr));
+    } catch(e){}
+    var thanks = document.getElementById('fbThanks');
+    thanks.classList.add('show');
+    document.getElementById('btnFbSave').disabled = true;
+    // Reset the form for next time and close shortly after the thanks shows.
+    fbRating = 0; fbTag = '';
+    renderFbStars();
+    fbTags.forEach(function(o){ o.setAttribute('aria-pressed', 'false'); });
+    document.getElementById('fbText').value = '';
+    setTimeout(function(){ closeOverlay('ovFeedback'); }, 1600);
+  });
+
+  renderBests();
+  newGame('garden');
+})();
+</script>
+</body>
+</html>

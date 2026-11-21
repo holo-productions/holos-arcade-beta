@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Tempo Trainer</title>
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2rem; }
+      :root {
+        --bg: #f4f1ea; --bg-accent: #e9e2d2; --surface: #fffdf7;
+        --ink: #1d1a14; --ink-soft: #5c5546; --line: #d8d0bd;
+        --accent: #6d28d9; --accent-ink: #ffffff;
+        --good: #2fa84f; --warn: #e08a00; --bad: #d93a2b;
+        --shadow: 0 18px 40px rgba(29, 26, 20, 0.18);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #14120e; --bg-accent: #1d1a14; --surface: #201d17;
+          --ink: #f2ecdd; --ink-soft: #b3a98f; --line: #3a352a;
+          --accent: #a78bfa; --accent-ink: #1d1a14;
+          --shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: radial-gradient(1100px 500px at 85% -10%, var(--bg-accent), transparent 60%), var(--bg);
+        color: var(--ink); min-height: 100vh;
+      }
+      .wrap { max-width: 560px; margin: 0 auto; padding: 18px 16px 40px; }
+      .topbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+      .topbar .spacer { flex: 1; }
+      .btn {
+        font: inherit; font-weight: 700; font-size: 0.9rem;
+        border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+        border-radius: 999px; padding: 8px 16px; cursor: pointer;
+        min-height: 44px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
+      }
+      .btn:hover { border-color: var(--ink-soft); }
+      .btn:focus-visible, .seg button:focus-visible, #tapPad:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+      .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+      .btn.big { font-size: 1.05rem; padding: 12px 28px; min-height: 52px; }
+      .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+      h1 { font-size: 1.6rem; margin: 0 0 4px; }
+      .tagline { color: var(--ink-soft); margin: 0 0 16px; font-size: 0.95rem; }
+      .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+      .stat { background: var(--surface); border: 1.5px solid var(--line); border-radius: 14px; padding: 8px 6px; text-align: center; }
+      .stat .num { font-weight: 800; font-size: 1.3rem; line-height: 1.1; display: block; }
+      .stat .lbl { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+      .mode-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+      .mode-lbl { font-weight: 700; font-size: 0.9rem; color: var(--ink-soft); }
+      .seg { display: inline-flex; background: var(--surface); border: 1.5px solid var(--line); border-radius: 999px; padding: 3px; }
+      .seg button { font: inherit; font-weight: 700; font-size: 0.88rem; border: 0; background: transparent; color: var(--ink-soft); border-radius: 999px; padding: 6px 18px; cursor: pointer; min-height: 40px; }
+      .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+      .seg button:disabled { opacity: 0.45; cursor: not-allowed; }
+      .mode-note { font-size: 0.82rem; color: var(--ink-soft); flex-basis: 100%; margin: 0; }
+      .stage { background: var(--surface); border: 1.5px solid var(--line); border-radius: 18px; padding: 18px; text-align: center; margin-bottom: 14px; box-shadow: var(--shadow); }
+      .beat-dot { width: 72px; height: 72px; border-radius: 50%; margin: 6px auto 10px; background: var(--line); transition: transform 60ms ease, background 60ms ease; }
+      .beat-dot.pulse { background: var(--accent); transform: scale(1.18); }
+      .beat-dot.tap-pulse { background: var(--good); transform: scale(1.18); }
+      .target-bpm { font-size: 2rem; font-weight: 800; margin: 2px 0; }
+      .phase-line { color: var(--ink-soft); font-size: 0.95rem; min-height: 1.4em; margin: 4px 0 0; }
+      #tapPad {
+        width: 100%; min-height: 150px; border-radius: 18px; margin-top: 12px;
+        font: inherit; font-size: 1.4rem; font-weight: 800; letter-spacing: 0.04em;
+        border: 2px solid var(--line); background: var(--bg-accent); color: var(--ink);
+        cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; user-select: none;
+      }
+      #tapPad.live { border-color: var(--accent); background: var(--accent); color: var(--accent-ink); }
+      #tapPad:disabled { opacity: 0.55; cursor: not-allowed; }
+      .tap-count { font-size: 0.9rem; color: var(--ink-soft); margin-top: 8px; min-height: 1.3em; }
+      .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+      .practice-badge { display: none; margin: 0 auto 8px; padding: 4px 14px; border-radius: 999px; border: 1.5px solid var(--line); background: var(--bg-accent); color: var(--ink-soft); font-size: 0.8rem; font-weight: 700; letter-spacing: 0.03em; }
+      .practice-badge.show { display: inline-block; }
+      .result { background: var(--surface); border: 1.5px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 14px; display: none; }
+      .result.show { display: block; }
+      .result h2 { margin: 0 0 8px; font-size: 1.25rem; }
+      .result .score-big { font-size: 2.4rem; font-weight: 800; line-height: 1; }
+      .result table { width: 100%; border-collapse: collapse; font-size: 0.92rem; margin-top: 8px; }
+      .result td { padding: 4px 2px; border-top: 1px solid var(--line); }
+      .result td:last-child { text-align: right; font-weight: 700; }
+      .verdict { font-weight: 700; margin-top: 8px; }
+      .verdict.good { color: var(--good); } .verdict.warn { color: var(--warn); } .verdict.bad { color: var(--bad); }
+      .newbest { display: none; font-weight: 800; color: var(--accent); margin-bottom: 6px; }
+      .newbest.show { display: block; }
+      .hint { font-size: 0.82rem; color: var(--ink-soft); text-align: center; }
+      footer { margin-top: 22px; padding-top: 14px; border-top: 1.5px solid var(--line); text-align: center; font-size: 0.88rem; color: var(--ink-soft); }
+      footer a { color: var(--accent); font-weight: 700; }
+      .overlay { position: fixed; inset: 0; z-index: 9990; display: none; align-items: flex-start; justify-content: center; background: rgba(0,0,0,0.55); padding: 16px; overflow-y: auto; }
+      .overlay.open { display: flex; }
+      .sheet { background: var(--surface); color: var(--ink); border-radius: 16px; max-width: 520px; width: 100%; padding: 20px; margin: auto 0; }
+      .sheet h2 { margin-top: 0; } .sheet h3 { margin-bottom: 6px; }
+      .sheet li { margin-bottom: 6px; }
+      .close-row { text-align: center; margin-top: 16px; }
+      @media (prefers-reduced-motion: reduce) { .beat-dot { transition: none; } }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <nav class="topbar" aria-label="Game options">
+        <a class="btn" href="../games-hub/">&larr; Arcade</a>
+        <span class="spacer"></span>
+        <button class="btn" id="btnHow" type="button">How to play</button>
+        <button class="btn" id="btnRules" type="button">Rules</button>
+        <button class="btn" id="btnSound" type="button" aria-pressed="true" aria-label="Toggle sound">&#128266;</button>
+      </nav>
+
+      <h1>Tempo Trainer</h1>
+      <p class="tagline">Hear the beat. The metronome stops. Keep tapping at the same tempo &mdash; how little do you drift?</p>
+
+      <div class="stats" aria-label="Scoreboard">
+        <div class="stat"><span class="num" id="statRound">&ndash;</span><span class="lbl">Round</span></div>
+        <div class="stat"><span class="num" id="statScore">0</span><span class="lbl">Score</span></div>
+        <div class="stat"><span class="num" id="statBest">0</span><span class="lbl">Best score</span></div>
+        <div class="stat"><span class="num" id="statTarget">&ndash;</span><span class="lbl">Target BPM</span></div>
+      </div>
+
+      <div class="mode-row">
+        <span class="mode-lbl" id="diffLbl">Difficulty</span>
+        <div class="seg" role="group" aria-labelledby="diffLbl">
+          <button type="button" id="diffEasy" aria-pressed="false">Easy</button>
+          <button type="button" id="diffNormal" aria-pressed="true">Normal</button>
+          <button type="button" id="diffHard" aria-pressed="false">Hard</button>
+        </div>
+        <p class="mode-note" id="diffNote">Normal: 80&ndash;120 BPM, hear 5 beats, tap 10 beats.</p>
+      </div>
+
+      <div class="stage">
+        <span class="practice-badge" id="practiceBadge">Practice round &mdash; no score kept, no pressure</span>
+        <div class="beat-dot" id="beatDot" aria-hidden="true"></div>
+        <p class="target-bpm" id="targetBpm">&ndash; BPM</p>
+        <p class="phase-line" id="phaseLine" role="status" aria-live="polite">Press Start, listen to the tempo, then keep it going on your own &mdash; or warm up first with a Practice round.</p>
+        <button id="tapPad" type="button" disabled>TAP</button>
+        <p class="tap-count" id="tapCount"></p>
+      </div>
+
+      <div class="controls">
+        <button class="btn primary big" id="btnStart" type="button">Start game</button>
+        <button class="btn big" id="btnPractice" type="button">Practice round</button>
+        <button class="btn big" id="btnNext" type="button" style="display:none">Next round</button>
+      </div>
+
+      <div class="result" id="resultBox" role="alert">
+        <span class="newbest" id="newBest">&#9733; New best score &#9733;</span>
+        <h2 id="resultTitle">Round result</h2>
+        <p class="score-big" id="resultScore">0</p>
+        <table>
+          <tr><td>Target tempo</td><td id="rTarget">&ndash;</td></tr>
+          <tr><td>Your average tempo</td><td id="rYours">&ndash;</td></tr>
+          <tr><td>Drift (average error)</td><td id="rDrift">&ndash;</td></tr>
+          <tr><td>Stability (tap-to-tap wobble)</td><td id="rStability">&ndash;</td></tr>
+          <tr><td id="rTotalLbl">Game total so far</td><td id="rTotal">&ndash;</td></tr>
+        </table>
+        <p class="verdict" id="rVerdict"></p>
+      </div>
+
+      <p class="hint">Tip: you can also tap with the <strong>Spacebar</strong> on a keyboard. All sounds are synthesized live &mdash; no recordings.</p>
+
+      <footer>
+        <p>More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener">Ridiculously Fit and Fed</a></p>
+        <p>Holo&rsquo;s Arcade</p>
+      </footer>
+    </div>
+
+    <!-- How to play (opt-in tutorial) -->
+    <div class="overlay" id="howOverlay" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+      <div class="sheet">
+        <h2 id="howTitle">How to play</h2>
+        <p>Tempo Trainer tests your inner metronome. You hear a tempo, it stops, and you have to keep it alive with your taps.</p>
+        <ol>
+          <li>Pick a <strong>difficulty</strong>, then press <strong>Start game</strong>.</li>
+          <li><strong>Listen:</strong> the metronome clicks at the target tempo for a few beats. Count along in your head &mdash; &ldquo;1, 2, 3, 4&rdquo;.</li>
+          <li><strong>Tap:</strong> the clicks stop and the big TAP pad lights up. Keep tapping at exactly the same speed until you&rsquo;ve tapped the required number of beats.</li>
+          <li>See your <strong>drift score</strong>: how close your average tempo was, and how steady your taps were.</li>
+          <li>Press <strong>Next round</strong> &mdash; each round the target tempo rises. There are 5 rounds per game.</li>
+        </ol>
+        <h3>Just warming up?</h3>
+        <p>Hit <strong>Practice round</strong> instead of Start game. You get one round at a surprise tempo in your difficulty range, with the full drift and stability feedback &mdash; but no points are added to your score and your best score is untouched. Practice as many times as you like, then jump into a real game when you&rsquo;re ready.</p>
+        <h3>Pick a difficulty</h3>
+        <ul>
+          <li><strong>Easy:</strong> 60&ndash;90 BPM, hear 6 beats, tap 8 beats, generous scoring.</li>
+          <li><strong>Normal:</strong> 80&ndash;120 BPM, hear 5 beats, tap 10 beats.</li>
+          <li><strong>Hard:</strong> 100&ndash;150 BPM, hear 4 beats, tap 12 beats, strict scoring.</li>
+          <li>Difficulty can be changed between games, never mid-game. Your choice is saved on this device.</li>
+        </ul>
+        <h3>Quick tips</h3>
+        <ul>
+          <li>Keep counting in your head after the clicks stop &mdash; don&rsquo;t just &ldquo;feel&rdquo; it.</li>
+          <li>Subdivide: think &ldquo;1-and-2-and&rdquo; to stay locked in.</li>
+          <li>Tap with the same finger or thumb every beat for steadier timing.</li>
+        </ul>
+        <div class="close-row"><button class="btn primary" type="button" data-close>Got it</button></div>
+      </div>
+    </div>
+
+    <!-- Rules (full rules, separate from tutorial) -->
+    <div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+      <div class="sheet">
+        <h2 id="rulesTitle">Rules</h2>
+
+        <h3>Objective</h3>
+        <p>Match a target tempo from memory. Each round you hear a metronome at the target BPM (beats per minute), then it stops and you tap the same tempo yourself. Score as many points as you can across 5 rounds.</p>
+
+        <h3>How a round works</h3>
+        <ul>
+          <li><strong>Listen phase:</strong> the metronome plays the target tempo for a set number of beats (Easy 6, Normal 5, Hard 4). The first beat of every 4 is accented. The TAP pad is locked.</li>
+          <li><strong>Tap phase:</strong> the metronome stops. Tap the TAP pad (or press Spacebar) for the required number of beats (Easy 8, Normal 10, Hard 12). Your first tap starts the clock &mdash; only the gaps <em>between</em> taps are measured.</li>
+          <li><strong>Result:</strong> your round score (0&ndash;100), your average tempo, your drift, and your stability are shown. Then the next round begins at a higher target tempo.</li>
+          <li>Target tempos rise every round within the difficulty&rsquo;s BPM range, so later rounds are faster and harder to hold.</li>
+        </ul>
+
+        <h3>Scoring</h3>
+        <ul>
+          <li><strong>Accuracy (60 points):</strong> based on your average error &mdash; the difference between your average tap interval and the target interval. Dead-on average = full points; the further your average tempo drifts from the target, the fewer points.</li>
+          <li><strong>Stability (40 points):</strong> based on how consistent your tap-to-tap gaps are (standard deviation). Even, metronome-like taps score full points; wobbly taps lose points even if the average is right.</li>
+          <li>Round score = accuracy + stability, rounded, from 0 to 100. Game score = the sum of all 5 rounds (max 500).</li>
+          <li>How forgiving the scoring is depends on difficulty: Easy tolerates larger errors, Hard demands near-perfect timing.</li>
+          <li>Your best game score is saved on this device and shown on the scoreboard.</li>
+        </ul>
+
+        <h3>Difficulty</h3>
+        <ul>
+          <li><strong>Easy:</strong> targets 60&ndash;90 BPM, 6 listen beats, 8 taps, wide tolerance.</li>
+          <li><strong>Normal (default):</strong> targets 80&ndash;120 BPM, 5 listen beats, 10 taps, medium tolerance.</li>
+          <li><strong>Hard:</strong> targets 100&ndash;150 BPM, 4 listen beats, 12 taps, tight tolerance.</li>
+          <li>Difficulty is chosen before a game starts and cannot be changed mid-game. Your last choice is remembered between visits.</li>
+        </ul>
+
+        <h3>Practice rounds</h3>
+        <ul>
+          <li>A practice round is a single warm-up round: same listen-then-tap flow, at a random tempo inside your difficulty&rsquo;s BPM range.</li>
+          <li>You still get a round score, drift, and stability feedback &mdash; but it is <strong>not</strong> added to your game score and never changes your saved best score.</li>
+          <li>Practice as often as you like, before or between games. Starting a real game works exactly the same as always.</li>
+        </ul>
+
+        <h3>Winning &amp; game end</h3>
+        <ul>
+          <li>A game is 5 rounds. After round 5 you get your final total out of 500.</li>
+          <li>There is no way to &ldquo;lose&rdquo; a round &mdash; every round scores something. You win by beating your own best score.</li>
+          <li>All metronome and tap sounds are synthesized in your browser with WebAudio. No songs, recordings, or samples are used.</li>
+        </ul>
+
+        <div class="close-row"><button class="btn primary" type="button" data-close>Close</button></div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        var LS_BEST = "tempo-trainer.best.v1";
+        var LS_DIFF = "tempo-trainer.difficulty.v1";
+        var ROUNDS_PER_GAME = 5;
+
+        var DIFFS = {
+          easy:   { label: "Easy",   minBpm: 60,  maxBpm: 90,  listenBeats: 6, tapBeats: 8,  accTolMs: 120, stabTolMs: 90,
+                    note: "Easy: 60\u201390 BPM, hear 6 beats, tap 8 beats, generous scoring." },
+          normal: { label: "Normal", minBpm: 80,  maxBpm: 120, listenBeats: 5, tapBeats: 10, accTolMs: 80,  stabTolMs: 60,
+                    note: "Normal: 80\u2013120 BPM, hear 5 beats, tap 10 beats." },
+          hard:   { label: "Hard",   minBpm: 100, maxBpm: 150, listenBeats: 4, tapBeats: 12, accTolMs: 45,  stabTolMs: 35,
+                    note: "Hard: 100\u2013150 BPM, hear 4 beats, tap 12 beats, strict scoring." }
+        };
+
+        var el = function (id) { return document.getElementById(id); };
+        var statRound = el("statRound"), statScore = el("statScore"), statBest = el("statBest"), statTarget = el("statTarget");
+        var diffNote = el("diffNote");
+        var diffBtns = { easy: el("diffEasy"), normal: el("diffNormal"), hard: el("diffHard") };
+        var beatDot = el("beatDot"), targetBpmEl = el("targetBpm"), phaseLine = el("phaseLine");
+        var tapPad = el("tapPad"), tapCountEl = el("tapCount");
+        var btnStart = el("btnStart"), btnNext = el("btnNext"), btnSound = el("btnSound");
+        var btnPractice = el("btnPractice"), practiceBadge = el("practiceBadge");
+        var resultBox = el("resultBox"), resultTitle = el("resultTitle"), resultScore = el("resultScore");
+        var newBestEl = el("newBest");
+
+        var best = { score: 0 };
+        try {
+          var savedBest = JSON.parse(localStorage.getItem(LS_BEST) || "null");
+          if (savedBest && typeof savedBest.score === "number") best = savedBest;
+        } catch (e) { /* storage unavailable: play without saving */ }
+        statBest.textContent = best.score;
+
+        var difficulty = "normal";
+        try {
+          var savedDiff = localStorage.getItem(LS_DIFF);
+          if (savedDiff && DIFFS[savedDiff]) difficulty = savedDiff;
+        } catch (e) {}
+
+        var phase = "idle"; // idle | listen | tap | result | over
+        var practice = false; // practice round: feedback only, never scored or saved
+        var round = 0, totalScore = 0, targetBpm = 0;
+        var taps = []; // performance.now() timestamps during tap phase
+        var timers = [];
+        var soundOn = true;
+
+        // ---------- Audio (all synthesized, no samples) ----------
+        var audioCtx = null;
+        function ctx() {
+          if (!audioCtx) {
+            var AC = window.AudioContext || window.webkitAudioContext;
+            if (AC) audioCtx = new AC();
+          }
+          if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+          return audioCtx;
+        }
+        function click(freq, dur, vol) {
+          if (!soundOn) return;
+          var c = ctx(); if (!c) return;
+          var t = c.currentTime;
+          var osc = c.createOscillator(), gain = c.createGain();
+          osc.type = "sine"; osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(vol, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+          osc.connect(gain); gain.connect(c.destination);
+          osc.start(t); osc.stop(t + dur + 0.02);
+        }
+        function metronomeClick(accent) { click(accent ? 1560 : 1040, 0.07, accent ? 0.35 : 0.25); }
+        function tapClick() { click(660, 0.05, 0.18); }
+        function jingle(good) {
+          if (!soundOn) return;
+          var notes = good ? [784, 988, 1175] : [392, 330];
+          notes.forEach(function (f, i) { setTimeout(function () { click(f, 0.16, 0.2); }, i * 110); });
+        }
+
+        function later(fn, ms) { timers.push(setTimeout(fn, ms)); }
+        function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+
+        function pulseDot(cls) {
+          beatDot.classList.remove("pulse", "tap-pulse");
+          void beatDot.offsetWidth; // restart transition
+          beatDot.classList.add(cls);
+          later(function () { beatDot.classList.remove(cls); }, 130);
+        }
+
+        // ---------- Difficulty ----------
+        function renderDifficulty() {
+          Object.keys(diffBtns).forEach(function (k) {
+            diffBtns[k].setAttribute("aria-pressed", String(k === difficulty));
+          });
+          diffNote.textContent = DIFFS[difficulty].note;
+        }
+        function setDifficulty(d) {
+          if (phase === "listen" || phase === "tap") return; // between games/rounds only
+          difficulty = d;
+          try { localStorage.setItem(LS_DIFF, d); } catch (e) {}
+          renderDifficulty();
+        }
+        Object.keys(diffBtns).forEach(function (k) {
+          diffBtns[k].addEventListener("click", function () { setDifficulty(k); });
+        });
+        renderDifficulty();
+
+        function setDiffLocked(locked) {
+          Object.keys(diffBtns).forEach(function (k) { diffBtns[k].disabled = locked; });
+        }
+
+        // ---------- Game flow ----------
+        function targetForRound(r) {
+          var d = DIFFS[difficulty];
+          if (ROUNDS_PER_GAME === 1) return d.minBpm;
+          var frac = (r - 1) / (ROUNDS_PER_GAME - 1);
+          return Math.round(d.minBpm + frac * (d.maxBpm - d.minBpm));
+        }
+
+        function startGame() {
+          clearTimers();
+          practice = false;
+          practiceBadge.classList.remove("show");
+          round = 0; totalScore = 0;
+          statScore.textContent = "0";
+          newBestEl.classList.remove("show");
+          resultBox.classList.remove("show");
+          btnStart.style.display = "none";
+          btnPractice.style.display = "none";
+          setDiffLocked(true);
+          nextRound();
+        }
+
+        function startPractice() {
+          clearTimers();
+          practice = true;
+          practiceBadge.classList.add("show");
+          round = 0;
+          newBestEl.classList.remove("show");
+          resultBox.classList.remove("show");
+          btnStart.textContent = "Start game";
+          btnStart.style.display = "none";
+          btnPractice.style.display = "none";
+          setDiffLocked(true);
+          nextRound();
+        }
+
+        function nextRound() {
+          clearTimers();
+          round += 1;
+          resultBox.classList.remove("show");
+          btnNext.style.display = "none";
+          var d = DIFFS[difficulty];
+          targetBpm = practice
+            ? Math.round(d.minBpm + Math.random() * (d.maxBpm - d.minBpm))
+            : targetForRound(round);
+          statRound.textContent = practice ? "Prac" : round + " / " + ROUNDS_PER_GAME;
+          statTarget.textContent = targetBpm;
+          targetBpmEl.textContent = targetBpm + " BPM";
+          taps = [];
+          tapCountEl.textContent = "";
+          tapPad.disabled = true;
+          tapPad.classList.remove("live");
+          phase = "listen";
+          phaseLine.textContent = (practice ? "Practice \u2014 listen\u2026 " : "Listen\u2026 ") + d.listenBeats + " beats at " + targetBpm + " BPM. Count along!";
+          ctx(); // unlock audio on user gesture chain
+          var intervalMs = 60000 / targetBpm;
+          for (var i = 0; i < d.listenBeats; i++) {
+            (function (beat) {
+              later(function () {
+                metronomeClick(beat % 4 === 0);
+                pulseDot("pulse");
+                phaseLine.textContent = "Listen\u2026 beat " + (beat + 1) + " of " + d.listenBeats + " at " + targetBpm + " BPM.";
+              }, 500 + beat * intervalMs);
+            })(i);
+          }
+          later(beginTapPhase, 500 + d.listenBeats * intervalMs);
+        }
+
+        function beginTapPhase() {
+          var d = DIFFS[difficulty];
+          phase = "tap";
+          taps = [];
+          tapPad.disabled = false;
+          tapPad.classList.add("live");
+          phaseLine.textContent = (practice ? "Practice \u2014 your turn! " : "Your turn! ") + "Keep tapping at " + targetBpm + " BPM \u2014 " + d.tapBeats + " taps.";
+          tapCountEl.textContent = "0 / " + d.tapBeats + " taps";
+          tapPad.focus();
+        }
+
+        function registerTap() {
+          if (phase !== "tap") return;
+          var now = performance.now();
+          taps.push(now);
+          tapClick();
+          pulseDot("tap-pulse");
+          var d = DIFFS[difficulty];
+          tapCountEl.textContent = taps.length + " / " + d.tapBeats + " taps";
+          if (taps.length >= 2) {
+            var gaps = [];
+            for (var i = 1; i < taps.length; i++) gaps.push(taps[i] - taps[i - 1]);
+            var avg = gaps.reduce(function (a, b) { return a + b; }, 0) / gaps.length;
+            tapCountEl.textContent += " \u00b7 you\u2019re at ~" + Math.round(60000 / avg) + " BPM";
+          }
+          if (taps.length >= d.tapBeats) finishRound();
+        }
+
+        function finishRound() {
+          phase = "result";
+          tapPad.disabled = true;
+          tapPad.classList.remove("live");
+          var d = DIFFS[difficulty];
+          var targetInterval = 60000 / targetBpm;
+          var gaps = [];
+          for (var i = 1; i < taps.length; i++) gaps.push(taps[i] - taps[i - 1]);
+          var avgGap = gaps.reduce(function (a, b) { return a + b; }, 0) / gaps.length;
+          var variance = gaps.reduce(function (a, g) { return a + Math.pow(g - avgGap, 2); }, 0) / gaps.length;
+          var stdDev = Math.sqrt(variance);
+          var avgError = Math.abs(avgGap - targetInterval); // drift, ms per beat
+          var yourBpm = 60000 / avgGap;
+
+          var accScore = Math.max(0, 60 * (1 - avgError / d.accTolMs));
+          var stabScore = Math.max(0, 40 * (1 - stdDev / d.stabTolMs));
+          var roundScore = Math.round(accScore + stabScore);
+          if (!practice) {
+            totalScore += roundScore;
+            statScore.textContent = totalScore;
+          }
+
+          resultTitle.textContent = practice ? "Practice round result" : "Round " + round + " result";
+          resultScore.textContent = roundScore + " / 100";
+          el("rTarget").textContent = targetBpm + " BPM";
+          el("rYours").textContent = yourBpm.toFixed(1) + " BPM";
+          el("rDrift").textContent = (avgGap > targetInterval ? "+" : "\u2212") + avgError.toFixed(0) + " ms/beat (" +
+            (avgGap > targetInterval ? "slow" : "fast") + ")";
+          el("rStability").textContent = "\u00b1" + stdDev.toFixed(0) + " ms";
+          el("rTotalLbl").textContent = practice ? "Counts toward your score?" : "Game total so far";
+          el("rTotal").textContent = practice ? "Nope \u2014 practice" : totalScore + " / " + (ROUNDS_PER_GAME * 100);
+          var verdict = el("rVerdict");
+          if (roundScore >= 85) { verdict.textContent = "Locked in! Rock-steady tempo."; verdict.className = "verdict good"; }
+          else if (roundScore >= 60) { verdict.textContent = "Solid \u2014 a little drift, but you held it together."; verdict.className = "verdict good"; }
+          else if (roundScore >= 35) { verdict.textContent = "You drifted. Keep counting in your head next round."; verdict.className = "verdict warn"; }
+          else { verdict.textContent = "The tempo escaped! Subdivide: think \u201c1-and-2-and\u201d."; verdict.className = "verdict bad"; }
+          jingle(roundScore >= 60);
+
+          resultBox.classList.add("show");
+          phaseLine.textContent = practice
+            ? "Practice done \u2014 " + roundScore + " points. That one didn\u2019t count, warm up as much as you like."
+            : "Round " + round + " done \u2014 " + roundScore + " points.";
+
+          if (practice) {
+            phase = "over";
+            btnNext.style.display = "none";
+            btnPractice.textContent = "Practice again";
+            btnPractice.style.display = "";
+            btnStart.textContent = "Start game";
+            btnStart.style.display = "";
+            setDiffLocked(false);
+          } else if (round >= ROUNDS_PER_GAME) {
+            phase = "over";
+            btnNext.style.display = "none";
+            btnStart.textContent = "Play again";
+            btnStart.style.display = "";
+            btnPractice.textContent = "Practice round";
+            btnPractice.style.display = "";
+            setDiffLocked(false);
+            resultTitle.textContent = "Game over \u2014 final score";
+            phaseLine.textContent = "Game over! Final score: " + totalScore + " / " + (ROUNDS_PER_GAME * 100) + ".";
+            if (totalScore > best.score) {
+              best = { score: totalScore };
+              try { localStorage.setItem(LS_BEST, JSON.stringify(best)); } catch (e) {}
+              statBest.textContent = best.score;
+              newBestEl.classList.add("show");
+            }
+          } else {
+            btnNext.textContent = "Next round (" + (round + 1) + " of " + ROUNDS_PER_GAME + ")";
+            btnNext.style.display = "";
+            btnNext.focus();
+          }
+        }
+
+        // ---------- Input ----------
+        tapPad.addEventListener("pointerdown", function (ev) { ev.preventDefault(); registerTap(); });
+        document.addEventListener("keydown", function (ev) {
+          if (ev.code === "Space" && phase === "tap") { ev.preventDefault(); if (!ev.repeat) registerTap(); }
+        });
+        btnStart.addEventListener("click", startGame);
+        btnPractice.addEventListener("click", startPractice);
+        btnNext.addEventListener("click", nextRound);
+        btnSound.addEventListener("click", function () {
+          soundOn = !soundOn;
+          btnSound.setAttribute("aria-pressed", String(soundOn));
+          btnSound.innerHTML = soundOn ? "&#128266;" : "&#128263;";
+          if (soundOn) { ctx(); click(880, 0.1, 0.15); }
+        });
+
+        // ---------- Modals (opt-in only; nothing auto-opens) ----------
+        function wireOverlay(openBtnId, overlayId) {
+          var overlay = el(overlayId);
+          var lastFocus = null;
+          el(openBtnId).addEventListener("click", function () {
+            lastFocus = document.activeElement;
+            overlay.classList.add("open");
+            var c = overlay.querySelector("[data-close]");
+            if (c) c.focus();
+          });
+          function close() {
+            overlay.classList.remove("open");
+            if (lastFocus) lastFocus.focus();
+          }
+          overlay.querySelector("[data-close]").addEventListener("click", close);
+          overlay.addEventListener("click", function (ev) { if (ev.target === overlay) close(); });
+          document.addEventListener("keydown", function (ev) {
+            if (ev.key === "Escape" && overlay.classList.contains("open")) close();
+          });
+        }
+        wireOverlay("btnHow", "howOverlay");
+        wireOverlay("btnRules", "rulesOverlay");
+      })();
+    </script>
+
+    <!-- ===== Holo's Arcade: Feedback button (standard, 2026-11-20) ===== -->
+    <style>
+    .fb-btn{display:inline-block;margin:8px;padding:10px 18px;min-height:44px;font:inherit;font-size:15px;border-radius:999px;border:1px solid rgba(128,128,128,.45);background:transparent;color:inherit;cursor:pointer}
+    .fb-btn:active{opacity:.7}
+    .fb-overlay{position:fixed;inset:0;z-index:9999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:16px;box-sizing:border-box}
+    .fb-overlay.open{display:flex}
+    .fb-card{background:#fff;color:#111;border-radius:14px;max-width:420px;width:100%;padding:18px;box-sizing:border-box;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+    .fb-card h2{margin:0 0 10px;font-size:18px}
+    .fb-stars{display:flex;gap:6px;margin:6px 0 12px}
+    .fb-star{font-size:28px;line-height:1;background:none;border:none;cursor:pointer;padding:6px;min-width:44px;min-height:44px;color:#bbb}
+    .fb-star.on{color:#f5a623}
+    .fb-card textarea{width:100%;box-sizing:border-box;min-height:90px;font:inherit;padding:10px;border:1px solid #ccc;border-radius:8px;resize:vertical}
+    .fb-card select{width:100%;box-sizing:border-box;font:inherit;padding:10px;margin-top:10px;border:1px solid #ccc;border-radius:8px;background:#fff}
+    .fb-row{display:flex;gap:10px;margin-top:14px}
+    .fb-save,.fb-cancel{flex:1;padding:12px;min-height:44px;font:inherit;font-size:15px;border-radius:10px;cursor:pointer}
+    .fb-save{background:#2e7d32;color:#fff;border:none}
+    .fb-cancel{background:transparent;border:1px solid #ccc;color:#111}
+    .fb-terms{font-size:13px;color:#555;margin:10px 0 0;line-height:1.4}
+    .fb-thanks{display:none;text-align:center;font-size:17px;padding:14px 0 4px}
+    </style>
+    <div class="fb-overlay" id="fbOverlay" role="dialog" aria-modal="true" aria-label="Send feedback">
+      <div class="fb-card">
+        <h2>Feedback</h2>
+        <div id="fbForm">
+          <div class="fb-stars" id="fbStars" role="radiogroup" aria-label="Rating">
+            <button type="button" class="fb-star" data-v="1" aria-label="1 star">&#9733;</button>
+            <button type="button" class="fb-star" data-v="2" aria-label="2 stars">&#9733;</button>
+            <button type="button" class="fb-star" data-v="3" aria-label="3 stars">&#9733;</button>
+            <button type="button" class="fb-star" data-v="4" aria-label="4 stars">&#9733;</button>
+            <button type="button" class="fb-star" data-v="5" aria-label="5 stars">&#9733;</button>
+          </div>
+          <textarea id="fbText" placeholder="Tell us what you think&hellip;" aria-label="Your feedback"></textarea>
+          <select id="fbTag" aria-label="Feedback type">
+            <option value="">Tag (optional)</option>
+            <option value="Bug">Bug</option>
+            <option value="Suggestion">Suggestion</option>
+            <option value="Other">Other</option>
+          </select>
+          <p class="fb-terms">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+          <div class="fb-row">
+            <button type="button" class="fb-cancel" id="fbCancel">Cancel</button>
+            <button type="button" class="fb-save" id="fbSave">Save</button>
+          </div>
+        </div>
+        <div class="fb-thanks" id="fbThanks">Thanks! &#128156;</div>
+      </div>
+    </div>
+    <script>
+    (function(){
+      var GAME = 'tempo-trainer';
+      var KEY = 'holos-arcade-feedback';
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'fb-btn'; btn.id = 'fbBtn'; btn.textContent = '\uD83D\uDCAC Feedback';
+      var foot = document.querySelector('footer');
+      if (foot) { foot.appendChild(btn); }
+      else { btn.style.position='fixed'; btn.style.right='12px'; btn.style.bottom='12px'; btn.style.zIndex='9998'; btn.style.background='#fff'; document.body.appendChild(btn); }
+      var overlay = document.getElementById('fbOverlay');
+      var rating = 0;
+      var stars = overlay.querySelectorAll('.fb-star');
+      function paint(){ stars.forEach(function(s){ s.classList.toggle('on', Number(s.getAttribute('data-v')) <= rating); }); }
+      stars.forEach(function(s){ s.addEventListener('click', function(){ rating = Number(s.getAttribute('data-v')); paint(); }); });
+      function open(){ document.getElementById('fbForm').style.display=''; document.getElementById('fbThanks').style.display='none'; overlay.classList.add('open'); }
+      function close(){ overlay.classList.remove('open'); }
+      btn.addEventListener('click', open);
+      document.getElementById('fbCancel').addEventListener('click', close);
+      overlay.addEventListener('click', function(e){ if (e.target === overlay) close(); });
+      document.getElementById('fbSave').addEventListener('click', function(){
+        var rec = { game: GAME, rating: rating, text: document.getElementById('fbText').value.trim(), tag: document.getElementById('fbTag').value, timestamp: new Date().toISOString() };
+        try {
+          var arr = [];
+          try { arr = JSON.parse(localStorage.getItem(KEY) || '[]'); if (!Array.isArray(arr)) arr = []; } catch(e){ arr = []; }
+          arr.push(rec);
+          localStorage.setItem(KEY, JSON.stringify(arr));
+        } catch(e){}
+        document.getElementById('fbForm').style.display='none';
+        document.getElementById('fbThanks').style.display='block';
+        rating = 0; paint();
+        document.getElementById('fbText').value = '';
+        document.getElementById('fbTag').value = '';
+        setTimeout(close, 1200);
+      });
+    })();
+    </script>
+    <!-- ===== /Feedback button ===== -->
+  </body>
+</html>

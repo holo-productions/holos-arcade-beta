@@ -1,0 +1,1276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Backgammon</title>
+<style>
+  :root{
+    --bg:#f4efe6; --panel:#fffdf8; --panel2:#efe7d6; --ink:#241a10; --muted:#6f6152;
+    --line:#d8cbb2; --accent:#b5493a; --accent-ink:#fff;
+    --gold:#a97b1e; --good:#2e7d4f; --bad:#b3362b;
+    --wood:#6d4525; --wood-dark:#452a13; --felt:#ecdfc2; --felt-edge:#d9c69c;
+    --pt-a:#b5493a; --pt-b:#33526b;
+    --chk-w:#f8f4e9; --chk-w-edge:#c9bda0; --chk-b:#2c231d; --chk-b-edge:#0f0b09;
+    --shadow:0 10px 28px rgba(60,40,15,.16);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#171310; --panel:#221c17; --panel2:#2a231c; --ink:#f0e7d7; --muted:#b3a48d;
+      --line:#3d332a; --accent:#d4695c; --gold:#d9a83f; --good:#5cb885; --bad:#e07a6f;
+      --shadow:0 10px 28px rgba(0,0,0,.45);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:ui-sans-system,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button,[role="button"],select,summary,input:not([type="checkbox"]){min-height:2.25rem}
+  button{font:inherit;cursor:pointer}
+  .wrap{max-width:1060px;margin:0 auto;padding:14px 14px 40px}
+  h1,h2,h3{font-family:"Iowan Old Style",Palatino,Palatino Linotype,Georgia,serif;margin:0}
+  /* ---------- header ---------- */
+  header.top{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 16px;margin:4px 0 12px}
+  header.top h1{font-size:clamp(1.7rem,5vw,2.4rem);letter-spacing:.01em}
+  header.top .sub{color:var(--muted);font-size:.95rem;width:100%;margin-top:-6px}
+  .spacer{flex:1}
+  .btn{
+    border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    border-radius:10px;padding:.5rem .9rem;font-weight:600;font-size:.95rem;
+  }
+  .btn:hover{border-color:var(--muted)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .btn.primary:disabled{opacity:.45;cursor:not-allowed}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn.gold{background:var(--gold);border-color:var(--gold);color:#fff}
+  .btn.small{padding:.35rem .65rem;font-size:.85rem;min-height:2rem}
+  /* ---------- stats ---------- */
+  .stats{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+  .chip{
+    background:var(--panel);border:1px solid var(--line);border-radius:999px;
+    padding:.32rem .75rem;font-size:.85rem;font-weight:600;display:flex;gap:.4rem;align-items:center;
+  }
+  .chip span{color:var(--muted);font-weight:500}
+  /* ---------- layout ---------- */
+  .layout{display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start}
+  @media (max-width:860px){.layout{grid-template-columns:1fr}}
+  /* ---------- board ---------- */
+  .board-frame{
+    background:var(--wood);border-radius:16px;padding:12px;box-shadow:var(--shadow);
+    border:3px solid var(--wood-dark);
+  }
+  .board{
+    background:var(--felt);border-radius:8px;display:grid;
+    grid-template-columns:repeat(6,1fr) .62fr repeat(6,1fr);
+    grid-template-rows:1fr 1fr;min-height:340px;position:relative;overflow:hidden;
+  }
+  @media (max-width:560px){.board{min-height:290px}.board-frame{padding:8px}}
+  .pt{
+    position:relative;display:flex;flex-direction:column;align-items:center;
+    padding:3px 0;min-width:0;border:none;background:transparent;cursor:default;
+  }
+  .pt::before{
+    content:"";position:absolute;left:50%;transform:translateX(-50%);
+    width:86%;height:46%;z-index:0;
+  }
+  .pt.top::before{top:0;clip-path:polygon(0 0,100% 0,50% 100%);background:var(--pt-a)}
+  .pt.bot::before{bottom:0;clip-path:polygon(0 100%,100% 100%,50% 0);background:var(--pt-a)}
+  .pt.alt.top::before,.pt.alt.bot::before{background:var(--pt-b)}
+  .pt.bot{flex-direction:column-reverse}
+  .pt .num{
+    position:absolute;font-size:.6rem;font-weight:700;color:var(--ink);z-index:3;
+    pointer-events:none;background:var(--felt);border-radius:4px;padding:0 2px;line-height:1.3;
+  }
+  .pt.top .num{bottom:2px}.pt.bot .num{top:2px}
+  .pt.selectable{cursor:pointer}
+  .pt.selectable::after{
+    content:"";position:absolute;inset:2px;border:2px dashed var(--gold);border-radius:6px;z-index:1;pointer-events:none;
+  }
+  .pt.selected::after{
+    content:"";position:absolute;inset:2px;border:3px solid var(--gold);border-radius:6px;z-index:1;pointer-events:none;
+  }
+  .pt.dest{cursor:pointer}
+  .pt.dest::after{
+    content:"";position:absolute;inset:2px;border:3px solid var(--good);border-radius:6px;z-index:1;pointer-events:none;
+  }
+  .bar-col{
+    background:var(--wood);grid-column:7;grid-row:1 / span 2;display:flex;flex-direction:column;
+    align-items:center;justify-content:space-between;padding:8px 0;gap:6px;z-index:3;
+  }
+  .bar-half{display:flex;flex-direction:column;align-items:center;gap:3px;min-height:40%}
+  .bar-half.bot{flex-direction:column-reverse;justify-content:flex-start}
+  .bar-label{color:#f3e6cd;font-size:.58rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+  .chk{
+    width:min(4.4vw,34px);height:min(4.4vw,34px);min-width:22px;min-height:22px;
+    border-radius:50%;z-index:2;flex:none;display:flex;align-items:center;justify-content:center;
+    font-size:.68rem;font-weight:800;position:relative;
+  }
+  @media (max-width:560px){.chk{width:6.2vw;height:6.2vw}}
+  .chk.w{background:var(--chk-w);border:2px solid var(--chk-w-edge);color:#5a4c33;box-shadow:inset 0 0 0 3px rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.3)}
+  .chk.b{background:var(--chk-b);border:2px solid var(--chk-b-edge);color:#e8dcc4;box-shadow:inset 0 0 0 3px rgba(255,255,255,.08),0 1px 2px rgba(0,0,0,.4)}
+  .chk.mini{width:20px;height:20px;min-width:20px;min-height:20px;font-size:.55rem}
+  .off-tray{
+    margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;
+  }
+  .tray{
+    flex:1;min-width:150px;background:var(--wood-dark);border-radius:10px;color:#f3e6cd;
+    padding:8px 10px;display:flex;align-items:center;gap:8px;min-height:44px;
+  }
+  .tray .tlabel{font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+  .tray .stack{display:flex;flex-wrap:wrap;gap:2px;align-items:center}
+  .tray.dest{outline:3px solid var(--good);cursor:pointer}
+  .tray.selectable{outline:2px dashed var(--gold);cursor:pointer}
+  .cube-display{
+    width:44px;height:44px;border-radius:9px;background:var(--panel);border:2px solid var(--gold);
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.05rem;color:var(--ink);
+  }
+  /* ---------- side panel ---------- */
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow)}
+  .panel + .panel{margin-top:14px}
+  .panel h2{font-size:1.05rem;margin-bottom:8px}
+  .status{
+    border-radius:10px;padding:10px 12px;font-weight:600;font-size:.95rem;line-height:1.4;
+    background:var(--panel2);border:1px solid var(--line);margin-bottom:12px;min-height:44px;
+  }
+  .status.ai{border-color:var(--pt-b)}
+  .dice-row{display:flex;align-items:center;gap:12px;margin:6px 0 12px}
+  .die{
+    width:46px;height:46px;background:var(--panel);border:2px solid var(--ink);border-radius:10px;
+    display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:6px;gap:1px;
+  }
+  .die .pip{width:8px;height:8px;border-radius:50%;background:var(--ink);align-self:center;justify-self:center;visibility:hidden}
+  .die .pip.on{visibility:visible}
+  .die.used{opacity:.3}
+  .dice-left{font-size:.85rem;color:var(--muted);font-weight:600}
+  .controls{display:flex;flex-wrap:wrap;gap:8px}
+  .controls .btn{flex:1;white-space:nowrap}
+  .pips{display:flex;justify-content:space-between;gap:8px;margin:10px 0 2px;font-size:.88rem}
+  .pips b{font-variant-numeric:tabular-nums}
+  .toggle-row{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:.9rem;font-weight:600}
+  .toggle-row label{display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0}
+  .toggle-row input{width:20px;height:20px;accent-color:var(--accent)}
+  .diff-field{margin-top:14px}
+  .diff-field label{display:block;font-size:.9rem;font-weight:700;margin-bottom:6px}
+  .diff-field select{
+    width:100%;font:inherit;font-weight:600;color:var(--ink);background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:.55rem .7rem;min-height:2.6rem;cursor:pointer;
+  }
+  .diff-field select:hover{border-color:var(--muted)}
+  .diff-desc{font-size:.83rem;color:var(--muted);line-height:1.5;margin:6px 0 0}
+  .log{
+    list-style:none;margin:0;padding:0;max-height:190px;overflow:auto;font-size:.85rem;line-height:1.5;
+  }
+  .log li{padding:5px 2px;border-bottom:1px solid var(--line)}
+  .log li:last-child{border-bottom:none}
+  .log .who{font-weight:700}
+  /* ---------- modal ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(20,12,4,.62);display:none;z-index:50;
+    align-items:flex-start;justify-content:center;overflow:auto;padding:18px 12px;
+  }
+  .overlay.open{display:flex}
+  .sheet{
+    background:var(--panel);color:var(--ink);border-radius:16px;max-width:640px;width:100%;
+    padding:22px 20px 18px;box-shadow:var(--shadow);margin:auto 0;
+  }
+  .sheet h2{font-size:1.45rem;margin-bottom:4px}
+  .sheet h3{font-size:1.02rem;margin:16px 0 5px}
+  .sheet p,.sheet li{font-size:.94rem;line-height:1.55}
+  .sheet ul{margin:4px 0 8px;padding-left:20px}
+  .sheet .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:18px}
+  .sheet .row .btn{flex:1}
+  .kbd-chip{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:0 .4rem;font-weight:700;font-size:.82rem}
+  footer{margin-top:22px;color:var(--muted);font-size:.85rem;display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center}
+  footer a{color:var(--accent);font-weight:600;padding:8px 0}
+  .hint{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    padding:8px 12px;font-size:.9rem;margin:0 0 12px;
+  }
+  .hint[hidden]{display:none}
+  .hint span{flex:1;min-width:200px}
+  .win-banner{
+    display:none;border-radius:12px;padding:14px;text-align:center;font-weight:700;font-size:1.05rem;margin-bottom:12px;
+  }
+  .win-banner.show{display:block}
+  .win-banner.won{background:#e2f2e6;border:1px solid var(--good);color:#14532d}
+  .win-banner.lost{background:#fbe7e4;border:1px solid var(--bad);color:#7c211a}
+  .practice-banner{
+    border:1px solid var(--gold);background:var(--panel2);border-radius:12px;
+    padding:10px 12px;font-weight:700;margin:0 0 12px;display:flex;gap:6px 10px;flex-wrap:wrap;align-items:center;
+  }
+  .practice-banner[hidden]{display:none}
+  .practice-banner span{font-weight:500;color:var(--muted);font-size:.9rem}
+  .practice-hint{
+    margin-top:12px;border:1px solid var(--gold);background:var(--panel2);border-radius:10px;
+    padding:10px 12px;font-size:.9rem;line-height:1.5;
+  }
+  .practice-hint[hidden]{display:none}
+  .practice-hint strong{display:block;margin-bottom:4px}
+  .practice-hint .prow{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  /* ---------- feedback ---------- */
+  .stars{display:flex;gap:6px;margin:10px 0 4px}
+  .stars button{
+    font-size:1.7rem;line-height:1;background:transparent;border:1px solid var(--line);
+    border-radius:10px;padding:.3rem .55rem;color:var(--muted);min-width:2.9rem;
+  }
+  .stars button.on{color:var(--gold);border-color:var(--gold);background:var(--panel2)}
+  .stars button:hover{border-color:var(--gold)}
+  .fb-field label{display:block;font-size:.9rem;font-weight:700;margin:14px 0 6px}
+  .fb-field textarea{
+    width:100%;font:inherit;color:var(--ink);background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;padding:.6rem .7rem;min-height:6.5rem;resize:vertical;
+  }
+  .fb-field textarea:focus{outline:2px solid var(--gold);outline-offset:1px}
+  .fb-tags{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 4px}
+  .fb-tags button{
+    font:inherit;font-size:.88rem;font-weight:600;background:transparent;color:var(--ink);
+    border:1px solid var(--line);border-radius:999px;padding:.4rem .85rem;cursor:pointer;
+  }
+  .fb-tags button.on{color:var(--gold);border-color:var(--gold);background:var(--panel2)}
+  .fb-tags button:hover{border-color:var(--gold)}
+  .fb-note{font-size:.83rem;color:var(--muted);line-height:1.5;margin:10px 0 0}
+  .fb-done{
+    display:none;border-radius:10px;padding:10px 12px;font-weight:600;font-size:.92rem;
+    background:#e2f2e6;border:1px solid var(--good);color:#14532d;margin-top:14px;
+  }
+  .fb-done.show{display:block}
+  @media (prefers-color-scheme: dark){.fb-done{background:#173a26;color:#a9e5bf}}
+  @media (prefers-color-scheme: dark){
+    .win-banner.won{background:#173a26;color:#a9e5bf}
+    .win-banner.lost{background:#3d1d19;color:#f2b3ab}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Backgammon</h1>
+    <div class="spacer"></div>
+    <button class="btn" id="btnHow">How to play</button>
+    <button class="btn" id="btnRules">Rules</button>
+    <button class="btn" id="btnFeedback">Feedback</button>
+    <button class="btn gold" id="btnPracticeTop">Practice round</button>
+    <button class="btn" id="btnNewTop">New game</button>
+    <p class="sub">You play the light checkers against the AI's dark checkers. Full rules — hitting, the bar, bearing off, and an optional doubling cube.</p>
+  </header>
+
+  <div class="hint" id="tutorialHint" hidden>
+    <span>New here? Tap <b>How to play</b> for a 1-minute walkthrough, or <b>Rules</b> for the full rulebook.</span>
+    <button class="btn small" id="btnHintDismiss">Got it</button>
+  </div>
+
+  <div class="stats" id="statsBar" aria-label="Your record"></div>
+
+  <div class="practice-banner" id="practiceBanner" hidden role="status">
+    🎓 Practice round <span>No score kept · Hints on · No timer — take your time and undo freely</span>
+  </div>
+
+  <div class="win-banner" id="winBanner" role="status"></div>
+
+  <div class="layout">
+    <div>
+      <div class="board-frame">
+        <div class="board" id="board" aria-label="Backgammon board"></div>
+        <div class="off-tray">
+          <div class="tray" id="trayPlayer">
+            <span class="tlabel">You off</span>
+            <div class="stack" id="offPlayer"></div>
+            <span id="offPlayerN" style="font-weight:800">0 / 15</span>
+          </div>
+          <div class="tray" id="trayAI">
+            <span class="tlabel">AI off</span>
+            <div class="stack" id="offAI"></div>
+            <span id="offAIN" style="font-weight:800">0 / 15</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;color:#f3e6cd;font-size:.78rem;font-weight:700">
+            CUBE <div class="cube-display" id="cubeDisplay">1</div>
+            <span id="cubeOwner"></span>
+          </div>
+        </div>
+      </div>
+      <div class="pips">
+        <span>Your pips: <b id="pipPlayer">167</b></span>
+        <span>AI pips: <b id="pipAI">167</b></span>
+        <span id="scoreLine">Match points — You <b id="ptsPlayer">0</b> · AI <b id="ptsAI">0</b></span>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel">
+        <div class="status" id="status">Tap Roll to start your turn.</div>
+        <div class="dice-row">
+          <div class="die" id="die1" aria-label="Die one"></div>
+          <div class="die" id="die2" aria-label="Die two"></div>
+          <div class="dice-left" id="diceLeft"></div>
+        </div>
+        <div class="controls">
+          <button class="btn primary" id="btnRoll">🎲 Roll dice</button>
+          <button class="btn" id="btnUndo" disabled>Undo turn</button>
+        </div>
+        <div class="controls" style="margin-top:8px">
+          <button class="btn gold" id="btnDouble" disabled>Offer double</button>
+          <button class="btn" id="btnNew">New game</button>
+        </div>
+        <div class="toggle-row">
+          <label><input type="checkbox" id="chkCube" checked /> Doubling cube</label>
+        </div>
+        <div class="toggle-row">
+          <label><input type="checkbox" id="chkPractice" /> Practice round — no score, hints on</label>
+        </div>
+        <p class="diff-desc" id="practiceDesc" hidden>Practice rounds don&rsquo;t count toward your record or match score, the doubling cube is off, and there&rsquo;s no timer. Turning practice on or off starts a fresh round.</p>
+        <div class="practice-hint" id="practiceHint" hidden>
+          <strong>💡 Practice hint</strong>
+          <span id="practiceHintText">Roll the dice and a suggested move will appear here.</span>
+          <div class="prow">
+            <button class="btn small" id="btnPracticeHint" type="button" disabled>Highlight hint move</button>
+            <button class="btn small" id="btnExitPractice" type="button">Exit practice</button>
+          </div>
+        </div>
+        <div class="diff-field">
+          <label for="selDiff">Difficulty</label>
+          <select id="selDiff" aria-label="Difficulty">
+            <option value="easy">Easy</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Hard</option>
+          </select>
+          <p class="diff-desc" id="diffDesc">Normal: the AI plays a solid, sensible game.</p>
+        </div>
+        <p style="font-size:.83rem;color:var(--muted);line-height:1.5;margin:10px 0 0">
+          Roll, then tap one of your checkers and tap a highlighted point to move it.
+          If you're on the bar, you must come back in first. Doubles roll four moves.
+        </p>
+      </div>
+
+      <div class="panel">
+        <h2>Moves</h2>
+        <ul class="log" id="moveLog"></ul>
+      </div>
+
+      <div class="panel">
+        <h2>Your bests</h2>
+        <p id="bestsText" style="font-size:.9rem;line-height:1.6;margin:0"></p>
+        <button class="btn small" id="btnResetStats" style="margin-top:8px">Reset record</button>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <a href="../" id="hubLink">← All games</a>
+    <span>Part of the arcade hub — your record is saved on this device only.</span>
+  </footer>
+</div>
+
+<!-- Tutorial / How to play -->
+<div class="overlay" id="howOverlay" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+  <div class="sheet">
+    <h2 id="howTitle">How to play — the 1-minute version</h2>
+    <p>Race all 15 of your checkers around the board into your home board (bottom-right, points 1–6), then bear them off. First to bear off all 15 wins.</p>
+
+    <h3>Your turn, step by step</h3>
+    <ul>
+      <li><b>1.</b> Tap <span class="kbd-chip">Roll dice</span>.</li>
+      <li><b>2.</b> Tap one of your light checkers — the points it can legally reach light up green.</li>
+      <li><b>3.</b> Tap a highlighted point to move there. One checker per die, or the same checker twice. Doubles = four moves.</li>
+      <li><b>4.</b> Land on a lone enemy checker (a <b>blot</b>) to hit it onto the bar. On the bar yourself? You must re-enter before anything else moves.</li>
+      <li><b>5.</b> With all 15 checkers home, tap a checker and then your <b>You off</b> tray to bear it off.</li>
+    </ul>
+
+    <h3>One tip before you start</h3>
+    <ul>
+      <li>Two or more of your checkers on a point make it safe and block the AI — build those walls in your home board, and don't leave lone checkers exposed when you can avoid it.</li>
+      <li>Pick <b>Difficulty</b> in the side panel: Easy plays casually, Normal plays solid, Hard plays sharp.</li>
+      <li>Want a pressure-free run first? Tap <b>Practice round</b> at the top (or tick it in the side panel): no score is kept, a hint suggests a good move after every roll, and there&rsquo;s no timer.</li>
+    </ul>
+
+    <p style="color:var(--muted)">That's enough to play. For the complete rulebook — dice rules, bearing-off details, the doubling cube, and scoring (gammons &amp; backgammons) — tap <b>Rules</b>.</p>
+
+    <div class="row">
+      <button class="btn primary" id="btnStartPlay">Start playing</button>
+      <button class="btn" id="btnHowToRules">Read the full rules</button>
+      <button class="btn" id="btnCloseHow">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Full rules -->
+<div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="sheet">
+    <h2 id="rulesTitle">Backgammon — full rules</h2>
+    <p>The complete rulebook for this game, exactly as enforced by the move checker. You are the light checkers; the AI plays dark.</p>
+
+    <h3>Setup &amp; direction</h3>
+    <ul>
+      <li>Each side has 15 checkers. Yours start on points 24 (×2), 13 (×5), 8 (×3) and 6 (×5); the AI mirrors this on points 1, 12, 17 and 19.</li>
+      <li>Your checkers travel from point 24 down to point 1, then off the board. The AI travels from point 1 up to point 24. Your home board is points 1–6; the AI's is points 19–24.</li>
+      <li>The <b>pip count</b> is the total number of points all your checkers still have to travel. Both start at 167.</li>
+    </ul>
+
+    <h3>The dice</h3>
+    <ul>
+      <li>Each turn rolls two dice. Each die moves one checker that many points; the two dice may move two different checkers or the same checker twice.</li>
+      <li><b>Doubles</b> are played four times (a roll of 4-4 is four moves of 4).</li>
+      <li>You must use <b>both dice</b> if any legal sequence allows it. If only one die can be played but either die could be played alone, you must play the <b>higher</b> die. If no legal move exists, the turn passes.</li>
+      <li>A point holding <b>two or more</b> enemy checkers is <b>blocked</b> — you cannot land on it, though you may pass over it.</li>
+      <li>You may land on a point that is empty or holds your own checkers (any number), stacking as high as you like.</li>
+    </ul>
+
+    <h3>Hitting &amp; the bar</h3>
+    <ul>
+      <li>A single checker alone on a point is a <b>blot</b>. Landing on an enemy blot <b>hits</b> it: that checker goes to the bar in the centre of the board.</li>
+      <li>A player with any checker on the bar must re-enter it <b>before moving any other checker</b>. Re-entry uses one die and lands on the corresponding point of the opponent's home board (for you, a 1 enters on point 24, a 6 on point 19).</li>
+      <li>Re-entry can hit an enemy blot on the entry point. If the entry point is blocked by two or more enemy checkers, that die cannot be used to enter.</li>
+      <li>If neither die can re-enter a bar checker, the whole turn is forfeited. With two checkers on the bar and only one entry possible, the second die is lost unless it can enter the remaining checker.</li>
+    </ul>
+
+    <h3>Bearing off</h3>
+    <ul>
+      <li>You may bear off only when <b>all 15</b> of your checkers are in your home board (points 1–6) and none are on the bar.</li>
+      <li>An exact die bears off a checker from that point (a 3 takes a checker off point 3).</li>
+      <li>A die higher than the point can bear off a checker from your <b>highest occupied</b> point — only if no checker sits on any higher point. (E.g. rolling 6 with checkers only on points 4 and 2 bears one off point 4.)</li>
+      <li>A lower die may instead move a checker within the home board as a normal move.</li>
+      <li>If a checker is hit while you are bearing off, it must re-enter and travel all the way around again; you cannot resume bearing off until all 15 are home once more.</li>
+    </ul>
+
+    <h3>The doubling cube (optional)</h3>
+    <ul>
+      <li>The cube starts at <b>1</b>, centred — either side may offer the first double. Stakes double in sequence: 1 → 2 → 4 → 8 → 16 → 32 → 64 (maximum).</li>
+      <li>A double may be offered only <b>before rolling</b>, at the start of your turn, and only by the player who owns the cube (or either player while it is centred).</li>
+      <li>The player offered the double may <b>accept</b> — the game continues at the new value and the cube passes to them, making them the only player who can offer the next double — or <b>decline</b>, which ends the game immediately: the player who offered wins the game at the cube's <b>previous</b> value (single-game value; no gammon bonus on a declined double).</li>
+      <li>The AI offers doubles when it judges its position strong, and accepts or declines yours by the same kind of judgement.</li>
+      <li><strong>Difficulty</strong> (in the side panel): Easy — the AI plays a random legal move and never offers a double. Normal — the AI picks its best-scoring move. Hard — the AI evaluates each move three times for a sharper pick and doubles earlier. Your choice is saved on this device.</li>
+      <li>With the cube switched off, every game is worth exactly 1 point and no doubles can be offered.</li>
+    </ul>
+
+    <h3>Scoring &amp; win conditions</h3>
+    <ul>
+      <li><b>Winning the game:</b> the first player to bear off all 15 checkers wins.</li>
+      <li><b>Single game (×1):</b> the loser has borne off at least one checker. Worth the cube value.</li>
+      <li><b>Gammon (×2):</b> the loser has borne off <b>no</b> checkers. Worth twice the cube value.</li>
+      <li><b>Backgammon (×3):</b> the loser has borne off no checkers <b>and</b> still has a checker on the bar or in the winner's home board. Worth three times the cube value.</li>
+      <li>Points accumulate across games in the match score at the top of the board (You vs AI) until you reset your record. There is no fixed match target — play as many games as you like.</li>
+      <li>Resigning a double conceded by you, or the AI declining yours, scores as a single game at the cube value in effect before the offer.</li>
+    </ul>
+
+    <div class="row">
+      <button class="btn primary" id="btnCloseRules">Done</button>
+      <button class="btn" id="btnRulesToHow">Back to How to play</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback -->
+<div class="overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+  <div class="sheet" style="max-width:520px">
+    <h2 id="feedbackTitle">Feedback — Backgammon</h2>
+    <p>Tell us how this game is playing. Your rating and comment are saved on this device only.</p>
+
+    <div class="fb-field">
+      <label id="starsLabel">Your rating</label>
+      <div class="stars" id="fbStars" role="radiogroup" aria-labelledby="starsLabel">
+        <button type="button" data-star="1" role="radio" aria-checked="false" aria-label="1 star">★</button>
+        <button type="button" data-star="2" role="radio" aria-checked="false" aria-label="2 stars">★</button>
+        <button type="button" data-star="3" role="radio" aria-checked="false" aria-label="3 stars">★</button>
+        <button type="button" data-star="4" role="radio" aria-checked="false" aria-label="4 stars">★</button>
+        <button type="button" data-star="5" role="radio" aria-checked="false" aria-label="5 stars">★</button>
+      </div>
+      <p class="fb-note" id="fbRatingText">Tap a star to rate.</p>
+    </div>
+
+    <div class="fb-field">
+      <label id="tagsLabel">Tag <span style="font-weight:500;color:var(--muted)">(optional)</span></label>
+      <div class="fb-tags" id="fbTags" role="radiogroup" aria-labelledby="tagsLabel">
+        <button type="button" data-tag="Bug" role="radio" aria-checked="false">Bug</button>
+        <button type="button" data-tag="Suggestion" role="radio" aria-checked="false">Suggestion</button>
+        <button type="button" data-tag="Other" role="radio" aria-checked="false">Other</button>
+      </div>
+    </div>
+
+    <div class="fb-field">
+      <label for="fbComment">Your comment</label>
+      <textarea id="fbComment" maxlength="1000" placeholder="What did you like? What should we fix?"></textarea>
+    </div>
+
+    <p class="fb-note">Feedback follows the same Terms &amp; Conditions as the rest of the arcade: no personal info needed, please keep it clean — feedback may be used to improve the games.</p>
+
+    <div class="fb-done" id="fbDone" role="status">Thanks! Your feedback was saved on this device.</div>
+
+    <div class="row">
+      <button class="btn primary" id="btnSaveFeedback">Save feedback</button>
+      <button class="btn" id="btnCloseFeedback">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Double offer from AI -->
+<div class="overlay" id="doubleOverlay" role="dialog" aria-modal="true" aria-labelledby="doubleTitle">
+  <div class="sheet" style="max-width:440px">
+    <h2 id="doubleTitle">The AI offers a double</h2>
+    <p id="doubleText">The AI wants to raise the stakes.</p>
+    <div class="row">
+      <button class="btn primary" id="btnAcceptDouble">Accept</button>
+      <button class="btn" id="btnResignDouble">Resign</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+/* ================= State ================= */
+var W='W', B='B';
+var board, barW, barB, offW, offB;
+var phase='awaitRoll'; // awaitRoll | moving | aiTurn | over | doubleDecision
+var dice=[], diceRemaining=[], rolledDice=[];
+var selected=null; // 'bar' or point index
+var allowedMoves=[]; // legal moves for current diceRemaining under full-rules filter
+var turnSnapshot=null;
+var cubeValue=1, cubeOwner=null; // null=centered, 'W','B'
+var cubeEnabled=true;
+var practiceMode=false;
+var practiceHintMove=null;
+var ptsPlayer=0, ptsAI=0;
+var moveCount=0;
+var logEl=document.getElementById('moveLog');
+
+function startBoard(){
+  board=[]; for(var i=0;i<24;i++) board.push({n:0,c:null});
+  function set(i,n,c){board[i]={n:n,c:c};}
+  set(23,2,W); set(12,5,W); set(7,3,W); set(5,5,W);
+  set(0,2,B);  set(11,5,B); set(16,3,B); set(18,5,B);
+  barW=0; barB=0; offW=0; offB=0;
+}
+function cloneState(){
+  return {board:board.map(function(p){return {n:p.n,c:p.c};}), barW:barW, barB:barB, offW:offW, offB:offB};
+}
+function loadState(s){ board=s.board.map(function(p){return {n:p.n,c:p.c};}); barW=s.barW; barB=s.barB; offW=s.offW; offB=s.offB; }
+function opp(p){return p===W?B:W;}
+function barOf(st,p){return p===W?st.barW:st.barB;}
+function offOf(st,p){return p===W?st.offW:st.offB;}
+
+function allInHome(st,p){
+  if(barOf(st,p)>0) return false;
+  if(p===W){ for(var i=6;i<24;i++) if(st.board[i].c===W&&st.board[i].n>0) return false; }
+  else { for(var j=0;j<18;j++) if(st.board[j].c===B&&st.board[j].n>0) return false; }
+  return true;
+}
+function pipCount(st,p){
+  var t=barOf(st,p)*25, i, pt;
+  for(i=0;i<24;i++){ pt=st.board[i]; if(pt.c===p) t += pt.n * (p===W ? i+1 : 24-i); }
+  return t;
+}
+
+/* ================= Move generation ================= */
+function movesForDie(st,p,die){
+  var res=[], enemy=opp(p), i, pt, dest;
+  if(barOf(st,p)>0){
+    dest = (p===W) ? 24-die : die-1;
+    pt=st.board[dest];
+    if(!(pt.c===enemy&&pt.n>=2)) res.push({from:'bar',to:dest,die:die,hit:(pt.c===enemy&&pt.n===1)});
+    return res;
+  }
+  var canBear = allInHome(st,p);
+  for(i=0;i<24;i++){
+    pt=st.board[i]; if(pt.c!==p||pt.n===0) continue;
+    dest = (p===W) ? i-die : i+die;
+    if(dest>=0&&dest<24){
+      var dp=st.board[dest];
+      if(!(dp.c===enemy&&dp.n>=2)) res.push({from:i,to:dest,die:die,hit:(dp.c===enemy&&dp.n===1)});
+    } else if(canBear){
+      var exact = (p===W) ? (die===i+1) : (die===24-i);
+      var over = false;
+      if(!exact){
+        if(p===W && die>i+1){ over=true; for(var k=i+1;k<=5;k++) if(st.board[k].c===W&&st.board[k].n>0){over=false;break;} }
+        if(p===B && die>24-i){ over=true; for(var m=18;m<i;m++) if(st.board[m].c===B&&st.board[m].n>0){over=false;break;} }
+      }
+      if(exact||over) res.push({from:i,to:'off',die:die,hit:false});
+    }
+  }
+  return res;
+}
+function applyMove(st,move,p){
+  var s={board:st.board.map(function(x){return {n:x.n,c:x.c};}),barW:st.barW,barB:st.barB,offW:st.offW,offB:st.offB};
+  var enemy=opp(p);
+  if(move.from==='bar'){ if(p===W)s.barW--; else s.barB--; }
+  else { s.board[move.from].n--; if(s.board[move.from].n===0)s.board[move.from].c=null; }
+  if(move.to==='off'){ if(p===W)s.offW++; else s.offB++; }
+  else{
+    var dp=s.board[move.to];
+    if(dp.c===enemy&&dp.n===1){ dp.n=0; dp.c=null; if(enemy===W)s.barW++; else s.barB++; }
+    if(dp.c===null){dp.c=p;dp.n=1;} else dp.n++;
+  }
+  return s;
+}
+/* All maximal sequences for a dice set, honouring: use as many dice as
+   possible; if only one die is playable of two different dice, use the higher. */
+function bestSequences(st,p,diceArr){
+  var orders=[];
+  function perms(arr,cur){
+    if(!arr.length){orders.push(cur);return;}
+    var seen={};
+    for(var i=0;i<arr.length;i++){
+      if(seen[arr[i]])continue; seen[arr[i]]=1;
+      var rest=arr.slice(); rest.splice(i,1);
+      perms(rest,cur.concat([arr[i]]));
+    }
+  }
+  perms(diceArr,[]);
+  var seqs=[], maxUsed=0;
+  orders.forEach(function(order){
+    (function dfs(s,idx,moves){
+      if(idx>=order.length){ record(s,moves); return; }
+      var ms=movesForDie(s,p,order[idx]);
+      if(!ms.length){ record(s,moves); return; }
+      ms.forEach(function(m){ dfs(applyMove(s,m,p), idx+1, moves.concat([m])); });
+    })(st,0,[]);
+    function record(s,moves){
+      if(moves.length>maxUsed){maxUsed=moves.length;seqs=[{moves:moves,state:s}];}
+      else if(moves.length===maxUsed&&moves.length>0){seqs.push({moves:moves,state:s});}
+    }
+  });
+  if(seqs.length===0) return {seqs:[],maxUsed:0};
+  /* higher-die rule */
+  if(diceArr.length>=2 && maxUsed===1){
+    var uniq={}; diceArr.forEach(function(d){uniq[d]=1;});
+    var vals=Object.keys(uniq).map(Number);
+    if(vals.length>1){
+      var playable=vals.filter(function(d){return movesForDie(st,p,d).length>0;});
+      if(playable.length>1){
+        var hi=Math.max.apply(null,playable);
+        var filtered=seqs.filter(function(s){return s.moves[0].die===hi;});
+        if(filtered.length) seqs=filtered;
+      }
+    }
+  }
+  /* de-duplicate identical move paths */
+  var seen2={}, out=[];
+  seqs.forEach(function(s){
+    var key=s.moves.map(function(m){return m.from+'>'+m.to;}).join(',');
+    if(!seen2[key]){seen2[key]=1;out.push(s);}
+  });
+  return {seqs:out,maxUsed:maxUsed};
+}
+function currentAllowed(){
+  if(!diceRemaining.length) return [];
+  var st=cloneState();
+  var res=bestSequences(st, turnPlayer(), diceRemaining);
+  var seen={}, out=[];
+  res.seqs.forEach(function(s){
+    var m=s.moves[0]; var key=m.from+'>'+m.to+'/'+m.die;
+    if(!seen[key]){seen[key]=1;out.push(m);}
+  });
+  return out;
+}
+function turnPlayer(){ return phase==='moving'||phase==='awaitRoll' ? W : B; }
+
+/* ================= Stats (localStorage bests) ================= */
+var SKEY='backgammon-stats-v1';
+var stats={played:0,wins:0,losses:0,pointsWon:0,pointsLost:0,gammons:0,backgammons:0,streak:0,bestStreak:0,fewestRolls:null};
+try{ var saved=localStorage.getItem(SKEY); if(saved){ var parsed=JSON.parse(saved); for(var k in stats) if(parsed[k]!==undefined) stats[k]=parsed[k]; } }catch(e){}
+var rollsThisGame=0;
+function saveStats(){ try{localStorage.setItem(SKEY,JSON.stringify(stats));}catch(e){} }
+function renderStats(){
+  var bar=document.getElementById('statsBar');
+  bar.innerHTML='';
+  function chip(label,val){ var d=document.createElement('div'); d.className='chip'; d.innerHTML='<span>'+label+'</span>'+val; bar.appendChild(d); }
+  chip('Played',stats.played); chip('Won',stats.wins); chip('Lost',stats.losses);
+  chip('Win streak',stats.streak); chip('Best streak',stats.bestStreak);
+  chip('Difficulty', difficulty.charAt(0).toUpperCase()+difficulty.slice(1));
+  chip('Mode', practiceMode ? 'Practice — no score' : 'Standard');
+  var bt=document.getElementById('bestsText');
+  bt.innerHTML='Games won: <b>'+stats.wins+'</b> · Gammons: <b>'+stats.gammons+'</b> · Backgammons: <b>'+stats.backgammons+'</b><br>'+
+    'Points won: <b>'+stats.pointsWon+'</b> · Points lost: <b>'+stats.pointsLost+'</b><br>'+
+    'Fastest win: <b>'+(stats.fewestRolls? stats.fewestRolls+' of your rolls' : '—')+'</b> · Best win streak: <b>'+stats.bestStreak+'</b>';
+}
+
+/* ================= Rendering ================= */
+var boardEl=document.getElementById('board');
+function checkerEl(color,count){
+  var d=document.createElement('div'); d.className='chk '+(color===W?'w':'b');
+  if(count>5) d.textContent=count;
+  return d;
+}
+function render(){
+  boardEl.innerHTML='';
+  var destSet={}, srcSet={};
+  allowedMoves.forEach(function(m){
+    srcSet[m.from]=1;
+    if(selected!==null && m.from===selected) destSet[m.to]=1;
+  });
+  function makePoint(idx,isTop){
+    var pt=board[idx];
+    var el=document.createElement('button');
+    el.type='button';
+    el.className='pt '+(isTop?'top':'bot')+(((idx%2)===0)?' alt':'');
+    el.setAttribute('aria-label','Point '+(idx+1)+(pt.n? ', '+pt.n+' '+(pt.c===W?'your':'AI')+' checkers':''));
+    var num=document.createElement('span'); num.className='num'; num.textContent=idx+1; el.appendChild(num);
+    var show=Math.min(pt.n,5);
+    for(var i=0;i<show;i++) el.appendChild(checkerEl(pt.c, pt.n));
+    if(phase==='moving'){
+      if(selected===idx) el.classList.add('selected');
+      else if(srcSet[idx]) el.classList.add('selectable');
+      if(destSet[idx]) el.classList.add('dest');
+    }
+    el.addEventListener('click',function(){ onPointClick(idx); });
+    return el;
+  }
+  var i, el;
+  /* top row: points 13..18, bar, 19..24 */
+  for(i=12;i<=17;i++) boardEl.appendChild(makePoint(i,true));
+  var barCol=document.createElement('div'); barCol.className='bar-col';
+  var topHalf=document.createElement('div'); topHalf.className='bar-half';
+  var lblB=document.createElement('div'); lblB.className='bar-label'; lblB.textContent='Bar'; topHalf.appendChild(lblB);
+  for(i=0;i<Math.min(barB,5);i++) topHalf.appendChild(checkerEl(B,barB));
+  var botHalf=document.createElement('div'); botHalf.className='bar-half bot';
+  if(phase==='moving'&&srcSet['bar']) botHalf.style.outline='2px dashed var(--gold)';
+  for(i=0;i<Math.min(barW,5);i++) botHalf.appendChild(checkerEl(W,barW));
+  var lblW=document.createElement('div'); lblW.className='bar-label'; lblW.textContent='Bar'; botHalf.appendChild(lblW);
+  barCol.appendChild(topHalf); barCol.appendChild(botHalf);
+  barCol.addEventListener('click',function(){ onBarClick(); });
+  boardEl.appendChild(barCol);
+  for(i=18;i<=23;i++) boardEl.appendChild(makePoint(i,true));
+  /* bottom row: points 12..7, (bar spans), 6..1 */
+  for(i=11;i>=6;i--) boardEl.appendChild(makePoint(i,false));
+  for(i=5;i>=0;i--) boardEl.appendChild(makePoint(i,false));
+
+  /* trays */
+  function fillTray(id,n,color){
+    var t=document.getElementById(id); t.innerHTML='';
+    for(var j=0;j<Math.min(n,15);j++){ var c=checkerEl(color,0); c.classList.add('mini'); t.appendChild(c); }
+  }
+  fillTray('offPlayer',offW,W); fillTray('offAI',offB,B);
+  document.getElementById('offPlayerN').textContent=offW+' / 15';
+  document.getElementById('offAIN').textContent=offB+' / 15';
+  var trayP=document.getElementById('trayPlayer');
+  trayP.classList.toggle('dest', phase==='moving'&&selected!==null&&!!destSet['off']);
+  document.getElementById('pipPlayer').textContent=pipCount(cloneState(),W);
+  document.getElementById('pipAI').textContent=pipCount(cloneState(),B);
+  document.getElementById('ptsPlayer').textContent=ptsPlayer;
+  document.getElementById('ptsAI').textContent=ptsAI;
+  var cd=document.getElementById('cubeDisplay');
+  cd.textContent=cubeEnabled? cubeValue : 1;
+  document.getElementById('cubeOwner').textContent=!cubeEnabled?'off':(cubeOwner===W?'yours':cubeOwner===B?'AI\u2019s':'centred');
+  renderDice();
+  updateButtons();
+  updatePracticeUI();
+}
+var PIPS={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+function renderDice(){
+  [0,1].forEach(function(idx){
+    var el=document.getElementById(idx===0?'die1':'die2');
+    el.innerHTML='';
+    for(var i=0;i<9;i++){ var p=document.createElement('div'); p.className='pip'; el.appendChild(p); }
+    var val=rolledDice[idx];
+    if(val){ PIPS[val].forEach(function(pos){ el.children[pos].classList.add('on'); }); }
+    var stillThere = diceRemaining.indexOf(val)!==-1;
+    el.classList.toggle('used', !!val && !stillThere && phase!=='aiTurn');
+  });
+  document.getElementById('diceLeft').textContent =
+    phase==='moving' ? ('Moves left: '+(diceRemaining.length? diceRemaining.join(' · ') : 'none')) :
+    phase==='aiTurn' ? 'AI is playing…' : '';
+}
+function updateButtons(){
+  document.getElementById('btnRoll').disabled = phase!=='awaitRoll';
+  document.getElementById('btnUndo').disabled = !(phase==='moving'&&turnSnapshot);
+  var canDouble = !practiceMode && cubeEnabled && phase==='awaitRoll' && cubeValue<64 && (cubeOwner===null||cubeOwner===W);
+  document.getElementById('btnDouble').disabled=!canDouble;
+}
+function setStatus(msg,ai){
+  var s=document.getElementById('status'); s.textContent=msg; s.classList.toggle('ai',!!ai);
+}
+function addLog(who,text){
+  var li=document.createElement('li');
+  li.innerHTML='<span class="who"></span> ';
+  li.querySelector('.who').textContent=who;
+  li.appendChild(document.createTextNode(text));
+  logEl.insertBefore(li,logEl.firstChild);
+  while(logEl.children.length>40) logEl.removeChild(logEl.lastChild);
+}
+function fmtMove(m,p){
+  var from = m.from==='bar' ? 'bar' : 'point '+(m.from+1);
+  var to = m.to==='off' ? 'borne off' : 'point '+(m.to+1);
+  return from+' → '+to+(m.hit?' (hit!)':'');
+}
+
+/* ================= Practice round ================= */
+function computePracticeHintMove(){
+  if(!practiceMode||phase!=='moving'||!diceRemaining.length) return null;
+  var res=bestSequences(cloneState(), W, diceRemaining);
+  if(!res.seqs.length) return null;
+  var best=null, bestScore=-1e9;
+  res.seqs.forEach(function(s){ var sc=scoreState(s.state,W); if(sc>bestScore){bestScore=sc;best=s;} });
+  return (best&&best.moves.length) ? best.moves[0] : null;
+}
+function updatePracticeUI(){
+  var banner=document.getElementById('practiceBanner');
+  if(banner) banner.hidden=!practiceMode;
+  var hintBox=document.getElementById('practiceHint');
+  if(hintBox) hintBox.hidden=!practiceMode;
+  var desc=document.getElementById('practiceDesc');
+  if(desc) desc.hidden=!practiceMode;
+  var chk=document.getElementById('chkPractice');
+  if(chk&&chk.checked!==practiceMode) chk.checked=practiceMode;
+  var cubeChk=document.getElementById('chkCube');
+  if(cubeChk) cubeChk.disabled=practiceMode;
+  var topBtn=document.getElementById('btnPracticeTop');
+  if(topBtn) topBtn.textContent=practiceMode?'In practice round ✓':'Practice round';
+  if(!practiceMode){ practiceHintMove=null; return; }
+  var txt=document.getElementById('practiceHintText');
+  if(!txt) return;
+  var hb=document.getElementById('btnPracticeHint');
+  if(phase==='over'){
+    practiceHintMove=null;
+    txt.textContent='Round over — tap New game for another practice round, or Exit practice to play for score.';
+    if(hb) hb.disabled=true;
+    return;
+  }
+  if(phase!=='moving'){
+    practiceHintMove=null;
+    txt.textContent='Roll the dice and a suggested move will appear here. No timer — take your time.';
+    if(hb) hb.disabled=true;
+    return;
+  }
+  practiceHintMove=computePracticeHintMove();
+  txt.textContent=practiceHintMove
+    ? ('Try: '+fmtMove(practiceHintMove,W)+'. Tap “Highlight hint move” to select that checker, then tap the green point.')
+    : 'No legal move with this roll — the turn will pass to the AI.';
+  if(hb) hb.disabled=!practiceHintMove;
+}
+function setPracticeMode(on){
+  practiceMode=!!on;
+  newGame();
+  if(practiceMode){
+    addLog('Practice','practice round started — no score kept, hints on, no timer.');
+    setStatus('Practice round: tap Roll dice. After each roll, check the hint box for a suggested move.');
+    render();
+  }
+}
+
+/* ================= Player turn ================= */
+function rollDie(){ return 1+Math.floor(Math.random()*6); }
+document.getElementById('btnRoll').addEventListener('click',function(){
+  if(phase!=='awaitRoll') return;
+  var a=rollDie(), b=rollDie();
+  rolledDice=[a,b]; rollsThisGame++;
+  dice = (a===b)? [a,a,a,a] : [a,b];
+  diceRemaining=dice.slice();
+  turnSnapshot={state:cloneState(), dice:dice.slice(), rolled:rolledDice.slice()};
+  phase='moving'; selected=null;
+  allowedMoves=currentAllowed();
+  addLog('You','rolled '+a+' + '+b+(a===b?' — doubles, four moves!':''));
+  if(!allowedMoves.length){
+    setStatus('You rolled '+a+' + '+b+' but have no legal move. Turn passes to the AI.');
+    render(); setTimeout(startAITurn,1400); return;
+  }
+  setStatus(barW>0 ? 'You rolled '+a+' + '+b+'. You\u2019re on the bar — tap your bar checker to re-enter.'
+                    : 'You rolled '+a+' + '+b+'. Tap one of your checkers, then a highlighted point.');
+  render();
+});
+function onBarClick(){
+  if(phase!=='moving') return;
+  var has=allowedMoves.some(function(m){return m.from==='bar';});
+  if(!has) return;
+  selected = (selected==='bar') ? null : 'bar';
+  render();
+}
+function onPointClick(idx){
+  if(phase!=='moving') return;
+  /* destination? */
+  if(selected!==null){
+    var mv=null;
+    for(var i=0;i<allowedMoves.length;i++){
+      if(allowedMoves[i].from===selected&&allowedMoves[i].to===idx){ mv=allowedMoves[i]; break; }
+    }
+    if(mv){ doPlayerMove(mv); return; }
+  }
+  var has=allowedMoves.some(function(m){return m.from===idx;});
+  if(has){ selected = (selected===idx)? null : idx; render(); }
+}
+document.getElementById('trayPlayer').addEventListener('click',function(){
+  if(phase!=='moving'||selected===null) return;
+  for(var i=0;i<allowedMoves.length;i++){
+    if(allowedMoves[i].from===selected&&allowedMoves[i].to==='off'){ doPlayerMove(allowedMoves[i]); return; }
+  }
+});
+function doPlayerMove(mv){
+  var st=applyMove(cloneState(),mv,W); loadState(st);
+  addLog('You',fmtMove(mv,W));
+  var di=diceRemaining.indexOf(mv.die); if(di>=0) diceRemaining.splice(di,1);
+  selected=null;
+  if(offW===15){ render(); endGame(W); return; }
+  if(!diceRemaining.length){ render(); setStatus('Turn done. AI to play…',true); setTimeout(startAITurn,700); return; }
+  allowedMoves=currentAllowed();
+  if(!allowedMoves.length){
+    render(); setStatus('No more legal moves with the remaining dice. AI to play…',true);
+    setTimeout(startAITurn,1100); return;
+  }
+  setStatus(barW>0?'Re-enter from the bar first — tap the bar checker.':'Keep moving: tap a checker, then a highlighted point.');
+  render();
+}
+document.getElementById('btnUndo').addEventListener('click',function(){
+  if(phase!=='moving'||!turnSnapshot) return;
+  loadState(turnSnapshot.state);
+  diceRemaining=turnSnapshot.dice.slice(); rolledDice=turnSnapshot.rolled.slice();
+  selected=null; allowedMoves=currentAllowed();
+  addLog('You','undid the turn — dice restored.');
+  setStatus('Turn reset. Your roll: '+rolledDice.join(' + ')+'. Tap a checker to move.');
+  render();
+});
+
+/* ================= AI ================= */
+var DIFF_KEY='backgammon_difficulty_v1';
+var difficulty='normal';
+try{ var _bd=localStorage.getItem(DIFF_KEY); if(_bd==='easy'||_bd==='normal'||_bd==='hard') difficulty=_bd; }catch(e){}
+function aiShouldDouble(){
+  if(practiceMode) return false;
+  if(difficulty==='easy') return false;
+  if(!cubeEnabled||cubeValue>=64) return false;
+  if(!(cubeOwner===null||cubeOwner===B)) return false;
+  var st=cloneState();
+  var lead=pipCount(st,W)-pipCount(st,B); /* positive = AI ahead */
+  return difficulty==='hard' ? (lead>=16 && offB>=1) : (lead>=22 && offB>=2);
+}
+function aiAcceptsDouble(){
+  var st=cloneState();
+  var lead=pipCount(st,B)-pipCount(st,W); /* positive = player ahead */
+  if(lead<10) return true;
+  if(lead<28) return Math.random()<0.75;
+  if(lead<45) return Math.random()<0.35;
+  return false;
+}
+function startAITurn(){
+  if(phase==='over') return;
+  phase='aiTurn'; selected=null; allowedMoves=[]; turnSnapshot=null;
+  render();
+  if(aiShouldDouble()){
+    var offered=cubeValue*2;
+    setStatus('The AI offers to double the cube to '+offered+'…',true);
+    setTimeout(function(){
+      phase='doubleDecision'; render();
+      document.getElementById('doubleText').textContent=
+        'The AI wants to raise the stakes from '+cubeValue+' to '+offered+' points. Accept and the cube is yours — or resign and lose '+cubeValue+' point'+(cubeValue>1?'s':'')+'.';
+      document.getElementById('doubleOverlay').classList.add('open');
+    },900);
+    return;
+  }
+  aiRollAndMove();
+}
+document.getElementById('btnAcceptDouble').addEventListener('click',function(){
+  document.getElementById('doubleOverlay').classList.remove('open');
+  cubeValue=cubeValue*2; cubeOwner=W;
+  addLog('AI','doubled to '+cubeValue+' — you accepted. The cube is yours.');
+  phase='aiTurn'; setStatus('You accepted the double to '+cubeValue+'. AI to play…',true);
+  render(); setTimeout(aiRollAndMove,700);
+});
+document.getElementById('btnResignDouble').addEventListener('click',function(){
+  document.getElementById('doubleOverlay').classList.remove('open');
+  addLog('You','resigned the double. AI wins '+cubeValue+' point(s).');
+  finishGame(B,cubeValue,'You resigned the double — the AI takes '+cubeValue+' point'+(cubeValue>1?'s':'')+'.');
+});
+function scoreState(st,p){
+  var e=opp(p), s=0, i, pt;
+  s += (pipCount(st,e)-pipCount(st,p))*1.0;
+  s += offOf(st,p)*22 - offOf(st,e)*22;
+  s += barOf(st,e)*28 - barOf(st,p)*28;
+  for(i=0;i<24;i++){
+    pt=st.board[i]; if(!pt.n) continue;
+    if(pt.c===p){
+      if(pt.n>=2){ s+=7; if((p===W&&i<=5)||(p===B&&i>=18)) s+=5; if((p===W&&i>=18)||(p===B&&i<=5)) s+=4; }
+      else { /* blot */
+        s-=6;
+        var dist = (e===W)? (i+1) : (24-i); /* enemy distance concept */
+        var enemyNear=false;
+        for(var j=0;j<24;j++){ var q=st.board[j]; if(q.c===e&&q.n>0){ var d=(e===W)? (j-i) : (i-j); if(d>0&&d<=6) enemyNear=true; } }
+        if(enemyNear) s-=7;
+        if(barOf(st,e)>0) s-=5;
+        void dist;
+      }
+    }
+  }
+  /* prime: consecutive made points */
+  var run=0,best=0;
+  for(i=0;i<24;i++){ if(st.board[i].c===p&&st.board[i].n>=2){run++;best=Math.max(best,run);} else run=0; }
+  s+=best*4;
+  s+=Math.random()*1.5;
+  return s;
+}
+function aiRollAndMove(){
+  if(phase==='over') return;
+  var a=rollDie(), b=rollDie();
+  rolledDice=[a,b];
+  var myDice=(a===b)?[a,a,a,a]:[a,b];
+  addLog('AI','rolled '+a+' + '+b+(a===b?' — doubles!':''));
+  var res=bestSequences(cloneState(),B,myDice);
+  if(!res.seqs.length){
+    setStatus('AI rolled '+a+' + '+b+' but has no legal move. Your turn — tap Roll.',false);
+    phase='awaitRoll'; rolledDice=[]; render(); return;
+  }
+  var best=null,bestScore=-1e9;
+  if(difficulty==='easy'){
+    /* Easy: pick a random legal sequence — friendly blunders included. */
+    best=res.seqs[Math.floor(Math.random()*res.seqs.length)];
+  }else if(difficulty==='hard'){
+    /* Hard: average three evaluations per sequence to cut the noise. */
+    res.seqs.forEach(function(s){ var sc=(scoreState(s.state,B)+scoreState(s.state,B)+scoreState(s.state,B))/3; if(sc>bestScore){bestScore=sc;best=s;} });
+  }else{
+    res.seqs.forEach(function(s){ var sc=scoreState(s.state,B); if(sc>bestScore){bestScore=sc;best=s;} });
+  }
+  var moves=best.moves.slice();
+  setStatus('AI rolled '+a+' + '+b+' and is moving…',true); render();
+  var step=0;
+  function next(){
+    if(step>=moves.length){
+      if(offB===15){ endGame(B); return; }
+      phase='awaitRoll'; rolledDice=[];
+      setStatus(barW>0?'Your turn — you\u2019re on the bar. Tap Roll to try to re-enter.':'Your turn. Tap Roll dice.');
+      render(); return;
+    }
+    var mv=moves[step++];
+    loadState(applyMove(cloneState(),mv,B));
+    addLog('AI',fmtMove(mv,B));
+    render();
+    setTimeout(next,560);
+  }
+  setTimeout(next,650);
+}
+
+/* ================= Doubling (player) ================= */
+document.getElementById('btnDouble').addEventListener('click',function(){
+  if(!cubeEnabled||phase!=='awaitRoll') return;
+  if(!(cubeOwner===null||cubeOwner===W)||cubeValue>=64) return;
+  var offered=cubeValue*2;
+  setStatus('You offer a double to '+offered+'. The AI is thinking…');
+  render();
+  setTimeout(function(){
+    if(aiAcceptsDouble()){
+      var old=cubeValue; cubeValue=offered; cubeOwner=B;
+      addLog('You','doubled '+old+' → '+cubeValue+' — AI accepted. Cube is the AI\u2019s now.');
+      setStatus('AI accepted your double — the game is now worth '+cubeValue+'. Tap Roll.');
+    }else{
+      addLog('AI','refused your double. You win '+cubeValue+' point(s).');
+      finishGame(W,cubeValue,'The AI refused your double — you win '+cubeValue+' point'+(cubeValue>1?'s':'')+'!');
+      return;
+    }
+    render();
+  },800);
+});
+
+/* ================= Game end ================= */
+function endGame(winner){
+  var loser=opp(winner);
+  var st=cloneState();
+  var mult=1, kind='win';
+  if(offOf(st,loser)===0){
+    mult=2; kind='gammon';
+    var loserInWinnerHome=false;
+    if(loser===B){ for(var i=0;i<=5;i++) if(st.board[i].c===B&&st.board[i].n>0) loserInWinnerHome=true; }
+    else { for(var j=18;j<=23;j++) if(st.board[j].c===W&&st.board[j].n>0) loserInWinnerHome=true; }
+    if(barOf(st,loser)>0||loserInWinnerHome){ mult=3; kind='backgammon'; }
+  }
+  var pts=(cubeEnabled?cubeValue:1)*mult;
+  var msg = winner===W
+    ? (kind==='backgammon'?'Backgammon! Triple points!':kind==='gammon'?'Gammon! Double points!':'You win!')+' You take '+pts+' point'+(pts>1?'s':'')+'.'
+    : (kind==='backgammon'?'The AI scores a backgammon — triple points.':kind==='gammon'?'The AI scores a gammon — double points.':'The AI wins.')+' AI takes '+pts+' point'+(pts>1?'s':'')+'.';
+  finishGame(winner,pts,msg,kind);
+}
+function finishGame(winner,pts,msg,kind){
+  phase='over'; selected=null; allowedMoves=[];
+  if(practiceMode){
+    var pmsg = winner===W
+      ? 'Practice complete — you bore off all 15 checkers first. Nice work! No score was kept.'
+      : 'Practice complete — the AI finished first this time. No score was kept — tap New game to practise again.';
+    var pbanner=document.getElementById('winBanner');
+    pbanner.textContent=pmsg;
+    pbanner.className='win-banner show '+(winner===W?'won':'lost');
+    setStatus(pmsg);
+    addLog('Practice',pmsg);
+    render();
+    return;
+  }
+  stats.played++;
+  if(winner===W){
+    ptsPlayer+=pts; stats.wins++; stats.pointsWon+=pts; stats.streak++;
+    stats.bestStreak=Math.max(stats.bestStreak,stats.streak);
+    if(kind==='gammon')stats.gammons++;
+    if(kind==='backgammon'){stats.gammons++;stats.backgammons++;}
+    if(stats.fewestRolls===null||rollsThisGame<stats.fewestRolls) stats.fewestRolls=rollsThisGame;
+  }else{
+    ptsAI+=pts; stats.losses++; stats.pointsLost+=pts; stats.streak=0;
+  }
+  saveStats(); renderStats();
+  var banner=document.getElementById('winBanner');
+  banner.textContent=msg+' Tap New game for a rematch.';
+  banner.className='win-banner show '+(winner===W?'won':'lost');
+  setStatus(msg);
+  addLog('Game',msg);
+  render();
+}
+
+/* ================= New game / misc ================= */
+function newGame(){
+  startBoard();
+  phase='awaitRoll'; dice=[]; diceRemaining=[]; rolledDice=[]; selected=null;
+  allowedMoves=[]; turnSnapshot=null; moveCount=0; rollsThisGame=0;
+  cubeValue=1; cubeOwner=null;
+  logEl.innerHTML='';
+  document.getElementById('winBanner').className='win-banner';
+  document.getElementById('doubleOverlay').classList.remove('open');
+  addLog('Game', practiceMode ? 'new practice round started. You move first — no score kept, hints on.' : 'new game started. You move first — good luck!');
+  setStatus(practiceMode ? 'Practice round — your turn. Tap Roll dice to begin, then check the hint box.' : 'Your turn. Tap Roll dice to begin.');
+  render(); renderStats();
+}
+document.getElementById('btnNew').addEventListener('click',newGame);
+document.getElementById('btnNewTop').addEventListener('click',newGame);
+var selDiffEl=document.getElementById('selDiff');
+selDiffEl.value=difficulty;
+var DIFF_DESCS={
+  easy:'Easy: a relaxed opponent — random moves, friendly blunders, and it never offers a double. Good for learning.',
+  normal:'Normal: the AI plays a solid, sensible game and doubles when it is clearly ahead.',
+  hard:'Hard: the sharpest AI — it weighs every move carefully and doubles earlier when ahead.'
+};
+function updateDiffDesc(){
+  var el=document.getElementById('diffDesc');
+  if(el) el.textContent=DIFF_DESCS[difficulty]||DIFF_DESCS.normal;
+}
+updateDiffDesc();
+selDiffEl.addEventListener('change',function(){
+  difficulty=selDiffEl.value;
+  try{ localStorage.setItem(DIFF_KEY,difficulty); }catch(e){}
+  updateDiffDesc(); renderStats();
+  addLog('Difficulty','set to '+difficulty+' — applies from the AI\u2019s next turn.');
+  setStatus('Difficulty set to '+difficulty.charAt(0).toUpperCase()+difficulty.slice(1)+'. It applies from the AI\u2019s next turn — or tap New game for a fresh match at this level.');
+  render();
+});
+document.getElementById('chkCube').addEventListener('change',function(e){
+  cubeEnabled=e.target.checked;
+  if(!cubeEnabled){cubeValue=1;cubeOwner=null;}
+  addLog('Cube',cubeEnabled?'doubling cube ON.':'doubling cube OFF — games worth 1 point.');
+  render();
+});
+document.getElementById('chkPractice').addEventListener('change',function(e){
+  setPracticeMode(e.target.checked);
+});
+document.getElementById('btnPracticeTop').addEventListener('click',function(){
+  if(practiceMode){
+    setStatus('You are already in a practice round — no score kept, hints on. Tap New game for a fresh practice round.');
+    var hb=document.getElementById('practiceHint');
+    if(hb&&hb.scrollIntoView) hb.scrollIntoView({behavior:'smooth',block:'nearest'});
+    return;
+  }
+  setPracticeMode(true);
+});
+document.getElementById('btnExitPractice').addEventListener('click',function(){
+  setPracticeMode(false);
+});
+document.getElementById('btnPracticeHint').addEventListener('click',function(){
+  if(!practiceMode||phase!=='moving') return;
+  if(!practiceHintMove) practiceHintMove=computePracticeHintMove();
+  if(!practiceHintMove) return;
+  selected=practiceHintMove.from;
+  setStatus('Hint selected: move from '+(practiceHintMove.from==='bar'?'the bar':'point '+(practiceHintMove.from+1))+' — now tap the highlighted green point.');
+  render();
+});
+document.getElementById('btnResetStats').addEventListener('click',function(){
+  stats={played:0,wins:0,losses:0,pointsWon:0,pointsLost:0,gammons:0,backgammons:0,streak:0,bestStreak:0,fewestRolls:null};
+  ptsPlayer=0; ptsAI=0; saveStats(); renderStats(); render();
+});
+
+/* ================= Tutorial (opt-in only) & Rules ================= */
+var howOverlay=document.getElementById('howOverlay');
+var rulesOverlay=document.getElementById('rulesOverlay');
+var tutorialHint=document.getElementById('tutorialHint');
+function markTutorialSeen(){
+  try{localStorage.setItem('backgammon-seen-tutorial','1');}catch(e){}
+  tutorialHint.hidden=true;
+}
+function openHow(){ rulesOverlay.classList.remove('open'); howOverlay.classList.add('open'); markTutorialSeen(); }
+function closeHow(){ howOverlay.classList.remove('open'); }
+function openRules(){ howOverlay.classList.remove('open'); rulesOverlay.classList.add('open'); }
+function closeRules(){ rulesOverlay.classList.remove('open'); }
+document.getElementById('btnHow').addEventListener('click',openHow);
+document.getElementById('btnRules').addEventListener('click',openRules);
+document.getElementById('btnCloseHow').addEventListener('click',closeHow);
+document.getElementById('btnStartPlay').addEventListener('click',closeHow);
+document.getElementById('btnHowToRules').addEventListener('click',openRules);
+document.getElementById('btnCloseRules').addEventListener('click',closeRules);
+document.getElementById('btnRulesToHow').addEventListener('click',openHow);
+document.getElementById('btnHintDismiss').addEventListener('click',markTutorialSeen);
+howOverlay.addEventListener('click',function(e){ if(e.target===howOverlay) closeHow(); });
+rulesOverlay.addEventListener('click',function(e){ if(e.target===rulesOverlay) closeRules(); });
+
+/* ================= Feedback (standard, saved locally) ================= */
+var feedbackOverlay=document.getElementById('feedbackOverlay');
+var FB_KEY='holos-arcade-feedback';
+var fbRating=0;
+var fbTag=null;
+var fbStars=document.getElementById('fbStars');
+var fbRatingText=document.getElementById('fbRatingText');
+var FB_LABELS=['Tap a star to rate.','1 star — needs work','2 stars — a bit rough','3 stars — okay','4 stars — good','5 stars — love it'];
+function paintStars(){
+  var btns=fbStars.querySelectorAll('button');
+  for(var i=0;i<btns.length;i++){
+    var on=(i<fbRating);
+    btns[i].classList.toggle('on',on);
+    btns[i].setAttribute('aria-checked', (fbRating===i+1)?'true':'false');
+  }
+  fbRatingText.textContent=FB_LABELS[fbRating]||FB_LABELS[0];
+}
+fbStars.addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  fbRating=parseInt(b.getAttribute('data-star'),10)||0;
+  paintStars();
+});
+var fbTags=document.getElementById('fbTags');
+function paintTags(){
+  var btns=fbTags.querySelectorAll('button');
+  for(var i=0;i<btns.length;i++){
+    var on=(btns[i].getAttribute('data-tag')===fbTag);
+    btns[i].classList.toggle('on',on);
+    btns[i].setAttribute('aria-checked', on?'true':'false');
+  }
+}
+fbTags.addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  var t=b.getAttribute('data-tag');
+  fbTag=(fbTag===t)?null:t; /* tap again to clear — the tag is optional */
+  paintTags();
+});
+function openFeedback(){ feedbackOverlay.classList.add('open'); }
+function closeFeedback(){ feedbackOverlay.classList.remove('open'); }
+document.getElementById('btnFeedback').addEventListener('click',openFeedback);
+document.getElementById('btnCloseFeedback').addEventListener('click',closeFeedback);
+feedbackOverlay.addEventListener('click',function(e){ if(e.target===feedbackOverlay) closeFeedback(); });
+document.getElementById('btnSaveFeedback').addEventListener('click',function(){
+  var comment=document.getElementById('fbComment').value.trim();
+  if(!fbRating && !comment){
+    fbRatingText.textContent='Add a star rating or a comment first.';
+    return;
+  }
+  var entry={game:'backgammon',rating:fbRating,text:comment,tag:fbTag,timestamp:new Date().toISOString()};
+  try{
+    var list=[]; var raw=localStorage.getItem(FB_KEY);
+    if(raw){ var p=JSON.parse(raw); if(Array.isArray(p)) list=p; }
+    list.push(entry);
+    localStorage.setItem(FB_KEY,JSON.stringify(list));
+  }catch(e){}
+  document.getElementById('fbDone').classList.add('show');
+  addLog('Feedback','saved on this device — thank you!');
+});
+paintStars();
+paintTags();
+
+newGame();
+/* One-time, non-blocking hint for new players. The tutorial itself never
+   opens on its own — it is opt-in via the How to play button. */
+var seenTutorial=false;
+try{ seenTutorial=!!localStorage.getItem('backgammon-seen-tutorial'); }catch(e){}
+tutorialHint.hidden=seenTutorial;
+})();
+</script>
+</body>
+</html>

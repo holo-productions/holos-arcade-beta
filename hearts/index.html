@@ -1,0 +1,1069 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Hearts</title>
+<style>
+  :root{
+    --bg:#f4efe6; --panel:#fffdf8; --ink:#23201b; --muted:#6d6558; --line:#ddd3c0;
+    --felt:#1e6b4a; --felt-dark:#155239; --felt-edge:#0e3d29;
+    --accent:#b3372f; --accent-ink:#fff; --gold:#c9962e;
+    --card-bg:#fffef9; --card-ink:#1c1a17; --red:#b3372f; --black:#26241f;
+    --card-w:clamp(44px,11.5vw,64px); --card-h:calc(var(--card-w)*1.4);
+    --shadow:0 2px 10px rgba(30,25,15,.18);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#171a17; --panel:#22261f; --ink:#ece7da; --muted:#a89f8d; --line:#3a4034;
+      --felt:#17573c; --felt-dark:#0f3d29; --felt-edge:#092a1c; --card-bg:#f7f3e8; --shadow:0 2px 10px rgba(0,0,0,.5);}
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:Georgia,'Times New Roman',serif;-webkit-text-size-adjust:100%}
+  button,[role="button"],select,summary{ min-height:2.25rem; }
+  button{font-family:inherit;cursor:pointer}
+  .wrap{max-width:1060px;margin:0 auto;padding:10px 12px 28px}
+  header.top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin:4px 0 10px}
+  h1{font-size:1.55rem;margin:0;letter-spacing:.02em}
+  h1 .suit{color:var(--accent)}
+  .tagline{color:var(--muted);font-size:.9rem;margin:2px 0 0;font-style:italic}
+  .controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .btn{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 13px;font-size:.92rem;box-shadow:var(--shadow)}
+  .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:bold}
+  .btn.practice{border-color:var(--gold);background:#fff6da;color:var(--ink);font-weight:bold}
+  @media (prefers-color-scheme: dark){ .btn.practice{background:#38301a} }
+  .btn.practice.on{background:var(--gold);color:#241c05;border-color:var(--gold)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+  .seg button{border:0;background:transparent;padding:7px 11px;font-size:.88rem;color:var(--ink)}
+  .seg button.on{background:var(--felt);color:#fff;font-weight:bold}
+  .seg-label{font-size:.8rem;color:var(--muted);margin-right:2px}
+
+  /* Table */
+  .table{background:radial-gradient(ellipse at 50% 42%,var(--felt) 0%,var(--felt-dark) 78%,var(--felt-edge) 100%);
+    border-radius:18px;border:6px solid #6d4c2f;padding:10px;position:relative;color:#f5efdf;box-shadow:var(--shadow)}
+  @media (prefers-color-scheme: dark){ .table{border-color:#4a3520} }
+  .seats{display:grid;grid-template-columns:1fr auto 1fr;grid-template-rows:auto 1fr auto;gap:4px;min-height:340px}
+  .seat{display:flex;flex-direction:column;align-items:center;gap:4px;padding:2px}
+  .seat.north{grid-column:2;grid-row:1}
+  .seat.west{grid-column:1;grid-row:2;justify-content:center}
+  .seat.east{grid-column:3;grid-row:2;justify-content:center}
+  .seat.center{grid-column:2;grid-row:2;display:flex;align-items:center;justify-content:center}
+  .seat.south{grid-column:1/4;grid-row:3}
+  .pname{font-size:.85rem;font-weight:bold;text-shadow:0 1px 2px rgba(0,0,0,.5);display:flex;gap:6px;align-items:center}
+  .pname .pts{background:rgba(0,0,0,.35);border-radius:20px;padding:1px 9px;font-size:.78rem;font-weight:normal}
+  .pname.turn .who{color:#ffd968}
+  .turn-dot{width:9px;height:9px;border-radius:50%;background:#ffd968;box-shadow:0 0 7px #ffd968;display:none}
+  .pname.turn .turn-dot{display:inline-block}
+  .backs{display:flex}
+  .back{width:22px;height:31px;border-radius:4px;background:repeating-linear-gradient(45deg,#8c2f28,#8c2f28 4px,#a8433a 4px,#a8433a 8px);border:1.5px solid #f0e6cf;margin-left:-12px;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+  .back:first-child{margin-left:0}
+  .back.v{width:31px;height:22px;margin-left:0;margin-top:-12px}
+  .backs.v{flex-direction:column}
+  .backs.v .back:first-child{margin-top:0}
+
+  /* Trick area */
+  .trick{position:relative;width:210px;height:170px}
+  .slot{position:absolute;width:var(--card-w);height:var(--card-h);display:flex;align-items:center;justify-content:center}
+  .slot.s{left:50%;bottom:0;transform:translateX(-50%)}
+  .slot.n{left:50%;top:0;transform:translateX(-50%)}
+  .slot.w{left:0;top:50%;transform:translateY(-50%)}
+  .slot.e{right:0;top:50%;transform:translateY(-50%)}
+  .slot .who{position:absolute;font-size:.62rem;background:rgba(0,0,0,.45);color:#ffe9a8;border-radius:8px;padding:0 5px;bottom:-7px;left:50%;transform:translateX(-50%);white-space:nowrap;z-index:3}
+  .slot.win .card{box-shadow:0 0 0 3px #ffd968,0 4px 10px rgba(0,0,0,.45)}
+
+  /* Cards */
+  .card{width:var(--card-w);height:var(--card-h);background:var(--card-bg);color:var(--black);border-radius:7px;border:1px solid #c9c2b2;
+    display:flex;flex-direction:column;justify-content:space-between;padding:4px 5px;font-family:Georgia,serif;box-shadow:0 2px 5px rgba(0,0,0,.35);position:relative;user-select:none}
+  .card.red{color:var(--red)}
+  .card .r{font-size:calc(var(--card-w)*.30);font-weight:bold;line-height:1}
+  .card .s{font-size:calc(var(--card-w)*.34);line-height:1}
+  .card .big{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:calc(var(--card-w)*.62);opacity:.92}
+  .card.queen{outline:2px dashed var(--gold);outline-offset:-4px}
+  .card *{pointer-events:none}
+  button.card{cursor:pointer;text-align:left}
+  button.card.legal:hover,button.card.legal:focus-visible{transform:translateY(-10px)}
+  button.card.dim{opacity:.45}
+  button.card.sel{transform:translateY(-14px);box-shadow:0 0 0 3px var(--gold),0 6px 12px rgba(0,0,0,.4)}
+  .hand{display:flex;justify-content:center;align-items:flex-end;min-height:calc(var(--card-h) + 16px);padding-top:14px;flex-wrap:nowrap}
+  .hand .card{margin-left:calc(var(--card-w) * -0.44)}
+  .hand .card:first-child{margin-left:0}
+  .hand .card{transition:transform .12s ease}
+
+  .msgbar{min-height:2.4em;display:flex;align-items:center;justify-content:center;text-align:center;font-size:.98rem;padding:4px 8px}
+  .msgbar b{color:#ffd968}
+  .passbar{display:none;justify-content:center;gap:8px;padding:2px 0 8px;flex-wrap:wrap}
+  .passbar.show{display:flex}
+  .hearts-broken{font-size:.78rem;background:rgba(0,0,0,.35);border-radius:12px;padding:2px 10px}
+  .hearts-broken.on{background:var(--accent)}
+
+  /* Practice round */
+  .practice-banner{display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#fff6da;color:#2a2517;border:2px solid var(--gold);border-radius:12px;padding:9px 14px;margin:0 0 10px;font-size:.93rem;box-shadow:var(--shadow)}
+  @media (prefers-color-scheme: dark){ .practice-banner{background:#38301a;color:#f2ead2} }
+  .practice-banner.show{display:flex}
+  .practice-banner .btn{flex:0 0 auto}
+  .table.practice{border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,150,46,.45),var(--shadow)}
+  .coachtip{display:none;max-width:560px;margin:2px auto 4px;background:rgba(0,0,0,.38);color:#ffe9a8;border-radius:10px;padding:6px 12px;font-size:.87rem;line-height:1.4;text-align:center}
+  .coachtip.show{display:block}
+
+  /* Panels below table */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  @media (max-width:640px){ .grid{grid-template-columns:1fr} .trick{width:180px;height:155px} }
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:var(--shadow)}
+  .panel h2{font-size:1.02rem;margin:0 0 8px}
+  table.scores{width:100%;border-collapse:collapse;font-size:.9rem}
+  table.scores th,table.scores td{padding:5px 6px;text-align:right;border-bottom:1px solid var(--line)}
+  table.scores th:first-child,table.scores td:first-child{text-align:left}
+  table.scores tr.total td{font-weight:bold;border-bottom:none}
+  table.scores td.moon{color:var(--accent);font-weight:bold}
+  .log{font-size:.86rem;color:var(--muted);max-height:170px;overflow-y:auto;margin:0;padding-left:18px}
+  .log li{margin-bottom:3px}
+  .bests{display:flex;flex-wrap:wrap;gap:8px;font-size:.88rem}
+  .bests span{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+  .bests b{color:var(--accent)}
+
+  footer{margin-top:22px;border-top:1px solid var(--line);padding-top:12px;font-size:.86rem;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between}
+  footer a{color:var(--accent)}
+
+  /* Modals */
+  .overlay{position:fixed;inset:0;background:rgba(15,12,8,.62);display:none;align-items:center;justify-content:center;z-index:50;padding:14px}
+  .overlay.show{display:flex}
+  .modal{background:var(--panel);color:var(--ink);border-radius:14px;max-width:560px;width:100%;max-height:88vh;overflow-y:auto;padding:20px 22px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+  .modal h2{margin:0 0 10px;font-size:1.25rem}
+  .modal h3{margin:14px 0 5px;font-size:1rem}
+  .modal p,.modal li{font-size:.93rem;line-height:1.45}
+  .modal ul{margin:4px 0 8px;padding-left:20px}
+  .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap;position:sticky;bottom:-20px;background:var(--panel);padding:10px 0 2px}
+  .coach{background:#fff8df;color:#2a2517;border:2px solid var(--gold)}
+  @media (prefers-color-scheme: dark){ .coach{background:#2e2a1c;color:#f2ead2} }
+  .coach .step{font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:bold}
+  .summary-big{font-size:1.05rem;text-align:center;margin:8px 0}
+  .hintbar{display:none;align-items:center;justify-content:space-between;gap:10px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:8px;padding:7px 12px;margin:0 0 10px;font-size:.9rem;box-shadow:var(--shadow)}
+  .hintbar.show{display:flex}
+  .hintbar button{background:transparent;border:0;font-size:1.05rem;line-height:1;padding:4px 6px;color:var(--muted)}
+  .hintbar a{color:var(--accent);font-weight:bold;text-decoration:underline;cursor:pointer}
+  table.rules{width:100%;border-collapse:collapse;font-size:.9rem;margin:6px 0 10px}
+  table.rules th,table.rules td{padding:5px 7px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  table.rules td:last-child,table.rules th:last-child{text-align:right;white-space:nowrap}
+  /* Feedback */
+  .fb-stars{display:flex;gap:6px;margin:6px 0 4px}
+  .fb-stars button{background:transparent;border:0;font-size:2rem;line-height:1;padding:4px 2px;color:#c9c2b2;min-height:2.5rem;min-width:2.5rem}
+  .fb-stars button.on{color:var(--gold)}
+  .fb-stars button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+  .fb-label{font-size:.88rem;font-weight:bold;display:block;margin:12px 0 4px}
+  .fb-tags{display:flex;gap:6px;flex-wrap:wrap}
+  .fb-tags button{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:20px;padding:6px 14px;font-size:.88rem}
+  .fb-tags button.on{background:var(--felt);color:#fff;border-color:var(--felt);font-weight:bold}
+  .fb-text{width:100%;min-height:96px;border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-family:inherit;font-size:.95rem;background:var(--panel);color:var(--ink);resize:vertical}
+  .fb-note{font-size:.8rem;color:var(--muted);margin:8px 0 0;line-height:1.4}
+  .fb-thanks{text-align:center;padding:18px 0 6px}
+  .fb-thanks .big{font-size:1.3rem;font-weight:bold;margin:0 0 6px}
+  .fb-err{color:var(--accent);font-size:.86rem;min-height:1.2em;margin:6px 0 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Hearts <span class="suit">♥</span></h1>
+      <p class="tagline">You vs Ruby, Pearl &amp; Onyx · first to 100 loses · lowest score wins</p>
+      <p style="margin:4px 0 0"><span style="display:inline-block;background:var(--panel);border:1px solid var(--gold);color:var(--ink);border-radius:20px;padding:2px 11px;font-size:.78rem;font-weight:bold">Play money — no real gambling</span></p>
+    </div>
+    <div class="controls">
+      <span class="seg-label" id="diffLabel">Difficulty</span>
+      <div class="seg" role="group" aria-labelledby="diffLabel">
+        <button id="diffEasy" type="button">Easy</button>
+        <button id="diffNormal" type="button" class="on">Normal</button>
+        <button id="diffHard" type="button">Hard</button>
+      </div>
+      <button class="btn" id="howBtn" type="button">How to play</button>
+      <button class="btn" id="rulesBtn" type="button">Rules</button>
+      <button class="btn" id="walkBtn" type="button">Tutorial</button>
+      <button class="btn" id="feedbackBtn" type="button" aria-haspopup="dialog">💬 Feedback</button>
+      <button class="btn practice" id="practiceBtn" type="button" aria-pressed="false">Practice round</button>
+      <button class="btn primary" id="newBtn" type="button">New game</button>
+    </div>
+  </header>
+
+  <div class="hintbar" id="hintBar" role="note">
+    <span>New here? Tap <a id="hintHowLink">How to play</a> for a quick start, or <a id="hintRulesLink">Rules</a> for the full rules — play starts right away either way.</span>
+    <button type="button" id="hintDismiss" aria-label="Dismiss hint">✕</button>
+  </div>
+
+  <div class="practice-banner" id="practiceBanner" role="note">
+    <span><b>Practice round</b> — one chill hand just to mess around and learn the ropes. Points don't count, your bests stay put, and the coach tips below the message are on.</span>
+    <button class="btn" id="exitPracticeBtn" type="button">Exit practice</button>
+  </div>
+
+  <div class="table" id="table">
+    <div class="seats">
+      <div class="seat north">
+        <div class="pname" id="name2"><span class="turn-dot"></span><span class="who">Pearl (N)</span><span class="pts" id="tot2">0</span></div>
+        <div class="backs" id="backs2"></div>
+      </div>
+      <div class="seat west">
+        <div class="pname" id="name1"><span class="turn-dot"></span><span class="who">Ruby (W)</span><span class="pts" id="tot1">0</span></div>
+        <div class="backs v" id="backs1"></div>
+      </div>
+      <div class="seat center">
+        <div>
+          <div class="trick" id="trick">
+            <div class="slot n" id="slot2"></div>
+            <div class="slot w" id="slot1"></div>
+            <div class="slot e" id="slot3"></div>
+            <div class="slot s" id="slot0"></div>
+          </div>
+          <div style="text-align:center;margin-top:10px"><span class="hearts-broken" id="brokenBadge">Hearts not broken</span></div>
+        </div>
+      </div>
+      <div class="seat east">
+        <div class="pname" id="name3"><span class="turn-dot"></span><span class="who">Onyx (E)</span><span class="pts" id="tot3">0</span></div>
+        <div class="backs v" id="backs3"></div>
+      </div>
+      <div class="seat south">
+        <div class="pname" id="name0"><span class="turn-dot"></span><span class="who">You</span><span class="pts" id="tot0">0</span></div>
+        <div class="msgbar" id="msg">Dealing…</div>
+        <div class="coachtip" id="coachTip" aria-live="polite"></div>
+        <div class="passbar" id="passbar">
+          <button class="btn primary" id="passBtn" type="button" disabled>Select 3 cards to pass</button>
+          <button class="btn" id="clearPassBtn" type="button">Clear</button>
+        </div>
+        <div class="hand" id="hand"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <section class="panel" aria-label="Scoreboard">
+      <h2 id="scoreTitle">Scoreboard — race to 100</h2>
+      <table class="scores">
+        <thead><tr><th>Hand</th><th>You</th><th>Ruby</th><th>Pearl</th><th>Onyx</th></tr></thead>
+        <tbody id="scoreBody"></tbody>
+        <tfoot><tr class="total"><td>Total</td><td id="sum0">0</td><td id="sum1">0</td><td id="sum2">0</td><td id="sum3">0</td></tr></tfoot>
+      </table>
+      <p style="font-size:.85rem;color:var(--muted);margin:8px 0 0">Each ♥ = 1 point · Q♠ = 13 points · 26 points per hand. Take all 26 to <b>shoot the moon</b>: you score 0 and everyone else gets +26.</p>
+    </section>
+    <section class="panel" aria-label="Your bests and game log">
+      <h2>Your bests (saved on this device)</h2>
+      <div class="bests" id="bests"></div>
+      <h2 style="margin-top:14px">Game log</h2>
+      <ul class="log" id="log"></ul>
+    </section>
+  </div>
+
+  <footer>
+    <span>Hearts · a Ridiculously Fit and Fed arcade game · Play money — no real gambling</span>
+    <span><button class="btn" id="feedbackBtnFooter" type="button" style="padding:5px 11px;font-size:.86rem">💬 Feedback</button> · <a href="../games-hub/">← Games Hub</a> · <a href="../games-hub/">Ridiculously Fit and Fed (RFF)</a></span>
+  </footer>
+</div>
+
+<!-- How to play — short tutorial (opt-in only) -->
+<div class="overlay" id="howOverlay" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+  <div class="modal">
+    <h2 id="howTitle">How to play Hearts — quick start</h2>
+    <p>You vs Ruby (West), Pearl (North) and Onyx (East). Points are <b>bad</b>: avoid hearts and the Q♠. Lowest score when someone hits 100 wins. For the complete rules, tap <b>Rules</b>.</p>
+    <h3>In 4 steps</h3>
+    <ul>
+      <li><b>1. Pass:</b> on most hands, tap 3 cards in your hand at the bottom, then tap <b>Pass</b>. The direction is shown in the message bar (left → right → across → hold).</li>
+      <li><b>2. Play:</b> whoever holds the <b>2♣</b> leads first. On your turn, tap a highlighted card to play it. Dimmed cards can't be played right now.</li>
+      <li><b>3. Follow suit:</b> if you have a card in the suit led, you must play one. If you don't, tap any card to discard it.</li>
+      <li><b>4. Win low:</b> the highest card of the suit led takes the trick — and any points in it — and leads next. Check totals in the scoreboard below the table.</li>
+    </ul>
+    <h3>On screen</h3>
+    <ul>
+      <li>The <b>Q♠</b> has a dashed gold outline so you can always spot her (13 points!).</li>
+      <li>The badge under the trick area shows whether <b>hearts are broken</b> yet.</li>
+      <li>Use the <b>Tutorial</b> button any time for a short step-by-step tour, and <b>New game</b> to restart.</li>
+      <li>Not feeling ready? Hit <b>Practice round</b> up top — it's one no-pressure hand where the points don't count and a coach tip pops up on your turns to nudge you along.</li>
+    </ul>
+    <div class="row"><button class="btn" id="howRulesBtn" type="button">Read full Rules</button><button class="btn primary" id="howClose" type="button">Got it — play</button></div>
+  </div>
+</div>
+
+<!-- Rules — full game rules -->
+<div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="modal">
+    <h2 id="rulesTitle">Hearts — full rules</h2>
+    <h3>Objective &amp; winning</h3>
+    <ul>
+      <li>Hearts is a 4-player trick-taking game played with a standard 52-card deck. There are no partnerships in this version — every player scores for themselves.</li>
+      <li>Points are penalties. The game ends at the end of the hand in which any player reaches <b>100 points or more</b>.</li>
+      <li>The player with the <b>lowest total</b> at that point wins. If two or more players tie for the lowest total, the win is shared — there is no tie-break hand in this version.</li>
+    </ul>
+    <h3>Setup &amp; deal</h3>
+    <ul>
+      <li>Each player is dealt <b>13 cards</b>. Cards rank from 2 (low) to Ace (high). There is no trump suit.</li>
+      <li>Seating: You (South), Ruby (West), Pearl (North), Onyx (East). Play proceeds clockwise.</li>
+    </ul>
+    <h3>Passing</h3>
+    <p>Before play, each player passes 3 cards face-down at the same time. The direction rotates every hand in a 4-hand cycle, then repeats:</p>
+    <table class="rules">
+      <thead><tr><th>Hand in cycle</th><th>Pass to</th></tr></thead>
+      <tbody>
+        <tr><td>1st</td><td>Left</td></tr>
+        <tr><td>2nd</td><td>Right</td></tr>
+        <tr><td>3rd</td><td>Across</td></tr>
+        <tr><td>4th</td><td>No pass — hold 'em</td></tr>
+      </tbody>
+    </table>
+    <p>You must select your 3 cards before seeing the cards passed to you.</p>
+    <h3>Playing a trick</h3>
+    <ul>
+      <li>The player holding the <b>2♣</b> must lead it to the first trick.</li>
+      <li>Each player in turn must <b>follow suit</b> — play a card of the suit led — if they hold one. If they hold none, they may discard any other card, subject to the first-trick rule below.</li>
+      <li>The <b>highest card of the suit led</b> wins the trick. Cards in other suits can never win a trick, however high they are.</li>
+      <li>The trick winner collects the 4 cards, takes any points in them, and leads the next trick. A hand is 13 tricks.</li>
+    </ul>
+    <h3>Special rules</h3>
+    <ul>
+      <li><b>First trick:</b> no point card — no heart and not the Q♠ — may be played on the first trick, even by a player who cannot follow suit, unless that player's hand contains only point cards.</li>
+      <li><b>Breaking hearts:</b> hearts may not be led until hearts are <i>broken</i> — a heart is discarded on a trick where another suit was led. Exception: a player whose hand is only hearts may lead one. Once broken, hearts may be led freely for the rest of the hand. Hearts reset to unbroken each new hand.</li>
+      <li><b>The Queen of Spades:</b> Q♠ is a point card (13 points). She does not break hearts and has no other special power — but A♠ and K♠ are dangerous to hold while she is still out, because a spade lead can force them to win the trick she falls on.</li>
+      <li><b>No reneging:</b> playing off-suit while holding the suit led is not allowed; the game only offers you legal cards on your turn.</li>
+    </ul>
+    <h3>Scoring</h3>
+    <table class="rules">
+      <thead><tr><th>Card taken in a trick</th><th>Points</th></tr></thead>
+      <tbody>
+        <tr><td>Each heart ♥ (13 in the deck)</td><td>1 point each</td></tr>
+        <tr><td>Queen of Spades Q♠</td><td>13 points</td></tr>
+        <tr><td>All other cards</td><td>0 points</td></tr>
+        <tr><td><b>Total per hand</b></td><td><b>26 points</b></td></tr>
+      </tbody>
+    </table>
+    <p>Scores are added to each player's running total after every hand and shown on the scoreboard.</p>
+    <h3>Shooting the moon</h3>
+    <ul>
+      <li>If one player takes <b>all 26 points</b> in a hand — every heart plus the Q♠ — they have <b>shot the moon</b>.</li>
+      <li>The shooter scores <b>0</b> for the hand and <b>each opponent scores +26</b>. (This version uses the add-to-opponents method; the shooter does not have the option to subtract 26 from their own total instead.)</li>
+      <li>Taking 25 of 26 points is not a moon — those 25 points count normally against the player who took them.</li>
+    </ul>
+    <h3>This version</h3>
+    <ul>
+      <li><b>Difficulty</b> changes only how the AI plays: Easy plays loosely, Normal plays sound Hearts, Hard also ducks points, protects against the queen and tries to stop a moon shot. The rules above never change.</li>
+      <li><b>Practice round:</b> tap the Practice round button for a single practice hand. It plays by the exact same rules, but the points don't count toward the race to 100, the hand isn't added to the scoreboard, and your saved bests don't change. Coach tips appear during the hand to suggest plays — handy while you're learning. Leave any time with Exit practice, or jump straight into a real game when the hand ends.</li>
+      <li><b>Play money only:</b> points in this game are just a score — they have no cash value. There is no real-money wagering, no prizes, and no betting of any kind in this game.</li>
+      <li>Your bests (games, wins, best winning score, fewest points in a hand, moons shot) are saved on this device only.</li>
+    </ul>
+    <div class="row"><button class="btn primary" id="rulesClose" type="button">Close rules</button></div>
+  </div>
+</div>
+
+<!-- Walkthrough coach -->
+<div class="overlay" id="coachOverlay" role="dialog" aria-modal="true" aria-labelledby="coachTitle">
+  <div class="modal coach">
+    <div class="step" id="coachStep">Step 1 of 5</div>
+    <h2 id="coachTitle">Welcome to Hearts</h2>
+    <p id="coachText"></p>
+    <div class="row">
+      <button class="btn" id="coachSkip" type="button">Skip tour</button>
+      <button class="btn primary" id="coachNext" type="button">Next</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback -->
+<div class="overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+  <div class="modal">
+    <div id="fbFormWrap">
+      <h2 id="feedbackTitle">Feedback — Hearts</h2>
+      <p style="margin-top:0">How was this game? Your feedback is saved on this device only — no email, no account needed.</p>
+      <span class="fb-label" id="fbRatingLabel">Your rating</span>
+      <div class="fb-stars" role="radiogroup" aria-labelledby="fbRatingLabel" id="fbStars">
+        <button type="button" data-val="1" role="radio" aria-checked="false" aria-label="1 star">★</button>
+        <button type="button" data-val="2" role="radio" aria-checked="false" aria-label="2 stars">★</button>
+        <button type="button" data-val="3" role="radio" aria-checked="false" aria-label="3 stars">★</button>
+        <button type="button" data-val="4" role="radio" aria-checked="false" aria-label="4 stars">★</button>
+        <button type="button" data-val="5" role="radio" aria-checked="false" aria-label="5 stars">★</button>
+      </div>
+      <span class="fb-label" id="fbTagLabel">Tag <span style="font-weight:normal;color:var(--muted)">(optional)</span></span>
+      <div class="fb-tags" role="group" aria-labelledby="fbTagLabel" id="fbTags">
+        <button type="button" data-tag="Bug">Bug</button>
+        <button type="button" data-tag="Suggestion">Suggestion</button>
+        <button type="button" data-tag="Other" class="on">Other</button>
+      </div>
+      <label class="fb-label" for="fbText">Comment</label>
+      <textarea class="fb-text" id="fbText" placeholder="What did you like? What could be better?" maxlength="2000"></textarea>
+      <p class="fb-err" id="fbErr" aria-live="polite"></p>
+      <p class="fb-note">Please don't include personal information. Feedback follows the same Terms &amp; Conditions as the games — keep it clean, and it may be used to improve the games.</p>
+      <div class="row"><button class="btn" id="fbCancel" type="button">Cancel</button><button class="btn primary" id="fbSave" type="button">Save feedback</button></div>
+    </div>
+    <div id="fbThanksWrap" class="fb-thanks" hidden>
+      <p class="big">Thanks! 💛</p>
+      <p>Your feedback was saved on this device. It helps make the games better.</p>
+      <div class="row" style="justify-content:center"><button class="btn primary" id="fbThanksClose" type="button">Back to game</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- Hand / game summary -->
+<div class="overlay" id="sumOverlay" role="dialog" aria-modal="true" aria-labelledby="sumTitle">
+  <div class="modal">
+    <h2 id="sumTitle">Hand over</h2>
+    <p class="summary-big" id="sumText"></p>
+    <div id="sumTable"></div>
+    <div class="row"><button class="btn" id="sumAltBtn" type="button" hidden>Start a real game</button><button class="btn primary" id="sumBtn" type="button">Next hand</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var SUITS=['C','D','S','H'];
+var SUIT_SYM={C:'♣',D:'♦',S:'♠',H:'♥'};
+var SUIT_NAME={C:'clubs',D:'diamonds',S:'spades',H:'hearts'};
+var NAMES=['You','Ruby','Pearl','Onyx'];
+var PASS_DIRS=[{k:'left',label:'Pass 3 cards LEFT',off:1},{k:'right',label:'Pass 3 cards RIGHT',off:3},{k:'across',label:'Pass 3 cards ACROSS',off:2},{k:'hold',label:"Hold 'em — no passing this hand",off:0}];
+
+var difficulty='normal';
+try{ var savedDiff=localStorage.getItem('hearts_difficulty'); if(savedDiff) difficulty=savedDiff; }catch(e){}
+
+var bests={games:0,wins:0,bestWinningScore:null,fewestInHand:null,moons:0};
+try{ var b=localStorage.getItem('hearts_bests_v1'); if(b) bests=JSON.parse(b); }catch(e){}
+function saveBests(){ try{ localStorage.setItem('hearts_bests_v1',JSON.stringify(bests)); }catch(e){} renderBests(); }
+function renderBests(){
+  var el=document.getElementById('bests');
+  el.innerHTML='<span>Games played <b>'+bests.games+'</b></span>'+
+    '<span>Games won <b>'+bests.wins+'</b></span>'+
+    '<span>Best winning score <b>'+(bests.bestWinningScore===null?'—':bests.bestWinningScore)+'</b></span>'+
+    '<span>Fewest points in a hand <b>'+(bests.fewestInHand===null?'—':bests.fewestInHand)+'</b></span>'+
+    '<span>Moons shot <b>'+bests.moons+'</b></span>';
+}
+
+var G=null; // game state
+function rankLabel(r){ return r===14?'A':r===13?'K':r===12?'Q':r===11?'J':String(r); }
+function cardKey(c){ return c.suit+c.rank; }
+function isPoint(c){ return c.suit==='H'||(c.suit==='S'&&c.rank===12); }
+function pointsOf(cards){ var p=0; for(var i=0;i<cards.length;i++){ if(cards[i].suit==='H')p+=1; else if(cards[i].suit==='S'&&cards[i].rank===12)p+=13; } return p; }
+function sortHand(h){ h.sort(function(a,b){ var d=SUITS.indexOf(a.suit)-SUITS.indexOf(b.suit); return d!==0?d:a.rank-b.rank; }); }
+
+function log(msg){ var ul=document.getElementById('log'); var li=document.createElement('li'); li.textContent=msg; ul.insertBefore(li,ul.firstChild); while(ul.children.length>40) ul.removeChild(ul.lastChild); }
+function setMsg(html){ document.getElementById('msg').innerHTML=html; }
+
+function newGame(practice){
+  G={ totals:[0,0,0,0], handNo:0, history:[], over:false, practice:!!practice };
+  document.getElementById('log').innerHTML='';
+  if(practice) log('Practice round started ('+difficulty+'). One hand, no pressure — points don\'t count.');
+  else log('New game started ('+difficulty+'). First to 100 loses — lowest score wins.');
+  startHand();
+}
+
+function startHand(){
+  G.handNo++;
+  G.phase='pass';
+  G.heartsBroken=false;
+  G.trickNo=0;
+  G.currentTrick=[]; // [{player, card}]
+  G.taken=[[],[],[],[]]; // point cards taken per player this hand (cards)
+  G.pointsTaken=[0,0,0,0];
+  G.queenOut=false;
+  G.selected=[];
+  G.passDir=PASS_DIRS[(G.handNo-1)%4];
+  // deal
+  var deck=[];
+  for(var s=0;s<4;s++) for(var r=2;r<=14;r++) deck.push({suit:SUITS[s],rank:r});
+  for(var i=deck.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=deck[i]; deck[i]=deck[j]; deck[j]=t; }
+  G.hands=[[],[],[],[]];
+  for(var k=0;k<52;k++) G.hands[k%4].push(deck[k]);
+  for(var p=0;p<4;p++) sortHand(G.hands[p]);
+  renderAll();
+  if(G.passDir.off===0){
+    setMsg('<b>'+(G.practice?'Practice hand':'Hand '+G.handNo)+':</b> '+G.passDir.label+'. Finding the 2♣…');
+    setTimeout(beginPlay,700);
+  } else {
+    setMsg('<b>'+(G.practice?'Practice hand':'Hand '+G.handNo)+':</b> '+G.passDir.label+'. Tap 3 of your cards, then press Pass.');
+  }
+}
+
+function passTarget(from){ return (from+G.passDir.off)%4; }
+
+function aiPickPass(hand){
+  var sorted=hand.slice();
+  if(difficulty==='easy'){
+    sorted.sort(function(a,b){ return Math.random()-0.5; });
+    return sorted.slice(0,3);
+  }
+  function danger(c){
+    var d=0;
+    if(c.suit==='S'&&c.rank===12) d+=100;
+    if(c.suit==='S'&&c.rank===14) d+=60;
+    if(c.suit==='S'&&c.rank===13) d+=55;
+    if(c.suit==='H') d+= 20 + c.rank; // high hearts dangerous
+    if(c.rank>=12) d+= c.rank;
+    return d;
+  }
+  // Hard AI also tries to void its shortest suit
+  if(difficulty==='hard'){
+    var counts={C:0,D:0,S:0,H:0}; hand.forEach(function(c){counts[c.suit]++;});
+    var shortSuit=null,min=99;
+    for(var s in counts){ if(counts[s]>0&&counts[s]<min&&s!=='S'){min=counts[s];shortSuit=s;} }
+    sorted.sort(function(a,b){
+      var da=danger(a)+(a.suit===shortSuit?15:0), db=danger(b)+(b.suit===shortSuit?15:0);
+      return db-da;
+    });
+  } else {
+    sorted.sort(function(a,b){ return danger(b)-danger(a); });
+  }
+  return sorted.slice(0,3);
+}
+
+function doPass(){
+  var outgoing=[null,null,null,null];
+  outgoing[0]=G.selected.slice();
+  for(var p=1;p<4;p++) outgoing[p]=aiPickPass(G.hands[p]);
+  var incoming=[[],[],[],[]];
+  for(var f=0;f<4;f++){
+    var to=passTarget(f);
+    incoming[to]=outgoing[f];
+    G.hands[f]=G.hands[f].filter(function(c){ return outgoing[f].indexOf(c)===-1; });
+  }
+  for(var t=0;t<4;t++){ G.hands[t]=G.hands[t].concat(incoming[t]); sortHand(G.hands[t]); }
+  G.selected=[];
+  document.getElementById('passbar').classList.remove('show');
+  log('Hand '+G.handNo+': cards passed '+G.passDir.k+'.');
+  beginPlay();
+}
+
+function beginPlay(){
+  G.phase='play';
+  // leader holds 2 of clubs
+  var leader=0;
+  for(var p=0;p<4;p++) for(var i=0;i<G.hands[p].length;i++) if(G.hands[p][i].suit==='C'&&G.hands[p][i].rank===2) leader=p;
+  G.leader=leader; G.turn=leader; G.currentTrick=[];
+  renderAll();
+  if(leader===0) setMsg('You hold the <b>2♣</b> — tap it to lead the first trick.');
+  else setMsg('<b>'+NAMES[leader]+'</b> holds the 2♣ and leads.');
+  advance();
+}
+
+function legalCards(p){
+  var hand=G.hands[p];
+  if(G.currentTrick.length===0){
+    // leading
+    if(G.trickNo===0){
+      var two=hand.filter(function(c){return c.suit==='C'&&c.rank===2;});
+      if(two.length) return two;
+    }
+    if(!G.heartsBroken){
+      var nonH=hand.filter(function(c){return c.suit!=='H';});
+      if(nonH.length) return nonH;
+    }
+    return hand.slice();
+  }
+  var led=G.currentTrick[0].card.suit;
+  var follow=hand.filter(function(c){return c.suit===led;});
+  var pool;
+  if(follow.length) pool=follow;
+  else pool=hand.slice();
+  // first trick: no points may be discarded if avoidable
+  if(G.trickNo===0 && !follow.length){
+    var safe=pool.filter(function(c){return !isPoint(c);});
+    if(safe.length) pool=safe;
+  }
+  return pool;
+}
+
+function trickWinner(){
+  var led=G.currentTrick[0].card.suit, best=G.currentTrick[0];
+  for(var i=1;i<G.currentTrick.length;i++){ var t=G.currentTrick[i]; if(t.card.suit===led&&t.card.rank>best.card.rank) best=t; }
+  return best.player;
+}
+function currentWinning(){
+  var led=G.currentTrick[0].card.suit, best=G.currentTrick[0];
+  for(var i=1;i<G.currentTrick.length;i++){ var t=G.currentTrick[i]; if(t.card.suit===led&&t.card.rank>best.card.rank) best=t; }
+  return best;
+}
+
+/* ---------- AI ---------- */
+function aiChoose(p){
+  var hand=G.hands[p], legal=legalCards(p);
+  if(legal.length===1) return legal[0];
+  if(difficulty==='easy' && Math.random()<0.45){
+    return legal[Math.floor(Math.random()*legal.length)];
+  }
+  var ledSuit = G.currentTrick.length? G.currentTrick[0].card.suit : null;
+  var trickPts = pointsOf(G.currentTrick.map(function(t){return t.card;}));
+  var lastToPlay = G.currentTrick.length===3;
+
+  // Moon defence (normal/hard): if one opponent has taken ALL points so far and points remain, try to take one
+  var moonThreat=-1;
+  if(difficulty!=='easy'){
+    for(var q=0;q<4;q++){ if(q!==p && G.pointsTaken[q]>0){
+      var others=0; for(var o=0;o<4;o++) if(o!==q) others+=G.pointsTaken[o];
+      if(others===0 && G.pointsTaken[q]>=5) moonThreat=q;
+    }}
+  }
+
+  if(!ledSuit){
+    // LEADING
+    if(G.trickNo===0) return legal[0]; // 2C handled by legal
+    // avoid leading spades if queen still out and we might drag her onto our A/K partners — simple: prefer low card of longest non-heart suit
+    var bySuit={C:[],D:[],S:[],H:[]};
+    legal.forEach(function(c){bySuit[c.suit].push(c);});
+    var suits=Object.keys(bySuit).filter(function(s){return bySuit[s].length;});
+    suits.sort(function(a,b){
+      var sa=bySuit[a].length-(a==='H'?3:0)-(a==='S'&&!G.queenOut?1:0);
+      var sb=bySuit[b].length-(b==='H'?3:0)-(b==='S'&&!G.queenOut?1:0);
+      return sb-sa;
+    });
+    var leadSuit=suits[0];
+    var cards=bySuit[leadSuit].slice().sort(function(a,b){return a.rank-b.rank;});
+    // if leading spades and queen is out there, lead low (never A/K/Q unless forced)
+    return cards[0];
+  }
+  var follow=legal.filter(function(c){return c.suit===ledSuit;});
+  if(follow.length){
+    follow.sort(function(a,b){return a.rank-b.rank;});
+    var win=currentWinning();
+    if(ledSuit==='S' && !G.queenOut){
+      var hasQ=follow.some(function(c){return c.rank===12;});
+      // If A or K led and we hold Q, dump her now
+      if(hasQ && (win.card.rank===14||win.card.rank===13)) return follow.filter(function(c){return c.rank===12;})[0];
+      // If we hold A/K and queen not yet played this trick, play low spade if possible
+      var lowSpades=follow.filter(function(c){return c.rank<12;});
+      if(lowSpades.length && follow.some(function(c){return c.rank>12;})){
+        // only duck if trick winner isn't already taking points risk — play lowest
+        if(!(lastToPlay && trickPts===0 && difficulty==='hard')) return lowSpades[0];
+      }
+    }
+    // Try to duck under current winner with highest safe card
+    var under=follow.filter(function(c){return c.rank<win.card.rank;});
+    if(moonThreat===win.player){
+      // try to WIN this trick to stop the moon if it has points or is late
+      var over=follow.filter(function(c){return c.rank>win.card.rank;});
+      if(over.length && (trickPts>0||G.trickNo>8)) return over[0];
+    }
+    if(under.length) return under[under.length-1];
+    // Can't duck: if this trick has no points and we're last, winning cheaply is fine — play lowest above
+    if(trickPts===0 && lastToPlay) return follow[0];
+    // Otherwise shed lowest card (keep winners for later) unless hard & trick is point-free early
+    return follow[0];
+  }
+  // VOID — discard danger cards
+  var pool=legal.slice();
+  var qs=pool.filter(function(c){return c.suit==='S'&&c.rank===12;});
+  if(qs.length) return qs[0];
+  // If queen still out and we hold A/K spades, holding them is risky but dumping A/K when void is safe (queen can't fall on it unless spades led) — dump A/K spades
+  var aks=pool.filter(function(c){return c.suit==='S'&&(c.rank===14||c.rank===13)&&!G.queenOut;});
+  if(aks.length) return aks.sort(function(a,b){return b.rank-a.rank;})[0];
+  pool.sort(function(a,b){
+    var pa=(a.suit==='H'?100:0)+a.rank, pb=(b.suit==='H'?100:0)+b.rank;
+    return pb-pa;
+  });
+  return pool[0];
+}
+
+/* ---------- Play flow ---------- */
+function advance(){
+  if(!G||G.phase!=='play') return;
+  renderAll();
+  if(G.currentTrick.length===4){ finishTrick(); return; }
+  var p=G.turn;
+  if(p===0){
+    setMsg(G.currentTrick.length===0 ? 'Your lead — tap a card.' : 'Your turn — tap a card to play.');
+    renderAll();
+  } else {
+    setMsg('<b>'+NAMES[p]+'</b> is thinking…');
+    setTimeout(function(){
+      if(!G||G.phase!=='play'||G.turn!==p) return;
+      var card=aiChoose(p);
+      playCard(p,card);
+    }, difficulty==='easy'?420:600);
+  }
+}
+
+function playCard(p,card){
+  G.hands[p]=G.hands[p].filter(function(c){return !(c.suit===card.suit&&c.rank===card.rank);});
+  G.currentTrick.push({player:p,card:card});
+  if(card.suit==='S'&&card.rank===12) G.queenOut=true;
+  if(card.suit==='H' && G.currentTrick.length>1 && G.currentTrick[0].card.suit!=='H') G.heartsBroken=true;
+  if(card.suit==='H' && G.currentTrick[0].card.suit==='H') G.heartsBroken=true;
+  G.turn=(p+1)%4;
+  advance();
+}
+
+function finishTrick(){
+  renderAll(true);
+  var winner=trickWinner();
+  var cards=G.currentTrick.map(function(t){return t.card;});
+  var pts=pointsOf(cards);
+  setTimeout(function(){
+    if(!G) return;
+    G.pointsTaken[winner]+=pts;
+    for(var i=0;i<cards.length;i++) if(isPoint(cards[i])) G.taken[winner].push(cards[i]);
+    if(pts>0) log(NAMES[winner]+' took trick '+(G.trickNo+1)+' (+'+pts+' pts).');
+    G.currentTrick=[];
+    G.trickNo++;
+    G.leader=winner; G.turn=winner;
+    if(G.trickNo>=13){ endHand(); return; }
+    if(winner===0) setMsg('You won the trick'+(pts?' (+'+pts+' pts — ouch)':'')+'. Your lead.');
+    else setMsg('<b>'+NAMES[winner]+'</b> won the trick'+(pts?' (+'+pts+' pts)':'')+' and leads.');
+    advance();
+  }, 950);
+}
+
+function endHand(){
+  G.phase='handEnd';
+  var scores=G.pointsTaken.slice();
+  var shooter=-1;
+  for(var p=0;p<4;p++) if(scores[p]===26) shooter=p;
+  var moon=false;
+  if(shooter>=0){ moon=true; scores=scores.map(function(s,p){ return p===shooter?0:26; }); }
+  if(G.practice){
+    // Practice: one hand only — nothing touches totals, the scoreboard, or bests.
+    G.over=true; G.phase='gameOver';
+    var pTitle, pText;
+    if(moon && shooter===0){
+      pTitle='Practice round done — and you shot the moon! 🌙';
+      pText='You took all 26 points on purpose (brave!). In a real game you\'d score 0 and everyone else would get +26. Here? It\'s practice — nothing counted.';
+      log('Practice hand: you SHOT THE MOON. Not counted, obviously.');
+    } else if(moon){
+      pTitle='Practice round done 🌙';
+      pText=NAMES[shooter]+' shot the moon that hand — in a real game everyone else would\'ve copped +26. You took '+G.pointsTaken[0]+' point'+(G.pointsTaken[0]===1?'':'s')+' before the moon maths. None of it counted.';
+      log('Practice hand: '+NAMES[shooter]+' shot the moon. Not counted.');
+    } else {
+      pTitle='Practice round done! 🎉';
+      pText='You took '+scores[0]+' point'+(scores[0]===1?'':'s')+' that hand'+(scores[0]===0?' — a clean hand, nice work!':scores[0]<=5?' — pretty tidy!':' — the Queen and hearts add up fast, hey?')+' None of it counted — that was just for fun.';
+      log('Practice hand: You '+scores[0]+', Ruby '+scores[1]+', Pearl '+scores[2]+', Onyx '+scores[3]+'. Not counted.');
+    }
+    renderAll();
+    document.getElementById('sumTitle').textContent=pTitle;
+    document.getElementById('sumText').textContent=pText;
+    var pRows='';
+    for(var pr=0;pr<4;pr++) pRows+='<tr><td>'+NAMES[pr]+'</td><td>'+scores[pr]+(moon&&pr!==shooter?' (moon)':'')+(moon&&pr===shooter?' (shot it!)':'')+'</td><td>Not counted</td></tr>';
+    document.getElementById('sumTable').innerHTML='<table class="scores"><thead><tr><th>Player</th><th>This hand</th><th>Total</th></tr></thead><tbody>'+pRows+'</tbody></table>';
+    document.getElementById('sumBtn').textContent='Another practice round';
+    var pAlt=document.getElementById('sumAltBtn'); pAlt.hidden=false; pAlt.textContent='Start a real game';
+    setTimeout(function(){ document.getElementById('sumOverlay').classList.add('show'); }, 500);
+    return;
+  }
+  for(var q=0;q<4;q++) G.totals[q]+=scores[q];
+  G.history.push({scores:scores,moon:shooter});
+  if(shooter===0){ bests.moons++; }
+  if(bests.fewestInHand===null || scores[0]<bests.fewestInHand) bests.fewestInHand=scores[0];
+
+  var gameOver = G.totals.some(function(t){return t>=100;});
+  var title, text;
+  if(moon){
+    title='🌙 Someone shot the moon!';
+    text = shooter===0 ? 'YOU shot the moon! You score 0 and everyone else takes +26.' : NAMES[shooter]+' shot the moon! They score 0 and everyone else takes +26.';
+    log('Hand '+G.handNo+': '+NAMES[shooter]+' SHOT THE MOON.');
+  } else {
+    title='Hand '+G.handNo+' complete';
+    text='You took '+scores[0]+' point'+(scores[0]===1?'':'s')+' this hand.';
+    log('Hand '+G.handNo+': You '+scores[0]+', Ruby '+scores[1]+', Pearl '+scores[2]+', Onyx '+scores[3]+'.');
+  }
+  renderAll();
+  if(gameOver){
+    G.over=true; G.phase='gameOver';
+    bests.games++;
+    var min=Math.min.apply(null,G.totals);
+    var youWon = G.totals[0]===min && G.totals.filter(function(t){return t===min;}).length===1;
+    var tied = G.totals[0]===min && !youWon;
+    if(youWon){ bests.wins++; if(bests.bestWinningScore===null||G.totals[0]<bests.bestWinningScore) bests.bestWinningScore=G.totals[0]; }
+    saveBests();
+    var winnerName = NAMES[G.totals.indexOf(min)];
+    title='🏁 Game over';
+    text=(youWon?'You win with '+min+' points! 🎉': tied?'Tied at '+min+' — shared honours. No single winner this time.': winnerName+' wins with '+min+' points. You finished on '+G.totals[0]+'.');
+    log('Game over: '+text);
+    document.getElementById('sumBtn').textContent='Play again';
+  } else {
+    document.getElementById('sumBtn').textContent='Next hand';
+  }
+  document.getElementById('sumAltBtn').hidden=true;
+  document.getElementById('sumTitle').textContent=title;
+  document.getElementById('sumText').textContent=text;
+  var rows='';
+  for(var r=0;r<4;r++) rows+='<tr><td>'+NAMES[r]+'</td><td>'+scores[r]+(moon&&r!==shooter?' (moon)':'')+(moon&&r===shooter?' (shot it!)':'')+'</td><td>'+G.totals[r]+'</td></tr>';
+  document.getElementById('sumTable').innerHTML='<table class="scores"><thead><tr><th>Player</th><th>This hand</th><th>Total</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  setTimeout(function(){ document.getElementById('sumOverlay').classList.add('show'); }, 500);
+}
+
+/* ---------- Practice coach tips ---------- */
+function cardName(c){ return rankLabel(c.rank)+SUIT_SYM[c.suit]; }
+function practiceTipText(){
+  if(!G||!G.practice) return '';
+  if(G.phase==='pass'){
+    if(G.passDir.off===0) return 'Coach tip: no passing this hand — you play what you were dealt. Good chance to practise making the best of a tricky hand!';
+    var nasty=G.hands[0].filter(function(c){ return (c.suit==='S'&&(c.rank===12||c.rank===14||c.rank===13))||(c.suit==='H'&&c.rank>=11); });
+    if(nasty.length) return 'Coach tip: you\'re holding '+nasty.map(cardName).join(', ')+' — those are the risky ones. Passing them away is usually a smart move.';
+    return 'Coach tip: no super-scary cards here. Pass your highest cards, or try to empty a short suit so you can dump points on it later.';
+  }
+  if(G.phase==='play'&&G.turn===0){
+    var sugg=null;
+    var tipKey=G.trickNo+'|'+G.currentTrick.map(function(t){return t.player+cardKey(t.card);}).join(',')+'|'+G.hands[0].map(cardKey).join(',');
+    if(G._tipKey===tipKey&&G._tipSugg){ sugg=G._tipSugg; }
+    else { try{ sugg=aiChoose(0); }catch(e){} G._tipKey=tipKey; G._tipSugg=sugg; }
+    if(sugg){
+      var reason='that\'s a safe play here.';
+      if(G.currentTrick.length===0){
+        reason='leading low keeps things chill — remember, whoever wins the trick has to lead the next one.';
+      } else {
+        var led=G.currentTrick[0].card.suit;
+        if(sugg.suit!==led){
+          if(sugg.suit==='S'&&sugg.rank===12) reason='perfect moment to ditch the Queen — she lands on someone else!';
+          else if(sugg.suit==='H') reason='you can\'t follow suit, so it\'s a great time to unload a heart on someone else.';
+          else reason='you can\'t follow suit, so you may as well throw away a card you don\'t want.';
+        } else {
+          var win=currentWinning();
+          var trickPts=pointsOf(G.currentTrick.map(function(t){return t.card;}));
+          if(sugg.rank<win.card.rank) reason='it ducks under the '+cardName(win.card)+' winning so far, so you should dodge any points in this trick.';
+          else if(trickPts===0) reason='this trick has no points in it yet, so winning it doesn\'t hurt.';
+          else reason='you can\'t duck under the winner this time, so this keeps the damage as low as it gets.';
+        }
+      }
+      return 'Coach tip: try the '+cardName(sugg)+' — '+reason;
+    }
+    return 'Coach tip: follow the suit led if you can, and try to duck under the highest card played so far.';
+  }
+  if(G.phase==='play'){
+    return 'Coach tip: points go to whoever wins the trick — keep an eye out for the Q♠ and any hearts sitting in the middle.';
+  }
+  return '';
+}
+
+/* ---------- Rendering ---------- */
+function cardEl(card,opts){
+  opts=opts||{};
+  var el=document.createElement(opts.button?'button':'div');
+  el.className='card'+((card.suit==='H'||card.suit==='D')?' red':'')+((card.suit==='S'&&card.rank===12)?' queen':'')+(opts.cls?' '+opts.cls:'');
+  if(opts.button) el.type='button';
+  el.innerHTML='<span><span class="r">'+rankLabel(card.rank)+'</span><br><span class="s">'+SUIT_SYM[card.suit]+'</span></span><span class="big">'+SUIT_SYM[card.suit]+'</span>';
+  el.setAttribute('aria-label', rankLabel(card.rank)+' of '+SUIT_NAME[card.suit]);
+  return el;
+}
+
+function renderAll(showWinner){
+  if(!G) return;
+  // practice chrome: banner, gold table edge, scoreboard heading, button state
+  var isP=!!G.practice;
+  document.getElementById('practiceBanner').classList.toggle('show',isP);
+  document.getElementById('table').classList.toggle('practice',isP);
+  document.getElementById('scoreTitle').textContent=isP?'Scoreboard — practice hand (not counted)':'Scoreboard — race to 100';
+  var pBtn=document.getElementById('practiceBtn');
+  pBtn.classList.toggle('on',isP);
+  pBtn.setAttribute('aria-pressed',isP?'true':'false');
+  pBtn.textContent=isP?'Restart practice':'Practice round';
+  var tipEl=document.getElementById('coachTip');
+  var tipText=practiceTipText();
+  tipEl.textContent=tipText;
+  tipEl.classList.toggle('show',!!tipText);
+  // totals + turn highlight
+  for(var p=0;p<4;p++){
+    document.getElementById('tot'+p).textContent=G.totals[p]+' pts';
+    document.getElementById('sum'+p).textContent=G.totals[p];
+    document.getElementById('name'+p).classList.toggle('turn', G.phase==='play'&&G.turn===p);
+    var backs=document.getElementById('backs'+p);
+    if(p!==0){
+      backs.innerHTML='';
+      for(var i=0;i<G.hands[p].length;i++){ var b=document.createElement('div'); b.className='back'+(p===1||p===3?' v':''); backs.appendChild(b); }
+    }
+  }
+  document.getElementById('brokenBadge').textContent=G.heartsBroken?'♥ Hearts are broken':'Hearts not broken';
+  document.getElementById('brokenBadge').classList.toggle('on',G.heartsBroken);
+  // trick slots
+  var winP = (showWinner&&G.currentTrick.length===4)? trickWinner() : -1;
+  for(var s=0;s<4;s++){
+    var slot=document.getElementById('slot'+s);
+    slot.innerHTML=''; slot.classList.remove('win');
+    var entry=null;
+    for(var t=0;t<G.currentTrick.length;t++) if(G.currentTrick[t].player===s) entry=G.currentTrick[t];
+    if(entry){
+      var c=cardEl(entry.card);
+      slot.appendChild(c);
+      var who=document.createElement('span'); who.className='who'; who.textContent=NAMES[s];
+      slot.appendChild(who);
+      if(s===winP) slot.classList.add('win');
+    }
+  }
+  // score history
+  var body=document.getElementById('scoreBody'); body.innerHTML='';
+  G.history.forEach(function(h,idx){
+    var tr=document.createElement('tr');
+    var cells='<td>Hand '+(idx+1)+'</td>';
+    for(var q=0;q<4;q++) cells+='<td class="'+(h.moon===q?'moon':'')+'">'+h.scores[q]+(h.moon===q?' 🌙':'')+'</td>';
+    tr.innerHTML=cells; body.appendChild(tr);
+  });
+  // hand
+  var handEl=document.getElementById('hand'); handEl.innerHTML='';
+  var legal = (G.phase==='play'&&G.turn===0)? legalCards(0) : [];
+  G.hands[0].forEach(function(card){
+    var isLegal=legal.some(function(c){return c.suit===card.suit&&c.rank===card.rank;});
+    var isSel=G.selected.some(function(c){return c.suit===card.suit&&c.rank===card.rank;});
+    var btn=cardEl(card,{button:true,cls:(isSel?'sel':'')+((G.phase==='play'&&G.turn===0&&!isLegal)?' dim':'')+((G.phase==='play'&&G.turn===0&&isLegal)?' legal':'')});
+    btn.addEventListener('click',function(){ onCardTap(card); });
+    handEl.appendChild(btn);
+  });
+  // pass bar
+  var pb=document.getElementById('passbar');
+  if(G.phase==='pass'&&G.passDir.off!==0){
+    pb.classList.add('show');
+    var passBtn=document.getElementById('passBtn');
+    passBtn.disabled=G.selected.length!==3;
+    passBtn.textContent=G.selected.length===3?('Pass 3 cards '+G.passDir.k):('Select '+(3-G.selected.length)+' more card'+(3-G.selected.length===1?'':'s')+' to pass '+G.passDir.k);
+  } else pb.classList.remove('show');
+}
+
+function onCardTap(card){
+  if(!G) return;
+  if(G.phase==='pass'){
+    var idx=-1;
+    for(var i=0;i<G.selected.length;i++) if(G.selected[i].suit===card.suit&&G.selected[i].rank===card.rank) idx=i;
+    if(idx>=0) G.selected.splice(idx,1);
+    else { if(G.selected.length>=3){ setMsg('You already picked 3 — tap one to un-pick it, or press Clear.'); return; } G.selected.push(card); }
+    renderAll();
+    return;
+  }
+  if(G.phase!=='play'||G.turn!==0) return;
+  var legal=legalCards(0);
+  var ok=legal.some(function(c){return c.suit===card.suit&&c.rank===card.rank;});
+  if(!ok){
+    if(G.trickNo===0&&G.currentTrick.length===0) setMsg('The first trick must start with the <b>2♣</b>.');
+    else if(G.currentTrick.length&&G.hands[0].some(function(c){return c.suit===G.currentTrick[0].card.suit;})) setMsg('You must <b>follow suit</b> ('+SUIT_NAME[G.currentTrick[0].card.suit]+') if you can.');
+    else if(!G.heartsBroken&&card.suit==='H'&&G.currentTrick.length===0) setMsg('<b>Hearts aren\'t broken yet</b> — you can\'t lead a heart while you hold other suits.');
+    else if(G.trickNo===0&&isPoint(card)) setMsg('No point cards on the <b>first trick</b>.');
+    else setMsg('That card can\'t be played right now.');
+    return;
+  }
+  playCard(0,card);
+}
+
+/* ---------- Walkthrough ---------- */
+var coachSteps=[
+  {t:'Welcome to Hearts ♥',x:'You play against three AI rivals: Ruby (West), Pearl (North) and Onyx (East). Points are bad — hearts are 1 point each and the Queen of Spades is 13. When anyone reaches 100 the game ends and the LOWEST score wins.'},
+  {t:'Step 1 — Passing',x:'Most hands start by passing 3 cards: left, then right, then across, then a hold hand. Tap 3 cards in your hand at the bottom of the screen, then press the Pass button. Tip: pass the Q♠, A♠ and K♠ away!'},
+  {t:'Step 2 — Playing tricks',x:'Whoever holds the 2♣ leads first. On your turn, tap a card to play it. You must follow the suit led if you can. The highest card of that suit wins the trick — and any points in it.'},
+  {t:'Step 3 — Hearts & the Queen',x:'Hearts can\'t be led until they\'re "broken" (a heart gets thrown away on another trick). The badge under the trick area tells you. The Q♠ wears a gold dashed outline — never let her land on you!'},
+  {t:'Step 4 — Shooting the moon',x:'Feeling brave? Take ALL 26 points in a hand and you score 0 while everyone else gets +26. Check the scoreboard any time below the table. Good luck — tap "New game" any time to restart.'}
+];
+var coachIdx=0;
+function showCoach(i){
+  coachIdx=i;
+  document.getElementById('coachStep').textContent='Step '+(i+1)+' of '+coachSteps.length;
+  document.getElementById('coachTitle').textContent=coachSteps[i].t;
+  document.getElementById('coachText').textContent=coachSteps[i].x;
+  document.getElementById('coachNext').textContent= i===coachSteps.length-1?'Start playing':'Next';
+  document.getElementById('coachOverlay').classList.add('show');
+}
+function closeCoach(){
+  document.getElementById('coachOverlay').classList.remove('show');
+  try{ localStorage.setItem('hearts_walkthrough_seen','1'); }catch(e){}
+}
+
+/* ---------- Wiring ---------- */
+document.getElementById('passBtn').addEventListener('click',function(){ if(G&&G.phase==='pass'&&G.selected.length===3) doPass(); });
+document.getElementById('clearPassBtn').addEventListener('click',function(){ if(G){G.selected=[]; renderAll();} });
+document.getElementById('newBtn').addEventListener('click',function(){ document.getElementById('sumOverlay').classList.remove('show'); newGame(false); });
+document.getElementById('practiceBtn').addEventListener('click',function(){ document.getElementById('sumOverlay').classList.remove('show'); newGame(true); });
+document.getElementById('exitPracticeBtn').addEventListener('click',function(){ document.getElementById('sumOverlay').classList.remove('show'); newGame(false); });
+document.getElementById('howBtn').addEventListener('click',function(){ dismissHint(); document.getElementById('howOverlay').classList.add('show'); });
+document.getElementById('howClose').addEventListener('click',function(){ document.getElementById('howOverlay').classList.remove('show'); });
+document.getElementById('howOverlay').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('show'); });
+document.getElementById('howRulesBtn').addEventListener('click',function(){ document.getElementById('howOverlay').classList.remove('show'); document.getElementById('rulesOverlay').classList.add('show'); });
+document.getElementById('rulesBtn').addEventListener('click',function(){ dismissHint(); document.getElementById('rulesOverlay').classList.add('show'); });
+document.getElementById('rulesClose').addEventListener('click',function(){ document.getElementById('rulesOverlay').classList.remove('show'); });
+document.getElementById('rulesOverlay').addEventListener('click',function(e){ if(e.target===this) this.classList.remove('show'); });
+document.getElementById('walkBtn').addEventListener('click',function(){ dismissHint(); showCoach(0); });
+document.getElementById('coachNext').addEventListener('click',function(){ if(coachIdx<coachSteps.length-1) showCoach(coachIdx+1); else closeCoach(); });
+document.getElementById('coachSkip').addEventListener('click',closeCoach);
+document.getElementById('sumBtn').addEventListener('click',function(){
+  document.getElementById('sumOverlay').classList.remove('show');
+  if(G&&G.practice) newGame(true);
+  else if(G&&G.over) newGame(false); else if(G) startHand();
+});
+document.getElementById('sumAltBtn').addEventListener('click',function(){
+  document.getElementById('sumOverlay').classList.remove('show');
+  newGame(false);
+});
+function setDiff(d){
+  difficulty=d;
+  try{ localStorage.setItem('hearts_difficulty',d); }catch(e){}
+  ['easy','normal','hard'].forEach(function(k){
+    document.getElementById('diff'+k.charAt(0).toUpperCase()+k.slice(1)).classList.toggle('on',k===d);
+  });
+}
+document.getElementById('diffEasy').addEventListener('click',function(){ setDiff('easy'); log('Difficulty set to Easy.'); });
+document.getElementById('diffNormal').addEventListener('click',function(){ setDiff('normal'); log('Difficulty set to Normal.'); });
+document.getElementById('diffHard').addEventListener('click',function(){ setDiff('hard'); log('Difficulty set to Hard.'); });
+
+/* One-time, non-blocking hint — tutorial and rules are opt-in only.
+   Nothing auto-opens; the game is playable underneath/behind the hint. */
+function dismissHint(){
+  var bar=document.getElementById('hintBar');
+  if(bar) bar.classList.remove('show');
+  try{ localStorage.setItem('hearts_hint_seen','1'); }catch(e){}
+}
+document.getElementById('hintDismiss').addEventListener('click',dismissHint);
+document.getElementById('hintHowLink').addEventListener('click',function(){ dismissHint(); document.getElementById('howOverlay').classList.add('show'); });
+document.getElementById('hintRulesLink').addEventListener('click',function(){ dismissHint(); document.getElementById('rulesOverlay').classList.add('show'); });
+var hintSeen=false;
+try{ hintSeen=!!localStorage.getItem('hearts_hint_seen')||!!localStorage.getItem('hearts_walkthrough_seen'); }catch(e){}
+if(!hintSeen) document.getElementById('hintBar').classList.add('show');
+
+/* ---------- Feedback (standard — all games) ---------- */
+var fbRating=0, fbTag='Other';
+var fbOverlay=document.getElementById('feedbackOverlay');
+function fbPaintStars(){
+  var btns=document.querySelectorAll('#fbStars button');
+  for(var i=0;i<btns.length;i++){
+    var v=parseInt(btns[i].getAttribute('data-val'),10);
+    btns[i].classList.toggle('on', v<=fbRating);
+    btns[i].setAttribute('aria-checked', v===fbRating?'true':'false');
+  }
+}
+function fbPaintTags(){
+  var btns=document.querySelectorAll('#fbTags button');
+  for(var i=0;i<btns.length;i++) btns[i].classList.toggle('on', btns[i].getAttribute('data-tag')===fbTag);
+}
+function openFeedback(){
+  fbRating=0; fbTag='Other';
+  document.getElementById('fbText').value='';
+  document.getElementById('fbErr').textContent='';
+  document.getElementById('fbFormWrap').hidden=false;
+  document.getElementById('fbThanksWrap').hidden=true;
+  fbPaintStars(); fbPaintTags();
+  fbOverlay.classList.add('show');
+}
+function closeFeedback(){ fbOverlay.classList.remove('show'); }
+document.getElementById('feedbackBtn').addEventListener('click',openFeedback);
+document.getElementById('feedbackBtnFooter').addEventListener('click',openFeedback);
+document.getElementById('fbCancel').addEventListener('click',closeFeedback);
+document.getElementById('fbThanksClose').addEventListener('click',closeFeedback);
+fbOverlay.addEventListener('click',function(e){ if(e.target===this) closeFeedback(); });
+document.getElementById('fbStars').addEventListener('click',function(e){
+  var b=e.target.closest?e.target.closest('button'):null; if(!b) return;
+  fbRating=parseInt(b.getAttribute('data-val'),10)||0; fbPaintStars();
+  document.getElementById('fbErr').textContent='';
+});
+document.getElementById('fbTags').addEventListener('click',function(e){
+  var b=e.target.closest?e.target.closest('button'):null; if(!b) return;
+  fbTag=b.getAttribute('data-tag')||'Other'; fbPaintTags();
+});
+document.getElementById('fbSave').addEventListener('click',function(){
+  var text=document.getElementById('fbText').value.trim();
+  if(!fbRating && !text){
+    document.getElementById('fbErr').textContent='Please add a star rating or a comment first.';
+    return;
+  }
+  var record={game:'hearts',rating:fbRating,text:text,tag:fbTag,timestamp:new Date().toISOString()};
+  try{
+    var arr=[];
+    var raw=localStorage.getItem('holos-arcade-feedback');
+    if(raw){ var parsed=JSON.parse(raw); if(Array.isArray(parsed)) arr=parsed; }
+    arr.push(record);
+    localStorage.setItem('holos-arcade-feedback',JSON.stringify(arr));
+  }catch(e){}
+  document.getElementById('fbFormWrap').hidden=true;
+  document.getElementById('fbThanksWrap').hidden=false;
+  setTimeout(function(){ if(fbOverlay.classList.contains('show')) closeFeedback(); },2600);
+});
+
+setDiff(difficulty);
+renderBests();
+newGame();
+})();
+</script>
+</body>
+</html>

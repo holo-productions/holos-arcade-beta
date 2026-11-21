@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Empire Builder</title>
+<style>
+  :root{
+    --bg:#eef0e6; --panel:#fbfaf4; --panel2:#f3efe0; --ink:#22301f; --ink-soft:#55614f;
+    --line:#cfd3bd; --accent:#8a5a1e; --accent-ink:#fff7e8; --gold:#b8860b;
+    --good:#2e7d32; --bad:#b03a2e; --warn:#a86a00;
+    --player:#2e7d32; --vex:#8e3b2f; --dun:#31597f;
+    --shadow:0 2px 10px rgba(34,48,31,.12);
+    --radius:10px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#141a13; --panel:#1e261d; --panel2:#242e22; --ink:#e6ead9; --ink-soft:#a9b39c;
+      --line:#3a4636; --accent:#c98f2e; --accent-ink:#1c1503; --gold:#d9a92e;
+      --good:#7fc97f; --bad:#e08a7d; --warn:#e0b45c;
+      --player:#5aa864; --vex:#c96a5a; --dun:#6d97bd;
+      --shadow:0 2px 10px rgba(0,0,0,.45);
+    }
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:Georgia,'Iowan Old Style','Times New Roman',serif;
+    font-size:16px;line-height:1.45}
+  button,select,input,textarea{font:inherit;color:inherit}
+  button,[role="button"],select,summary,input:not([type="checkbox"]),textarea{min-height:2.25rem}
+  button{cursor:pointer;border:1px solid var(--line);background:var(--panel2);color:var(--ink);
+    border-radius:8px;padding:.45rem .8rem}
+  button:hover:not(:disabled){border-color:var(--accent)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:bold}
+  button.danger{border-color:var(--bad);color:var(--bad)}
+  .wrap{max-width:1120px;margin:0 auto;padding:14px 14px 40px}
+  h1{font-size:1.7rem;margin:.2rem 0 .1rem;letter-spacing:.02em}
+  h2{font-size:1.15rem;margin:0 0 .5rem;border-bottom:2px solid var(--line);padding-bottom:.3rem}
+  h3{font-size:1rem;margin:.6rem 0 .3rem}
+  .tagline{color:var(--ink-soft);margin:0 0 12px;font-style:italic}
+  /* Top control bar */
+  .topbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--panel);
+    border:1px solid var(--line);border-radius:var(--radius);padding:10px 12px;box-shadow:var(--shadow);margin-bottom:12px}
+  .topbar .group{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .topbar label{font-size:.85rem;color:var(--ink-soft)}
+  select{border:1px solid var(--line);background:var(--panel2);border-radius:8px;padding:.35rem .5rem}
+  .toggle{display:inline-flex;align-items:center;gap:6px;padding:.35rem .6rem;border:1px solid var(--line);
+    border-radius:8px;background:var(--panel2);cursor:pointer;min-height:2.25rem;font-size:.92rem}
+  .toggle input{width:1.1rem;height:1.1rem;accent-color:var(--accent)}
+  .spacer{flex:1}
+  .best{font-size:.88rem;color:var(--ink-soft)}
+  .best strong{color:var(--gold)}
+  /* HUD */
+  .hud{display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px;margin-bottom:12px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:8px 10px;box-shadow:var(--shadow)}
+  .stat .k{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft)}
+  .stat .v{font-size:1.25rem;font-weight:bold}
+  .stat .sub{font-size:.78rem;color:var(--ink-soft)}
+  .stat.warn .v{color:var(--bad)}
+  .resbar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .res{flex:1 1 120px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:8px 12px;display:flex;justify-content:space-between;align-items:baseline;box-shadow:var(--shadow)}
+  .res .name{font-size:.85rem;color:var(--ink-soft)}
+  .res .amt{font-size:1.2rem;font-weight:bold}
+  .res .per{font-size:.78rem;color:var(--good)}
+  .res .per.neg{color:var(--bad)}
+  /* Layout */
+  .layout{display:grid;grid-template-columns:1fr 340px;gap:12px;align-items:start}
+  @media (max-width:860px){.layout{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px;box-shadow:var(--shadow);margin-bottom:12px}
+  /* Map */
+  .map{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  @media (max-width:520px){.map{grid-template-columns:repeat(3,1fr)}}
+  .tile{border:2px solid var(--line);border-radius:10px;padding:8px 6px;text-align:center;background:var(--panel2);
+    min-height:96px;display:flex;flex-direction:column;justify-content:center;gap:2px;width:100%}
+  .tile .tname{font-weight:bold;font-size:.92rem;line-height:1.2}
+  .tile .tinfo{font-size:.72rem;color:var(--ink-soft);line-height:1.3}
+  .tile .owner{font-size:.7rem;font-weight:bold;text-transform:uppercase;letter-spacing:.05em}
+  .tile.mine{border-color:var(--player)}
+  .tile.mine .owner{color:var(--player)}
+  .tile.vex{border-color:var(--vex)}
+  .tile.vex .owner{color:var(--vex)}
+  .tile.dun{border-color:var(--dun)}
+  .tile.dun .owner{color:var(--dun)}
+  .tile.neutral{border-style:dashed}
+  .tile.capital{box-shadow:inset 0 0 0 2px var(--gold)}
+  .tile button{font-size:.75rem;padding:.2rem .4rem;min-height:2rem;margin-top:4px}
+  .tile.selected{outline:3px solid var(--accent);outline-offset:1px}
+  /* Buildings & army */
+  .brow{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line)}
+  .brow:last-child{border-bottom:none}
+  .brow .info{flex:1;min-width:0}
+  .brow .bname{font-weight:bold}
+  .brow .bdesc{font-size:.8rem;color:var(--ink-soft)}
+  .brow .count{font-size:1.05rem;font-weight:bold;min-width:2ch;text-align:center}
+  .cost{font-size:.78rem;color:var(--ink-soft);white-space:nowrap}
+  /* Rivals */
+  .rival{padding:8px 0;border-bottom:1px dashed var(--line)}
+  .rival:last-child{border-bottom:none}
+  .rival .rhead{display:flex;justify-content:space-between;align-items:baseline}
+  .rival .rname{font-weight:bold}
+  .bar{height:10px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;overflow:hidden;margin-top:4px}
+  .bar>i{display:block;height:100%}
+  .bar.player>i{background:var(--player)} .bar.vex>i{background:var(--vex)} .bar.dun>i{background:var(--dun)}
+  .rival .rmeta{font-size:.8rem;color:var(--ink-soft)}
+  .dead{opacity:.55;text-decoration:line-through}
+  /* Log */
+  .log{max-height:260px;overflow:auto;font-size:.9rem}
+  .log p{margin:.35rem 0;padding-bottom:.35rem;border-bottom:1px dotted var(--line)}
+  .log p:last-child{border-bottom:none}
+  .log .good{color:var(--good)} .log .bad{color:var(--bad)} .log .warn{color:var(--warn)}
+  .advisor{background:var(--panel2);border:1px dashed var(--accent);border-radius:8px;padding:10px 12px;font-size:.92rem}
+  .advisor strong{color:var(--accent)}
+  .endturn{width:100%;font-size:1.15rem;padding:.8rem;margin-top:4px}
+  .progress-note{font-size:.85rem;color:var(--ink-soft);text-align:center;margin-top:6px}
+  /* Modal */
+  .overlay{position:fixed;inset:0;background:rgba(10,14,8,.62);display:none;align-items:center;justify-content:center;
+    padding:14px;z-index:50}
+  .overlay.open{display:flex}
+  .modal{background:var(--panel);color:var(--ink);border-radius:12px;max-width:560px;width:100%;
+    max-height:88vh;overflow:auto;padding:20px;box-shadow:0 10px 40px rgba(0,0,0,.4)}
+  .modal h2{border-bottom:none;font-size:1.3rem}
+  .choices{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+  .choices button{text-align:left;padding:.7rem .9rem}
+  .choices button small{display:block;color:var(--ink-soft);font-size:.8rem}
+  .choices button:hover{border-color:var(--accent)}
+  .stars{display:flex;gap:6px;margin:8px 0}
+  .stars button{font-size:1.5rem;padding:.2rem .55rem;line-height:1;background:var(--panel2)}
+  .stars button.on{background:var(--gold);color:#fff;border-color:var(--gold)}
+  textarea{width:100%;border:1px solid var(--line);border-radius:8px;background:var(--panel2);padding:8px;min-height:80px}
+  .modal .row{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+  .tut-step{min-height:120px}
+  .tut-dots{text-align:center;color:var(--ink-soft);font-size:.85rem;margin-top:8px}
+  /* Rules */
+  .rules li{margin:.35rem 0}
+  .rules table{border-collapse:collapse;width:100%;font-size:.9rem;margin:.5rem 0}
+  .rules th,.rules td{border:1px solid var(--line);padding:5px 8px;text-align:left}
+  .rules th{background:var(--panel2)}
+  footer{margin-top:26px;text-align:center;color:var(--ink-soft);font-size:.9rem}
+  footer a{color:var(--accent);font-weight:bold;display:inline-block;padding:8px 4px;min-height:2rem}
+  .hidden{display:none!important}
+  .banner{border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;border:2px solid var(--line);background:var(--panel)}
+  .banner.win{border-color:var(--good)} .banner.lose{border-color:var(--bad)}
+  .banner h2{border:none;margin-bottom:.2rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ GAME VIEW ============ -->
+  <div id="gameView">
+    <h1>👑 Empire Builder</h1>
+    <p class="tagline">Grow a kingdom from one small capital to the most prosperous realm in the land — in 30 seasons.</p>
+
+    <div class="topbar">
+      <div class="group">
+        <label for="diffSel">Difficulty</label>
+        <select id="diffSel" aria-label="Difficulty">
+          <option value="easy">Easy</option>
+          <option value="normal" selected>Normal</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
+      <div class="group">
+        <label class="toggle"><input type="checkbox" id="practiceChk" /> Practice mode</label>
+      </div>
+      <div class="group">
+        <button id="tutBtn" type="button">📖 How to play</button>
+        <button id="rulesBtn" type="button">📜 Rules</button>
+        <button id="feedbackBtn" type="button">💬 Feedback</button>
+        <button id="newBtn" type="button">↻ New game</button>
+      </div>
+      <div class="spacer"></div>
+      <div class="best" id="bestLine">Best score: —</div>
+    </div>
+
+    <div id="endBanner" class="banner hidden"></div>
+
+    <div class="hud">
+      <div class="stat"><div class="k">Season</div><div class="v" id="hudTurn">1 / 30</div><div class="sub" id="hudSeason">Spring, Year 1</div></div>
+      <div class="stat"><div class="k">Prosperity (score)</div><div class="v" id="hudScore">0</div><div class="sub" id="hudTarget">Target: 750</div></div>
+      <div class="stat"><div class="k">Provinces</div><div class="v" id="hudProv">1</div><div class="sub">of 12 on the map</div></div>
+      <div class="stat"><div class="k">Army</div><div class="v" id="hudArmy">0</div><div class="sub" id="hudArmySub">troops</div></div>
+      <div class="stat"><div class="k">Population</div><div class="v" id="hudPop">20</div><div class="sub">mouths to feed</div></div>
+    </div>
+
+    <div class="resbar">
+      <div class="res"><span class="name">🪙 Gold</span><span><span class="amt" id="resGold">0</span> <span class="per" id="perGold"></span></span></div>
+      <div class="res"><span class="name">🌾 Food</span><span><span class="amt" id="resFood">0</span> <span class="per" id="perFood"></span></span></div>
+      <div class="res"><span class="name">🪵 Wood</span><span><span class="amt" id="resWood">0</span> <span class="per" id="perWood"></span></span></div>
+      <div class="res"><span class="name">🪨 Stone</span><span><span class="amt" id="resStone">0</span> <span class="per" id="perStone"></span></span></div>
+    </div>
+    <p id="incomeNote" style="font-size:.85rem;color:var(--ink-soft);margin:-4px 0 12px"></p>
+
+    <div class="advisor hidden" id="advisorBox" style="margin-bottom:12px"></div>
+
+    <div class="layout">
+      <div>
+        <div class="card">
+          <h2>🗺️ The Realm — tap a province</h2>
+          <div class="map" id="map"></div>
+          <p style="font-size:.85rem;color:var(--ink-soft);margin:.6rem 0 0">
+            Claim neutral provinces for their income (your army must match their garrison).
+            Attack a rival's province to take it — capture both rival capitals to win by conquest.
+          </p>
+          <div id="tileActions"></div>
+        </div>
+
+        <div class="card">
+          <h2>📜 Royal Chronicle</h2>
+          <div class="log" id="log"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h2>🏰 Build</h2>
+          <div id="buildList"></div>
+        </div>
+
+        <div class="card">
+          <h2>⚔️ Army</h2>
+          <p style="margin:.2rem 0 .4rem">Troops defend your lands, claim provinces and fight rivals. Each troop eats <strong>1 food</strong> per season.</p>
+          <div class="brow">
+            <div class="info"><div class="bname">Train troops ×5</div><div class="bdesc">Needs a Barracks. Cost scales with army size.</div></div>
+            <span class="cost" id="trainCost"></span>
+            <button id="trainBtn" type="button">Train</button>
+          </div>
+          <div class="brow">
+            <div class="info"><div class="bname">Disband troops ×5</div><div class="bdesc">Stop paying food upkeep for 5 troops.</div></div>
+            <button id="disbandBtn" type="button">Disband</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>👑 Rival Kingdoms</h2>
+          <div id="rivalsBox"></div>
+          <div class="rival">
+            <div class="rhead"><span class="rname" style="color:var(--player)">Your kingdom</span><span id="youScore"></span></div>
+            <div class="bar player"><i id="youBar" style="width:0%"></i></div>
+          </div>
+          <p class="rmeta" style="font-size:.8rem;color:var(--ink-soft)">First to the prosperity target wins the campaign. If a rival gets there first, you lose.</p>
+        </div>
+
+        <button class="primary endturn" id="endTurnBtn" type="button">End Season ➜</button>
+        <p class="progress-note" id="turnNote">Collect income, resolve events, and grow — then end the season.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ RULES VIEW ============ -->
+  <div id="rulesView" class="hidden rules">
+    <h1>📜 Empire Builder — Rules</h1>
+    <p class="tagline">Everything a ruler needs to know.</p>
+    <div class="card">
+      <h2>Goal</h2>
+      <ul>
+        <li>The campaign lasts <strong>30 seasons</strong> (turns). Each year has Spring, Summer, Autumn and Winter.</li>
+        <li><strong>Win</strong> by being the first kingdom to reach the prosperity target (Easy 600 · Normal 750 · Hard 900), or by capturing <strong>both rival capitals</strong>.</li>
+        <li>If turn 30 ends with nobody at the target, the highest prosperity wins — ties go to you.</li>
+        <li><strong>Lose</strong> if a rival reaches the target first, or if <strong>your capital falls</strong> to raiders or a rival army.</li>
+      </ul>
+      <h2>Each season</h2>
+      <ul>
+        <li>Press <strong>End Season</strong>: your provinces and buildings produce resources, your people and troops eat food, a random event may occur, and both rival kingdoms take their turn.</li>
+        <li>Your capital's base land &amp; labour also adds <strong>+2 gold and +2 wood</strong> every season. Food eaten each season = 1 per troop + 1 per 8 population — the food figure in the resource bar is net of that upkeep, and the line under the resource bar shows the full breakdown.</li>
+        <li>Farms produce less in Winter. If food runs out, people leave and troops desert — keep a surplus.</li>
+        <li>You may build, train, claim and attack as many times as you can afford before ending the season.</li>
+      </ul>
+      <h2>Buildings</h2>
+      <table>
+        <tr><th>Building</th><th>Effect</th></tr>
+        <tr><td>🌾 Farm</td><td>+8 food per season (+4 in Winter)</td></tr>
+        <tr><td>⛏️ Mine</td><td>+4 stone and +2 gold per season</td></tr>
+        <tr><td>🏪 Market</td><td>+7 gold per season</td></tr>
+        <tr><td>🏯 Barracks</td><td>Lets you train troops; each one trains them a little cheaper</td></tr>
+        <tr><td>🧱 Walls</td><td>+8 defence for your capital and lands against raids and attacks</td></tr>
+        <tr><td>⛪ Temple</td><td>+6 prosperity per season and happier people (population grows faster)</td></tr>
+      </table>
+      <h2>The map</h2>
+      <ul>
+        <li>12 provinces. Neutral provinces show a <strong>garrison</strong>: your army must be at least that large to claim one, and claiming costs gold and wood.</li>
+        <li>Every province you own adds its income each season and +50 prosperity.</li>
+        <li>Attacking a rival province: your army fights their defending force. Win and the province is yours; lose and you lose troops. Rival capitals are heavily defended — bring a big army and expect losses either way.</li>
+      </ul>
+      <h2>Events</h2>
+      <ul>
+        <li>Harvests, storms, traders, raiders, festivals and more arrive most seasons. Each offers simple choices — there is rarely a free lunch.</li>
+        <li>Raiders test your defences: troops + walls. If your capital's defence is overwhelmed, the capital falls and the campaign ends.</li>
+        <li>On <strong>Hard</strong>, bad events hit harder and rivals grow faster. On <strong>Easy</strong>, the land is kinder and rivals slower.</li>
+      </ul>
+      <h2>Prosperity (score)</h2>
+      <ul>
+        <li>Prosperity = a share of your treasury and stores, +20 per building, +50 per province, +3 per troop, +15 per Temple.</li>
+        <li>In <strong>Practice mode</strong> an advisor offers hints and your score is never saved. Your best real score is kept on this device.</li>
+      </ul>
+      <button class="primary" id="backToGameBtn" type="button">← Back to the game</button>
+    </div>
+  </div>
+
+  <footer>
+    More ridiculous health &amp; fitness fun: <a href="https://instagram.com/ridiculouslyfitandfed" target="_blank" rel="noopener">Ridiculously Fit and Fed</a>
+  </footer>
+</div>
+
+<!-- Event modal -->
+<div class="overlay" id="eventOverlay" role="dialog" aria-modal="true">
+  <div class="modal">
+    <h2 id="eventTitle"></h2>
+    <p id="eventText"></p>
+    <div class="choices" id="eventChoices"></div>
+  </div>
+</div>
+
+<!-- Tutorial modal -->
+<div class="overlay" id="tutOverlay" role="dialog" aria-modal="true">
+  <div class="modal">
+    <h2 id="tutTitle"></h2>
+    <div class="tut-step"><p id="tutText"></p></div>
+    <div class="row">
+      <button id="tutBack" type="button">Back</button>
+      <button id="tutNext" class="primary" type="button">Next</button>
+      <button id="tutClose" type="button">Close</button>
+    </div>
+    <div class="tut-dots" id="tutDots"></div>
+  </div>
+</div>
+
+<!-- Feedback modal -->
+<div class="overlay" id="fbOverlay" role="dialog" aria-modal="true">
+  <div class="modal">
+    <h2>💬 Feedback</h2>
+    <p>How is Empire Builder treating you, Your Majesty?</p>
+    <div class="stars" id="fbStars" role="radiogroup" aria-label="Rating">
+      <button type="button" data-star="1" aria-label="1 star">★</button>
+      <button type="button" data-star="2" aria-label="2 stars">★</button>
+      <button type="button" data-star="3" aria-label="3 stars">★</button>
+      <button type="button" data-star="4" aria-label="4 stars">★</button>
+      <button type="button" data-star="5" aria-label="5 stars">★</button>
+    </div>
+    <label for="fbText" style="font-size:.9rem">Your comment</label>
+    <textarea id="fbText" placeholder="What worked, what didn't, what you'd add…"></textarea>
+    <p style="font-size:.82rem;color:var(--ink-soft);margin:.5rem 0 0">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+    <p id="fbMsg" style="font-size:.88rem;color:var(--good)"></p>
+    <div class="row">
+      <button id="fbCancel" type="button">Cancel</button>
+      <button id="fbSave" class="primary" type="button">Save feedback</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var $ = function(id){ return document.getElementById(id); };
+var DIFF = {
+  easy:   { target:600, aiGrowth:[10,17], aiArmy:0.5, harsh:0.7, raidBonus:0,  label:"Easy" },
+  normal: { target:750, aiGrowth:[17,26], aiArmy:0.8, harsh:1.0, raidBonus:4,  label:"Normal" },
+  hard:   { target:900, aiGrowth:[25,36], aiArmy:1.2, harsh:1.4, raidBonus:9,  label:"Hard" }
+};
+var BUILDINGS = {
+  farm:    { name:"🌾 Farm",     desc:"+8 food / season (+4 in Winter)",        cost:{wood:10, gold:5} },
+  mine:    { name:"⛏️ Mine",     desc:"+4 stone, +2 gold / season",             cost:{wood:12, gold:8} },
+  market:  { name:"🏪 Market",   desc:"+7 gold / season",                       cost:{wood:10, stone:6} },
+  barracks:{ name:"🏯 Barracks", desc:"Unlocks training; cheaper troops",       cost:{wood:14, stone:8} },
+  walls:   { name:"🧱 Walls",    desc:"+8 capital defence",                     cost:{stone:14, wood:6} },
+  temple:  { name:"⛪ Temple",   desc:"+6 prosperity / season, faster growth",  cost:{stone:12, gold:14} }
+};
+var PROVINCES = [
+  { name:"Vexmoor",     owner:"vex", capital:true,  inc:{gold:3,food:2,wood:2,stone:1}, gar:26 },
+  { name:"Greenfield",  owner:null,  capital:false, inc:{food:6,wood:1},               gar:6  },
+  { name:"Stonehollow", owner:null,  capital:false, inc:{stone:5,gold:1},              gar:9  },
+  { name:"Saltmarsh",   owner:null,  capital:false, inc:{food:4,gold:2},               gar:8  },
+  { name:"Emberhold",   owner:"you", capital:true,  inc:{gold:2,food:3,wood:2,stone:1}, gar:0  },
+  { name:"Rivermouth",  owner:null,  capital:false, inc:{gold:5,food:2},               gar:10 },
+  { name:"Oakshire",    owner:null,  capital:false, inc:{wood:6,food:1},               gar:7  },
+  { name:"Highpine",    owner:null,  capital:false, inc:{wood:4,stone:2},              gar:9  },
+  { name:"Lowford",     owner:null,  capital:false, inc:{food:5,gold:1},               gar:6  },
+  { name:"Briarwood",   owner:null,  capital:false, inc:{wood:3,food:3},               gar:8  },
+  { name:"Goldentarn",  owner:null,  capital:false, inc:{gold:6,stone:1},              gar:12 },
+  { name:"Dunmere",     owner:"dun", capital:true,  inc:{gold:3,food:2,wood:2,stone:1}, gar:26 }
+];
+var SEASONS = ["Spring","Summer","Autumn","Winter"];
+var S = null; // game state
+var selectedTile = -1;
+var pendingEvent = null;
+
+function lsGet(k, d){ try{ var v = localStorage.getItem(k); return v===null? d : JSON.parse(v); }catch(e){ return d; } }
+function lsSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+function rnd(a,b){ return a + Math.floor(Math.random()*(b-a+1)); }
+function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+
+function newGame(){
+  var diff = $("diffSel").value;
+  S = {
+    diff: diff, practice: $("practiceChk").checked,
+    turn: 1, over: false,
+    res: { gold:60, food:55, wood:45, stone:25 },
+    buildings: { farm:1, mine:0, market:0, barracks:0, walls:0, temple:0 },
+    troops: 5, pop: 20, templeBonus: 0,
+    prov: PROVINCES.map(function(p){ return { owner:p.owner }; }),
+    rivals: [
+      { key:"vex", name:"Kingdom of Vex", color:"var(--vex)", score:130, army:14, alive:true },
+      { key:"dun", name:"Dunmere Realm",  color:"var(--dun)", score:125, army:12, alive:true }
+    ],
+    log: []
+  };
+  selectedTile = -1;
+  logMsg("A new reign begins in <b>Emberhold</b>. Reach " + DIFF[diff].target + " prosperity before your rivals — or take both of their capitals.", "good");
+  if (S.practice) logMsg("Practice mode: the advisor will offer hints, and this score won't be saved.", "warn");
+  $("endBanner").classList.add("hidden");
+  render();
+}
+
+function seasonName(){ return SEASONS[(S.turn-1)%4]; }
+function yearNum(){ return Math.floor((S.turn-1)/4)+1; }
+function myProvinces(){ var n=0; S.prov.forEach(function(p){ if(p.owner==="you") n++; }); return n; }
+function buildingCount(){ var n=0; for (var k in S.buildings) n += S.buildings[k]; return n; }
+function capitalDefence(){ return S.troops + S.buildings.walls*8 + 10; }
+
+function score(){
+  var r = S.res;
+  var s = Math.floor(r.gold*0.5 + r.food*0.3 + r.wood*0.2 + r.stone*0.4)
+        + buildingCount()*20 + myProvinces()*50 + S.troops*3
+        + S.buildings.temple*15 + S.templeBonus;
+  return Math.max(0, s);
+}
+
+function income(){
+  var prov = { gold:0, food:0, wood:0, stone:0 };
+  S.prov.forEach(function(p,i){ if(p.owner==="you"){ var pi = PROVINCES[i].inc; for (var k in pi) prov[k]+=pi[k]; } });
+  var winter = seasonName()==="Winter";
+  var bld = { gold:0, food:0, wood:0, stone:0 };
+  bld.food += S.buildings.farm * (winter?4:8);
+  bld.stone += S.buildings.mine*4; bld.gold += S.buildings.mine*2;
+  bld.gold += S.buildings.market*7;
+  var base = { gold:2, food:0, wood:2, stone:0 }; // capital base land & labour
+  var inc = { gold:0, food:0, wood:0, stone:0 };
+  for (var k in inc) inc[k] = prov[k] + bld[k] + base[k];
+  // upkeep: troops eat 1 each, plus 1 per 8 population
+  var upkeep = S.troops + Math.ceil(S.pop/8);
+  return { inc:inc, prov:prov, bld:bld, base:base, upkeep:upkeep, winter:winter, net:{ gold:inc.gold, food:inc.food-upkeep, wood:inc.wood, stone:inc.stone } };
+}
+
+function canAfford(cost){ for (var k in cost){ if (S.res[k] < cost[k]) return false; } return true; }
+function pay(cost){ for (var k in cost) S.res[k] -= cost[k]; }
+function costText(cost){ var parts=[]; for (var k in cost) parts.push(cost[k]+" "+k); return parts.join(" · "); }
+function gainText(g){ var parts=[]; for (var k in g){ if(g[k]) parts.push((g[k]>0?"+":"")+g[k]+" "+k); } return parts.join(", "); }
+
+function logMsg(html, cls){
+  S.log.unshift({ html:html, cls:cls||"" });
+  if (S.log.length > 40) S.log.pop();
+}
+
+/* ---------- Actions ---------- */
+function build(key){
+  if (S.over) return;
+  var b = BUILDINGS[key];
+  if (!canAfford(b.cost)){ logMsg("Not enough resources to build a " + b.name + ".", "bad"); render(); return; }
+  pay(b.cost); S.buildings[key]++;
+  logMsg("Built a <b>" + b.name + "</b> (" + S.buildings[key] + " total).", "good");
+  render();
+}
+function trainCost(){ return { gold: Math.max(4, 10 - S.buildings.barracks*2), food: 5 }; }
+function train(){
+  if (S.over) return;
+  if (S.buildings.barracks < 1){ logMsg("You need a Barracks before training troops.", "bad"); render(); return; }
+  var c = trainCost(); var total = { gold:c.gold*5, food:c.food*5 };
+  // cost is per 5 troops: gold shown is batch cost
+  total = { gold: c.gold, food: c.food };
+  if (!canAfford(total)){ logMsg("Not enough gold/food to train troops.", "bad"); render(); return; }
+  pay(total); S.troops += 5;
+  logMsg("Trained <b>5 troops</b>. Army is now " + S.troops + ".", "good");
+  render();
+}
+function disband(){
+  if (S.over) return;
+  if (S.troops < 5){ logMsg("Not enough troops to disband a group of 5.", "bad"); render(); return; }
+  S.troops -= 5;
+  logMsg("Disbanded 5 troops. They return to the fields.", "");
+  render();
+}
+function claimCost(){ return { gold:15, wood:10 }; }
+function claimProvince(i){
+  if (S.over) return;
+  var p = PROVINCES[i];
+  if (S.troops < p.gar){ logMsg(p.name + "'s garrison (" + p.gar + ") outnumbers your army (" + S.troops + "). Train more troops first.", "bad"); render(); return; }
+  var c = claimCost();
+  if (!canAfford(c)){ logMsg("Claiming " + p.name + " costs " + costText(c) + ".", "bad"); render(); return; }
+  pay(c); S.prov[i].owner = "you";
+  logMsg("<b>" + p.name + "</b> joins your kingdom! Its income is yours each season.", "good");
+  checkWin();
+  render();
+}
+function attackProvince(i){
+  if (S.over) return;
+  var p = PROVINCES[i];
+  var ownerKey = S.prov[i].owner;
+  var rival = S.rivals.filter(function(r){ return r.key===ownerKey; })[0];
+  if (!rival || !rival.alive) return;
+  if (S.troops < 5){ logMsg("Your army is too small to attack. Train at least 5 troops.", "bad"); render(); return; }
+  var defence = p.capital ? rival.army + 18 : Math.max(4, Math.round(rival.army*0.45));
+  var attack = S.troops + rnd(0,8);
+  var defRoll = defence + rnd(0,8);
+  if (attack > defRoll){
+    var losses = p.capital ? rnd(5,10) : rnd(1,4);
+    S.troops = Math.max(0, S.troops - losses);
+    S.prov[i].owner = "you";
+    rival.army = Math.max(0, rival.army - (p.capital? rival.army : rnd(2,5)));
+    if (p.capital){
+      rival.alive = false; rival.score = Math.floor(rival.score*0.4);
+      logMsg("⚔️ <b>" + p.name + " has fallen!</b> The " + rival.name + " is conquered. You lost " + losses + " troops in the assault.", "good");
+    } else {
+      logMsg("⚔️ Victory at <b>" + p.name + "</b>! The province is yours. You lost " + losses + " troops.", "good");
+    }
+    checkWin();
+  } else {
+    var losses2 = p.capital ? rnd(6,12) : rnd(2,6);
+    S.troops = Math.max(0, S.troops - losses2);
+    logMsg("⚔️ The attack on <b>" + p.name + "</b> was repelled (their defence ≈ " + defence + "). You lost " + losses2 + " troops.", "bad");
+  }
+  render();
+}
+
+/* ---------- Events ---------- */
+function harshMult(){ return DIFF[S.diff].harsh; }
+function evChoices(list){ return list; }
+function makeEvent(){
+  var h = harshMult();
+  var events = [
+    function(){ return { title:"🌾 Bumper Harvest", text:"The fields overflow. Granaries bulge and the people sing in the lanes.",
+      choices: evChoices([
+        { label:"Store it all", sub:"Gain food for lean seasons", fx:function(){ S.res.food += 22; return "Stored +22 food."; } },
+        { label:"Sell the surplus", sub:"Traders pay well for grain", fx:function(){ S.res.food += 6; S.res.gold += 14; return "+6 food, +14 gold."; } },
+        { label:"Feast with the people", sub:"A happy kingdom grows", fx:function(){ S.res.food += 4; S.pop += 4; return "Population +4, +4 food."; } }
+      ])}; },
+    function(){ var dmg = Math.round(12*h); return { title:"⛈️ Great Storm", text:"A storm tears across the realm. Roofs leak, fences fall, and a storehouse is damaged.",
+      choices: evChoices([
+        { label:"Repair with timber", sub:"Costs wood, saves the stores", fx:function(){ if(S.res.wood>=10){ S.res.wood-=10; return "Repairs done: −10 wood, stores saved."; } S.res.food-=dmg; return "Not enough wood! The stores flood: −"+dmg+" food."; } },
+        { label:"Ride it out", sub:"Lose some food and wood", fx:function(){ S.res.food-=dmg; S.res.wood-=Math.round(6*h); return "The storm passes: −"+dmg+" food, −"+Math.round(6*h)+" wood."; } },
+        { label:"Hire help to rebuild", sub:"Costs gold, gains stone salvage", fx:function(){ if(S.res.gold>=12){ S.res.gold-=12; S.res.stone+=6; return "−12 gold, salvaged +6 stone."; } S.res.food-=dmg; return "No gold for help: −"+dmg+" food."; } }
+      ])}; },
+    function(){ return { title:"🧳 Wandering Traders", text:"A caravan of traders sets up bright stalls in the market square, offering deals until dusk.",
+      choices: evChoices([
+        { label:"Sell wood & stone", sub:"They pay in gold", fx:function(){ if(S.res.wood>=8){ S.res.wood-=8; S.res.gold+=16; return "−8 wood, +16 gold."; } return "You had too little wood to sell."; } },
+        { label:"Buy supplies", sub:"Gold for food and timber", fx:function(){ if(S.res.gold>=12){ S.res.gold-=12; S.res.food+=12; S.res.wood+=6; return "−12 gold, +12 food, +6 wood."; } return "Your purse was too light."; } },
+        { label:"Tax the caravan", sub:"Quick gold, but they may not return", fx:function(){ S.res.gold+=8; return "+8 gold. The traders grumble as they leave."; } }
+      ])}; },
+    function(){ var str = rnd(10,20) + DIFF[S.diff].raidBonus + Math.floor(S.turn/3); return { title:"🏴 Raiders at the Border!", text:"Raiders ("+str+" strong) are marching on your lands, torches lit. Your defence is "+capitalDefence()+" (troops + walls).",
+      choices: evChoices([
+        { label:"Fight them off", sub:"Your army and walls vs. the raiders", fx:function(){ var def = capitalDefence() + rnd(0,8); if (def >= str){ var loot = rnd(2,7); S.res.gold += loot; return "Victory! The raiders flee, dropping +"+loot+" gold of loot."; } var short = str - def; if (short >= 14){ gameOver(false, "Your capital's defences were overwhelmed by raiders. Emberhold burns, and your reign ends in smoke."); return "The raiders broke through — the capital has fallen!"; } var loss = Math.round(short*h); S.res.food = Math.max(0,S.res.food-loss); S.troops = Math.max(0,S.troops-rnd(1,4)); return "The raiders were driven off, but not before plundering −"+loss+" food. Some troops fell."; } },
+        { label:"Pay tribute", sub:"Gold buys peace — this time", fx:function(){ var cost = Math.min(S.res.gold, Math.round((10+S.turn)*h)); S.res.gold -= cost; return "You paid "+cost+" gold. The raiders leave, laughing."; } },
+        { label:"Hide the stores", sub:"Lose a little food, keep the gold", fx:function(){ var loss = Math.round(rnd(5,10)*h); S.res.food = Math.max(0,S.res.food-loss); return "The people hide in the hills: −"+loss+" food, but the treasury is safe."; } }
+      ])}; },
+    function(){ return { title:"🎪 Harvest Festival", text:"Musicians, pie contests and far too much cider. The whole kingdom wants a day off.",
+      choices: evChoices([
+        { label:"Fund the festival", sub:"Gold for happiness and growth", fx:function(){ if(S.res.gold>=10){ S.res.gold-=10; S.pop+=5; S.templeBonus+=5; return "A splendid day! Population +5, +5 lasting prosperity."; } S.pop+=2; return "A modest festival anyway: population +2."; } },
+        { label:"Keep everyone working", sub:"Extra production, no smiles", fx:function(){ S.res.wood+=8; S.res.food+=6; return "+8 wood, +6 food. The fiddles stay silent."; } }
+      ])}; },
+    function(){ return { title:"💎 Rich Vein Discovered", text:"Miners report a glittering vein deep in the hills — if someone funds the dig.",
+      choices: evChoices([
+        { label:"Fund the dig", sub:"Costs gold, gains stone and gold", fx:function(){ if(S.res.gold>=10){ S.res.gold-=10; S.res.stone+=14; S.res.gold+=6; return "Jackpot: +14 stone, +6 gold in gems."; } return "No funds, no dig. The vein waits."; } },
+        { label:"Leave it for later", sub:"Nothing ventured", fx:function(){ return "The miners shrug and go back to work."; } }
+      ])}; },
+    function(){ var loss = Math.round(rnd(8,14)*h); return { title:"☀️ Drought", text:"The wells run low and the fields crack under a merciless sun.",
+      choices: evChoices([
+        { label:"Ration carefully", sub:"Lose food, keep order", fx:function(){ S.res.food=Math.max(0,S.res.food-loss); return "Tight belts all round: −"+loss+" food."; } },
+        { label:"Buy water & grain", sub:"Gold softens the blow", fx:function(){ if(S.res.gold>=14){ S.res.gold-=14; S.res.food+=4; return "−14 gold, but nobody goes hungry (+4 food net)."; } S.res.food=Math.max(0,S.res.food-loss); return "Not enough gold: −"+loss+" food."; } },
+        { label:"Dig new wells", sub:"Costs wood and stone", fx:function(){ if(S.res.wood>=6 && S.res.stone>=6){ S.res.wood-=6; S.res.stone-=6; S.res.food+=6; return "New wells flow! −6 wood, −6 stone, +6 food."; } S.res.food=Math.max(0,S.res.food-Math.round(loss/2)); return "Materials lacking: −"+Math.round(loss/2)+" food."; } }
+      ])}; },
+    function(){ return { title:"🗡️ Mercenaries Offer Service", text:"A band of seasoned sellswords camps outside the walls, blades for hire.",
+      choices: evChoices([
+        { label:"Hire 6 troops", sub:"Costs gold, instant army", fx:function(){ if(S.res.gold>=16){ S.res.gold-=16; S.troops+=6; return "+6 veteran troops join your army."; } return "They laugh at your empty purse and ride on."; } },
+        { label:"Send them away", sub:"Your own troops suffice", fx:function(){ return "The sellswords ride off to find richer lords."; } }
+      ])}; },
+    function(){ return { title:"🕊️ Pilgrims Arrive", text:"Pilgrims journey to your temples, leaving offerings and hopeful songs.",
+      choices: evChoices([
+        { label:"Welcome them warmly", sub:"Offerings and new settlers", fx:function(){ var g = S.buildings.temple>0? 12:5; S.res.gold+=g; S.pop+=2; return "+"+g+" gold in offerings, population +2."; } },
+        { label:"Charge a toll", sub:"More gold, colder hearts", fx:function(){ S.res.gold+=9; return "+9 gold. The songs sound a little flatter."; } }
+      ])}; }
+  ];
+  return pick(events)();
+}
+
+function showEvent(ev){
+  pendingEvent = ev;
+  $("eventTitle").textContent = ev.title;
+  $("eventText").textContent = ev.text;
+  var box = $("eventChoices"); box.innerHTML = "";
+  ev.choices.forEach(function(c){
+    var b = document.createElement("button");
+    b.type = "button";
+    b.innerHTML = c.label + (c.sub ? "<small>"+c.sub+"</small>" : "");
+    b.addEventListener("click", function(){
+      var result = c.fx();
+      logMsg("<b>" + ev.title + "</b> — " + result, "");
+      $("eventOverlay").classList.remove("open");
+      pendingEvent = null;
+      afterEvent();
+    });
+    box.appendChild(b);
+  });
+  $("eventOverlay").classList.add("open");
+}
+
+/* ---------- Turn flow ---------- */
+function aiTurn(){
+  var d = DIFF[S.diff];
+  S.rivals.forEach(function(r){
+    if (!r.alive) return;
+    r.score += rnd(d.aiGrowth[0], d.aiGrowth[1]);
+    if (Math.random() < 0.55) r.army += rnd(1, Math.max(2, Math.round(4*d.aiArmy)));
+    // Rival snatches a neutral province now and then
+    if (Math.random() < 0.12){
+      var neutrals = [];
+      S.prov.forEach(function(p,i){ if (p.owner===null) neutrals.push(i); });
+      if (neutrals.length){
+        var i = pick(neutrals);
+        S.prov[i].owner = r.key;
+        r.score += 20;
+        logMsg("The <b>" + r.name + "</b> claimed <b>" + PROVINCES[i].name + "</b>.", "warn");
+      }
+    }
+    // Rival raids the player late-game on higher difficulties
+    if (S.turn >= 12 && S.diff !== "easy" && Math.random() < 0.14){
+      var str = Math.round(r.army*0.6) + rnd(0,6);
+      var def = capitalDefence() + rnd(0,8);
+      if (def >= str){
+        logMsg("The <b>" + r.name + "</b> raided your border (strength "+str+") — your defences held!", "good");
+        r.army = Math.max(4, r.army - rnd(2,5));
+      } else {
+        var short = str - def;
+        if (short >= 16){
+          gameOver(false, "The " + r.name + " stormed Emberhold with an army your defences could not hold. Your capital has fallen.");
+        } else {
+          var loss = Math.round(short*harshMult());
+          S.res.gold = Math.max(0, S.res.gold - loss);
+          S.troops = Math.max(0, S.troops - rnd(1,4));
+          logMsg("The <b>" + r.name + "</b> raided you (strength "+str+") and plundered " + loss + " gold!", "bad");
+        }
+      }
+    }
+  });
+}
+
+function endTurn(){
+  if (S.over || pendingEvent) return;
+  var io = income();
+  for (var k in io.inc) S.res[k] += io.inc[k];
+  S.res.food -= io.upkeep;
+  var notes = [];
+  if (S.buildings.temple > 0){ S.templeBonus += S.buildings.temple*6; } // temples add lasting prosperity each season
+  if (S.res.food < 0){
+    var deficit = -S.res.food; S.res.food = 0;
+    var desert = Math.min(S.troops, Math.ceil(deficit/4));
+    S.troops -= desert;
+    var leave = Math.min(S.pop, Math.ceil(deficit/3));
+    S.pop -= leave;
+    logMsg("🍽️ <b>Starvation!</b> The stores ran dry — " + desert + " troops deserted and " + leave + " people left the kingdom.", "bad");
+  } else {
+    var growth = 1 + (S.buildings.temple>0 ? 1 : 0) + (S.res.food > 60 ? 1 : 0);
+    S.pop += growth;
+  }
+  for (var k2 in S.res){ if (S.res[k2] < 0) S.res[k2] = 0; }
+  logMsg("<b>" + seasonName() + ", Year " + yearNum() + "</b> — income: " + gainText(io.inc) + "; food eaten: " + io.upkeep + ".", "");
+  S.turn++;
+  aiTurn();
+  if (S.over) { render(); return; }
+  if (checkWin()) { render(); return; }
+  if (S.turn > 30){ finishCampaign(); render(); return; }
+  render();
+  // Random event most seasons
+  if (Math.random() < 0.72){
+    showEvent(makeEvent());
+  }
+}
+function afterEvent(){
+  if (S.over) { render(); return; }
+  if (checkWin()) { render(); return; }
+  render();
+}
+
+function checkWin(){
+  if (S.over) return true;
+  var target = DIFF[S.diff].target;
+  var sc = score();
+  var bothDead = S.rivals.every(function(r){ return !r.alive; });
+  if (bothDead){ gameOver(true, "Both rival capitals have fallen to your banners. The whole realm is yours — a conquest victory!"); return true; }
+  if (sc >= target){ gameOver(true, "Your kingdom reached " + sc + " prosperity — past the target of " + target + ". Bards will sing of this reign!"); return true; }
+  for (var i=0;i<S.rivals.length;i++){
+    var r = S.rivals[i];
+    if (r.alive && r.score >= target){ gameOver(false, "The " + r.name + " reached the prosperity target first (" + r.score + "). Your kingdom is remembered as a footnote."); return true; }
+  }
+  return false;
+}
+function finishCampaign(){
+  var sc = score();
+  var best = sc;
+  S.rivals.forEach(function(r){ if (r.alive && r.score > best) best = r.score; });
+  if (sc >= best){
+    gameOver(true, "Thirty seasons have passed and no kingdom hit the target — but yours stands tallest at " + sc + " prosperity. Victory, by a nose (and several granaries)!");
+  } else {
+    var top = S.rivals.filter(function(r){ return r.alive && r.score===best; })[0];
+    gameOver(false, "Thirty seasons have passed. The " + (top? top.name : "rivals") + " finished ahead of you (" + best + " to your " + sc + "). So close!");
+  }
+}
+function gameOver(won, text){
+  if (S.over) return;
+  S.over = true;
+  var sc = score();
+  var banner = $("endBanner");
+  banner.className = "banner " + (won ? "win" : "lose");
+  banner.innerHTML = "<h2>" + (won ? "🏆 Victory!" : "💀 Defeat") + "</h2><p>" + text + "</p>" +
+    "<p><strong>Final prosperity: " + sc + "</strong> · Difficulty: " + DIFF[S.diff].label +
+    (S.practice ? " · Practice mode (score not saved)" : "") + "</p>" +
+    "<p><button class='primary' id='againBtn' type='button'>↻ Play again</button></p>";
+  var ab = $("againBtn");
+  if (ab) ab.addEventListener("click", newGame);
+  logMsg(won ? "🏆 <b>Campaign won!</b> Final prosperity: " + sc + "." : "💀 <b>Campaign lost.</b> Final prosperity: " + sc + ".", won ? "good" : "bad");
+  if (!S.practice){
+    var best = lsGet("eb_best", null);
+    if (!best || sc > best.score){
+      lsSet("eb_best", { score: sc, won: won, diff: S.diff, date: new Date().toISOString().slice(0,10) });
+    }
+    var plays = lsGet("eb_plays", 0); lsSet("eb_plays", plays+1);
+  }
+  updateBestLine();
+}
+
+/* ---------- Advisor (Practice) ---------- */
+function advisorHint(){
+  var io = income();
+  if (S.buildings.barracks < 1) return "Build a <b>Barracks</b> early — without one you can't train troops, claim provinces, or defend yourself.";
+  if (io.net.food < 0) return "Your food balance is <b>negative</b> (" + io.net.food + "/season). Build Farms or claim food-rich provinces like Greenfield before you starve.";
+  if (S.troops < 10) return "Your army is small. <b>Train troops</b> — you'll need at least 12 to threaten a rival capital, and garrisons block expansion.";
+  if (myProvinces() < 3) return "Provinces are the fastest prosperity: each is worth <b>+50</b> plus income every season. Claim a neutral province from the map.";
+  if (S.buildings.walls < 1 && S.turn > 8) return "Raiders grow bolder over time. A set of <b>Walls</b> adds +8 capital defence — cheap insurance against losing the game.";
+  if (S.res.gold > 80) return "Your treasury is overflowing. Gold sitting still is worth little — spend it on <b>Temples and Markets</b> to convert it into prosperity.";
+  var target = DIFF[S.diff].target, sc = score();
+  var lead = S.rivals.filter(function(r){return r.alive;}).sort(function(a,b){return b.score-a.score;})[0];
+  if (lead && lead.score > sc) return "The <b>" + lead.name + "</b> leads you " + lead.score + " to " + sc + ". Expand, build Temples, or start taking their provinces.";
+  return "Steady rule! You're at " + sc + " of " + target + " prosperity with " + (31 - S.turn) + " seasons left. Keep income positive and grow every season.";
+}
+
+/* ---------- Render ---------- */
+function fmt(n){ return n; }
+function render(){
+  var d = DIFF[S.diff];
+  $("hudTurn").textContent = Math.min(S.turn,30) + " / 30";
+  $("hudSeason").textContent = seasonName() + ", Year " + yearNum();
+  $("hudScore").textContent = score();
+  $("hudTarget").textContent = "Target: " + d.target + (S.practice ? " · Practice" : "");
+  $("hudProv").textContent = myProvinces();
+  $("hudArmy").textContent = S.troops;
+  $("hudArmySub").textContent = "defence " + capitalDefence();
+  $("hudPop").textContent = S.pop;
+  var io = income();
+  $("resGold").textContent = S.res.gold; $("resFood").textContent = S.res.food;
+  $("resWood").textContent = S.res.wood; $("resStone").textContent = S.res.stone;
+  function per(el, v){ el.textContent = (v>=0?"+":"") + v + "/season"; el.className = "per" + (v<0?" neg":""); }
+  per($("perGold"), io.net.gold); per($("perFood"), io.net.food); per($("perWood"), io.net.wood); per($("perStone"), io.net.stone);
+  (function(){
+    function s(v){ return (v>0?"+":"")+v; }
+    var grossFood = io.inc.food;
+    $("incomeNote").textContent = "How the +/season figures add up — Gold: provinces " + s(io.prov.gold) + " + buildings " + s(io.bld.gold) + " + capital base " + s(io.base.gold) + " = " + s(io.net.gold) + ". Food: provinces " + s(io.prov.food) + " + Farms " + s(io.bld.food) + (io.winter ? " (Winter rate)" : "") + " = " + s(grossFood) + " grown, minus " + io.upkeep + " eaten (troops + people) = " + s(io.net.food) + " net. Wood: provinces " + s(io.prov.wood) + " + capital base " + s(io.base.wood) + " = " + s(io.net.wood) + ". Stone: provinces " + s(io.prov.stone) + " + Mines " + s(io.bld.stone) + " = " + s(io.net.stone) + ".";
+  })();
+  $("hudScore").parentElement.classList.toggle("warn", S.res.food <= 5);
+
+  // Map
+  var map = $("map"); map.innerHTML = "";
+  PROVINCES.forEach(function(p, i){
+    var owner = S.prov[i].owner;
+    var tile = document.createElement("button");
+    tile.type = "button";
+    var cls = "tile " + (owner==="you" ? "mine" : owner==="vex" ? "vex" : owner==="dun" ? "dun" : "neutral") + (p.capital ? " capital" : "") + (selectedTile===i ? " selected" : "");
+    tile.className = cls;
+    var ownerTxt = owner==="you" ? "Yours" : owner==="vex" ? "Vex" : owner==="dun" ? "Dunmere" : "Neutral";
+    var rival = S.rivals.filter(function(r){return r.key===owner;})[0];
+    if (rival && !rival.alive && owner!=="you") ownerTxt = "Ruined";
+    var incParts = []; for (var k in p.inc) incParts.push("+"+p.inc[k]+" "+k);
+    tile.innerHTML = "<span class='tname'>" + (p.capital ? "👑 " : "") + p.name + "</span>" +
+      "<span class='owner'>" + ownerTxt + "</span>" +
+      "<span class='tinfo'>" + incParts.join(" · ") + (owner===null ? "<br>Garrison: " + p.gar : "") + "</span>";
+    tile.addEventListener("click", function(){ selectedTile = (selectedTile===i? -1 : i); render(); });
+    map.appendChild(tile);
+  });
+  // Tile actions
+  var ta = $("tileActions"); ta.innerHTML = "";
+  if (selectedTile >= 0 && !S.over){
+    var p2 = PROVINCES[selectedTile]; var ow = S.prov[selectedTile].owner;
+    var div = document.createElement("div");
+    div.style.marginTop = "10px";
+    if (ow === null){
+      div.innerHTML = "<strong>" + p2.name + "</strong> — garrison " + p2.gar + " (your army: " + S.troops + "). Claiming costs " + costText(claimCost()) + ". ";
+      var b1 = document.createElement("button"); b1.type="button"; b1.className="primary"; b1.textContent = "Claim province";
+      b1.disabled = S.troops < p2.gar || !canAfford(claimCost());
+      (function(idx){ b1.addEventListener("click", function(){ claimProvince(idx); }); })(selectedTile);
+      div.appendChild(b1);
+    } else if (ow !== "you"){
+      var rv = S.rivals.filter(function(r){return r.key===ow;})[0];
+      if (rv && rv.alive){
+        var def = p2.capital ? rv.army + 18 : Math.max(4, Math.round(rv.army*0.45));
+        div.innerHTML = "<strong>" + p2.name + "</strong> (" + rv.name + ") — defending force ≈ " + def + " vs. your army of " + S.troops + ". " + (p2.capital ? "Capturing a capital conquers the whole kingdom!" : "");
+        var b2 = document.createElement("button"); b2.type="button"; b2.className="danger"; b2.textContent = "⚔️ Attack";
+        b2.disabled = S.troops < 5;
+        (function(idx){ b2.addEventListener("click", function(){ attackProvince(idx); }); })(selectedTile);
+        div.appendChild(b2);
+      } else {
+        div.innerHTML = "<strong>" + p2.name + "</strong> — a ruined land with no ruler. It cannot be claimed.";
+      }
+    } else {
+      div.innerHTML = "<strong>" + p2.name + "</strong> flies your banner." + (p2.capital ? " This is your capital — if it falls, your reign ends." : "");
+    }
+    ta.appendChild(div);
+  }
+
+  // Buildings
+  var bl = $("buildList"); bl.innerHTML = "";
+  Object.keys(BUILDINGS).forEach(function(key){
+    var b = BUILDINGS[key];
+    var row = document.createElement("div"); row.className = "brow";
+    row.innerHTML = "<div class='info'><div class='bname'>" + b.name + "</div><div class='bdesc'>" + b.desc + "</div></div>" +
+      "<span class='cost'>" + costText(b.cost) + "</span><span class='count'>" + S.buildings[key] + "</span>";
+    var btn = document.createElement("button"); btn.type="button"; btn.textContent="Build";
+    btn.disabled = S.over || !canAfford(b.cost);
+    btn.addEventListener("click", function(){ build(key); });
+    row.appendChild(btn);
+    bl.appendChild(row);
+  });
+  var tc = trainCost();
+  $("trainCost").textContent = tc.gold + " gold · " + tc.food + " food";
+  $("trainBtn").disabled = S.over || S.buildings.barracks < 1;
+  $("disbandBtn").disabled = S.over || S.troops < 5;
+
+  // Rivals
+  var rb = $("rivalsBox"); rb.innerHTML = "";
+  S.rivals.forEach(function(r){
+    var div = document.createElement("div"); div.className = "rival";
+    var pct = Math.min(100, Math.round(r.score / d.target * 100));
+    div.innerHTML = "<div class='rhead'><span class='rname" + (r.alive?"":" dead") + "' style='color:" + r.color + "'>" + r.name + "</span><span>" + (r.alive? r.score : "Conquered") + "</span></div>" +
+      "<div class='bar " + r.key + "'><i style='width:" + pct + "%;background:" + r.color + "'></i></div>" +
+      "<div class='rmeta'>" + (r.alive ? "Army ≈ " + r.army + " · Prosperity " + r.score + " / " + d.target : "Their capital has fallen.") + "</div>";
+    rb.appendChild(div);
+  });
+  $("youScore").textContent = score();
+  $("youBar").style.width = Math.min(100, Math.round(score()/d.target*100)) + "%";
+
+  // Log
+  var lg = $("log"); lg.innerHTML = "";
+  S.log.forEach(function(e){
+    var p = document.createElement("p");
+    if (e.cls) p.className = e.cls;
+    p.innerHTML = e.html;
+    lg.appendChild(p);
+  });
+
+  // Advisor
+  var adv = $("advisorBox");
+  if (S.practice && !S.over){
+    adv.classList.remove("hidden");
+    adv.innerHTML = "<strong>🧭 Advisor:</strong> " + advisorHint();
+  } else {
+    adv.classList.add("hidden");
+  }
+  $("endTurnBtn").disabled = S.over;
+  $("turnNote").textContent = S.over ? "This campaign has ended. Start a new game to play again." :
+    (S.practice ? "Practice mode — hints on, score not saved." : "Season " + S.turn + " of 30 · " + seasonName() + " — rivals grow every season too.");
+}
+
+function updateBestLine(){
+  var best = lsGet("eb_best", null);
+  var plays = lsGet("eb_plays", 0);
+  $("bestLine").innerHTML = best ?
+    "Best score: <strong>" + best.score + "</strong> (" + DIFF[best.diff].label + (best.won ? ", won" : "") + ") · Campaigns: " + plays :
+    "Best score: — · No finished campaigns yet";
+}
+
+/* ---------- Tutorial ---------- */
+var TUT = [
+  { t:"Welcome, Your Majesty 👑", x:"Empire Builder is a 30-season race. Grow your kingdom's prosperity to the target before the Kingdoms of Vex and Dunmere — or conquer them both. This tutorial only appears when you ask for it." },
+  { t:"Step 1 — Resources", x:"Each season your provinces and buildings produce gold, food, wood and stone. Watch the per-season numbers under each resource: if food goes negative, people leave and troops desert." },
+  { t:"Step 2 — Build", x:"Use the Build panel: Farms for food, Mines for stone and gold, Markets for gold, a Barracks to unlock troops, Walls for defence, and Temples for prosperity and growth." },
+  { t:"Step 3 — The map", x:"Tap any province on the map. Claim neutral provinces when your army matches their garrison — each one pays income every season and adds +50 prosperity. Attack rival provinces to weaken them; take both rival capitals to win by conquest." },
+  { t:"Step 4 — Events", x:"Most seasons bring an event: harvests, storms, traders, raiders. Read the choices — raiders test your troops and walls, and if your capital's defence is ever overwhelmed, your reign ends on the spot." },
+  { t:"Step 5 — End the season", x:"When you're done building and battling, press End Season. Your rivals grow on their own turns, so don't dawdle. Practice mode gives you an advisor and never saves your score — perfect for learning. Good luck!" }
+];
+var tutStep = 0;
+function showTut(){
+  tutStep = 0; drawTut();
+  $("tutOverlay").classList.add("open");
+}
+function drawTut(){
+  $("tutTitle").textContent = TUT[tutStep].t;
+  $("tutText").textContent = TUT[tutStep].x;
+  $("tutDots").textContent = "Step " + (tutStep+1) + " of " + TUT.length;
+  $("tutBack").disabled = tutStep === 0;
+  $("tutNext").textContent = tutStep === TUT.length-1 ? "Finish" : "Next";
+}
+
+/* ---------- Feedback ---------- */
+var fbRating = 0;
+function drawStars(){
+  var btns = $("fbStars").querySelectorAll("button");
+  btns.forEach(function(b){ b.classList.toggle("on", parseInt(b.getAttribute("data-star"),10) <= fbRating); });
+}
+
+/* ---------- Wiring ---------- */
+function init(){
+  var savedDiff = lsGet("eb_difficulty", "normal");
+  if (DIFF[savedDiff]) $("diffSel").value = savedDiff;
+  $("diffSel").addEventListener("change", function(){
+    lsSet("eb_difficulty", $("diffSel").value);
+    newGame();
+  });
+  $("practiceChk").addEventListener("change", newGame);
+  $("newBtn").addEventListener("click", newGame);
+  $("endTurnBtn").addEventListener("click", endTurn);
+  $("trainBtn").addEventListener("click", train);
+  $("disbandBtn").addEventListener("click", disband);
+  $("rulesBtn").addEventListener("click", function(){
+    $("gameView").classList.add("hidden"); $("rulesView").classList.remove("hidden");
+    window.scrollTo(0,0);
+  });
+  $("backToGameBtn").addEventListener("click", function(){
+    $("rulesView").classList.add("hidden"); $("gameView").classList.remove("hidden");
+    window.scrollTo(0,0);
+  });
+  $("tutBtn").addEventListener("click", showTut);
+  $("tutBack").addEventListener("click", function(){ if (tutStep>0){ tutStep--; drawTut(); } });
+  $("tutNext").addEventListener("click", function(){
+    if (tutStep < TUT.length-1){ tutStep++; drawTut(); }
+    else $("tutOverlay").classList.remove("open");
+  });
+  $("tutClose").addEventListener("click", function(){ $("tutOverlay").classList.remove("open"); });
+  $("feedbackBtn").addEventListener("click", function(){
+    fbRating = 0; $("fbText").value = ""; $("fbMsg").textContent = ""; drawStars();
+    $("fbOverlay").classList.add("open");
+  });
+  $("fbStars").querySelectorAll("button").forEach(function(b){
+    b.addEventListener("click", function(){ fbRating = parseInt(b.getAttribute("data-star"),10); drawStars(); });
+  });
+  $("fbCancel").addEventListener("click", function(){ $("fbOverlay").classList.remove("open"); });
+  $("fbSave").addEventListener("click", function(){
+    var comment = $("fbText").value.trim();
+    if (!fbRating && !comment){ $("fbMsg").textContent = "Pick a star rating or write a comment first."; $("fbMsg").style.color = "var(--bad)"; return; }
+    var all = lsGet("eb_feedback", []);
+    all.push({ rating: fbRating, comment: comment, date: new Date().toISOString().slice(0,10) });
+    lsSet("eb_feedback", all);
+    /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+    try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "empire-builder", rating: fbRating||0, text: comment||"", tag: "", mode: "real", level: "", difficulty: "", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+    $("fbMsg").style.color = "var(--good)";
+    $("fbMsg").textContent = "Thank you! Feedback saved on this device (" + all.length + " saved).";
+    setTimeout(function(){ $("fbOverlay").classList.remove("open"); }, 900);
+  });
+  updateBestLine();
+  newGame();
+}
+init();
+})();
+</script>
+</body>
+</html>

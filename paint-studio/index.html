@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paint Studio — Holo's Arcade</title>
+<style>
+  :root{--navy:#141433;--navy2:#1d1d4d;--pink:#ff5da2;--purple:#8b5cf6;--blue:#38bdf8;--cyan:#22d3ee;--text:#f4f2ff;--muted:#b9b4e6;--card:#23235a;--border:#4c3fa3}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:linear-gradient(160deg,var(--navy),#241047 60%,#101a3d);color:var(--text);min-height:100vh}
+  header{padding:14px 16px 4px;text-align:center}
+  h1{margin:0;font-size:1.6rem;background:linear-gradient(90deg,var(--pink),var(--purple),var(--blue));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{color:var(--muted);font-size:.9rem;margin:4px 0 0}
+  main{max-width:760px;margin:0 auto;padding:12px 14px 40px}
+  .panel{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px;margin:12px 0}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0}
+  .row label{font-size:.85rem;color:var(--muted);min-width:78px}
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--border);background:var(--navy2);color:var(--text);padding:9px 13px;min-height:44px}
+  button.active{background:linear-gradient(90deg,var(--pink),var(--purple));border-color:transparent;font-weight:700}
+  button.primary{background:linear-gradient(90deg,var(--pink),var(--purple),var(--blue));border:none;font-weight:700}
+  .swatches{display:flex;flex-wrap:wrap;gap:6px}
+  .sw{width:40px;height:40px;border-radius:10px;border:2px solid rgba(255,255,255,.25);padding:0;min-height:40px}
+  .sw.active{border-color:#fff;box-shadow:0 0 0 2px var(--cyan)}
+  canvas#art{width:100%;aspect-ratio:4/3;background:#fff;border-radius:12px;border:3px solid var(--purple);touch-action:none;display:block}
+  .view{display:none}.view.on{display:block}
+  .note{color:var(--muted);font-size:.85rem}
+  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+  .gallery figure{margin:0}.gallery img{width:100%;border-radius:8px;border:1px solid var(--border)}
+  .gallery figcaption{font-size:.75rem;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+  .gallery button{min-height:32px;padding:4px 8px;font-size:.75rem}
+  textarea{width:100%;min-height:70px;border-radius:10px;border:1px solid var(--border);background:var(--navy2);color:var(--text);padding:10px;font:inherit}
+  select{font:inherit;background:var(--navy2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:9px;min-height:44px}
+  .stars button{font-size:1.3rem;padding:4px 8px;background:none;border:none}
+  .stars button.on{color:#ffd166}
+  footer{text-align:center;color:var(--muted);font-size:.8rem;padding:16px}
+  .prompt-box{background:var(--navy2);border:1px dashed var(--pink);border-radius:10px;padding:10px;font-size:.95rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>Paint Studio</h1>
+  <p class="tag">Draw, paint, stamp and splat — your canvas, your rules.</p>
+</header>
+<main>
+  <div class="panel" id="homePanel">
+    <div class="row"><label>Difficulty</label>
+      <button data-diff="easy">Easy</button><button data-diff="normal">Normal</button><button data-diff="hard">Hard</button>
+    </div>
+    <p class="note">Easy: tracing guides + prompts. Normal: prompts only. Hard: blank canvas, no guides.</p>
+    <div class="row"><label>Mode</label>
+      <button data-mode="create">Create</button><button data-mode="practice">Practice</button>
+    </div>
+    <p class="note">Practice: free painting, nothing saved to your gallery.</p>
+    <div class="row">
+      <button id="btnHow">How to Play</button>
+      <button id="btnRules">Rules</button>
+      <button id="btnFeedback">Tell us what you think!</button>
+    </div>
+  </div>
+
+  <div class="view on" id="viewPlay">
+    <div class="panel">
+      <div class="row" id="promptRow"><div class="prompt-box" id="promptBox" style="flex:1"></div><button id="btnPrompt">New prompt</button></div>
+      <canvas id="art" width="800" height="600"></canvas>
+      <div class="row"><label>Colour</label><div class="swatches" id="swatches"></div>
+        <input type="color" id="customColour" value="#ff5da2" aria-label="Custom colour" style="width:44px;height:40px;border:none;background:none">
+      </div>
+      <div class="row"><label>Tool</label>
+        <button data-tool="brush" class="active">Brush</button><button data-tool="fill">Fill bucket</button>
+        <button data-tool="stamp">Stamp</button><button data-tool="eraser">Eraser</button>
+      </div>
+      <div class="row" id="stampRow" style="display:none"><label>Stamp</label>
+        <button data-stamp="duck">Duck</button><button data-stamp="cat">Cat</button><button data-stamp="dog">Dog</button>
+        <button data-stamp="star">Star</button><button data-stamp="heart">Heart</button><button data-stamp="flower">Flower</button>
+      </div>
+      <div class="row"><label>Brush size</label>
+        <button data-size="4">S</button><button data-size="10" class="active">M</button><button data-size="20">L</button><button data-size="36">XL</button>
+      </div>
+      <div class="row">
+        <button id="btnUndo">Undo</button><button id="btnClear">Clear</button>
+        <button id="btnDownload">Download PNG</button><button id="btnSave" class="primary">Save to gallery</button>
+      </div>
+      <p class="note" id="saveNote"></p>
+    </div>
+    <div class="panel"><h2 style="margin-top:0;font-size:1.1rem">My gallery</h2><div class="gallery" id="gallery"></div>
+      <p class="note" id="galleryEmpty">No saved paintings yet. Make something ridiculous.</p></div>
+  </div>
+
+  <div class="view" id="viewHow"><div class="panel">
+    <h2 style="margin-top:0">How to Play</h2>
+    <p>1. Pick a difficulty and mode up top.</p>
+    <p>2. Choose a colour, a tool and a brush size.</p>
+    <p>3. Draw with your finger or mouse. Fill bucket floods an area. Stamp drops a shape where you tap.</p>
+    <p>4. Undo steps back one stroke. Save keeps your painting in the gallery on this device; Download gives you a PNG file.</p>
+    <button data-back>Back to painting</button>
+  </div></div>
+
+  <div class="view" id="viewRules"><div class="panel">
+    <h2 style="margin-top:0">Rules</h2>
+    <p>Paint Studio is a free-play art game. There is no score and no losing — just making things.</p>
+    <p>Your paintings, difficulty and mode are saved only in this browser on this device. Nothing is uploaded or shared.</p>
+    <p>Practice mode never saves to the gallery. Create mode saves when you tap Save to gallery.</p>
+    <p>Be kind in feedback comments: no personal information needed.</p>
+    <button data-back>Back to painting</button>
+  </div></div>
+
+  <div class="view" id="viewFeedback"><div class="panel">
+    <h2 style="margin-top:0">Tell us what you think!</h2>
+    <div class="stars" id="stars"></div>
+    <div class="row"><label>Kind</label>
+      <select id="fbTag"><option value="">Just a comment</option><option value="Bug">Bug</option><option value="Suggestion">Suggestion</option><option value="Other">Other</option></select>
+    </div>
+    <textarea id="fbText" placeholder="What's fun? What's broken?"></textarea>
+    <div class="row"><button id="btnSendFb" class="primary">Send it!</button><button data-back>Back</button></div>
+    <p class="note">No personal info needed. Be kind 💜</p>
+    <p class="note" id="fbDone"></p>
+  </div></div>
+</main>
+<footer>Holo's Arcade · Paint Studio · For fun and relaxation.</footer>
+<script>
+(function(){
+"use strict";
+var SLUG="paint-studio";
+var COLOURS=["#ff5da2","#ff8fab","#8b5cf6","#6d28d9","#38bdf8","#22d3ee","#34d399","#a3e635","#facc15","#fb923c","#f87171","#ffffff","#94a3b8","#334155","#000000"];
+var PROMPTS=["Paint a rubber duck on an adventure.","Paint a cat wearing a party hat.","Paint a happy dog in a field.","Paint the silliest sandwich ever.","Paint a house made of cake.","Paint a rainbow with a secret door.","Paint your dream treehouse.","Paint a fish flying a kite.","Paint a mountain wearing sunglasses.","Paint a garden at midnight."];
+var state={diff:localStorage.getItem(SLUG+":difficulty")||"easy",mode:localStorage.getItem(SLUG+":mode")||"create",colour:"#ff5da2",tool:"brush",stamp:"duck",size:10,rating:0};
+var canvas=document.getElementById("art"),ctx=canvas.getContext("2d");
+ctx.fillStyle="#ffffff";ctx.fillRect(0,0,canvas.width,canvas.height);
+var undoStack=[],drawing=false,last=null,guideDrawn=false;
+function pushUndo(){undoStack.push(canvas.toDataURL());if(undoStack.length>25)undoStack.shift();}
+function show(id){["viewPlay","viewHow","viewRules","viewFeedback"].forEach(function(v){document.getElementById(v).classList.toggle("on",v===id);});window.scrollTo(0,0);}
+document.getElementById("btnHow").onclick=function(){show("viewHow");};
+document.getElementById("btnRules").onclick=function(){show("viewRules");};
+document.getElementById("btnFeedback").onclick=function(){show("viewFeedback");};
+document.querySelectorAll("[data-back]").forEach(function(b){b.onclick=function(){show("viewPlay");};});
+function markActive(sel,val,attr){document.querySelectorAll(sel).forEach(function(b){b.classList.toggle("active",b.getAttribute(attr)===val);});}
+function applySettings(){
+  markActive("[data-diff]",state.diff,"data-diff");markActive("[data-mode]",state.mode,"data-mode");
+  document.getElementById("promptRow").style.display=(state.diff==="hard"||state.mode==="practice")?"none":"flex";
+  document.getElementById("btnSave").style.display=state.mode==="practice"?"none":"";
+  if(state.diff==="easy"&&!guideDrawn)drawGuide();
+}
+document.querySelectorAll("[data-diff]").forEach(function(b){b.onclick=function(){state.diff=b.getAttribute("data-diff");localStorage.setItem(SLUG+":difficulty",state.diff);applySettings();};});
+document.querySelectorAll("[data-mode]").forEach(function(b){b.onclick=function(){state.mode=b.getAttribute("data-mode");localStorage.setItem(SLUG+":mode",state.mode);applySettings();};});
+var sw=document.getElementById("swatches");
+COLOURS.forEach(function(c){var b=document.createElement("button");b.className="sw";b.style.background=c;b.setAttribute("aria-label","Colour "+c);b.onclick=function(){state.colour=c;document.querySelectorAll(".sw").forEach(function(x){x.classList.remove("active");});b.classList.add("active");};sw.appendChild(b);});
+sw.children[0].classList.add("active");
+document.getElementById("customColour").oninput=function(e){state.colour=e.target.value;document.querySelectorAll(".sw").forEach(function(x){x.classList.remove("active");});};
+document.querySelectorAll("[data-tool]").forEach(function(b){b.onclick=function(){state.tool=b.getAttribute("data-tool");markActive("[data-tool]",state.tool,"data-tool");document.getElementById("stampRow").style.display=state.tool==="stamp"?"flex":"none";};});
+document.querySelectorAll("[data-stamp]").forEach(function(b){b.onclick=function(){state.stamp=b.getAttribute("data-stamp");markActive("[data-stamp]",state.stamp,"data-stamp");};});
+document.querySelectorAll("[data-size]").forEach(function(b){b.onclick=function(){state.size=+b.getAttribute("data-size");markActive("[data-size]",String(state.size),"data-size");};});
+function newPrompt(){document.getElementById("promptBox").textContent="Prompt: "+PROMPTS[Math.floor(Math.random()*PROMPTS.length)];}
+document.getElementById("btnPrompt").onclick=newPrompt;newPrompt();
+function drawGuide(){guideDrawn=true;ctx.save();ctx.strokeStyle="rgba(139,92,246,0.35)";ctx.lineWidth=3;ctx.setLineDash([10,8]);
+  ctx.beginPath();ctx.arc(400,300,150,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(150,480);ctx.lineTo(650,480);ctx.stroke();ctx.restore();}
+function pos(e){var r=canvas.getBoundingClientRect();var t=e.touches?e.touches[0]:e;return{x:(t.clientX-r.left)*canvas.width/r.width,y:(t.clientY-r.top)*canvas.height/r.height};}
+function drawStamp(p){ctx.save();ctx.fillStyle=state.colour;ctx.strokeStyle=state.colour;var s=state.size*4,x=p.x,y=p.y;
+  if(state.stamp==="heart"){ctx.beginPath();ctx.moveTo(x,y+s*0.35);ctx.bezierCurveTo(x-s,y-s*0.4,x-s*0.3,y-s,x,y-s*0.35);ctx.bezierCurveTo(x+s*0.3,y-s,x+s,y-s*0.4,x,y+s*0.35);ctx.fill();}
+  else if(state.stamp==="star"){ctx.beginPath();for(var i=0;i<10;i++){var r=i%2?s*0.45:s,a=-Math.PI/2+i*Math.PI/5;ctx[i?"lineTo":"moveTo"](x+r*Math.cos(a),y+r*Math.sin(a));}ctx.closePath();ctx.fill();}
+  else if(state.stamp==="flower"){for(var j=0;j<6;j++){var a2=j*Math.PI/3;ctx.beginPath();ctx.ellipse(x+s*0.55*Math.cos(a2),y+s*0.55*Math.sin(a2),s*0.4,s*0.22,a2,0,Math.PI*2);ctx.fill();}ctx.beginPath();ctx.arc(x,y,s*0.3,0,Math.PI*2);ctx.fillStyle="#facc15";ctx.fill();}
+  else if(state.stamp==="duck"){ctx.beginPath();ctx.ellipse(x,y,s*0.8,s*0.55,0,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.arc(x+s*0.55,y-s*0.5,s*0.38,0,Math.PI*2);ctx.fill();ctx.fillStyle="#fb923c";ctx.beginPath();ctx.ellipse(x+s*0.95,y-s*0.45,s*0.28,s*0.13,0,0,Math.PI*2);ctx.fill();}
+  else if(state.stamp==="cat"){ctx.beginPath();ctx.arc(x,y,s*0.6,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(x-s*0.5,y-s*0.35);ctx.lineTo(x-s*0.55,y-s*0.85);ctx.lineTo(x-s*0.15,y-s*0.55);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(x+s*0.5,y-s*0.35);ctx.lineTo(x+s*0.55,y-s*0.85);ctx.lineTo(x+s*0.15,y-s*0.55);ctx.closePath();ctx.fill();}
+  else{ctx.beginPath();ctx.arc(x,y,s*0.55,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(x-s*0.6,y-s*0.2,s*0.22,s*0.45,0.4,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(x+s*0.6,y-s*0.2,s*0.22,s*0.45,-0.4,0,Math.PI*2);ctx.fill();}
+  ctx.restore();}
+function floodFill(p){var img=ctx.getImageData(0,0,canvas.width,canvas.height),d=img.data,W=canvas.width,H=canvas.height;
+  var sx=Math.floor(p.x),sy=Math.floor(p.y),si=(sy*W+sx)*4,target=[d[si],d[si+1],d[si+2],d[si+3]];
+  var tmp=document.createElement("canvas");tmp.width=tmp.height=1;var tc=tmp.getContext("2d");tc.fillStyle=state.colour;tc.fillRect(0,0,1,1);var fd=tc.getImageData(0,0,1,1).data;
+  if(target[0]===fd[0]&&target[1]===fd[1]&&target[2]===fd[2])return;
+  var stack=[[sx,sy]],seen=new Uint8Array(W*H);
+  function match(i){return Math.abs(d[i]-target[0])<24&&Math.abs(d[i+1]-target[1])<24&&Math.abs(d[i+2]-target[2])<24;}
+  while(stack.length){var cur=stack.pop(),x=cur[0],y=cur[1];if(x<0||y<0||x>=W||y>=H)continue;var idx=y*W+x;if(seen[idx])continue;seen[idx]=1;var i4=idx*4;if(!match(i4))continue;d[i4]=fd[0];d[i4+1]=fd[1];d[i4+2]=fd[2];d[i4+3]=255;stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);}
+  ctx.putImageData(img,0,0);}
+function start(e){e.preventDefault();pushUndo();var p=pos(e);
+  if(state.tool==="fill"){floodFill(p);return;}
+  if(state.tool==="stamp"){drawStamp(p);return;}
+  drawing=true;last=p;stroke(p,p);}
+function move(e){if(!drawing)return;e.preventDefault();var p=pos(e);stroke(last,p);last=p;}
+function end(){drawing=false;last=null;}
+function stroke(a,b){ctx.save();ctx.strokeStyle=state.tool==="eraser"?"#ffffff":state.colour;ctx.lineWidth=state.size;ctx.lineCap="round";ctx.lineJoin="round";ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();ctx.restore();}
+canvas.addEventListener("mousedown",start);canvas.addEventListener("mousemove",move);window.addEventListener("mouseup",end);
+canvas.addEventListener("touchstart",start,{passive:false});canvas.addEventListener("touchmove",move,{passive:false});canvas.addEventListener("touchend",end);
+document.getElementById("btnUndo").onclick=function(){var u=undoStack.pop();if(!u)return;var img=new Image();img.onload=function(){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0);};img.src=u;};
+document.getElementById("btnClear").onclick=function(){pushUndo();ctx.fillStyle="#ffffff";ctx.fillRect(0,0,canvas.width,canvas.height);guideDrawn=false;if(state.diff==="easy")drawGuide();};
+document.getElementById("btnDownload").onclick=function(){var a=document.createElement("a");a.download="paint-studio.png";a.href=canvas.toDataURL("image/png");a.click();};
+function loadGallery(){try{return JSON.parse(localStorage.getItem(SLUG+":gallery")||"[]");}catch(e){return[];}}
+function renderGallery(){var g=loadGallery(),el=document.getElementById("gallery");el.innerHTML="";
+  document.getElementById("galleryEmpty").style.display=g.length?"none":"";
+  g.forEach(function(item,i){var f=document.createElement("figure");var im=document.createElement("img");im.src=item.img;im.alt="Saved painting";
+    var cap=document.createElement("figcaption");cap.textContent=item.date;var del=document.createElement("button");del.textContent="Delete";
+    del.onclick=function(){var gg=loadGallery();gg.splice(i,1);localStorage.setItem(SLUG+":gallery",JSON.stringify(gg));renderGallery();};
+    cap.appendChild(del);f.appendChild(im);f.appendChild(cap);el.appendChild(f);});}
+document.getElementById("btnSave").onclick=function(){if(state.mode==="practice")return;var g=loadGallery();
+  g.unshift({img:canvas.toDataURL("image/png"),date:new Date().toLocaleDateString()});if(g.length>12)g=g.slice(0,12);
+  try{localStorage.setItem(SLUG+":gallery",JSON.stringify(g));document.getElementById("saveNote").textContent="Saved to your gallery on this device.";}
+  catch(e){document.getElementById("saveNote").textContent="Gallery is full — delete an old painting, or use Download PNG.";}
+  renderGallery();};
+var starsEl=document.getElementById("stars");
+for(var s=1;s<=5;s++){(function(n){var b=document.createElement("button");b.textContent="★";b.setAttribute("aria-label",n+" stars");
+  b.onclick=function(){state.rating=n;Array.prototype.forEach.call(starsEl.children,function(x,i){x.classList.toggle("on",i<n);});};starsEl.appendChild(b);})(s);}
+document.getElementById("btnSendFb").onclick=function(){var rec={game:SLUG,rating:state.rating,text:document.getElementById("fbText").value,tag:document.getElementById("fbTag").value,timestamp:new Date().toISOString()};
+  var all=[];try{all=JSON.parse(localStorage.getItem("holos-arcade-feedback")||"[]");}catch(e){}
+  all.push(rec);localStorage.setItem("holos-arcade-feedback",JSON.stringify(all));
+  document.getElementById("fbDone").textContent="Thanks! Saved on this device for the arcade team.";};
+applySettings();renderGallery();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Minesweeper</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2.25rem; }
+  :root{
+    color-scheme: light dark;
+    --bg:#f4f1e8;
+    --panel:#ffffff;
+    --panel2:#efece1;
+    --ink:#1c2321;
+    --muted:#5f6a66;
+    --line:#ddd8c8;
+    --accent:#0e7569;
+    --accent-ink:#0a5a52;
+    --danger:#b3261e;
+    --gold:#b7791f;
+    --btn:#1c2321;
+    --btn-ink:#f7f4ea;
+    --board-frame:#2e3a36;
+    --board-bg:#c9cdc4;
+    --cell:#aeb6a8;
+    --cell-edge-light:#e8ebe2;
+    --cell-edge-dark:#7c867a;
+    --cell-open:#e6e4d8;
+    --led-bg:#171a18;
+    --led:#ff5a4e;
+    --shadow:0 10px 30px rgba(28,35,33,.14);
+    --n1:#1a56c4; --n2:#1d7a3a; --n3:#c22e3a; --n4:#1b2a6b; --n5:#7a1f2b; --n6:#0e7569; --n7:#222222; --n8:#6b7280;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#121614;
+      --panel:#1b211f;
+      --panel2:#232a27;
+      --ink:#f0eee4;
+      --muted:#a3ada8;
+      --line:#333b37;
+      --accent:#3ec9b6;
+      --accent-ink:#3ec9b6;
+      --btn:#f0eee4;
+      --btn-ink:#171c1a;
+      --board-frame:#0c100e;
+      --board-bg:#3a423e;
+      --cell:#5d6a61;
+      --cell-edge-light:#8b988e;
+      --cell-edge-dark:#39423c;
+      --cell-open:#272e2a;
+      --shadow:0 10px 30px rgba(0,0,0,.45);
+      --n1:#7aa8ff; --n2:#6fd68a; --n3:#ff8a80; --n4:#a8b8ff; --n5:#ff9db0; --n6:#3ec9b6; --n7:#e8e8e8; --n8:#9aa3a0;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:var(--bg); color:var(--ink);
+    -webkit-tap-highlight-color:transparent;
+  }
+  button{font-family:inherit}
+  button:focus-visible, select:focus-visible, input:focus-visible{outline:3px solid var(--accent); outline-offset:2px}
+  .wrap{max-width:860px; margin:0 auto; padding:16px 14px 10px}
+  h1{font-family:"Bricolage Grotesque",sans-serif; font-size:clamp(30px,6vw,44px); font-weight:800; letter-spacing:-.02em; margin:2px 0 4px; line-height:1.02}
+  h1 .boom{font-size:.82em}
+  .sub{color:var(--muted); margin:0 0 14px; font-size:15.5px; line-height:1.5; max-width:620px}
+  .sub b{color:var(--ink)}
+
+  /* difficulty + toolbar */
+  .diffs{display:flex; gap:8px; flex-wrap:wrap; margin:0 0 10px}
+  .diff{
+    flex:1 1 30%; min-height:54px; cursor:pointer; text-align:left;
+    border:2px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius:14px; padding:8px 12px; display:flex; align-items:center; gap:10px;
+  }
+  .diff .dic{font-size:24px; line-height:1}
+  .diff b{display:block; font-size:15.5px; font-family:"Bricolage Grotesque",sans-serif; line-height:1.1}
+  .diff small{display:block; color:var(--muted); font-size:12px; margin-top:2px; font-weight:600}
+  .diff[aria-pressed="true"]{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset}
+  .toolbar{
+    display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:8px; margin-bottom:12px;
+  }
+  .btn{
+    cursor:pointer; border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius:10px; padding:8px 14px; font-weight:700; font-size:14px; min-height:44px;
+  }
+  .btn.primary{background:var(--btn); color:var(--btn-ink); border-color:var(--btn)}
+  .btn:disabled{opacity:.45; cursor:default}
+  .toolbar .spacer{flex:1 1 auto}
+  .mode-toggle{display:flex; border:1px solid var(--line); border-radius:11px; overflow:hidden}
+  .mode-toggle button{
+    border:0; background:var(--panel2); color:var(--ink); font-weight:800; font-size:14px;
+    padding:8px 14px; cursor:pointer; min-height:44px; min-width:86px;
+  }
+  .mode-toggle button[aria-pressed="true"]{background:var(--accent); color:#fff}
+  @media (prefers-color-scheme: dark){ .mode-toggle button[aria-pressed="true"]{color:#0c1512} }
+  /* practice round */
+  .practice-bar{
+    display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+    background:var(--panel); border:1.5px dashed var(--line); border-radius:14px;
+    padding:10px 12px; margin:0 0 10px;
+  }
+  .practice-bar.on{border-style:solid; border-color:var(--gold); background:var(--panel2)}
+  .practice-bar .p-ico{font-size:24px; line-height:1}
+  .practice-bar .p-text{flex:1 1 280px; font-size:14px; line-height:1.45}
+  .practice-bar .p-text b{font-family:"Bricolage Grotesque",sans-serif; font-size:15.5px}
+  .practice-bar .p-text span{display:block; color:var(--muted); font-size:13.5px; margin-top:1px}
+  .practice-bar .p-actions{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+  .practice-toggle{
+    cursor:pointer; border:2px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius:999px; padding:8px 14px 8px 8px; font-weight:800; font-size:14px; min-height:44px;
+    display:inline-flex; align-items:center; gap:9px;
+  }
+  .practice-toggle .track{width:38px; height:22px; border-radius:999px; background:var(--line); position:relative; flex:0 0 auto; transition:background .15s}
+  .practice-toggle .track::after{content:""; position:absolute; top:3px; left:3px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.35); transition:left .15s}
+  .practice-toggle[aria-pressed="true"]{border-color:var(--gold)}
+  .practice-toggle[aria-pressed="true"] .track{background:var(--gold)}
+  .practice-toggle[aria-pressed="true"] .track::after{left:19px}
+  .hint-btn{
+    cursor:pointer; border:1px solid var(--btn); background:var(--btn); color:var(--btn-ink);
+    border-radius:999px; padding:8px 16px; font-weight:800; font-size:14px; min-height:44px;
+  }
+  .hint-btn:disabled{opacity:.45; cursor:default}
+  .practice-badge{
+    display:inline-flex; align-items:center; gap:5px; background:var(--gold); color:#1c2321;
+    font-size:11px; font-weight:800; letter-spacing:.08em; padding:4px 8px; border-radius:999px; vertical-align:middle;
+  }
+  .practice-badge[hidden]{display:none}
+  .frame.practice{box-shadow:0 0 0 3px var(--gold), var(--shadow)}
+  .cell.hint-cell{outline:3px solid var(--gold); outline-offset:1px; z-index:2; animation:hintPulse 0.9s ease-in-out 3}
+  @keyframes hintPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
+  .hint-line{font-size:13px; color:var(--muted); margin:0 2px 10px}
+  .hint-line kbd{background:var(--panel2); border:1px solid var(--line); border-bottom-width:2px; border-radius:5px; padding:0 5px; font-family:inherit; font-size:12px; font-weight:700}
+  .newbie-hint{
+    display:flex; align-items:center; gap:10px;
+    background:var(--panel2); border:1px solid var(--line); border-radius:12px;
+    padding:9px 12px; margin:0 0 12px; font-size:14px; line-height:1.45;
+  }
+  .newbie-hint[hidden]{display:none}
+  .newbie-hint p{margin:0; flex:1}
+  .newbie-hint button.linkish{
+    background:none; border:0; color:var(--accent-ink); font-weight:800; font-size:14px;
+    cursor:pointer; padding:6px 2px; min-height:36px; text-decoration:underline; text-underline-offset:2px;
+  }
+  .newbie-hint .hint-x{
+    flex:0 0 auto; width:38px; height:38px; min-height:38px; border-radius:50%;
+    border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    font-size:15px; cursor:pointer; line-height:1;
+  }
+  /* rules sheet */
+  .rules-body h3{font-family:"Bricolage Grotesque",sans-serif; font-size:17px; margin:18px 0 5px}
+  .rules-body h3:first-child{margin-top:2px}
+  .rules-body p, .rules-body li{font-size:14.5px; line-height:1.55}
+  .rules-body p{margin:0 0 8px}
+  .rules-body ul{margin:0 0 8px; padding-left:20px}
+  .rules-body li{margin:0 0 4px}
+  .rules-body table{border-collapse:collapse; width:100%; font-size:14px; margin:4px 0 10px}
+  .rules-body th, .rules-body td{border-bottom:1px solid var(--line); padding:7px 6px; text-align:left}
+  .rules-body th{font-size:12.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted)}
+
+  /* board frame + HUD */
+  .frame{
+    background:var(--board-frame); border-radius:18px; padding:12px;
+    box-shadow:var(--shadow);
+  }
+  .hud{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    background:var(--board-bg); border-radius:10px; padding:8px 10px; margin-bottom:10px;
+  }
+  .led{
+    font-family:"IBM Plex Mono",ui-monospace,monospace; font-weight:700;
+    background:var(--led-bg); color:var(--led); border-radius:7px;
+    font-size:26px; line-height:1; padding:7px 10px 6px; min-width:86px; text-align:center;
+    letter-spacing:.08em; box-shadow:inset 0 2px 6px rgba(0,0,0,.6);
+  }
+  .led small{display:block; font-family:"Public Sans",sans-serif; font-size:9.5px; letter-spacing:.14em; color:#9aa39d; margin-top:3px; font-weight:700}
+  .face{
+    width:52px; height:52px; min-height:52px; border-radius:50%; cursor:pointer;
+    font-size:27px; line-height:1; display:grid; place-items:center;
+    background:var(--panel); border:2px solid rgba(0,0,0,.25);
+    box-shadow:0 2px 0 rgba(0,0,0,.3);
+  }
+  .face:active{transform:translateY(1px)}
+  .board-scroll{overflow:auto; border-radius:8px; -webkit-overflow-scrolling:touch; max-height:min(72vh, 640px)}
+  .board{
+    display:grid; gap:2px; background:var(--board-bg); padding:6px; border-radius:8px;
+    margin:0 auto; width:max-content; max-width:none;
+    user-select:none; -webkit-user-select:none; touch-action:manipulation;
+  }
+  .board.fit{width:100%}
+  .cell{
+    border:0; padding:0; cursor:pointer; position:relative;
+    width:var(--cs,34px); height:var(--cs,34px); min-height:0;
+    border-radius:4px;
+    background:var(--cell);
+    box-shadow:inset 2px 2px 0 var(--cell-edge-light), inset -2px -2px 0 var(--cell-edge-dark);
+    font-family:"Public Sans",sans-serif; font-weight:800;
+    font-size:calc(var(--cs,34px) * .52); line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    color:var(--ink);
+  }
+  .board.fit .cell{width:auto; height:auto; aspect-ratio:1/1}
+  .cell:hover:not(.open):not(:disabled){filter:brightness(1.07)}
+  .cell.open{
+    background:var(--cell-open); box-shadow:inset 0 0 0 1px rgba(0,0,0,.10);
+    cursor:default;
+  }
+  .cell.open.num{cursor:pointer}
+  .cell.flagged{font-size:calc(var(--cs,34px) * .58)}
+  .board.fit .cell.flagged{font-size:clamp(11px, 3.4vw, 20px)}
+  .cell.mine-hit{background:#e5484d; box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)}
+  .cell.wrong-flag{background:#e8a13a}
+  .cell:disabled{cursor:default; opacity:1}
+  .n1{color:var(--n1)} .n2{color:var(--n2)} .n3{color:var(--n3)} .n4{color:var(--n4)}
+  .n5{color:var(--n5)} .n6{color:var(--n6)} .n7{color:var(--n7)} .n8{color:var(--n8)}
+
+  .msg{min-height:26px; font-size:15px; font-weight:600; margin:12px 2px 0}
+  .msg:empty{display:none}
+  .msg.win{color:var(--accent-ink)}
+  .msg.lose{color:var(--danger)}
+
+  /* custom panel */
+  .custom{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:12px 14px; margin:0 0 12px; display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;
+  }
+  .custom[hidden]{display:none}
+  .custom label{font-size:13px; font-weight:700; color:var(--muted); display:flex; flex-direction:column; gap:5px}
+  .custom input{
+    width:84px; padding:9px 10px; border:1.5px solid var(--line); border-radius:9px;
+    background:var(--panel); color:var(--ink); font:700 15px "Public Sans",sans-serif; min-height:44px;
+  }
+  .custom .note{font-size:13px; color:var(--muted); flex:1 1 200px; line-height:1.45}
+
+  /* bests */
+  .bests{
+    margin-top:16px; background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:16px; box-shadow:var(--shadow);
+  }
+  .bests h2{font-family:"Bricolage Grotesque",sans-serif; font-size:19px; margin:0 0 4px}
+  .bests p{margin:0 0 12px; color:var(--muted); font-size:13.5px}
+  .best-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+  @media (max-width:560px){ .best-grid{grid-template-columns:1fr} }
+  .best-card{background:var(--panel2); border-radius:12px; padding:12px 14px}
+  .best-card b{font-family:"Bricolage Grotesque",sans-serif; font-size:15.5px; display:block; margin-bottom:5px}
+  .best-card .big{font-family:"IBM Plex Mono",monospace; font-size:24px; font-weight:700; line-height:1.1}
+  .best-card span{display:block; font-size:12.5px; color:var(--muted); font-weight:600; margin-top:3px; line-height:1.45}
+  .best-card .star{color:var(--gold); font-weight:800; font-size:13px}
+
+  /* overlays */
+  .overlay{
+    position:fixed; inset:0; z-index:100; background:rgba(10,14,12,.58);
+    display:flex; align-items:flex-start; justify-content:center; overflow-y:auto; padding:18px 12px;
+  }
+  .overlay[hidden]{display:none}
+  .sheet{
+    background:var(--panel); color:var(--ink); border-radius:18px; max-width:560px; width:100%;
+    padding:22px; box-shadow:var(--shadow); margin:auto 0;
+  }
+  .sheet h2{font-family:"Bricolage Grotesque",sans-serif; margin:0 0 4px; font-size:25px; letter-spacing:-.01em}
+  .sheet .sheet-sub{color:var(--muted); margin:0 0 14px; font-size:14.5px; line-height:1.5}
+  .tut-steps{list-style:none; margin:0 0 18px; padding:0}
+  .tut-steps li{display:flex; gap:12px; padding:10px 0; border-bottom:1px solid var(--line)}
+  .tut-steps li:last-child{border-bottom:none}
+  .tut-num{
+    flex:0 0 auto; width:29px; height:29px; border-radius:50%;
+    background:var(--accent); color:#fff; font-weight:800; font-size:14px;
+    display:flex; align-items:center; justify-content:center; margin-top:1px;
+  }
+  @media (prefers-color-scheme: dark){ .tut-num{color:#0c1512} }
+  .tut-steps li>div>b{display:block; font-size:15.5px; margin-bottom:2px}
+  .tut-steps li>div>span{font-size:14.5px; line-height:1.5; color:var(--ink)}
+  .tut-steps .demo{
+    display:inline-grid; grid-template-columns:repeat(3,26px); gap:2px; vertical-align:middle; margin:4px 0 2px;
+  }
+  .tut-steps .demo i{
+    width:26px; height:26px; border-radius:4px; display:grid; place-items:center;
+    font-style:normal; font-weight:800; font-size:14px;
+    background:var(--cell); box-shadow:inset 2px 2px 0 var(--cell-edge-light), inset -2px -2px 0 var(--cell-edge-dark);
+  }
+  .tut-steps .demo i.open{background:var(--cell-open); box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+  .sheet .row{display:flex; gap:8px; flex-wrap:wrap}
+  .sheet .row .btn{flex:1 1 auto; min-height:48px}
+  .winstats{display:flex; gap:10px; flex-wrap:wrap; margin:0 0 14px}
+  .winstats div{flex:1 1 30%; background:var(--panel2); border-radius:12px; padding:12px; text-align:center}
+  .winstats b{display:block; font-size:21px; font-family:"Bricolage Grotesque",sans-serif}
+  .winstats span{font-size:12.5px; color:var(--muted); font-weight:600}
+  .newbest{color:var(--gold); font-weight:800; margin:0 0 12px}
+  .newbest[hidden]{display:none}
+
+  /* feedback (arcade standard) */
+  .stars{display:flex; gap:6px; margin:8px 0 4px}
+  .stars button{width:48px; height:48px; min-height:48px; border-radius:12px; border:1.5px solid var(--line); background:var(--panel); font-size:24px; line-height:1; color:var(--muted); padding:0; cursor:pointer}
+  .stars button[aria-pressed="true"]{border-color:var(--gold); color:var(--gold); background:var(--panel2)}
+  .stars button:focus-visible{outline:3px solid var(--gold); outline-offset:2px}
+  .seg{display:inline-flex; border:1.5px solid var(--line); border-radius:999px; overflow:hidden}
+  .seg button{border:0; background:transparent; padding:9px 13px; font-weight:600; font-size:14px; min-height:42px; color:var(--ink); cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--accent); color:#fff}
+  @media (prefers-color-scheme: dark){ .seg button[aria-pressed="true"]{color:#0c1512} }
+  .fb-field{margin-top:14px}
+  .fb-field label{display:block; font-size:13px; font-weight:700; letter-spacing:.04em; margin-bottom:6px}
+  .fb-field textarea{width:100%; min-height:110px; border:1.5px solid var(--line); border-radius:10px; background:var(--panel); color:var(--ink); font:inherit; font-size:14.5px; padding:10px 12px; resize:vertical}
+  .fb-field textarea:focus-visible{outline:3px solid var(--accent); outline-offset:1px}
+  .fb-terms{font-size:12.5px; color:var(--muted); margin-top:10px; line-height:1.5}
+  .fb-status{font-size:14px; font-weight:600; margin-top:12px; min-height:20px}
+  .fb-status:empty{margin-top:0; min-height:0}
+
+  footer{padding:16px 4px 28px; text-align:center; font-size:13.5px; color:var(--muted); line-height:1.7}
+  footer a{color:var(--accent-ink); font-weight:700; text-decoration:underline; text-underline-offset:2px; display:inline-block; padding:6px 4px; min-height:32px}
+  @media (max-width:560px){
+    .wrap{padding:12px 10px 6px}
+    .diff small{display:none}
+    .diff{min-height:48px}
+    .led{font-size:22px; min-width:74px}
+    .face{width:46px; height:46px; min-height:46px; font-size:24px}
+    .frame{padding:9px}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important; animation:none !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Minesweeper <span class="boom" aria-hidden="true">💣</span></h1>
+  <p class="sub">The classic logic puzzle. Every number tells you exactly how many mines touch that square — <b>your first tap is always safe</b>, and every board can be worked out with pure deduction. No guessing needed… most of the time.</p>
+
+  <div class="diffs" role="group" aria-label="Choose difficulty">
+    <button class="diff" id="diff-easy" type="button" aria-pressed="true">
+      <span class="dic" aria-hidden="true">🌱</span>
+      <span><b>Easy</b><small>9 × 9 · 10 mines</small></span>
+    </button>
+    <button class="diff" id="diff-normal" type="button" aria-pressed="false">
+      <span class="dic" aria-hidden="true">🌿</span>
+      <span><b>Normal</b><small>16 × 16 · 40 mines</small></span>
+    </button>
+    <button class="diff" id="diff-hard" type="button" aria-pressed="false">
+      <span class="dic" aria-hidden="true">🔥</span>
+      <span><b>Hard</b><small>30 × 16 · 99 mines</small></span>
+    </button>
+  </div>
+
+  <div class="custom" id="customPanel" hidden>
+    <label>Columns <input type="number" id="cCols" min="8" max="30" value="12"></label>
+    <label>Rows <input type="number" id="cRows" min="8" max="24" value="12"></label>
+    <label>Mines <input type="number" id="cMines" min="10" max="150" value="24"></label>
+    <button class="btn primary" id="customGo" type="button">Build board</button>
+    <span class="note">Custom boards are just for fun — best times are only recorded for the three classic difficulties.</span>
+  </div>
+
+  <div class="newbie-hint" id="newbieHint" hidden>
+    <p>👋 <b>New here?</b> Tap <b>How to play</b> for a 1-minute walkthrough, or <b>Rules</b> for the full rulebook. Otherwise, just start digging — your first tap is always safe.</p>
+    <button class="linkish" id="hintHow" type="button">How to play</button>
+    <button class="hint-x" id="hintDismiss" type="button" aria-label="Dismiss hint">✕</button>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn primary" id="newBtn" type="button">↻ New game</button>
+    <button class="btn" id="customBtn" type="button" aria-expanded="false">⚙ Custom</button>
+    <button class="btn" id="howBtn" type="button">❓ How to play</button>
+    <button class="btn" id="rulesBtn" type="button">📖 Rules</button>
+    <button class="btn" id="feedbackBtn" type="button">✎ Feedback</button>
+    <span class="spacer"></span>
+    <div class="mode-toggle" role="group" aria-label="Tap mode">
+      <button id="modeDig" type="button" aria-pressed="true">⛏ Dig</button>
+      <button id="modeFlag" type="button" aria-pressed="false">🚩 Flag</button>
+    </div>
+  </div>
+  <div class="practice-bar" id="practiceBar">
+    <span class="p-ico" aria-hidden="true">🎓</span>
+    <div class="p-text">
+      <b>Practice round</b>
+      <span id="practiceDesc">Learn stress-free — no best times saved, mines don't end the game, and hints are on tap.</span>
+    </div>
+    <div class="p-actions">
+      <button class="hint-btn" id="hintBtn" type="button" hidden>💡 Hint</button>
+      <button class="practice-toggle" id="practiceToggle" type="button" aria-pressed="false" aria-label="Turn practice round on or off">
+        <span class="track" aria-hidden="true"></span><span id="practiceToggleLabel">Practice OFF</span>
+      </button>
+    </div>
+  </div>
+  <p class="hint-line" id="controlHint">Tap a square to dig. <b>Flag mode</b>, a <b>long-press</b>, or <kbd>right-click</kbd> plants a flag. Tap a revealed number whose flags add up to <b>chord</b> — it clears the rest around it.</p>
+
+  <div class="frame">
+    <div class="hud">
+      <div class="led" aria-label="Mines remaining"><span id="mineCount">010</span><small>MINES LEFT</small></div>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:5px">
+        <button class="face" id="faceBtn" type="button" aria-label="New game">🙂</button>
+        <span class="practice-badge" id="practiceBadge" hidden>🎓 PRACTICE</span>
+      </div>
+      <div class="led" aria-label="Time elapsed"><span id="timer">000</span><small id="timerLabel">SECONDS</small></div>
+    </div>
+    <div class="board-scroll" id="boardScroll">
+      <div class="board" id="board" role="grid" aria-label="Minefield"></div>
+    </div>
+  </div>
+
+  <p class="msg" id="msg" role="status" aria-live="polite"></p>
+
+  <section class="bests" aria-label="Your best times">
+    <h2>🏆 Your bests — saved on this device</h2>
+    <p>Best (fastest) winning time for each classic difficulty, plus your win record. Stored in this browser only — no account, nothing leaves your device. 🎓 Practice rounds never count toward these.</p>
+    <div class="best-grid" id="bestGrid"></div>
+    <div class="row" style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap">
+      <button class="btn" id="resetBests" type="button">Reset bests</button>
+    </div>
+  </section>
+
+  <footer>
+    <a href="../games-hub/">← Back to Holo's Arcade — all games</a><br>
+    A solo logic game — no opponent, just you vs. the minefield. More games from <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener">Ridiculously Fit and Fed</a>.
+  </footer>
+</div>
+
+<!-- Tutorial / How to play -->
+<div class="overlay" id="tutOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+  <div class="sheet">
+    <h2 id="tutTitle">💣 How to play Minesweeper</h2>
+    <p class="sheet-sub">Clear the whole field without digging up a mine. The numbers do all the talking — under a minute to learn.</p>
+    <ol class="tut-steps">
+      <li>
+        <span class="tut-num">1</span>
+        <div><b>🎯 The goal</b>
+        <span>Reveal every square that <em>doesn't</em> hide a mine. Easy hides 10 mines in a 9 × 9 field; Hard hides 99. You never need to reveal a mine to win.</span></div>
+      </li>
+      <li>
+        <span class="tut-num">2</span>
+        <div><b>👆 Your first tap is always safe</b>
+        <span>Mines are only planted <em>after</em> your first dig, and never under — or next to — that first square. So open with confidence, ideally near the middle for a bigger opening.</span></div>
+      </li>
+      <li>
+        <span class="tut-num">3</span>
+        <div><b>🔢 Numbers count touching mines</b>
+        <span>A revealed number says how many mines touch that square, counting all 8 neighbours — sides and corners. A <b>1</b> in a corner with only one hidden neighbour left? That neighbour is a mine.<br>
+        <span class="demo" aria-hidden="true"><i class="open n1">1</i><i class="open n2">2</i><i></i><i class="open n1">1</i><i>🚩</i><i></i><i class="open"></i><i class="open"></i><i></i></span></span></div>
+      </li>
+      <li>
+        <span class="tut-num">4</span>
+        <div><b>🚩 Flag the mines</b>
+        <span>Worked out where a mine is? Flag it so you don't dig it up by accident: switch to <b>Flag mode</b>, <b>long-press</b> the square, or <b>right-click</b> it. The counter at the top tracks mines left = total mines − flags planted.</span></div>
+      </li>
+      <li>
+        <span class="tut-num">5</span>
+        <div><b>⚡ Chord to go faster</b>
+        <span>When a revealed number already has that many flags around it, tap the number itself — it digs every other square around it at once. Fast, satisfying… and unforgiving if a flag is in the wrong place.</span></div>
+      </li>
+      <li>
+        <span class="tut-num">6</span>
+        <div><b>🏁 Winning &amp; losing</b>
+        <span>Dig a mine and it's over — the field shows every mine, and a <b>✕</b> marks any flag that was wrong. Clear every safe square and you win: your time is saved as a best for that difficulty if it's your fastest yet.</span></div>
+      </li>
+      <li>
+        <span class="tut-num">7</span>
+        <div><b>🎓 Try a Practice round first</b>
+        <span>Flip <b>Practice ON</b> above the board for a stress-free round: the timer and bests don't count, digging a mine just flags it and lets you keep going, and the <b>💡 Hint</b> button points out a move the numbers prove — a safe square to dig or a mine to flag. Perfect while you're learning the logic. Flip it OFF when you want a real, timed game.</span></div>
+      </li>
+    </ol>
+    <div class="row">
+      <button class="btn primary" id="tutGo" type="button">Got it — start digging ▶</button>
+      <button class="btn" id="tutRules" type="button">📖 Full Rules instead</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rules (full rulebook — separate from the short tutorial) -->
+<div class="overlay" id="rulesOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="sheet">
+    <h2 id="rulesTitle">📖 Minesweeper — Full Rules</h2>
+    <p class="sheet-sub">The complete rulebook: setup, digging, flagging, chording, timing, scoring and win conditions. For the quick 1-minute version, use <b>How to play</b> instead.</p>
+    <div class="rules-body">
+      <h3>1 · Objective</h3>
+      <p>Reveal every square on the field that does <b>not</b> contain a mine, without ever digging up a mine. There is no opponent and no score to beat except your own best time for each difficulty.</p>
+
+      <h3>2 · The field &amp; difficulties</h3>
+      <table>
+        <tr><th>Difficulty</th><th>Field</th><th>Squares</th><th>Mines</th></tr>
+        <tr><td>🌱 Easy</td><td>9 × 9</td><td>81</td><td>10</td></tr>
+        <tr><td>🌿 Normal</td><td>16 × 16</td><td>256</td><td>40</td></tr>
+        <tr><td>🔥 Hard</td><td>30 × 16</td><td>480</td><td>99</td></tr>
+        <tr><td>⚙ Custom</td><td>8–30 wide × 8–24 tall</td><td>Varies</td><td>Up to 35% of squares</td></tr>
+      </table>
+      <p>Changing difficulty, tapping <b>↻ New game</b>, or tapping the face button abandons the current field and deals a fresh one. A fresh deal counts as a game played for that difficulty.</p>
+
+      <h3>3 · First-dig safety</h3>
+      <p>Mines are <b>not</b> placed until your first dig. The square you dig first — and all 8 squares touching it — are guaranteed mine-free, so the first dig can never lose and usually opens a small clearing. This guarantee applies to the first <em>dig</em> only: if your first action is planting a flag, the guarantee moves to your first actual dig.</p>
+
+      <h3>4 · Numbers</h3>
+      <ul>
+        <li>A revealed number (1–8) is the exact count of mines in the 8 squares surrounding it — up, down, left, right and the four diagonals.</li>
+        <li>A revealed blank square has 0 neighbouring mines. Digging a blank automatically digs every square around it, cascading through connected blanks and stopping at numbers (flood-fill).</li>
+        <li>Numbers are never wrong. If your deduction contradicts a number, a flag somewhere nearby is misplaced.</li>
+      </ul>
+
+      <h3>5 · Digging</h3>
+      <ul>
+        <li>In <b>⛏ Dig mode</b>, tap or click a hidden, unflagged square to dig it.</li>
+        <li>Digging a mine loses the game immediately (see §9).</li>
+        <li>Flagged squares cannot be dug — unflag them first. This protects you from mis-taps.</li>
+        <li>Digging an already-revealed blank does nothing; digging a revealed <em>number</em> chords instead (see §7).</li>
+      </ul>
+
+      <h3>6 · Flagging</h3>
+      <ul>
+        <li>Plant a flag on any hidden square you believe hides a mine: switch to <b>🚩 Flag mode</b> and tap, <b>long-press</b> (≈½ second) the square, or <b>right-click</b> it. Repeat the action to remove the flag.</li>
+        <li>Flags are unlimited and purely informational — the game never checks them until the end. You may plant more flags than there are mines; the <b>MINES LEFT</b> counter (total mines − flags planted) simply goes negative.</li>
+        <li>You do <b>not</b> need to flag every mine to win — only revealing all safe squares matters (§8).</li>
+      </ul>
+
+      <h3>7 · Chording</h3>
+      <ul>
+        <li>Tap a revealed number when the number of flags around it exactly equals the number. The game digs every remaining hidden, unflagged square around it at once.</li>
+        <li>If the flags are correct, chording is a safe shortcut. If any flag is misplaced, a chord can dig a real mine and lose the game — the risk is yours.</li>
+        <li>If the flag count doesn't match the number, the tap does nothing.</li>
+      </ul>
+
+      <h3>8 · Winning</h3>
+      <ul>
+        <li>You win the moment every non-mine square is revealed — for Easy, that's 71 squares; Normal, 216; Hard, 381.</li>
+        <li>On a win, any unflagged mines are flagged automatically, the mine counter reads 000, the face becomes 😎, and the timer stops.</li>
+        <li>Flagging all mines without revealing all safe squares is <b>not</b> a win.</li>
+      </ul>
+
+      <h3>9 · Losing</h3>
+      <ul>
+        <li>Digging any mine — directly or by chording — ends the game immediately. The face becomes 😵 and the timer stops.</li>
+        <li>The full field is then revealed: every mine is shown 💣 (the one you dug is highlighted red), correctly flagged mines keep their flags, and any flag that was <em>not</em> on a mine is marked ✕.</li>
+        <li>A lost game counts as played, not won. There is no undo — start a new game to try again.</li>
+      </ul>
+
+      <h3>10 · Timer &amp; scoring</h3>
+      <ul>
+        <li>The timer starts on your first action (dig or flag) and stops the instant you win or lose. It caps at 999 seconds.</li>
+        <li>There are no points. Your score for a game is simply your <b>finishing time</b> — lower is better.</li>
+        <li>Your fastest winning time per classic difficulty is saved as your <b>best</b>, along with games played and won. Custom fields are untimed for records: they save no bests.</li>
+        <li>Bests live in this browser on this device only. <b>Reset bests</b> (under the board) clears them permanently.</li>
+      </ul>
+
+      <h3>11 · Practice rounds</h3>
+      <ul>
+        <li>Turn <b>Practice ON</b> with the toggle above the board. It starts a fresh field on the same difficulty (or your custom size) — turning it off also starts a fresh, normal field.</li>
+        <li><b>No records:</b> practice games don't count as played or won, the timer is for curiosity only, and no best time is saved — win or lose.</li>
+        <li><b>Mines don't end a practice round:</b> if you dig a mine, it's flagged for you, you get a short note, and you keep playing. Chording onto a mine works the same way.</li>
+        <li><b>Hints:</b> the <b>💡 Hint</b> button (only in Practice) highlights one move and explains it. It first looks for a move the revealed numbers prove; if none exists yet, it will peek and point to a guaranteed-safe square and say so. Hints are unlimited.</li>
+        <li>You still win a practice round by revealing every safe square — you'll just see a “Practice complete” message instead of a saved best.</li>
+      </ul>
+
+      <h3>12 · Special rules &amp; edge cases</h3>
+      <ul>
+        <li><b>Guaranteed opening, not a guaranteed solve:</b> first-dig safety guarantees a safe start, but classic random placement can occasionally leave a genuine 50/50 guess late in a game. That's part of classic Minesweeper.</li>
+        <li><b>Dense custom fields:</b> if a custom field is too dense for the full 3 × 3 safe zone, the guarantee shrinks to just the first-dug square.</li>
+        <li><b>Keyboard:</b> press <b>F</b> to switch between Dig and Flag mode, <b>P</b> to toggle Practice, <b>H</b> for a hint in Practice; <b>Esc</b> closes dialogs.</li>
+        <li><b>Pausing:</b> there is no pause — but the timer only runs during a live game, and leaving the page mid-game simply abandons the field (it still counts as played).</li>
+      </ul>
+    </div>
+    <div class="row">
+      <button class="btn primary" id="rulesClose" type="button">Got it — back to the field</button>
+      <button class="btn" id="rulesTut" type="button">❓ Quick tutorial instead</button>
+    </div>
+  </div>
+</div>
+
+<!-- Win overlay -->
+<div class="overlay" id="winOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="winTitle">
+  <div class="sheet">
+    <h2 id="winTitle">😎 Field cleared!</h2>
+    <p class="sheet-sub" id="winSub">Every safe square revealed, not a single mine disturbed.</p>
+    <div class="winstats">
+      <div><b id="winTime">0s</b><span>Your time</span></div>
+      <div><b id="winDiff">Easy</b><span>Difficulty</span></div>
+      <div><b id="winBest">—</b><span>Best time</span></div>
+    </div>
+    <p class="newbest" id="winNewBest" hidden>★ New personal best!</p>
+    <div class="row">
+      <button class="btn primary" id="winAgain" type="button">▶ Play again</button>
+      <button class="btn" id="winHarder" type="button">Try a harder field ↑</button>
+      <button class="btn" id="winClose" type="button">Admire the field</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback (arcade standard: rating + comment, saved on this device) -->
+<div class="overlay" id="feedbackOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+  <div class="sheet">
+    <h2 id="feedbackTitle">✎ Feedback</h2>
+    <p class="sheet-sub">How's Minesweeper playing? Rate it and leave a note — what you liked, what felt off, or what you'd change.</p>
+    <div class="fb-field">
+      <label id="ratingLabel">Your rating</label>
+      <div class="stars" role="group" aria-labelledby="ratingLabel">
+        <button type="button" data-star="1" aria-pressed="false" aria-label="1 star">★</button>
+        <button type="button" data-star="2" aria-pressed="false" aria-label="2 stars">★</button>
+        <button type="button" data-star="3" aria-pressed="false" aria-label="3 stars">★</button>
+        <button type="button" data-star="4" aria-pressed="false" aria-label="4 stars">★</button>
+        <button type="button" data-star="5" aria-pressed="false" aria-label="5 stars">★</button>
+      </div>
+    </div>
+    <div class="fb-field">
+      <label id="tagLabel">What's this about?</label>
+      <div class="seg" role="group" aria-labelledby="tagLabel">
+        <button type="button" data-tag="Bug" aria-pressed="false">Bug</button>
+        <button type="button" data-tag="Suggestion" aria-pressed="true">Suggestion</button>
+        <button type="button" data-tag="Other" aria-pressed="false">Other</button>
+      </div>
+    </div>
+    <div class="fb-field">
+      <label for="fbComment">Your comment</label>
+      <textarea id="fbComment" maxlength="1000" placeholder="Tell us what you think…"></textarea>
+    </div>
+    <p class="fb-terms">Feedback follows the same Terms &amp; Conditions as the games: no personal info needed, please keep it clean (moderation rules apply), and feedback may be used to improve the games. Saved on this device only for now.</p>
+    <p class="fb-status" id="fbStatus" role="status"></p>
+    <div class="row" style="margin-top:14px">
+      <button class="btn primary" id="fbSave" type="button">Save feedback</button>
+      <button class="btn" id="fbCancel" type="button">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ================================================================
+   Minesweeper — classic rules.
+   - Mines are planted after the first dig; the first square and
+     its neighbours are always safe.
+   - Flood-fill opens empty regions; chording clears around a
+     satisfied number; flags via Flag mode, long-press, right-click.
+   ================================================================ */
+function el(id){ return document.getElementById(id); }
+
+/* Standard arcade difficulty settings: Easy / Normal / Hard.
+   KEYMAP migrates bests and the saved difficulty preference stored
+   under the old classic key names by earlier versions. */
+var DIFFS = {
+  easy:   { label:'Easy',   cols:9,  rows:9,  mines:10 },
+  normal: { label:'Normal', cols:16, rows:16, mines:40 },
+  hard:   { label:'Hard',   cols:30, rows:16, mines:99 }
+};
+var ORDER = ['easy','normal','hard'];
+var KEYMAP = { beginner:'easy', intermediate:'normal', expert:'hard' };
+
+var BESTK = 'minesweeper_v1_bests';
+var TUTK  = 'minesweeper_v1_seen_tutorial';
+var HINTK = 'minesweeper_v1_hint_dismissed';
+var SETK  = 'minesweeper_v1_difficulty';
+function lsGet(k, dflt){ try { var v = localStorage.getItem(k); return v === null ? dflt : JSON.parse(v); } catch(e){ return dflt; } }
+function lsSet(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+var bests = lsGet(BESTK, {});
+Object.keys(KEYMAP).forEach(function(oldK){
+  if(bests[oldK] && !bests[KEYMAP[oldK]]) bests[KEYMAP[oldK]] = bests[oldK];
+  delete bests[oldK];
+});
+function blankBest(){ return { played:0, won:0, bestTime:0 }; }
+ORDER.forEach(function(k){ if(!bests[k]) bests[k] = blankBest(); });
+
+/* ---------------- state ---------------- */
+var G = null;
+var mode = 'dig'; // 'dig' | 'flag'
+var practice = false;
+
+function syncPracticeUI(){
+  var t = el('practiceToggle');
+  if(t){
+    t.setAttribute('aria-pressed', practice ? 'true' : 'false');
+    el('practiceToggleLabel').textContent = practice ? 'Practice ON' : 'Practice OFF';
+  }
+  el('practiceBar').classList.toggle('on', practice);
+  el('practiceBadge').hidden = !practice;
+  el('hintBtn').hidden = !practice;
+  el('timerLabel').textContent = practice ? 'PRACTICE · SEC' : 'SECONDS';
+  el('practiceDesc').textContent = practice
+    ? 'Practice is ON — this round doesn\'t count. Mines won\'t end it, and 💡 Hint will point out a proven move.'
+    : 'Learn stress-free — no best times saved, mines don\'t end the game, and hints are on tap.';
+  var frame = document.querySelector('.frame');
+  if(frame) frame.classList.toggle('practice', practice);
+}
+function restartCurrent(){
+  if(G && G.diffKey === 'custom') newGame('custom', { cols:G.cols, rows:G.rows, mines:G.mines, label:'Custom' });
+  else newGame(curDiff);
+}
+function practiceMineHit(i){
+  var cell = G.cells[i];
+  if(!cell || cell.flag) return;
+  cell.flag = true;
+  G.flags++;
+  G.practiceHits = (G.practiceHits || 0) + 1;
+  paintCell(i);
+  updateHud();
+  if(navigator.vibrate){ try { navigator.vibrate(25); } catch(err){} }
+  setMsg('🎓 Practice: that square was a mine — it\'s been flagged for you, keep going. (' + G.practiceHits + ' mine' + (G.practiceHits === 1 ? '' : 's') + ' found the hard way so far)');
+}
+
+function newGame(diffKey, custom){
+  var cfg = custom || DIFFS[diffKey];
+  G = {
+    diffKey: custom ? 'custom' : diffKey,
+    label: custom ? 'Custom' : cfg.label || DIFFS[diffKey].label,
+    cols: cfg.cols, rows: cfg.rows, mines: cfg.mines,
+    cells: [], planted:false, started:false, over:false, won:false,
+    flags:0, revealed:0, seconds:0, startStamp:0, timerId:null, hitIdx:-1,
+    practice: practice, practiceHits:0, hintsUsed:0
+  };
+  var n = G.cols * G.rows;
+  for(var i = 0; i < n; i++) G.cells.push({ mine:false, open:false, flag:false, count:0 });
+  if(!custom && !practice && bests[G.diffKey]) { bests[G.diffKey].played++; lsSet(BESTK, bests); }
+  stopTimer();
+  setMsg('');
+  el('faceBtn').textContent = '🙂';
+  buildBoard();
+  syncPracticeUI();
+  updateHud();
+  renderBests();
+}
+function idx(r, c){ return r * G.cols + c; }
+function inBounds(r, c){ return r >= 0 && r < G.rows && c >= 0 && c < G.cols; }
+function neighbours(r, c){
+  var out = [];
+  for(var dr = -1; dr <= 1; dr++) for(var dc = -1; dc <= 1; dc++){
+    if(!dr && !dc) continue;
+    var nr = r + dr, nc = c + dc;
+    if(inBounds(nr, nc)) out.push(idx(nr, nc));
+  }
+  return out;
+}
+function plantMines(safeIdx){
+  var safe = {};
+  safe[safeIdx] = true;
+  var sr = Math.floor(safeIdx / G.cols), sc = safeIdx % G.cols;
+  neighbours(sr, sc).forEach(function(i){ safe[i] = true; });
+  var spots = [];
+  for(var i = 0; i < G.cells.length; i++) if(!safe[i]) spots.push(i);
+  // If the field is so dense the safe zone doesn't fit, shrink it to just the tapped square.
+  if(spots.length < G.mines){
+    spots = [];
+    for(var j = 0; j < G.cells.length; j++) if(j !== safeIdx) spots.push(j);
+  }
+  for(var k = spots.length - 1; k > 0; k--){
+    var j2 = Math.floor(Math.random() * (k + 1));
+    var t = spots[k]; spots[k] = spots[j2]; spots[j2] = t;
+  }
+  for(var m = 0; m < G.mines && m < spots.length; m++) G.cells[spots[m]].mine = true;
+  for(var r = 0; r < G.rows; r++) for(var c = 0; c < G.cols; c++){
+    var cell = G.cells[idx(r, c)];
+    if(cell.mine) continue;
+    var cnt = 0;
+    neighbours(r, c).forEach(function(i){ if(G.cells[i].mine) cnt++; });
+    cell.count = cnt;
+  }
+  G.planted = true;
+}
+
+/* ---------------- timer ---------------- */
+function startTimer(){
+  if(G.started) return;
+  G.started = true; G.startStamp = Date.now();
+  G.timerId = setInterval(function(){
+    G.seconds = Math.min(999, Math.floor((Date.now() - G.startStamp) / 1000));
+    el('timer').textContent = pad3(G.seconds);
+  }, 250);
+}
+function stopTimer(){
+  if(G && G.timerId){ clearInterval(G.timerId); G.timerId = null; }
+  if(G && G.started) G.seconds = Math.min(999, Math.floor((Date.now() - G.startStamp) / 1000));
+}
+function pad3(n){
+  n = Math.max(-99, Math.min(999, n));
+  if(n < 0) return '-' + String(Math.abs(n)).padStart(2, '0');
+  return String(n).padStart(3, '0');
+}
+
+/* ---------------- actions ---------------- */
+function dig(i){
+  if(G.over) return;
+  var cell = G.cells[i];
+  if(cell.flag || cell.open) return;
+  if(!G.planted) plantMines(i);
+  startTimer();
+  if(cell.mine){ if(practice){ practiceMineHit(i); return; } lose(i); return; }
+  flood(i);
+  afterMove();
+}
+function flood(start){
+  var stack = [start];
+  while(stack.length){
+    var i = stack.pop();
+    var cell = G.cells[i];
+    if(cell.open || cell.flag || cell.mine) continue;
+    cell.open = true; G.revealed++;
+    if(cell.count === 0){
+      var r = Math.floor(i / G.cols), c = i % G.cols;
+      neighbours(r, c).forEach(function(n){ if(!G.cells[n].open) stack.push(n); });
+    }
+  }
+}
+function toggleFlag(i){
+  if(G.over) return;
+  var cell = G.cells[i];
+  if(cell.open) return;
+  if(!G.planted) startTimer(); // flagging first is allowed; clock runs from first action
+  cell.flag = !cell.flag;
+  G.flags += cell.flag ? 1 : -1;
+  paintCell(i);
+  updateHud();
+}
+function chord(i){
+  if(G.over) return;
+  var cell = G.cells[i];
+  if(!cell.open || cell.count === 0) return;
+  var r = Math.floor(i / G.cols), c = i % G.cols;
+  var ns = neighbours(r, c);
+  var flags = 0;
+  ns.forEach(function(n){ if(G.cells[n].flag) flags++; });
+  if(flags !== cell.count) return;
+  startTimer();
+  var hit = -1;
+  for(var k = 0; k < ns.length; k++){
+    var ncell = G.cells[ns[k]];
+    if(!ncell.flag && !ncell.open && ncell.mine){ hit = ns[k]; break; }
+  }
+  if(hit >= 0 && !practice){ lose(hit); return; }
+  if(hit >= 0 && practice){
+    practiceMineHit(hit);
+    // Keep chording the rest — practice forgives the mine above.
+  }
+  ns.forEach(function(n){
+    var ncell = G.cells[n];
+    if(!ncell.flag && !ncell.open && !ncell.mine) flood(n);
+  });
+  afterMove();
+}
+function afterMove(){
+  paintAll();
+  updateHud();
+  if(G.revealed === G.cols * G.rows - G.mines) win();
+}
+function lose(hitIdx){
+  G.over = true; G.won = false; G.hitIdx = hitIdx;
+  stopTimer();
+  el('faceBtn').textContent = '😵';
+  setMsg('💥 Boom — that was a mine. The field shows every mine; ✕ marks flags that were wrong. Hit New game to try again.', 'lose');
+  paintAll();
+  updateHud();
+}
+function win(){
+  G.over = true; G.won = true;
+  stopTimer();
+  // Auto-flag the remaining mines for a tidy finish.
+  G.cells.forEach(function(cell){ if(cell.mine) cell.flag = true; });
+  G.flags = G.mines;
+  el('faceBtn').textContent = '😎';
+  paintAll();
+  updateHud();
+  var isBest = false;
+  if(!practice && G.diffKey !== 'custom'){
+    var b = bests[G.diffKey];
+    b.won++;
+    if(!b.bestTime || G.seconds < b.bestTime){ b.bestTime = G.seconds; isBest = true; }
+    lsSet(BESTK, bests);
+  }
+  renderBests();
+  el('winTitle').textContent = practice ? '🎓 Practice complete!' : '😎 Field cleared!';
+  el('winSub').textContent = practice
+    ? G.label + ' practice field cleared in ' + G.seconds + ' second' + (G.seconds === 1 ? '' : 's') + (G.practiceHits ? ', with ' + G.practiceHits + ' mine' + (G.practiceHits === 1 ? '' : 's') + ' found the hard way' : '') + (G.hintsUsed ? ' and ' + G.hintsUsed + ' hint' + (G.hintsUsed === 1 ? '' : 's') + ' used' : '') + '. No best time saved — flip Practice OFF for a real timed run.'
+    : G.label + ' field cleared in ' + G.seconds + ' second' + (G.seconds === 1 ? '' : 's') + '.';
+  el('winTime').textContent = G.seconds + 's';
+  el('winDiff').textContent = practice ? G.label + ' · Practice' : G.label;
+  var bb = (!practice && G.diffKey !== 'custom') ? bests[G.diffKey] : null;
+  el('winBest').textContent = practice ? 'Not saved' : (bb && bb.bestTime ? bb.bestTime + 's' : '—');
+  el('winNewBest').hidden = !isBest;
+  el('winHarder').hidden = G.diffKey === 'hard' || G.diffKey === 'custom';
+  el('winHarder').textContent = practice ? 'Try a harder practice field ↑' : 'Try a harder field ↑';
+  el('winAgain').textContent = practice ? '▶ Another practice round' : '▶ Play again';
+  el('winOverlay').hidden = false;
+  setMsg(practice ? '🎓 Practice complete in ' + G.seconds + 's — nice work. No best saved in Practice.' : '😎 Field cleared in ' + G.seconds + 's — every mine accounted for.', 'win');
+}
+function setMsg(t, kind){
+  var m = el('msg');
+  m.textContent = t || '';
+  m.className = 'msg' + (kind ? ' ' + kind : '');
+}
+
+/* ---------------- rendering ---------------- */
+var cellEls = [];
+function buildBoard(){
+  var board = el('board');
+  board.innerHTML = '';
+  cellEls = [];
+  // Cell size: fit Easy/Normal to the frame; Hard scrolls at a tappable size.
+  var frameW = Math.min(el('boardScroll').clientWidth || 800, 860);
+  var fitCols = G.cols <= 16;
+  board.classList.toggle('fit', fitCols);
+  board.style.gridTemplateColumns = 'repeat(' + G.cols + ', 1fr)';
+  if(!fitCols) board.style.setProperty('--cs', '32px');
+  else board.style.removeProperty('--cs');
+  for(var r = 0; r < G.rows; r++){
+    for(var c = 0; c < G.cols; c++){
+      var i = idx(r, c);
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'cell';
+      b.dataset.i = i;
+      b.setAttribute('role', 'gridcell');
+      b.setAttribute('aria-label', 'Row ' + (r + 1) + ', column ' + (c + 1) + ', hidden');
+      board.appendChild(b);
+      cellEls.push(b);
+    }
+  }
+  paintAll();
+}
+function paintCell(i){
+  var cell = G.cells[i], b = cellEls[i];
+  if(!b) return;
+  var r = Math.floor(i / G.cols), c = i % G.cols;
+  var label = 'Row ' + (r + 1) + ', column ' + (c + 1);
+  b.className = 'cell';
+  b.textContent = '';
+  if(G.over && cell.mine && !cell.flag){
+    b.classList.add('open');
+    b.textContent = '💣';
+    if(i === G.hitIdx) b.classList.add('mine-hit');
+    b.setAttribute('aria-label', label + ', mine');
+    return;
+  }
+  if(G.over && cell.flag && !cell.mine){
+    b.classList.add('open', 'wrong-flag');
+    b.textContent = '✕';
+    b.setAttribute('aria-label', label + ', wrong flag');
+    return;
+  }
+  if(cell.open){
+    b.classList.add('open');
+    if(cell.count > 0){
+      b.classList.add('num', 'n' + cell.count);
+      b.textContent = cell.count;
+      b.setAttribute('aria-label', label + ', ' + cell.count);
+    } else {
+      b.setAttribute('aria-label', label + ', empty');
+    }
+    return;
+  }
+  if(cell.flag){
+    b.classList.add('flagged');
+    b.textContent = '🚩';
+    b.setAttribute('aria-label', label + ', flagged');
+    return;
+  }
+  b.setAttribute('aria-label', label + ', hidden');
+}
+function paintAll(){ for(var i = 0; i < G.cells.length; i++) paintCell(i); }
+function updateHud(){
+  el('mineCount').textContent = pad3(G.mines - G.flags);
+  el('timer').textContent = pad3(G.seconds);
+}
+
+/* ---------------- bests panel ---------------- */
+function renderBests(){
+  var grid = el('bestGrid');
+  grid.innerHTML = '';
+  ORDER.forEach(function(k){
+    var b = bests[k], d = DIFFS[k];
+    var card = document.createElement('div');
+    card.className = 'best-card';
+    var rate = b.played ? Math.round(b.won / b.played * 100) : 0;
+    card.innerHTML =
+      '<b>' + d.label + ' · ' + d.cols + ' × ' + d.rows + ' · ' + d.mines + ' mines</b>' +
+      '<div class="big">' + (b.bestTime ? b.bestTime + 's' : '—') + '</div>' +
+      (b.bestTime ? '<div class="star">★ Best time</div>' : '<span>No win yet — clear this field to set a best.</span>') +
+      '<span>Played ' + b.played + ' · Won ' + b.won + (b.played ? ' (' + rate + '%)' : '') + '</span>';
+    grid.appendChild(card);
+  });
+}
+
+/* ---------------- input ---------------- */
+var pressTimer = null, longPressed = false, pressIdx = -1;
+var board = el('board');
+
+board.addEventListener('contextmenu', function(e){
+  e.preventDefault();
+  var b = e.target.closest('.cell');
+  if(b) toggleFlag(+b.dataset.i);
+});
+board.addEventListener('pointerdown', function(e){
+  var b = e.target.closest('.cell');
+  if(!b || G.over) return;
+  if(e.pointerType === 'mouse' && e.button !== 0) return;
+  longPressed = false; pressIdx = +b.dataset.i;
+  pressTimer = setTimeout(function(){
+    longPressed = true;
+    toggleFlag(pressIdx);
+    if(navigator.vibrate) { try { navigator.vibrate(25); } catch(err){} }
+  }, 450);
+});
+function cancelPress(){ if(pressTimer){ clearTimeout(pressTimer); pressTimer = null; } }
+board.addEventListener('pointerup', cancelPress);
+board.addEventListener('pointercancel', cancelPress);
+board.addEventListener('pointerleave', cancelPress);
+board.addEventListener('click', function(e){
+  var b = e.target.closest('.cell');
+  if(!b) return;
+  if(longPressed){ longPressed = false; return; }
+  var i = +b.dataset.i;
+  var cell = G.cells[i];
+  if(cell.open){ chord(i); return; }
+  if(mode === 'flag') toggleFlag(i);
+  else dig(i);
+});
+
+/* mode toggle */
+function setMode(m){
+  mode = m;
+  el('modeDig').setAttribute('aria-pressed', m === 'dig' ? 'true' : 'false');
+  el('modeFlag').setAttribute('aria-pressed', m === 'flag' ? 'true' : 'false');
+}
+el('modeDig').addEventListener('click', function(){ setMode('dig'); });
+el('modeFlag').addEventListener('click', function(){ setMode('flag'); });
+
+/* practice round toggle + hints */
+function setPractice(on){
+  practice = on;
+  restartCurrent();
+  setMsg(on
+    ? '🎓 Practice round ON — fresh ' + G.label + ' field. Timer and bests don\'t count, mines won\'t end the game, and 💡 Hint is ready when you\'re stuck.'
+    : 'Practice OFF — fresh ' + G.label + ' field. This one counts: timer runs and a win can set a best.');
+}
+el('practiceToggle').addEventListener('click', function(){ setPractice(!practice); });
+
+function cellName(i){
+  var r = Math.floor(i / G.cols), c = i % G.cols;
+  return 'row ' + (r + 1) + ', column ' + (c + 1);
+}
+function highlightHint(i){
+  var b = cellEls[i];
+  if(!b) return;
+  cellEls.forEach(function(x){ x.classList.remove('hint-cell'); });
+  b.classList.add('hint-cell');
+  try { b.scrollIntoView({ block:'nearest', inline:'nearest', behavior:'smooth' }); } catch(e){}
+  setTimeout(function(){ if(b) b.classList.remove('hint-cell'); }, 2900);
+}
+function showHint(){
+  if(!practice || !G || G.over) return;
+  G.hintsUsed = (G.hintsUsed || 0) + 1;
+  if(!G.planted){
+    var centre = idx(Math.floor(G.rows / 2), Math.floor(G.cols / 2));
+    highlightHint(centre);
+    setMsg('💡 Hint: no mines are planted until your first dig, and that dig is always safe. Start near the middle — highlighted — for the biggest opening.');
+    return;
+  }
+  var safeMove = null, mineMove = null;
+  for(var r = 0; r < G.rows && !safeMove; r++){
+    for(var c = 0; c < G.cols; c++){
+      var i = idx(r, c), cell = G.cells[i];
+      if(!cell.open || cell.count === 0) continue;
+      var ns = neighbours(r, c), flagged = 0, hidden = [];
+      ns.forEach(function(n){ if(G.cells[n].flag) flagged++; else if(!G.cells[n].open) hidden.push(n); });
+      if(!hidden.length) continue;
+      var remaining = cell.count - flagged;
+      if(remaining === 0 && !safeMove) safeMove = { at:i, target:hidden[0], num:cell.count };
+      if(remaining === hidden.length && hidden.length > 0 && !mineMove) mineMove = { at:i, target:hidden[0], num:cell.count, remaining:remaining, hiddenCount:hidden.length };
+      if(safeMove) break;
+    }
+  }
+  if(safeMove){
+    highlightHint(safeMove.target);
+    setMsg('💡 Hint: the ' + safeMove.num + ' at ' + cellName(safeMove.at) + ' already has all its mines flagged, so ' + cellName(safeMove.target) + ' (highlighted) is safe to dig.');
+    return;
+  }
+  if(mineMove){
+    highlightHint(mineMove.target);
+    setMsg('💡 Hint: the ' + mineMove.num + ' at ' + cellName(mineMove.at) + ' still needs ' + mineMove.remaining + ' more mine' + (mineMove.remaining === 1 ? '' : 's') + ' and has exactly ' + mineMove.hiddenCount + ' hidden square' + (mineMove.hiddenCount === 1 ? '' : 's') + ' left — so ' + cellName(mineMove.target) + ' (highlighted) must be a mine. Flag it.');
+    return;
+  }
+  // No purely logical move found — peek (and say so, this is Practice).
+  for(var k = 0; k < G.cells.length; k++){
+    if(!G.cells[k].open && !G.cells[k].flag && !G.cells[k].mine){
+      highlightHint(k);
+      setMsg('💡 Hint (peek): no move is provable from the numbers alone right now, so Practice peeked — ' + cellName(k) + ' (highlighted) is guaranteed safe to dig.');
+      return;
+    }
+  }
+  setMsg('💡 Hint: nothing hidden and unflagged is left to point out — you\'re nearly there.');
+}
+el('hintBtn').addEventListener('click', showHint);
+
+/* difficulty + controls */
+var curDiff = lsGet(SETK, 'easy');
+if (KEYMAP[curDiff]) curDiff = KEYMAP[curDiff];
+if (!DIFFS[curDiff]) curDiff = 'easy';
+function selectDiff(k){
+  curDiff = k;
+  lsSet(SETK, k);
+  ORDER.forEach(function(key){
+    el('diff-' + key).setAttribute('aria-pressed', key === k ? 'true' : 'false');
+  });
+  newGame(k);
+}
+ORDER.forEach(function(k){
+  el('diff-' + k).addEventListener('click', function(){ selectDiff(k); });
+});
+el('newBtn').addEventListener('click', function(){
+  if(G.diffKey === 'custom') newGame('custom', { cols:G.cols, rows:G.rows, mines:G.mines, label:'Custom' });
+  else selectDiff(curDiff);
+});
+el('faceBtn').addEventListener('click', function(){
+  if(G.diffKey === 'custom') newGame('custom', { cols:G.cols, rows:G.rows, mines:G.mines, label:'Custom' });
+  else selectDiff(curDiff);
+});
+el('customBtn').addEventListener('click', function(){
+  var p = el('customPanel');
+  var open = p.hidden;
+  p.hidden = !open;
+  el('customBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+});
+el('customGo').addEventListener('click', function(){
+  var cols = Math.max(8, Math.min(30, +el('cCols').value || 12));
+  var rows = Math.max(8, Math.min(24, +el('cRows').value || 12));
+  var maxMines = Math.floor(cols * rows * 0.35);
+  var mines = Math.max(1, Math.min(maxMines, +el('cMines').value || 10));
+  ORDER.forEach(function(key){ el('diff-' + key).setAttribute('aria-pressed', 'false'); });
+  newGame('custom', { cols:cols, rows:rows, mines:mines, label:'Custom' });
+  setMsg('Custom field: ' + cols + ' × ' + rows + ' with ' + mines + ' mines. First tap is safe — good luck.');
+});
+el('resetBests').addEventListener('click', function(){
+  ORDER.forEach(function(k){ bests[k] = blankBest(); });
+  lsSet(BESTK, bests);
+  renderBests();
+  setMsg('Bests cleared. Fresh fields, fresh records.');
+});
+
+/* tutorial — OPT-IN only: opens solely from a button tap, never automatically */
+function openTut(){
+  el('rulesOverlay').hidden = true;
+  el('tutOverlay').hidden = false;
+}
+function closeTut(){
+  el('tutOverlay').hidden = true;
+  lsSet(TUTK, true);
+  hideHint();
+}
+el('howBtn').addEventListener('click', openTut);
+el('tutGo').addEventListener('click', closeTut);
+el('tutOverlay').addEventListener('click', function(e){ if(e.target === el('tutOverlay')) closeTut(); });
+el('tutRules').addEventListener('click', function(){
+  lsSet(TUTK, true);
+  hideHint();
+  openRules();
+});
+
+/* rules — full rulebook, separate from the tutorial, also opt-in only */
+function openRules(){
+  el('tutOverlay').hidden = true;
+  el('rulesOverlay').hidden = false;
+}
+function closeRules(){ el('rulesOverlay').hidden = true; }
+el('rulesBtn').addEventListener('click', openRules);
+el('rulesClose').addEventListener('click', closeRules);
+el('rulesOverlay').addEventListener('click', function(e){ if(e.target === el('rulesOverlay')) closeRules(); });
+el('rulesTut').addEventListener('click', openTut);
+
+/* feedback — arcade standard: star rating + tag + comment, saved on this
+   device under the shared arcade key (Firebase sync comes later) */
+var FEEDBACK_KEY = 'holos-arcade-feedback';
+var fbRating = 0, fbTag = 'Suggestion';
+var fbStatus = el('fbStatus');
+var fbComment = el('fbComment');
+var starBtns = document.querySelectorAll('.stars button[data-star]');
+function paintStars(){
+  starBtns.forEach(function(b){ b.setAttribute('aria-pressed', String(parseInt(b.getAttribute('data-star'), 10) <= fbRating)); });
+}
+starBtns.forEach(function(b){
+  b.addEventListener('click', function(){ fbRating = parseInt(b.getAttribute('data-star'), 10); paintStars(); fbStatus.textContent = ''; });
+});
+var tagBtns = document.querySelectorAll('[data-tag]');
+tagBtns.forEach(function(b){
+  b.addEventListener('click', function(){
+    tagBtns.forEach(function(x){ x.setAttribute('aria-pressed', 'false'); });
+    b.setAttribute('aria-pressed', 'true'); fbTag = b.getAttribute('data-tag');
+  });
+});
+function openFeedback(){
+  el('tutOverlay').hidden = true;
+  el('rulesOverlay').hidden = true;
+  el('feedbackOverlay').hidden = false;
+}
+function closeFeedback(){ el('feedbackOverlay').hidden = true; }
+el('feedbackBtn').addEventListener('click', openFeedback);
+el('fbCancel').addEventListener('click', closeFeedback);
+el('feedbackOverlay').addEventListener('click', function(e){ if(e.target === el('feedbackOverlay')) closeFeedback(); });
+el('fbSave').addEventListener('click', function(){
+  var text = fbComment.value.trim();
+  if(!fbRating && !text){ fbStatus.textContent = 'Pick a star rating or write a comment first.'; return; }
+  var entry = { game:'minesweeper', rating:fbRating, text:text, tag:fbTag, timestamp:new Date().toISOString() };
+  try {
+    var all = [];
+    try { all = JSON.parse(localStorage.getItem(FEEDBACK_KEY) || '[]'); if(!Array.isArray(all)) all = []; } catch(e){ all = []; }
+    all.push(entry);
+    localStorage.setItem(FEEDBACK_KEY, JSON.stringify(all));
+  } catch(e){
+    fbStatus.textContent = 'Sorry — feedback could not be saved on this device.';
+    return;
+  }
+  fbStatus.textContent = 'Thanks! Feedback saved.';
+  fbRating = 0; paintStars(); fbComment.value = '';
+  setTimeout(function(){ closeFeedback(); fbStatus.textContent = ''; }, 900);
+});
+
+/* one-time, non-blocking new-player hint (never a forced walkthrough) */
+function hideHint(){
+  el('newbieHint').hidden = true;
+}
+el('hintHow').addEventListener('click', openTut);
+el('hintDismiss').addEventListener('click', function(){
+  lsSet(HINTK, true);
+  hideHint();
+});
+
+/* win overlay */
+el('winAgain').addEventListener('click', function(){
+  el('winOverlay').hidden = true;
+  if(G.diffKey === 'custom') newGame('custom', { cols:G.cols, rows:G.rows, mines:G.mines, label:'Custom' });
+  else selectDiff(curDiff);
+});
+el('winHarder').addEventListener('click', function(){
+  el('winOverlay').hidden = true;
+  var next = G.diffKey === 'easy' ? 'normal' : 'hard';
+  selectDiff(next);
+});
+el('winClose').addEventListener('click', function(){ el('winOverlay').hidden = true; });
+
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape'){
+    el('winOverlay').hidden = true;
+    el('rulesOverlay').hidden = true;
+    el('feedbackOverlay').hidden = true;
+    if(!el('tutOverlay').hidden) closeTut();
+  }
+  if(e.key === 'f' || e.key === 'F'){
+    if(document.activeElement && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') setMode(mode === 'dig' ? 'flag' : 'dig');
+  }
+  var inField = document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
+  if(!inField && (e.key === 'p' || e.key === 'P')) setPractice(!practice);
+  if(!inField && practice && (e.key === 'h' || e.key === 'H')) showHint();
+});
+window.addEventListener('resize', function(){
+  // Re-fit cell sizing when the frame width changes materially.
+  if(G && G.cols <= 16) buildBoardKeepState();
+});
+var lastFitW = 0;
+function buildBoardKeepState(){
+  var w = el('boardScroll').clientWidth;
+  if(Math.abs(w - lastFitW) < 40) return;
+  lastFitW = w;
+  buildBoard();
+}
+
+/* ---------------- init ---------------- */
+lastFitW = el('boardScroll').clientWidth;
+selectDiff(curDiff);
+// Tutorial is opt-in only — no auto-shown walkthrough. First-time players
+// just get the small, dismissible, non-blocking hint above the toolbar.
+if(!lsGet(TUTK, false) && !lsGet(HINTK, false)) el('newbieHint').hidden = false;
+</script>
+</body>
+</html>

@@ -1,0 +1,1532 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Property Tycoon</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+    <style>
+      :root {
+        --bg: #e9ede3;
+        --panel: #fbfaf5;
+        --panel-2: #f1efe4;
+        --ink: #1c2a20;
+        --ink-soft: #4c5a4f;
+        --line: #c9cfc0;
+        --felt: #17573a;
+        --felt-deep: #0f4029;
+        --brass: #a97b12;
+        --brass-ink: #fff8e6;
+        --good: #1e7d46;
+        --bad: #b3372a;
+        --tile: #fdfcf7;
+        --tile-ink: #22302a;
+        --shadow: 0 10px 28px rgba(20, 40, 25, .16);
+        --radius: 14px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0f1511;
+          --panel: #1a221c;
+          --panel-2: #232d25;
+          --ink: #e8ede4;
+          --ink-soft: #a7b3a4;
+          --line: #37453a;
+          --felt: #125134;
+          --felt-deep: #0a3823;
+          --brass: #d9a92c;
+          --brass-ink: #1d1602;
+          --good: #4cc07a;
+          --bad: #e07a6a;
+          --tile: #e9e7db;
+          --tile-ink: #22302a;
+          --shadow: 0 10px 28px rgba(0, 0, 0, .5);
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Archivo", system-ui, -apple-system, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+      .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+      button, select, input, textarea { font: inherit; }
+      .btn {
+        min-height: 42px;
+        padding: 9px 16px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      .btn:active { transform: translateY(1px); }
+      .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+      .btn.primary { background: var(--felt); border-color: var(--felt-deep); color: #f2f7ee; }
+      .btn.brass { background: var(--brass); border-color: var(--brass); color: var(--brass-ink); }
+      .btn.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+      .btn.small { min-height: 36px; padding: 6px 12px; font-size: .9rem; }
+      .btn.block { width: 100%; }
+
+      .topbar {
+        display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        padding: 10px 14px;
+      }
+      .topbar .spacer { flex: 1; }
+      .topbar .btn { min-height: 38px; padding: 6px 13px; font-size: .92rem; }
+
+      main { max-width: 1180px; margin: 0 auto; padding: 0 12px 20px; }
+
+      /* ---------- Setup ---------- */
+      .setup-card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 22px;
+        max-width: 640px;
+        margin: 14px auto;
+      }
+      .setup-card h1 { font-size: 1.7rem; margin: 0 0 4px; letter-spacing: -.01em; }
+      .setup-card .lede { color: var(--ink-soft); margin: 0 0 18px; line-height: 1.45; }
+      .field { margin-bottom: 18px; }
+      .field > span { display: block; font-weight: 700; font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); margin-bottom: 8px; }
+      .seg { display: flex; gap: 8px; flex-wrap: wrap; }
+      .seg button {
+        flex: 1 1 0; min-height: 44px; border-radius: 10px; border: 1px solid var(--line);
+        background: var(--panel-2); color: var(--ink); font-weight: 600; cursor: pointer; padding: 8px 10px;
+      }
+      .seg button[aria-pressed="true"] { background: var(--felt); color: #f2f7ee; border-color: var(--felt-deep); }
+      .seg button .sub { display: block; font-size: .76rem; font-weight: 500; opacity: .85; margin-top: 2px; }
+      .setup-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+      .setup-actions .btn { flex: 1 1 160px; }
+      .stats-line { margin-top: 16px; color: var(--ink-soft); font-size: .9rem; text-align: center; }
+
+      /* ---------- Game layout ---------- */
+      .game-layout { display: flex; flex-direction: column; gap: 14px; }
+      @media (min-width: 940px) {
+        .game-layout { flex-direction: row; align-items: flex-start; }
+        .board-wrap { flex: 0 0 auto; position: sticky; top: 10px; }
+        .side { flex: 1 1 340px; min-width: 320px; }
+      }
+      .board-wrap { display: flex; justify-content: center; }
+      .board {
+        display: grid;
+        grid-template-columns: repeat(11, 1fr);
+        grid-template-rows: repeat(11, 1fr);
+        width: min(94vw, 640px);
+        aspect-ratio: 1 / 1;
+        background: var(--felt-deep);
+        border: 3px solid var(--felt-deep);
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        user-select: none;
+      }
+      .tile {
+        position: relative;
+        background: var(--tile);
+        color: var(--tile-ink);
+        border: 1px solid rgba(20, 35, 25, .35);
+        display: flex; flex-direction: column; align-items: stretch;
+        overflow: hidden;
+        cursor: pointer;
+      }
+      .tile .band { height: 24%; min-height: 5px; border-bottom: 1px solid rgba(20,35,25,.35); position: relative; }
+      .tile .houses { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 1px; }
+      .tile .houses i { width: 22%; max-width: 11px; aspect-ratio: 1; background: #1e7d46; border: 1px solid rgba(0,0,0,.4); border-radius: 2px; display: block; }
+      .tile .houses i.hotel { width: 46%; max-width: 22px; aspect-ratio: 2 / 1; background: #b3372a; }
+      .tile .tname { font-size: clamp(5.5px, 1.55vw, 9.5px); font-weight: 700; text-align: center; line-height: 1.08; padding: 2px 1px 0; }
+      .tile .tsub { font-size: clamp(5px, 1.3vw, 8px); text-align: center; color: #5a665c; line-height: 1.05; padding: 0 1px; }
+      .tile .tprice { margin-top: auto; text-align: center; font-family: "IBM Plex Mono", monospace; font-size: clamp(5.5px, 1.5vw, 9.5px); padding-bottom: 2px; }
+      .tile.corner .tname { font-size: clamp(6.5px, 1.9vw, 12px); padding-top: 6px; }
+      .tile.special { background: #efe9d6; }
+      .tile.mortgaged { opacity: .45; }
+      .tile .owner-dot { position: absolute; top: 1px; right: 1px; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
+      .tile .tokens { position: absolute; left: 1px; bottom: 1px; display: flex; flex-wrap: wrap; gap: 1px; max-width: 90%; }
+      .ptoken { width: clamp(8px, 2.4vw, 13px); height: clamp(8px, 2.4vw, 13px); border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.5); }
+      .tile.current { outline: 3px solid var(--brass); outline-offset: -3px; z-index: 2; }
+
+      .board-center {
+        background:
+          radial-gradient(ellipse at 50% 38%, rgba(255,255,255,.09), transparent 60%),
+          var(--felt);
+        color: #eef5e9;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 6px; padding: 10px; text-align: center; position: relative;
+      }
+      .board-center .bc-title { font-weight: 800; letter-spacing: .14em; font-size: clamp(.8rem, 3.4vw, 1.5rem); text-transform: uppercase; }
+      .board-center .bc-sub { font-size: clamp(.6rem, 2.2vw, .85rem); opacity: .85; letter-spacing: .05em; }
+      .board-center .bc-turn { margin-top: 6px; background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.25); padding: 6px 12px; border-radius: 999px; font-size: clamp(.65rem, 2.4vw, .9rem); font-weight: 600; }
+      .decks { display: flex; gap: 10px; margin-top: 8px; }
+      .deck { width: clamp(56px, 15vw, 84px); aspect-ratio: 5 / 7; border-radius: 6px; border: 2px dashed rgba(255,255,255,.55); display: flex; align-items: center; justify-content: center; font-size: clamp(.44rem, 1.8vw, .72rem); font-weight: 700; letter-spacing: .02em; padding: 4px; line-height: 1.2; overflow: hidden; overflow-wrap: anywhere; }
+      .deck.fate { background: #8a5a16; }
+      .deck.fund { background: #205c86; }
+
+      .side { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+      .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+      .panel h2 { margin: 0 0 10px; font-size: 1rem; }
+      .panel h3 { margin: 14px 0 8px; font-size: .92rem; }
+
+      .player-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: var(--panel-2); }
+      .player-row.active { border-color: var(--brass); box-shadow: 0 0 0 1px var(--brass); }
+      .player-row.bankrupt { opacity: .5; }
+      .player-row .pdot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.3); flex: 0 0 auto; }
+      .player-row .pinfo { flex: 1; min-width: 0; }
+      .player-row .pname { font-weight: 700; font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .player-row .pmeta { font-size: .78rem; color: var(--ink-soft); }
+      .player-row .pcash { font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 1rem; text-align: right; }
+      .player-row .pworth { font-size: .72rem; color: var(--ink-soft); text-align: right; }
+      .badge { display: inline-block; font-size: .68rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; background: var(--brass); color: var(--brass-ink); margin-left: 6px; vertical-align: 2px; }
+      .badge.jail { background: var(--bad); color: #fff; }
+
+      .dice-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+      .die { width: 46px; height: 46px; background: #fff; border-radius: 9px; border: 1px solid #b9bdb2; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); padding: 7px; box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+      .die i { width: 8px; height: 8px; border-radius: 50%; background: #20302a; place-self: center; visibility: hidden; }
+      .die i.on { visibility: visible; }
+      .dice-note { color: var(--ink-soft); font-size: .88rem; }
+      .action-area { display: flex; flex-direction: column; gap: 8px; }
+      .action-area .prompt { font-size: .95rem; line-height: 1.45; }
+      .action-area .prompt strong { font-weight: 800; }
+      .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+      .btn-row .btn { flex: 1 1 120px; }
+      .hint { font-size: .83rem; color: var(--ink-soft); background: var(--panel-2); border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; line-height: 1.4; }
+
+      .prop-item { border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; margin-bottom: 8px; background: var(--panel-2); }
+      .prop-item .pi-top { display: flex; align-items: center; gap: 8px; }
+      .prop-item .swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,.3); flex: 0 0 auto; }
+      .prop-item .pi-name { font-weight: 700; font-size: .9rem; flex: 1; }
+      .prop-item .pi-state { font-size: .78rem; color: var(--ink-soft); }
+      .prop-item .pi-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+      .prop-item .pi-actions .btn { min-height: 36px; padding: 5px 10px; font-size: .83rem; flex: 1 1 auto; }
+      .empty-note { color: var(--ink-soft); font-size: .9rem; }
+
+      .log { max-height: 190px; overflow-y: auto; font-size: .85rem; line-height: 1.5; display: flex; flex-direction: column; gap: 3px; }
+      .log div { border-bottom: 1px dotted var(--line); padding-bottom: 3px; }
+      .log .l-money { color: var(--good); font-weight: 600; }
+      .log .l-bad { color: var(--bad); font-weight: 600; }
+
+      /* ---------- Overlays ---------- */
+      .overlay { position: fixed; inset: 0; background: rgba(10, 18, 12, .62); display: none; align-items: flex-start; justify-content: center; padding: 18px 12px; overflow-y: auto; z-index: 50; }
+      .overlay.open { display: flex; }
+      .sheet { background: var(--panel); color: var(--ink); border-radius: 16px; max-width: 560px; width: 100%; padding: 22px; box-shadow: var(--shadow); margin: auto 0; }
+      .sheet h2 { margin: 0 0 10px; font-size: 1.3rem; }
+      .sheet h3 { margin: 16px 0 6px; font-size: 1rem; }
+      .sheet p, .sheet li { line-height: 1.55; font-size: .95rem; }
+      .sheet ul { padding-left: 20px; margin: 6px 0; }
+      .sheet .close-row { display: flex; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+      .card-draw { border: 2px solid var(--brass); border-radius: 12px; padding: 16px; text-align: center; background: var(--panel-2); }
+      .card-draw .cd-deck { font-weight: 800; letter-spacing: .1em; text-transform: uppercase; font-size: .78rem; color: var(--ink-soft); margin-bottom: 8px; }
+      .card-draw .cd-text { font-size: 1.08rem; font-weight: 600; line-height: 1.5; }
+      .capture-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: .83rem; line-height: 1.6; margin: 12px 0; word-break: break-word; }
+      textarea.fb-text { width: 100%; min-height: 110px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 10px; resize: vertical; }
+      .tut-step { min-height: 120px; }
+      .tut-dots { display: flex; gap: 6px; justify-content: center; margin: 14px 0 4px; }
+      .tut-dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+      .tut-dots i.on { background: var(--brass); }
+      .funds-row { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; background: var(--panel-2); }
+      .funds-row .fr-name { flex: 1; font-size: .9rem; font-weight: 600; }
+      .funds-row .fr-sub { display: block; font-weight: 500; font-size: .76rem; color: var(--ink-soft); }
+      .debt-banner { border-radius: 10px; padding: 10px 12px; font-weight: 700; margin-bottom: 12px; background: #f6e3df; color: #7c2318; border: 1px solid #d8a79f; }
+      @media (prefers-color-scheme: dark) { .debt-banner { background: #40201b; color: #f0b7ac; border-color: #6e3a32; } }
+
+      footer { text-align: center; padding: 22px 12px 30px; color: var(--ink-soft); }
+      footer .brand { font-weight: 800; letter-spacing: .05em; color: var(--ink); }
+      footer .fine { font-size: .8rem; margin-top: 4px; }
+      [hidden] { display: none !important; }
+    </style>
+  </head>
+  <body>
+    <div class="topbar">
+      <button class="btn" id="btnTutorialTop" type="button">How to play</button>
+      <button class="btn" id="btnRulesTop" type="button">Rules</button>
+      <div class="spacer"></div>
+      <button class="btn" id="btnFeedbackTop" type="button">Something off? Tell us</button>
+      <button class="btn" id="btnQuitTop" type="button" hidden>Quit to setup</button>
+    </div>
+
+    <main>
+      <!-- ============ SETUP ============ -->
+      <section id="setupView">
+        <div class="setup-card">
+          <h1>Property Tycoon</h1>
+          <p class="lede">Roll the dice, tour the board, snap up streets, depots and utilities, build houses and hotels, and charge everyone who lands on your turf. Last tycoon standing wins — everyone else goes bankrupt.</p>
+
+          <div class="field">
+            <span>Rivals</span>
+            <div class="seg" id="segAI" role="group" aria-label="Number of AI rivals">
+              <button type="button" data-v="1">1 rival</button>
+              <button type="button" data-v="2">2 rivals</button>
+              <button type="button" data-v="3">3 rivals</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <span>Difficulty</span>
+            <div class="seg" id="segDiff" role="group" aria-label="Difficulty">
+              <button type="button" data-v="easy">Easy<span class="sub">Rivals start lean &amp; build slowly</span></button>
+              <button type="button" data-v="normal">Normal<span class="sub">A fair fight</span></button>
+              <button type="button" data-v="hard">Hard<span class="sub">Rivals start rich &amp; build fast</span></button>
+            </div>
+          </div>
+
+          <div class="field">
+            <span>Mode</span>
+            <div class="seg" id="segMode" role="group" aria-label="Mode">
+              <button type="button" data-v="standard">Standard<span class="sub">Bankruptcy ends your run</span></button>
+              <button type="button" data-v="practice">Practice<span class="sub">Bailouts + hints, no losing</span></button>
+            </div>
+          </div>
+
+          <div class="setup-actions">
+            <button class="btn primary" id="btnStart" type="button">Start game</button>
+            <button class="btn brass" id="btnResume" type="button" hidden>Resume saved game</button>
+          </div>
+          <p class="stats-line" id="statsLine"></p>
+        </div>
+      </section>
+
+      <!-- ============ GAME ============ -->
+      <section id="gameView" hidden>
+        <div class="game-layout">
+          <div class="board-wrap">
+            <div class="board" id="board" aria-label="Game board"></div>
+          </div>
+          <div class="side">
+            <div class="panel">
+              <h2>Players</h2>
+              <div id="playerList"></div>
+            </div>
+
+            <div class="panel">
+              <h2>Your move</h2>
+              <div class="dice-row">
+                <div class="die" id="die1" aria-label="Die one"></div>
+                <div class="die" id="die2" aria-label="Die two"></div>
+                <div class="dice-note" id="diceNote">Round <span class="mono" id="roundNum">1</span></div>
+              </div>
+              <div class="action-area" id="actionArea"></div>
+            </div>
+
+            <div class="panel">
+              <h2>Your portfolio</h2>
+              <div id="portfolio"></div>
+            </div>
+
+            <div class="panel">
+              <h2>Game log</h2>
+              <div class="log" id="log"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="brand">Ridiculously Fit and Fed</div>
+      <div class="fine">Property Tycoon — an original property-trading board game.</div>
+    </footer>
+
+    <!-- ============ CARD OVERLAY ============ -->
+    <div class="overlay" id="cardOverlay" role="dialog" aria-modal="true">
+      <div class="sheet">
+        <div class="card-draw">
+          <div class="cd-deck" id="cardDeckName"></div>
+          <div class="cd-text" id="cardText"></div>
+        </div>
+        <div class="close-row">
+          <button class="btn primary block" id="btnCardOk" type="button">Got it</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ FUNDS OVERLAY ============ -->
+    <div class="overlay" id="fundsOverlay" role="dialog" aria-modal="true">
+      <div class="sheet">
+        <h2>Short on cash</h2>
+        <div class="debt-banner" id="debtBanner"></div>
+        <p>Sell houses back at half price or mortgage properties (half their price, paid to you now) until you can cover what you owe. Mortgaged properties collect no rent; lift a mortgage later for the mortgage value plus 10%.</p>
+        <div id="fundsList"></div>
+        <div class="close-row">
+          <button class="btn primary" id="btnPayDebt" type="button">Pay what I owe</button>
+          <button class="btn danger" id="btnBankrupt" type="button">Declare bankruptcy</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ TILE OVERLAY ============ -->
+    <div class="overlay" id="tileOverlay" role="dialog" aria-modal="true">
+      <div class="sheet">
+        <h2 id="tileName"></h2>
+        <div id="tileBody"></div>
+        <div class="close-row">
+          <button class="btn primary block" id="btnTileClose" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ TUTORIAL OVERLAY ============ -->
+    <div class="overlay" id="tutOverlay" role="dialog" aria-modal="true">
+      <div class="sheet">
+        <h2>How to play</h2>
+        <div class="tut-step" id="tutStep"></div>
+        <div class="tut-dots" id="tutDots"></div>
+        <div class="close-row">
+          <button class="btn" id="btnTutBack" type="button">Back</button>
+          <button class="btn primary" id="btnTutNext" type="button">Next</button>
+          <button class="btn" id="btnTutClose" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ RULES OVERLAY ============ -->
+    <div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true">
+      <div class="sheet">
+        <h2>Property Tycoon — Rules</h2>
+        <h3>Goal</h3>
+        <p>Be the last player with money. When a player can't pay what they owe — even after selling houses and mortgaging property — they go bankrupt and are out. If that's you (in Standard mode), the game is lost. Bankrupt every rival to win.</p>
+        <h3>On your turn</h3>
+        <ul>
+          <li>Tap <strong>Roll dice</strong> and move that many spaces. Passing Start pays you <span class="mono">$200</span>.</li>
+          <li>Roll doubles and you roll again — but three doubles in a row sends you straight to Lockup.</li>
+          <li>Land on an unowned property, depot or utility and you may buy it at the listed price. If you pass, it stays on the market.</li>
+          <li>Land on someone else's property and you pay rent. Rent doubles on an unimproved property when its owner holds the whole colour set.</li>
+          <li>Depots charge <span class="mono">$25 / $50 / $100 / $200</span> depending on how many the owner holds. Utilities charge 4× your dice roll (10× if the owner holds both).</li>
+          <li>Taxes, Twist of Fate cards and Neighbourhood Fund cards do what they say.</li>
+        </ul>
+        <h3>Building</h3>
+        <ul>
+          <li>Own every property in a colour set and you can build. Houses go up one at a time, spread evenly across the set; the fifth building on a property becomes a hotel.</li>
+          <li>Build and manage from <strong>Your portfolio</strong> during your own turn.</li>
+          <li>Houses sell back at half price. Mortgaging a property pays half its price; unmortgaging costs that plus 10%. Mortgaged properties charge no rent, and you can't build on a set while any of its properties is mortgaged.</li>
+        </ul>
+        <h3>Lockup</h3>
+        <ul>
+          <li>Landing on the Lockup corner is just a visit — no penalty.</li>
+          <li>Being sent there is different: on your turn, pay a <span class="mono">$50</span> fine and roll, use a Get Out of Lockup Free card, or roll for doubles to break out. Fail three turns in a row and you pay the fine and move anyway.</li>
+          <li>You still collect rent while in Lockup.</li>
+        </ul>
+        <h3>Modes &amp; difficulty</h3>
+        <ul>
+          <li><strong>Practice:</strong> you start with more cash, get buying hints, and a bailout tops you up instead of bankruptcy — you can't lose, so it's the place to learn. Rivals can still go bankrupt, and bankrupting them all still wins.</li>
+          <li><strong>Difficulty</strong> changes your rivals: how much cash they start with and how eagerly they buy and build. Your difficulty and mode choices are remembered for next time.</li>
+        </ul>
+        <div class="close-row">
+          <button class="btn primary block" id="btnRulesClose" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ FEEDBACK OVERLAY ============ -->
+    <div class="overlay" id="fbOverlay" role="dialog" aria-modal="true">
+      <div class="sheet">
+        <h2>Something off? Tell us</h2>
+        <p>No stress — if a button felt weird, a rule seemed off, or anything broke, jot it down here in your own words. The boring details (game, mode, difficulty, your score, device, time) get attached automatically so you don't have to type them.</p>
+        <label for="fbText" style="font-weight:700; display:block; margin-bottom:6px;">What's up?</label>
+        <textarea class="fb-text" id="fbText" placeholder="e.g. the rent on Harbor Flat looked wrong after I built a house…"></textarea>
+        <div class="capture-box mono" id="fbCapture"></div>
+        <div class="close-row">
+          <button class="btn primary" id="btnFbCopy" type="button">Copy my feedback</button>
+          <button class="btn" id="btnFbClose" type="button">Close</button>
+        </div>
+        <p id="fbStatus" style="font-size:.88rem; color:var(--ink-soft); margin:10px 0 0;"></p>
+      </div>
+    </div>
+
+    <!-- ============ GAME OVER OVERLAY ============ -->
+    <div class="overlay" id="overOverlay" role="dialog" aria-modal="true">
+      <div class="sheet">
+        <h2 id="overTitle"></h2>
+        <p id="overText"></p>
+        <div class="capture-box mono" id="overStats"></div>
+        <div class="close-row">
+          <button class="btn primary" id="btnAgain" type="button">Play again</button>
+          <button class="btn" id="btnOverSetup" type="button">Back to setup</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    "use strict";
+    /* ================= DATA ================= */
+    var GROUPS = {
+      elm:   { label: "Elm District",   color: "#7a4a21", house: 50 },
+      sky:   { label: "Sky District",   color: "#6fb6e3", house: 50 },
+      rose:  { label: "Rose District",  color: "#e58bb1", house: 100 },
+      grove: { label: "Grove District", color: "#f08c2e", house: 100 },
+      ruby:  { label: "Ruby District",  color: "#d63a2f", house: 150 },
+      sun:   { label: "Sun District",   color: "#eebd14", house: 150 },
+      jade:  { label: "Jade District",  color: "#2e9e5b", house: 200 },
+      crown: { label: "Crown District", color: "#2b4c9b", house: 200 }
+    };
+    /* rents: [site, 1 house, 2, 3, 4, hotel] */
+    var TILES = [
+      { t: "start",   name: "Start", sub: "Collect $200 passing" },
+      { t: "prop", name: "Willow Cottage",  group: "elm", price: 60,  rents: [2, 10, 30, 90, 160, 250] },
+      { t: "fund",    name: "Neighbourhood Fund", sub: "Draw a card" },
+      { t: "prop", name: "Birch Cottage",   group: "elm", price: 60,  rents: [4, 20, 60, 180, 320, 450] },
+      { t: "tax",     name: "City Levy", sub: "Pay $100", amount: 100 },
+      { t: "station", name: "Northgate Depot", price: 200 },
+      { t: "prop", name: "Harbor Flat",     group: "sky", price: 100, rents: [6, 30, 90, 270, 400, 550] },
+      { t: "fate",    name: "Twist of Fate", sub: "Draw a card" },
+      { t: "prop", name: "Seaside Flat",    group: "sky", price: 100, rents: [6, 30, 90, 270, 400, 550] },
+      { t: "prop", name: "Cliffside Flat",  group: "sky", price: 120, rents: [8, 40, 100, 300, 450, 600] },
+      { t: "jail",    name: "Lockup", sub: "Just visiting" },
+      { t: "prop", name: "Rosewood House",  group: "rose", price: 140, rents: [10, 50, 150, 450, 625, 750] },
+      { t: "utility", name: "Power Plant", price: 150 },
+      { t: "prop", name: "Lavender House",  group: "rose", price: 140, rents: [10, 50, 150, 450, 625, 750] },
+      { t: "prop", name: "Garden House",    group: "rose", price: 160, rents: [12, 60, 180, 500, 700, 900] },
+      { t: "station", name: "Westgate Depot", price: 200 },
+      { t: "prop", name: "Orchard Villa",   group: "grove", price: 180, rents: [14, 70, 200, 550, 750, 950] },
+      { t: "fund",    name: "Neighbourhood Fund", sub: "Draw a card" },
+      { t: "prop", name: "Peach Villa",     group: "grove", price: 180, rents: [14, 70, 200, 550, 750, 950] },
+      { t: "prop", name: "Apricot Villa",   group: "grove", price: 200, rents: [16, 80, 220, 600, 800, 1000] },
+      { t: "rest",    name: "Park Bench", sub: "Free rest" },
+      { t: "prop", name: "Crimson Manor",   group: "ruby", price: 220, rents: [18, 90, 250, 700, 875, 1050] },
+      { t: "fate",    name: "Twist of Fate", sub: "Draw a card" },
+      { t: "prop", name: "Scarlet Manor",   group: "ruby", price: 220, rents: [18, 90, 250, 700, 875, 1050] },
+      { t: "prop", name: "Ruby Manor",      group: "ruby", price: 240, rents: [20, 100, 300, 750, 925, 1100] },
+      { t: "station", name: "Eastgate Depot", price: 200 },
+      { t: "prop", name: "Golden Heights",  group: "sun", price: 260, rents: [22, 110, 330, 800, 975, 1150] },
+      { t: "utility", name: "Water Works", price: 150 },
+      { t: "prop", name: "Amber Heights",   group: "sun", price: 260, rents: [22, 110, 330, 800, 975, 1150] },
+      { t: "prop", name: "Solar Heights",   group: "sun", price: 280, rents: [24, 120, 360, 850, 1025, 1200] },
+      { t: "gotojail", name: "Head to Lockup", sub: "Off you go" },
+      { t: "prop", name: "Emerald Estate",  group: "jade", price: 300, rents: [26, 130, 390, 900, 1100, 1275] },
+      { t: "fund",    name: "Neighbourhood Fund", sub: "Draw a card" },
+      { t: "prop", name: "Jade Estate",     group: "jade", price: 300, rents: [26, 130, 390, 900, 1100, 1275] },
+      { t: "prop", name: "Opal Estate",     group: "jade", price: 320, rents: [28, 150, 450, 1000, 1200, 1400] },
+      { t: "station", name: "Southgate Depot", price: 200 },
+      { t: "fate",    name: "Twist of Fate", sub: "Draw a card" },
+      { t: "prop", name: "Sapphire Penthouse", group: "crown", price: 350, rents: [35, 175, 500, 1100, 1300, 1500] },
+      { t: "tax",     name: "Luxury Levy", sub: "Pay $100", amount: 100 },
+      { t: "prop", name: "Diamond Penthouse",  group: "crown", price: 400, rents: [50, 200, 600, 1400, 1700, 2000] }
+    ];
+    var GROUP_TILES = {};
+    TILES.forEach(function (tile, i) {
+      if (tile.t === "prop") { (GROUP_TILES[tile.group] = GROUP_TILES[tile.group] || []).push(i); }
+    });
+    var STATIONS = [5, 15, 25, 35], UTILITIES = [12, 27];
+
+    var FATE_CARDS = [
+      { text: "A glowing post about your rentals goes viral. Collect $100.", fx: { money: 100 } },
+      { text: "Roof repairs on every building you own. Pay $60.", fx: { money: -60 } },
+      { text: "Advance to Start. Collect $200.", fx: { goto: 0 } },
+      { text: "Caught cutting corners on a renovation. Head straight to Lockup — do not pass Start.", fx: { jail: true } },
+      { text: "Your tenants threw a block party and passed the hat for you. Collect $50.", fx: { money: 50 } },
+      { text: "Speeding ticket on Depot Road. Pay $40.", fx: { money: -40 } },
+      { text: "Wrong turn! Move back 3 spaces.", fx: { back: 3 } },
+      { text: "A film crew rents your street for a day of shooting. Collect $150.", fx: { money: 150 } },
+      { text: "A pipe bursts in the night. Plumbers aren't cheap — pay $80.", fx: { money: -80 } },
+      { text: "Get Out of Lockup Free. Keep this card until you need it.", fx: { getout: true } },
+      { text: "A penthouse viewing calls. Advance to Sapphire Penthouse.", fx: { goto: 37 } },
+      { text: "Advance to the nearest Depot. If it's owned, pay the usual rent.", fx: { nearestStation: true } },
+      { text: "Renovation day: pay $25 for each house and $100 for each hotel you own.", fx: { repairs: [25, 100] } },
+      { text: "The bank finds an old bonus in your favour. Collect $75.", fx: { money: 75 } }
+    ];
+    var FUND_CARDS = [
+      { text: "Neighbours pass the hat after your fence blew down. Collect $80.", fx: { money: 80 } },
+      { text: "You pledged at the library fundraiser. Pay $50.", fx: { money: -50 } },
+      { text: "Your bake-sale table sold out in an hour. Collect $45.", fx: { money: 45 } },
+      { text: "Advance to Start. Collect $200.", fx: { goto: 0 } },
+      { text: "Get Out of Lockup Free. Keep this card until you need it.", fx: { getout: true } },
+      { text: "It's your birthday! Collect $10 from every other player.", fx: { birthday: 10 } },
+      { text: "A trip to the doctor comes with a bill. Pay $60.", fx: { money: -60 } },
+      { text: "You won the community garden contest. Collect $100.", fx: { money: 100 } },
+      { text: "Your paperwork was a mess at inspection time. Head to Lockup — do not pass Start.", fx: { jail: true } },
+      { text: "School fees are due. Pay $70.", fx: { money: -70 } },
+      { text: "A kind stranger returns your lost wallet — with a little extra inside. Collect $30.", fx: { money: 30 } },
+      { text: "You ran the block cleanup and the fund thanks you. Collect $25.", fx: { money: 25 } },
+      { text: "A distant aunt leaves you a small surprise in her will. Collect $120.", fx: { money: 120 } },
+      { text: "Car trouble on the way to a viewing. Pay $90.", fx: { money: -90 } }
+    ];
+
+    var AI_NAMES = ["Ada", "Bruno", "Cleo"];
+    var AI_COLORS = ["#c2410c", "#9333ea", "#0f766e"];
+    var HUMAN_COLOR = "#b91c1c";
+    var DIFFS = {
+      easy:   { aiStart: 1300, reserve: 260, buildReserve: 700 },
+      normal: { aiStart: 1500, reserve: 150, buildReserve: 400 },
+      hard:   { aiStart: 1700, reserve: 50,  buildReserve: 200 }
+    };
+
+    /* ================= SETTINGS / STORAGE ================= */
+    var LS_SET = "pt-settings", LS_SAVE = "pt-save", LS_STATS = "pt-stats", LS_FB = "pt-feedback";
+    function lsGet(k, fb) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : fb; } catch (e) { return fb; } }
+    function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+    var settings = Object.assign({ ai: 2, difficulty: "normal", mode: "standard" }, lsGet(LS_SET, {}));
+    var stats = Object.assign({ played: 0, won: 0, lost: 0 }, lsGet(LS_STATS, {}));
+
+    /* ================= STATE ================= */
+    var G = null;         /* game state */
+    var gameSeq = 0;      /* increments to cancel stale AI loops */
+    var pendingDebt = null; /* { resolve } while human funds modal open */
+    var cardResolve = null;
+
+    function $(id) { return document.getElementById(id); }
+    function money(n) { return "$" + n.toLocaleString("en-US"); }
+    function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+    function shuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+
+    function newGame() {
+      var d = DIFFS[settings.difficulty];
+      var players = [{
+        id: 0, name: "You", isAI: false, color: HUMAN_COLOR,
+        cash: settings.mode === "practice" ? 2000 : 1500,
+        pos: 0, inJail: false, jailTurns: 0, getout: 0, bankrupt: false, bailedOut: false
+      }];
+      for (var i = 0; i < settings.ai; i++) {
+        players.push({
+          id: i + 1, name: AI_NAMES[i], isAI: true, color: AI_COLORS[i],
+          cash: d.aiStart, pos: 0, inJail: false, jailTurns: 0, getout: 0, bankrupt: false, bailedOut: false
+        });
+      }
+      G = {
+        players: players,
+        own: {},            /* idx -> { owner, houses, mortgaged } */
+        cur: 0, round: 1, doubles: 0, phase: "setup",
+        lastDice: [1, 1], lastSum: 2,
+        fateDeck: shuffle(FATE_CARDS.map(function (_, i) { return i; })),
+        fundDeck: shuffle(FUND_CARDS.map(function (_, i) { return i; })),
+        mode: settings.mode, difficulty: settings.difficulty,
+        over: false, log: []
+      };
+      gameSeq++;
+      logMsg("New game — " + settings.ai + " rival" + (settings.ai > 1 ? "s" : "") + ", " + settings.difficulty + " difficulty, " + settings.mode + " mode. Good luck, tycoon!");
+      saveGame();
+    }
+
+    function saveGame() {
+      if (!G || G.over) { try { localStorage.removeItem(LS_SAVE); } catch (e) {} return; }
+      var copy = Object.assign({}, G, { phase: "awaitRoll", doubles: 0 });
+      lsSet(LS_SAVE, copy);
+    }
+    function clearSave() { try { localStorage.removeItem(LS_SAVE); } catch (e) {} refreshResume(); }
+    function refreshResume() { $("btnResume").hidden = !lsGet(LS_SAVE, null); }
+
+    /* ================= BOARD ================= */
+    function tilePos(i) {
+      if (i <= 10) return { row: 11, col: 11 - i };
+      if (i <= 20) return { row: 11 - (i - 10), col: 1 };
+      if (i <= 30) return { row: 1, col: 1 + (i - 20) };
+      return { row: 1 + (i - 30), col: 11 };
+    }
+    var tileEls = [];
+    function buildBoard() {
+      var board = $("board");
+      board.innerHTML = ""; tileEls = [];
+      var center = document.createElement("div");
+      center.className = "board-center";
+      center.style.gridArea = "2 / 2 / 11 / 11";
+      center.innerHTML = '<div class="bc-title">Property Tycoon</div>' +
+        '<div class="bc-sub">Buy · Build · Bankrupt them all</div>' +
+        '<div class="decks"><div class="deck fate">Twist of Fate</div><div class="deck fund">Fund</div></div>' +
+        '<div class="bc-turn" id="bcTurn">Setting up…</div>';
+      board.appendChild(center);
+      TILES.forEach(function (tile, i) {
+        var el = document.createElement("div");
+        el.className = "tile" + ((i % 10 === 0) ? " corner" : "") +
+          (["start", "jail", "rest", "gotojail", "tax", "fate", "fund"].indexOf(tile.t) >= 0 ? " special" : "");
+        var p = tilePos(i);
+        el.style.gridRow = p.row; el.style.gridColumn = p.col;
+        var band = "";
+        if (tile.t === "prop") band = '<div class="band" style="background:' + GROUPS[tile.group].color + '"><span class="houses"></span></div>';
+        else if (tile.t === "station") band = '<div class="band" style="background:#374151"></div>';
+        else if (tile.t === "utility") band = '<div class="band" style="background:#0e7490"></div>';
+        var price = "";
+        var displayName = tile.t === "fund" ? "Fund" : (tile.t === "fate" ? "Fate" : tile.name);
+        if (tile.price) price = '<div class="tprice">$' + tile.price + "</div>";
+        else if (tile.t === "tax") price = '<div class="tprice">Pay $' + tile.amount + "</div>";
+        el.innerHTML = band + '<div class="tname">' + displayName + "</div>" +
+          (tile.sub ? '<div class="tsub">' + tile.sub + "</div>" : "") + price +
+          '<span class="owner-dot" hidden></span><div class="tokens"></div>';
+        el.addEventListener("click", function () { showTile(i); });
+        board.appendChild(el);
+        tileEls.push(el);
+      });
+    }
+
+    function renderBoard() {
+      if (!G) return;
+      TILES.forEach(function (tile, i) {
+        var el = tileEls[i], o = G.own[i];
+        el.classList.toggle("current", G.players.some(function (p) { return !p.bankrupt && p.id === G.cur && p.pos === i; }));
+        var dot = el.querySelector(".owner-dot");
+        if (o) { dot.hidden = false; dot.style.background = G.players[o.owner].color; } else { dot.hidden = true; }
+        el.classList.toggle("mortgaged", !!(o && o.mortgaged));
+        var h = el.querySelector(".houses");
+        if (h) {
+          h.innerHTML = "";
+          if (o && o.houses > 0) {
+            if (o.houses === 5) { var hh = document.createElement("i"); hh.className = "hotel"; h.appendChild(hh); }
+            else for (var k = 0; k < o.houses; k++) h.appendChild(document.createElement("i"));
+          }
+        }
+        var priceEl = el.querySelector(".tprice");
+        if (priceEl && tile.price) {
+          priceEl.textContent = o ? (o.mortgaged ? "Mortgaged" : "Owned") : "$" + tile.price;
+        }
+        var tok = el.querySelector(".tokens");
+        tok.innerHTML = "";
+        G.players.forEach(function (p) {
+          if (!p.bankrupt && p.pos === i) {
+            var s = document.createElement("span");
+            s.className = "ptoken"; s.style.background = p.color; s.title = p.name;
+            tok.appendChild(s);
+          }
+        });
+      });
+      var cur = G.players[G.cur];
+      var bc = $("bcTurn");
+      if (bc) bc.textContent = G.over ? "Game over" : (cur.isAI ? cur.name + " is playing…" : "Your turn");
+    }
+
+    /* ================= RENDER: PANELS ================= */
+    function ownsSet(pid, group) {
+      return GROUP_TILES[group].every(function (i) { return G.own[i] && G.own[i].owner === pid; });
+    }
+    function ownedTiles(pid) {
+      return Object.keys(G.own).map(Number).filter(function (i) { return G.own[i].owner === pid; });
+    }
+    function netWorth(p) {
+      var w = p.cash;
+      ownedTiles(p.id).forEach(function (i) {
+        var o = G.own[i], tile = TILES[i];
+        w += o.mortgaged ? Math.floor(tile.price / 2) : tile.price;
+        if (tile.t === "prop") w += o.houses * GROUPS[tile.group].house;
+      });
+      return w;
+    }
+    function renderPlayers() {
+      var wrap = $("playerList"); wrap.innerHTML = "";
+      G.players.forEach(function (p) {
+        var row = document.createElement("div");
+        row.className = "player-row" + (G.cur === p.id && !G.over ? " active" : "") + (p.bankrupt ? " bankrupt" : "");
+        var meta = [];
+        meta.push(ownedTiles(p.id).length + " properties");
+        if (p.getout > 0) meta.push(p.getout + " jail card" + (p.getout > 1 ? "s" : ""));
+        if (p.inJail) meta.push("in Lockup");
+        if (p.bankrupt) meta.push("bankrupt");
+        row.innerHTML = '<span class="pdot" style="background:' + p.color + '"></span>' +
+          '<div class="pinfo"><div class="pname">' + p.name +
+          (p.inJail && !p.bankrupt ? '<span class="badge jail">Lockup</span>' : "") +
+          (p.bankrupt ? '<span class="badge">Out</span>' : "") +
+          '</div><div class="pmeta">' + meta.join(" · ") + "</div></div>" +
+          '<div><div class="pcash">' + money(p.cash) + '</div><div class="pworth">worth ' + money(netWorth(p)) + "</div></div>";
+        wrap.appendChild(row);
+      });
+      $("roundNum").textContent = G.round;
+    }
+
+    var PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+    function renderDice() {
+      [["die1", G.lastDice[0]], ["die2", G.lastDice[1]]].forEach(function (pair) {
+        var el = $(pair[0]); el.innerHTML = "";
+        for (var i = 0; i < 9; i++) {
+          var d = document.createElement("i");
+          if (PIPS[pair[1]].indexOf(i) >= 0) d.className = "on";
+          el.appendChild(d);
+        }
+      });
+    }
+
+    function logMsg(html) {
+      if (!G) return;
+      G.log.unshift(html);
+      if (G.log.length > 80) G.log.pop();
+      var el = $("log");
+      if (el) el.innerHTML = G.log.map(function (m) { return "<div>" + m + "</div>"; }).join("");
+    }
+
+    function setActions(html) { $("actionArea").innerHTML = html; }
+    function renderAll() { renderBoard(); renderPlayers(); renderDice(); renderPortfolio(); }
+
+    function renderPortfolio() {
+      var wrap = $("portfolio");
+      if (!G) { wrap.innerHTML = ""; return; }
+      var me = G.players[0];
+      var mine = ownedTiles(0).sort(function (a, b) { return a - b; });
+      if (!mine.length) { wrap.innerHTML = '<p class="empty-note">Nothing yet — land on a property and buy it to start your empire.</p>'; return; }
+      wrap.innerHTML = "";
+      var myTurn = G.cur === 0 && !G.over && !me.bankrupt;
+      mine.forEach(function (i) {
+        var tile = TILES[i], o = G.own[i];
+        var div = document.createElement("div");
+        div.className = "prop-item";
+        var swatch = tile.t === "prop" ? GROUPS[tile.group].color : (tile.t === "station" ? "#374151" : "#0e7490");
+        var state;
+        if (o.mortgaged) state = "Mortgaged — no rent";
+        else if (tile.t === "prop") state = o.houses === 5 ? "Hotel" : o.houses + " house" + (o.houses === 1 ? "" : "s") + " · rent " + money(rentFor(i, G.lastSum));
+        else state = "Rent " + money(rentFor(i, G.lastSum));
+        if (tile.t === "prop" && ownsSet(0, tile.group)) state += " · full set";
+        var actions = "";
+        if (myTurn && tile.t === "prop" && !o.mortgaged) {
+          if (canBuild(i)) actions += '<button class="btn" data-act="build" data-i="' + i + '">Build ' + (o.houses === 4 ? "hotel" : "house") + " · " + money(GROUPS[tile.group].house) + "</button>";
+          if (o.houses > 0) actions += '<button class="btn" data-act="sellhouse" data-i="' + i + '">Sell ' + (o.houses === 5 ? "hotel" : "house") + " · +" + money(Math.floor(GROUPS[tile.group].house / 2)) + "</button>";
+        }
+        if (myTurn && !o.mortgaged && o.houses === 0) actions += '<button class="btn" data-act="mortgage" data-i="' + i + '">Mortgage · +' + money(Math.floor(tile.price / 2)) + "</button>";
+        if (myTurn && o.mortgaged) actions += '<button class="btn" data-act="unmortgage" data-i="' + i + '">Lift mortgage · ' + money(unmortgageCost(i)) + "</button>";
+        div.innerHTML = '<div class="pi-top"><span class="swatch" style="background:' + swatch + '"></span>' +
+          '<span class="pi-name">' + tile.name + '</span></div><div class="pi-state">' + state + "</div>" +
+          (actions ? '<div class="pi-actions">' + actions + "</div>" : "");
+        wrap.appendChild(div);
+      });
+      wrap.querySelectorAll("button[data-act]").forEach(function (b) {
+        b.addEventListener("click", function () { portfolioAction(b.getAttribute("data-act"), Number(b.getAttribute("data-i"))); });
+      });
+    }
+
+    function unmortgageCost(i) { return Math.ceil(Math.floor(TILES[i].price / 2) * 1.1); }
+    function canBuild(i) {
+      var tile = TILES[i], o = G.own[i];
+      if (!o || o.mortgaged || o.houses >= 5) return false;
+      if (!ownsSet(o.owner, tile.group)) return false;
+      var tiles = GROUP_TILES[tile.group];
+      if (tiles.some(function (j) { return G.own[j].mortgaged; })) return false;
+      var min = Math.min.apply(null, tiles.map(function (j) { return G.own[j].houses; }));
+      return o.houses <= min;
+    }
+    function portfolioAction(act, i) {
+      var me = G.players[0], tile = TILES[i], o = G.own[i];
+      if (!o || o.owner !== 0) return;
+      if (act === "build") {
+        var cost = GROUPS[tile.group].house;
+        if (me.cash < cost) { logMsg("Not enough cash to build on " + tile.name + "."); return; }
+        me.cash -= cost; o.houses++;
+        logMsg("You built " + (o.houses === 5 ? "a <strong>hotel</strong>" : "a house") + " on " + tile.name + " for " + money(cost) + ".");
+      } else if (act === "sellhouse") {
+        if (o.houses <= 0) return;
+        var gain = Math.floor(GROUPS[tile.group].house / 2);
+        o.houses--; me.cash += gain;
+        logMsg("You sold a building on " + tile.name + " for " + money(gain) + ".");
+      } else if (act === "mortgage") {
+        var g2 = Math.floor(tile.price / 2);
+        o.mortgaged = true; me.cash += g2;
+        logMsg("You mortgaged " + tile.name + " for " + money(g2) + ".");
+      } else if (act === "unmortgage") {
+        var c = unmortgageCost(i);
+        if (me.cash < c) { logMsg("Not enough cash to lift the mortgage on " + tile.name + "."); return; }
+        me.cash -= c; o.mortgaged = false;
+        logMsg("You lifted the mortgage on " + tile.name + " for " + money(c) + ".");
+      }
+      renderAll(); saveGame();
+    }
+</script>
+
+    <script>
+    "use strict";
+    /* ================= ECONOMY ================= */
+    function rentFor(i, diceSum) {
+      var tile = TILES[i], o = G.own[i];
+      if (!o || o.mortgaged) return 0;
+      if (tile.t === "prop") {
+        if (o.houses > 0) return tile.rents[o.houses];
+        return ownsSet(o.owner, tile.group) ? tile.rents[0] * 2 : tile.rents[0];
+      }
+      if (tile.t === "station") {
+        var n = STATIONS.filter(function (s) { return G.own[s] && G.own[s].owner === o.owner && !G.own[s].mortgaged; }).length;
+        return 25 * Math.pow(2, Math.max(0, n - 1));
+      }
+      if (tile.t === "utility") {
+        var both = UTILITIES.every(function (u) { return G.own[u] && G.own[u].owner === o.owner; });
+        return (both ? 10 : 4) * (diceSum || 7);
+      }
+      return 0;
+    }
+
+    function give(p, amt) { p.cash += amt; }
+
+    /* Charge a player; resolves true if paid, false if they went bankrupt.
+       creditorId: player id who receives the money, or -1 for the bank. */
+    async function charge(p, amt, creditorId) {
+      if (amt <= 0) return true;
+      if (p.cash < amt) {
+        if (p.isAI) { raiseFundsAI(p, amt); }
+        else {
+          var ok = await raiseFundsHuman(p, amt, creditorId);
+          if (!ok) { doBankrupt(p, creditorId); return false; }
+        }
+      }
+      if (p.cash < amt) { doBankrupt(p, creditorId); return false; }
+      p.cash -= amt;
+      if (creditorId >= 0) {
+        var c = G.players[creditorId];
+        if (c && !c.bankrupt) c.cash += amt;
+      }
+      renderAll();
+      return true;
+    }
+
+    function raisableAssets(p) {
+      /* returns list of actions available to raise cash */
+      var list = [];
+      ownedTiles(p.id).forEach(function (i) {
+        var o = G.own[i], tile = TILES[i];
+        if (tile.t === "prop" && o.houses > 0) list.push({ kind: "house", tile: i, gain: Math.floor(GROUPS[tile.group].house / 2) });
+      });
+      ownedTiles(p.id).forEach(function (i) {
+        var o = G.own[i], tile = TILES[i];
+        if (!o.mortgaged && o.houses === 0) list.push({ kind: "mortgage", tile: i, gain: Math.floor(tile.price / 2) });
+      });
+      return list;
+    }
+    function maxRaisable(p) {
+      var total = p.cash;
+      raisableAssets(p).forEach(function (a) { total += a.gain; });
+      /* houses must come off before their tile can be mortgaged — approximate upper bound is fine for solvency checks */
+      return total;
+    }
+    function applyRaise(p, a) {
+      var o = G.own[a.tile], tile = TILES[a.tile];
+      if (a.kind === "house") { o.houses--; p.cash += a.gain; logMsg(p.name + " sold a building on " + tile.name + " (+" + money(a.gain) + ")."); }
+      else { o.mortgaged = true; p.cash += a.gain; logMsg(p.name + " mortgaged " + tile.name + " (+" + money(a.gain) + ")."); }
+    }
+    function raiseFundsAI(p, amt) {
+      var guard = 0;
+      while (p.cash < amt && guard++ < 60) {
+        var assets = raisableAssets(p);
+        if (!assets.length) break;
+        /* sell houses first, then mortgage the cheapest property */
+        var houses = assets.filter(function (a) { return a.kind === "house"; });
+        var pick = houses.length ? houses[0] : assets.reduce(function (m, a) { return a.gain < m.gain ? a : m; }, assets[0]);
+        applyRaise(p, pick);
+      }
+    }
+
+    function raiseFundsHuman(p, amt, creditorId) {
+      if (G.mode === "practice" && !p.bailedOut) {
+        p.bailedOut = true; p.cash += 500;
+        logMsg('<span class="l-money">Practice bailout!</span> The bank tops you up with $500 so you can keep learning.');
+        renderAll();
+        if (p.cash >= amt) return Promise.resolve(true);
+      }
+      if (G.mode === "practice" && p.bailedOut && p.cash < amt) {
+        p.cash += (amt - p.cash) + 100;
+        logMsg('<span class="l-money">Practice bailout!</span> Topped up again — no losing in Practice.');
+        renderAll();
+        return Promise.resolve(true);
+      }
+      return new Promise(function (resolve) {
+        pendingDebt = { resolve: resolve, amt: amt };
+        renderFundsModal(amt, creditorId);
+        $("fundsOverlay").classList.add("open");
+      });
+    }
+    function renderFundsModal(amt, creditorId) {
+      var me = G.players[0];
+      var who = creditorId >= 0 ? G.players[creditorId].name : "the bank";
+      $("debtBanner").textContent = "You owe " + money(amt) + " to " + who + " but only have " + money(me.cash) + ".";
+      var list = $("fundsList"); list.innerHTML = "";
+      var assets = raisableAssets(me);
+      if (!assets.length) list.innerHTML = '<p class="empty-note">Nothing left to sell or mortgage.</p>';
+      assets.forEach(function (a) {
+        var tile = TILES[a.tile];
+        var row = document.createElement("div");
+        row.className = "funds-row";
+        row.innerHTML = '<div class="fr-name">' + tile.name + '<span class="fr-sub">' +
+          (a.kind === "house" ? "Sell one building" : "Mortgage this property") + "</span></div>" +
+          '<span class="mono">' + money(a.gain) + '</span>';
+        var b = document.createElement("button");
+        b.className = "btn small"; b.type = "button"; b.textContent = a.kind === "house" ? "Sell" : "Mortgage";
+        b.addEventListener("click", function () {
+          applyRaise(me, a); renderAll(); renderFundsModal(amt, creditorId);
+        });
+        row.appendChild(b);
+        list.appendChild(row);
+      });
+      $("btnPayDebt").disabled = me.cash < amt;
+    }
+    function closeFunds(result) {
+      $("fundsOverlay").classList.remove("open");
+      if (pendingDebt) { var r = pendingDebt.resolve; pendingDebt = null; r(result); }
+    }
+
+    function doBankrupt(p, creditorId) {
+      p.bankrupt = true; p.inJail = false;
+      logMsg('<span class="l-bad">' + p.name + " went bankrupt!</span>");
+      ownedTiles(p.id).forEach(function (i) {
+        if (creditorId >= 0 && G.players[creditorId] && !G.players[creditorId].bankrupt) {
+          G.own[i].owner = creditorId;
+          if (G.own[i].houses > 0) { /* buildings stay with the property */ }
+        } else {
+          delete G.own[i];
+        }
+      });
+      if (creditorId >= 0 && G.players[creditorId] && !G.players[creditorId].bankrupt) {
+        G.players[creditorId].cash += Math.max(0, p.cash);
+        G.players[creditorId].getout += p.getout;
+      }
+      p.cash = 0; p.getout = 0;
+      renderAll();
+    }
+
+    function activePlayers() { return G.players.filter(function (p) { return !p.bankrupt; }); }
+    function checkGameOver() {
+      if (G.over) return true;
+      var alive = activePlayers();
+      var me = G.players[0];
+      if (me.bankrupt && G.mode !== "practice") { endGame(false, "You went bankrupt. The board belongs to " + alive[0].name + " now."); return true; }
+      if (alive.length === 1) {
+        if (alive[0].id === 0) endGame(true, "Every rival is bankrupt — the whole board is yours!");
+        else endGame(false, alive[0].name + " bankrupted everyone else.");
+        return true;
+      }
+      return false;
+    }
+    function endGame(won, text) {
+      G.over = true; G.phase = "over";
+      stats.played++; if (won) stats.won++; else stats.lost++;
+      lsSet(LS_STATS, stats);
+      clearSave();
+      $("overTitle").textContent = won ? "You win, Tycoon!" : "Game over";
+      $("overText").textContent = text;
+      $("overStats").innerHTML = "Mode: " + G.mode + " · Difficulty: " + G.difficulty +
+        "<br>Rounds played: " + G.round + "<br>Your final net worth: " + money(netWorth(G.players[0])) +
+        "<br>Properties owned: " + ownedTiles(0).length;
+      $("overOverlay").classList.add("open");
+      renderAll();
+    }
+
+    /* ================= MOVEMENT & TILES ================= */
+    async function moveSteps(p, steps, seq) {
+      var dir = steps >= 0 ? 1 : -1;
+      var n = Math.abs(steps);
+      for (var s = 0; s < n; s++) {
+        if (seq !== gameSeq) return;
+        p.pos = (p.pos + dir + 40) % 40;
+        if (dir > 0 && p.pos === 0) { give(p, 200); logMsg(p.name + " passed Start and collected <span class='l-money'>$200</span>."); }
+        renderBoard(); renderPlayers();
+        await sleep(130);
+      }
+    }
+    function sendToJail(p) {
+      p.pos = 10; p.inJail = true; p.jailTurns = 0; G.doubles = 0;
+      logMsg(p.name + " was sent to <strong>Lockup</strong>.");
+      renderAll();
+    }
+
+    async function resolveTile(p, seq) {
+      var tile = TILES[p.pos];
+      if (tile.t === "prop" || tile.t === "station" || tile.t === "utility") {
+        var o = G.own[p.pos];
+        if (!o) { await offerBuy(p, seq); return; }
+        if (o.owner !== p.id && !o.mortgaged) {
+          var rent = rentFor(p.pos, G.lastSum);
+          if (rent > 0) {
+            logMsg(p.name + " landed on " + tile.name + " and owes <span class='l-bad'>" + money(rent) + "</span> rent to " + G.players[o.owner].name + ".");
+            await charge(p, rent, o.owner);
+          }
+        } else if (o.owner === p.id) {
+          logMsg(p.name + " stopped by their own " + tile.name + ". No rent due.");
+        } else {
+          logMsg(p.name + " landed on " + tile.name + " — it's mortgaged, so no rent.");
+        }
+        return;
+      }
+      if (tile.t === "tax") {
+        logMsg(p.name + " hit the " + tile.name + ": <span class='l-bad'>" + money(tile.amount) + "</span> to the bank.");
+        await charge(p, tile.amount, -1);
+        return;
+      }
+      if (tile.t === "fate" || tile.t === "fund") { await drawCard(p, tile.t, seq); return; }
+      if (tile.t === "gotojail") { sendToJail(p); return; }
+      if (tile.t === "jail") { logMsg(p.name + " is just visiting Lockup. Nothing happens."); return; }
+      if (tile.t === "rest") { logMsg(p.name + " takes a breather on the Park Bench."); return; }
+      if (tile.t === "start") { logMsg(p.name + " landed right on Start."); return; }
+    }
+
+    async function offerBuy(p, seq) {
+      var tile = TILES[p.pos];
+      if (p.isAI) {
+        await sleep(450);
+        if (seq !== gameSeq) return;
+        var d = DIFFS[G.difficulty];
+        var completes = tile.t === "prop" && GROUP_TILES[tile.group].filter(function (j) { return G.own[j] && G.own[j].owner === p.id; }).length === GROUP_TILES[tile.group].length - 1;
+        var want = p.cash - tile.price >= (completes ? 0 : d.reserve);
+        if (want && p.cash >= tile.price) {
+          p.cash -= tile.price;
+          G.own[p.pos] = { owner: p.id, houses: 0, mortgaged: false };
+          logMsg(p.name + " bought <strong>" + tile.name + "</strong> for " + money(tile.price) + ".");
+        } else {
+          logMsg(p.name + " passed on " + tile.name + ".");
+        }
+        renderAll(); saveGame();
+        return;
+      }
+      /* human */
+      G.phase = "awaitBuy";
+      var hint = "";
+      if (G.mode === "practice") {
+        if (tile.t === "prop") {
+          var ownedInGroup = GROUP_TILES[tile.group].filter(function (j) { return G.own[j] && G.own[j].owner === 0; }).length;
+          hint = '<div class="hint">Practice hint: ' + (ownedInGroup > 0
+            ? "you already own " + ownedInGroup + " of the " + GROUPS[tile.group].label + " set — owning the whole set doubles site rent and unlocks building."
+            : GROUPS[tile.group].label + " set has " + GROUP_TILES[tile.group].length + " properties. Full sets double site rent and let you build houses.") + "</div>";
+        } else if (tile.t === "station") hint = '<div class="hint">Practice hint: depots pay more rent the more of them one player holds — $25, $50, $100, then $200.</div>';
+        else hint = '<div class="hint">Practice hint: utilities charge rent based on the dice roll — 4× the roll, or 10× if you hold both.</div>';
+      }
+      setActions(
+        '<p class="prompt"><strong>' + tile.name + '</strong> is on the market for <strong>' + money(tile.price) + '</strong>. ' +
+        (tile.t === "prop" ? "Site rent " + money(tile.rents[0]) + (ownsSet(0, tile.group) || GROUP_TILES[tile.group].some(function (j) { return G.own[j] && G.own[j].owner === 0; }) ? "" : "") + "." : tile.t === "station" ? "Depot rent starts at $25 and doubles per extra depot." : "Utility rent is a multiple of the dice roll.") +
+        "</p>" + hint +
+        '<div class="btn-row"><button class="btn primary" id="btnBuy" type="button">Buy · ' + money(tile.price) + '</button>' +
+        '<button class="btn" id="btnPass" type="button">Pass</button></div>'
+      );
+      renderAll();
+      await new Promise(function (resolve) {
+        $("btnBuy").disabled = p.cash < tile.price;
+        $("btnBuy").addEventListener("click", function () {
+          p.cash -= tile.price;
+          G.own[p.pos] = { owner: p.id, houses: 0, mortgaged: false };
+          logMsg("You bought <strong>" + tile.name + "</strong> for " + money(tile.price) + ".");
+          renderAll(); saveGame(); resolve();
+        });
+        $("btnPass").addEventListener("click", function () {
+          logMsg("You passed on " + tile.name + ".");
+          resolve();
+        });
+      });
+    }
+
+    /* ================= CARDS ================= */
+    function showCardModal(deckName, text) {
+      return new Promise(function (resolve) {
+        cardResolve = resolve;
+        $("cardDeckName").textContent = deckName;
+        $("cardText").textContent = text;
+        $("cardOverlay").classList.add("open");
+      });
+    }
+    async function drawCard(p, kind, seq) {
+      var isFate = kind === "fate";
+      var deckArr = isFate ? G.fateDeck : G.fundDeck;
+      var cards = isFate ? FATE_CARDS : FUND_CARDS;
+      if (!deckArr.length) {
+        var fresh = shuffle(cards.map(function (_, i) { return i; }));
+        if (isFate) G.fateDeck = fresh; else G.fundDeck = fresh;
+        deckArr = fresh;
+      }
+      var card = cards[deckArr.pop()];
+      logMsg(p.name + " drew a " + (isFate ? "Twist of Fate" : "Neighbourhood Fund") + " card.");
+      if (!p.isAI) { await showCardModal(isFate ? "Twist of Fate" : "Neighbourhood Fund", card.text); }
+      else { await sleep(500); }
+      if (seq !== gameSeq) return;
+      var fx = card.fx;
+      if (fx.getout) { p.getout++; logMsg(p.name + " pocketed a Get Out of Lockup Free card."); }
+      else if (fx.money) {
+        if (fx.money > 0) { give(p, fx.money); logMsg(p.name + " collected <span class='l-money'>" + money(fx.money) + "</span>."); }
+        else { logMsg(p.name + " must pay <span class='l-bad'>" + money(-fx.money) + "</span>."); await charge(p, -fx.money, -1); }
+      }
+      else if (fx.goto !== undefined) {
+        var steps = (fx.goto - p.pos + 40) % 40;
+        await moveSteps(p, steps, seq);
+        if (!p.bankrupt && seq === gameSeq) await resolveTile(p, seq);
+      }
+      else if (fx.back) { await moveSteps(p, -fx.back, seq); if (!p.bankrupt && seq === gameSeq) await resolveTile(p, seq); }
+      else if (fx.jail) { sendToJail(p); }
+      else if (fx.nearestStation) {
+        var dist = STATIONS.map(function (s) { return (s - p.pos + 40) % 40; });
+        var step = Math.min.apply(null, dist.filter(function (x) { return x > 0; }).concat([40]));
+        await moveSteps(p, step === 40 ? 0 : step, seq);
+        if (!p.bankrupt && seq === gameSeq) await resolveTile(p, seq);
+      }
+      else if (fx.repairs) {
+        var due = 0;
+        ownedTiles(p.id).forEach(function (i) {
+          var o = G.own[i];
+          if (o.houses === 5) due += fx.repairs[1]; else due += o.houses * fx.repairs[0];
+        });
+        if (due > 0) { logMsg(p.name + " owes <span class='l-bad'>" + money(due) + "</span> in repairs."); await charge(p, due, -1); }
+        else logMsg(p.name + " has no buildings — no repairs due.");
+      }
+      else if (fx.birthday) {
+        var others = activePlayers().filter(function (q) { return q.id !== p.id; });
+        for (var k = 0; k < others.length; k++) {
+          if (seq !== gameSeq) return;
+          await charge(others[k], fx.birthday, p.id);
+          if (checkGameOver()) return;
+        }
+        logMsg(p.name + " collected birthday money from everyone.");
+      }
+      renderAll(); saveGame();
+    }
+
+    /* ================= TURNS ================= */
+    function rollPair() { return [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]; }
+
+    async function takeTurn(p, seq) {
+      if (G.over || p.bankrupt || seq !== gameSeq) return;
+      renderAll();
+
+      /* --- Lockup handling --- */
+      if (p.inJail) {
+        var freed = false, moveBy = 0;
+        if (p.isAI) {
+          await sleep(600);
+          if (p.getout > 0) { p.getout--; freed = true; logMsg(p.name + " used a Get Out of Lockup Free card."); }
+          else if (p.cash >= 200) { if (await charge(p, 50, -1)) { freed = true; logMsg(p.name + " paid the $50 Lockup fine."); } }
+          if (!freed && !p.bankrupt) {
+            var jr = rollPair(); G.lastDice = jr; G.lastSum = jr[0] + jr[1]; renderDice();
+            logMsg(p.name + " rolled " + jr[0] + " + " + jr[1] + " trying to break out of Lockup.");
+            if (jr[0] === jr[1]) { freed = true; moveBy = G.lastSum; }
+            else {
+              p.jailTurns++;
+              if (p.jailTurns >= 3) {
+                logMsg(p.name + " struck out three times — pays the $50 fine and moves.");
+                if (await charge(p, 50, -1)) { freed = true; moveBy = G.lastSum; }
+              }
+            }
+          }
+          if (p.bankrupt) { finishTurn(p, seq); return; }
+          if (!freed) { renderAll(); finishTurn(p, seq); return; }
+          p.inJail = false; p.jailTurns = 0; renderAll();
+          if (moveBy > 0) { await moveSteps(p, moveBy, seq); if (!p.bankrupt) await resolveTile(p, seq); finishTurn(p, seq); return; }
+          /* paid/card: fall through to a normal roll */
+        } else {
+          var choice = await humanJailChoice(p);
+          if (seq !== gameSeq) return;
+          if (choice === "card") { p.getout--; p.inJail = false; p.jailTurns = 0; logMsg("You used a Get Out of Lockup Free card."); }
+          else if (choice === "pay") {
+            if (!(await charge(p, 50, -1))) { finishTurn(p, seq); return; }
+            p.inJail = false; p.jailTurns = 0; logMsg("You paid the $50 Lockup fine.");
+          } else if (choice === "roll") {
+            var r0 = rollPair(); G.lastDice = r0; G.lastSum = r0[0] + r0[1]; renderDice();
+            logMsg("You rolled " + r0[0] + " + " + r0[1] + " to break out of Lockup.");
+            if (r0[0] === r0[1]) {
+              p.inJail = false; p.jailTurns = 0;
+              logMsg('<span class="l-money">Doubles!</span> You break out and move ' + G.lastSum + ".");
+              await moveSteps(p, G.lastSum, seq);
+              if (!p.bankrupt) await resolveTile(p, seq);
+            } else {
+              p.jailTurns++;
+              if (p.jailTurns >= 3) {
+                logMsg("Third failed try — you pay the $50 fine and move anyway.");
+                if (await charge(p, 50, -1)) {
+                  p.inJail = false; p.jailTurns = 0;
+                  await moveSteps(p, G.lastSum, seq);
+                  if (!p.bankrupt) await resolveTile(p, seq);
+                }
+              } else {
+                logMsg("No doubles — you stay in Lockup. " + (3 - p.jailTurns) + " tries left before the fine is forced.");
+              }
+            }
+            finishTurn(p, seq); return;
+          }
+          if (p.bankrupt) { finishTurn(p, seq); return; }
+          renderAll();
+        }
+      }
+
+      /* --- Normal roll loop (doubles roll again) --- */
+      var again = true;
+      while (again && !G.over && !p.bankrupt && seq === gameSeq) {
+        again = false;
+        if (p.isAI) { setActions('<p class="prompt"><strong>' + p.name + '</strong> is taking a turn…</p>'); await sleep(650); }
+        else { await humanRollPrompt(p); setActions('<p class="prompt">Dice are rolling…</p>'); }
+        if (seq !== gameSeq || G.over) return;
+        var r = rollPair();
+        G.lastDice = r; G.lastSum = r[0] + r[1]; renderDice();
+        var isDouble = r[0] === r[1];
+        logMsg(p.name + " rolled " + r[0] + " + " + r[1] + (isDouble ? " — <strong>doubles!</strong>" : "") + ".");
+        if (isDouble) {
+          G.doubles++;
+          if (G.doubles >= 3) {
+            logMsg(p.name + " rolled three doubles in a row — straight to Lockup!");
+            sendToJail(p);
+            break;
+          }
+        } else G.doubles = 0;
+        await moveSteps(p, G.lastSum, seq);
+        if (seq !== gameSeq) return;
+        if (!p.bankrupt) await resolveTile(p, seq);
+        if (checkGameOver()) return;
+        if (p.bankrupt || p.inJail) break;
+        if (isDouble) { again = true; logMsg(p.name + " rolls again thanks to doubles."); }
+      }
+      finishTurn(p, seq);
+    }
+
+    function finishTurn(p, seq) {
+      if (seq !== gameSeq) return;
+      G.doubles = 0;
+      if (checkGameOver()) { renderAll(); return; }
+      /* advance to next active player */
+      var n = G.players.length, next = G.cur;
+      do { next = (next + 1) % n; } while (G.players[next].bankrupt);
+      if (next <= G.cur) G.round++;
+      G.cur = next;
+      G.phase = "awaitRoll";
+      renderAll(); saveGame();
+      var np = G.players[G.cur];
+      takeTurn(np, seq);
+    }
+
+    function showRollPrompt(p) {
+      if (G.over) return;
+      G.phase = "awaitRoll";
+      setActions(
+        '<p class="prompt">Your turn, tycoon. Build from your portfolio first if you like, then roll.</p>' +
+        '<div class="btn-row"><button class="btn primary" id="btnRoll" type="button">Roll dice</button></div>'
+      );
+      renderAll();
+    }
+    function humanRollPrompt(p) {
+      return new Promise(function (resolve) {
+        showRollPrompt(p);
+        $("btnRoll").addEventListener("click", function () { resolve(); }, { once: true });
+      });
+    }
+    function humanJailChoice(p) {
+      return new Promise(function (resolve) {
+        G.phase = "awaitJail";
+        var btns = '<div class="btn-row">';
+        if (p.getout > 0) btns += '<button class="btn primary" id="btnJailCard" type="button">Use Get Out card</button>';
+        btns += '<button class="btn' + (p.getout > 0 ? "" : " primary") + '" id="btnJailPay" type="button">Pay $50 fine &amp; roll</button>';
+        btns += '<button class="btn" id="btnJailRoll" type="button">Roll for doubles (' + (3 - p.jailTurns) + ' tries left)</button></div>';
+        setActions('<p class="prompt">You\'re in <strong>Lockup</strong>. Pay the fine, play a card, or try to roll doubles to break out.</p>' + btns);
+        renderAll();
+        var card = $("btnJailCard"), pay = $("btnJailPay"), roll = $("btnJailRoll");
+        if (card) card.addEventListener("click", function () { resolve("card"); });
+        pay.addEventListener("click", function () { resolve("pay"); });
+        roll.addEventListener("click", function () { resolve("roll"); });
+      });
+    }
+
+    /* AI building between turns */
+    function aiBuild(p) {
+      var d = DIFFS[G.difficulty];
+      var guard = 0;
+      var changed = true;
+      while (changed && guard++ < 30) {
+        changed = false;
+        for (var gi in GROUP_TILES) {
+          if (!ownsSet(p.id, gi)) continue;
+          var tiles = GROUP_TILES[gi];
+          if (tiles.some(function (j) { return G.own[j].mortgaged; })) continue;
+          var min = Math.min.apply(null, tiles.map(function (j) { return G.own[j].houses; }));
+          for (var k = 0; k < tiles.length; k++) {
+            var j = tiles[k], o = G.own[j], cost = GROUPS[gi].house;
+            if (o.houses === min && o.houses < 5 && p.cash - cost >= d.buildReserve) {
+              p.cash -= cost; o.houses++; changed = true;
+              logMsg(p.name + " built " + (o.houses === 5 ? "a <strong>hotel</strong>" : "a house") + " on " + TILES[j].name + ".");
+            }
+          }
+        }
+      }
+      /* lift a mortgage when flush */
+      ownedTiles(p.id).forEach(function (i) {
+        if (G.own[i].mortgaged && p.cash - unmortgageCost(i) >= d.buildReserve) {
+          p.cash -= unmortgageCost(i); G.own[i].mortgaged = false;
+          logMsg(p.name + " lifted the mortgage on " + TILES[i].name + ".");
+        }
+      });
+    }
+    var _origFinish = finishTurn;
+    finishTurn = function (p, seq) {
+      if (p && p.isAI && !p.bankrupt && G && !G.over) { aiBuild(p); }
+      _origFinish(p, seq);
+    };
+</script>
+
+    <script>
+    "use strict";
+    /* ================= TILE INSPECTOR ================= */
+    function showTile(i) {
+      var tile = TILES[i];
+      $("tileName").textContent = tile.name;
+      var html = "";
+      if (G && (tile.t === "prop" || tile.t === "station" || tile.t === "utility")) {
+        var o = G.own[i];
+        html += "<p><strong>Price:</strong> " + money(tile.price) + "<br><strong>Status:</strong> " +
+          (o ? "Owned by " + G.players[o.owner].name + (o.mortgaged ? " (mortgaged)" : "") : "On the market") + "</p>";
+        if (tile.t === "prop") {
+          html += "<p><strong>" + GROUPS[tile.group].label + "</strong> · House cost " + money(GROUPS[tile.group].house) + "</p>" +
+            "<p class='mono' style='font-size:.9rem; line-height:1.7'>Site rent " + money(tile.rents[0]) + " (×2 with full set)<br>" +
+            "1 house " + money(tile.rents[1]) + " · 2 houses " + money(tile.rents[2]) + "<br>" +
+            "3 houses " + money(tile.rents[3]) + " · 4 houses " + money(tile.rents[4]) + "<br>Hotel " + money(tile.rents[5]) + "</p>";
+          if (o) html += "<p>Currently built: <strong>" + (o.houses === 5 ? "Hotel" : o.houses + " house(s)") + "</strong> · Rent right now: <strong>" + money(rentFor(i, G.lastSum)) + "</strong></p>";
+        } else if (tile.t === "station") {
+          html += "<p>Depot rent: <span class='mono'>$25</span> for one, <span class='mono'>$50</span> for two, <span class='mono'>$100</span> for three, <span class='mono'>$200</span> for all four.</p>";
+        } else {
+          html += "<p>Utility rent is 4× the visitor's dice roll — or 10× the roll if one player holds both the Power Plant and the Water Works.</p>";
+        }
+      } else {
+        var desc = {
+          start: "Pass or land here to collect $200 from the bank.",
+          jail: "Just visiting is free. Being sent here is another story — see the Rules for how to get out.",
+          rest: "A free breather. Nothing happens here.",
+          gotojail: "Land here and you go straight to Lockup.",
+          tax: "Land here and pay the levy to the bank.",
+          fate: "Land here and draw a Twist of Fate card.",
+          fund: "Land here and draw a Neighbourhood Fund card."
+        };
+        html = "<p>" + (desc[tile.t] || "") + "</p>";
+      }
+      $("tileBody").innerHTML = html;
+      $("tileOverlay").classList.add("open");
+    }
+
+    /* ================= TUTORIAL ================= */
+    var TUT = [
+      { h: "Welcome, tycoon", b: "You and your rivals start with cash and a token on Start. Take turns rolling the dice and travelling around the board. Tap any square on the board at any time to see its price and rent." },
+      { h: "Buy what you land on", b: "Stop on an unowned street, depot or utility and you can buy it at the listed price. Own a property and anyone who lands on it pays you rent — that's the whole game, really." },
+      { h: "Sets are where the money is", b: "Collect every property in a colour set and site rent doubles. Better yet, full sets let you build houses — and eventually a hotel — which send rent through the roof. Manage building from Your portfolio on your turn." },
+      { h: "Watch out for Lockup", b: "Land on 'Head to Lockup', draw the wrong card, or roll three doubles in a row and you're locked up. Pay the $50 fine, play a Get Out card, or roll for doubles to escape." },
+      { h: "Last one standing wins", b: "Can't pay a bill? Sell houses or mortgage properties to raise cash. Still short and you're bankrupt — out of the game. Bankrupt every rival to win. New here? Practice mode gives you bailouts and hints while you learn." }
+    ];
+    var tutIdx = 0;
+    function renderTut() {
+      var s = TUT[tutIdx];
+      $("tutStep").innerHTML = "<h3 style='margin-top:0'>" + s.h + "</h3><p>" + s.b + "</p>";
+      $("tutDots").innerHTML = TUT.map(function (_, i) { return "<i class='" + (i === tutIdx ? "on" : "") + "'></i>"; }).join("");
+      $("btnTutBack").disabled = tutIdx === 0;
+      $("btnTutNext").textContent = tutIdx === TUT.length - 1 ? "Done" : "Next";
+    }
+    function openTut() { tutIdx = 0; renderTut(); $("tutOverlay").classList.add("open"); }
+
+    /* ================= FEEDBACK ================= */
+    function fbCaptureText() {
+      var inGame = !!G;
+      var score = inGame ? money(netWorth(G.players[0])) + " net worth, " + money(G.players[0].cash) + " cash, round " + G.round : "no game in progress";
+      var dev = navigator.userAgent + " · screen " + window.innerWidth + "×" + window.innerHeight;
+      return "Game: Property Tycoon\nMode: " + (inGame ? G.mode : settings.mode) +
+        "\nDifficulty: " + (inGame ? G.difficulty : settings.difficulty) +
+        "\nScore: " + score + "\nDevice: " + dev + "\nTime: " + new Date().toLocaleString();
+    }
+    function openFeedback() {
+      $("fbCapture").innerText = fbCaptureText();
+      $("fbStatus").textContent = "";
+      $("fbOverlay").classList.add("open");
+    }
+
+    /* ================= SETUP WIRING ================= */
+    function wireSeg(id, key, parse) {
+      var seg = $(id);
+      function paint() {
+        seg.querySelectorAll("button").forEach(function (b) {
+          b.setAttribute("aria-pressed", String(parse(b.getAttribute("data-v")) === settings[key]));
+        });
+      }
+      seg.querySelectorAll("button").forEach(function (b) {
+        b.addEventListener("click", function () {
+          settings[key] = parse(b.getAttribute("data-v"));
+          lsSet(LS_SET, settings);
+          paint();
+        });
+      });
+      paint();
+    }
+    function renderStatsLine() {
+      $("statsLine").textContent = stats.played
+        ? "Your record so far: " + stats.played + " game" + (stats.played > 1 ? "s" : "") + " played · " + stats.won + " won · " + stats.lost + " lost."
+        : "No games on the books yet — your record will live here.";
+    }
+
+    function startGame(resume) {
+      if (resume) {
+        var saved = lsGet(LS_SAVE, null);
+        if (!saved) return;
+        G = saved;
+        settings.mode = G.mode; settings.difficulty = G.difficulty;
+        gameSeq++;
+      } else {
+        newGame();
+      }
+      document.querySelectorAll(".overlay").forEach(function (o) { o.classList.remove("open"); });
+      $("setupView").hidden = true;
+      $("gameView").hidden = false;
+      $("btnQuitTop").hidden = false;
+      buildBoard();
+      $("log").innerHTML = G.log.map(function (m) { return "<div>" + m + "</div>"; }).join("");
+      renderAll();
+      if (resume) logMsg("Welcome back — game resumed at round " + G.round + ".");
+      takeTurn(G.players[G.cur], gameSeq);
+    }
+    function quitToSetup() {
+      gameSeq++;
+      if (pendingDebt) { var r = pendingDebt.resolve; pendingDebt = null; r(false); }
+      document.querySelectorAll(".overlay").forEach(function (o) { o.classList.remove("open"); });
+      saveGame();
+      G = null;
+      $("gameView").hidden = true;
+      $("setupView").hidden = false;
+      $("btnQuitTop").hidden = true;
+      renderStatsLine(); refreshResume();
+    }
+
+    /* ================= INIT ================= */
+    document.addEventListener("DOMContentLoaded", function () {
+      buildBoard();
+      wireSeg("segAI", "ai", Number);
+      wireSeg("segDiff", "difficulty", String);
+      wireSeg("segMode", "mode", String);
+      renderStatsLine(); refreshResume();
+
+      $("btnStart").addEventListener("click", function () { startGame(false); });
+      $("btnResume").addEventListener("click", function () { startGame(true); });
+      $("btnQuitTop").addEventListener("click", quitToSetup);
+
+      $("btnTutorialTop").addEventListener("click", openTut);
+      $("btnRulesTop").addEventListener("click", function () { $("rulesOverlay").classList.add("open"); });
+      $("btnFeedbackTop").addEventListener("click", openFeedback);
+
+      $("btnRulesClose").addEventListener("click", function () { $("rulesOverlay").classList.remove("open"); });
+      $("btnTileClose").addEventListener("click", function () { $("tileOverlay").classList.remove("open"); });
+
+      $("btnCardOk").addEventListener("click", function () {
+        $("cardOverlay").classList.remove("open");
+        if (cardResolve) { var r = cardResolve; cardResolve = null; r(); }
+      });
+
+      $("btnPayDebt").addEventListener("click", function () { closeFunds(true); });
+      $("btnBankrupt").addEventListener("click", function () { closeFunds(false); });
+
+      $("btnTutBack").addEventListener("click", function () { if (tutIdx > 0) { tutIdx--; renderTut(); } });
+      $("btnTutNext").addEventListener("click", function () {
+        if (tutIdx < TUT.length - 1) { tutIdx++; renderTut(); }
+        else $("tutOverlay").classList.remove("open");
+      });
+      $("btnTutClose").addEventListener("click", function () { $("tutOverlay").classList.remove("open"); });
+
+      $("btnFbClose").addEventListener("click", function () { $("fbOverlay").classList.remove("open"); });
+      $("btnFbCopy").addEventListener("click", function () {
+        var text = "Feedback — Property Tycoon\n\n" + ($("fbText").value.trim() || "(no message written)") + "\n\n— auto-attached —\n" + fbCaptureText();
+        var entries = lsGet(LS_FB, []);
+        entries.push({ when: new Date().toISOString(), text: text });
+        lsSet(LS_FB, entries);
+        /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+        try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "property-tycoon", rating: 0, text: $("fbText").value.trim(), tag: "", mode: "real", level: "", difficulty: (typeof settings!=="undefined"&&settings.difficulty)||"", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+        function done() { $("fbStatus").textContent = "Copied! Paste it wherever you send feedback. A copy is also saved on this device."; }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, function () { fallback(); });
+        } else fallback();
+        function fallback() {
+          var ta = $("fbText"); ta.value = text; ta.focus(); ta.select();
+          try { document.execCommand("copy"); } catch (e) {}
+          $("fbStatus").textContent = "Your feedback is selected above — copy it and paste it wherever you send feedback. A copy is also saved on this device.";
+        }
+      });
+
+      $("btnAgain").addEventListener("click", function () {
+        $("overOverlay").classList.remove("open");
+        startGame(false);
+      });
+      $("btnOverSetup").addEventListener("click", function () {
+        $("overOverlay").classList.remove("open");
+        quitToSetup();
+      });
+    });
+    </script>
+  </body>
+</html>

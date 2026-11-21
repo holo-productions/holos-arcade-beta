@@ -1,0 +1,934 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Word Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Serif+4:opsz,wght@8..60,700;8..60,900&display=swap" rel="stylesheet" />
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#e9efec; --panel:#ffffff; --panel2:#f4f7f5; --ink:#17251f; --ink-soft:#4c5d55;
+  --line:#cfd9d2; --accent:#0e6e5c; --accent-ink:#ffffff; --accent-soft:#d9ece6;
+  --gold:#b97f16; --danger:#b3372f; --shadow:0 2px 10px rgba(20,40,32,.12);
+  --cell:#dcebe2; --cell-line:#b9cec2;
+  --dl:#a8cdf0; --dl-ink:#123c63; --tl:#3f7fc4; --tl-ink:#ffffff;
+  --dw:#f2b8c6; --dw-ink:#6d1226; --tw:#c93a2e; --tw-ink:#ffffff;
+  --tile:#f7c873; --tile-edge:#d99b2b; --tile-ink:#33230a;
+  --tile-placed:#ffe1a1; --ai-tile:#bcd6f7; --board-frame:#0d4f42;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0e1512; --panel:#182420; --panel2:#1f2f28; --ink:#e8f0eb; --ink-soft:#a7bab0;
+    --line:#33463c; --accent:#2fae8f; --accent-ink:#06231b; --accent-soft:#173d33;
+    --gold:#e0a83e; --danger:#e07a6e; --shadow:0 2px 12px rgba(0,0,0,.45);
+    --cell:#22392f; --cell-line:#335144;
+    --dl:#2c4d75; --dl-ink:#cfe6ff; --tl:#3f7fc4; --tl-ink:#ffffff;
+    --dw:#6e2b3c; --dw-ink:#ffd7e0; --tw:#a02c22; --tw-ink:#ffffff;
+    --tile:#eebd63; --tile-edge:#b98424; --tile-ink:#2c1e05;
+    --tile-placed:#ffd98f; --ai-tile:#33517a; --board-frame:#08382e;
+  }
+}
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{ background:var(--bg); color:var(--ink); font-family:ui-rounded,"Segoe UI",system-ui,-apple-system,sans-serif; -webkit-tap-highlight-color:transparent; }
+button,select,input,textarea{ font:inherit; }
+button,select,summary{ min-height:2.25rem; }
+.wrap{ max-width:1060px; margin:0 auto; padding:10px 12px 28px; }
+.toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.toolbar .group{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.btn{ border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:10px; padding:8px 14px; font-weight:600; cursor:pointer; box-shadow:var(--shadow); }
+.btn:hover{ border-color:var(--accent); }
+.btn.primary{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+.btn.primary:disabled{ opacity:.45; cursor:not-allowed; }
+.btn.warn{ color:var(--danger); }
+.btn[aria-pressed="true"]{ background:var(--accent-soft); border-color:var(--accent); }
+select.btn{ appearance:none; }
+label.sel{ display:flex; align-items:center; gap:6px; font-weight:600; font-size:.92rem; color:var(--ink-soft); }
+.scores{ display:grid; grid-template-columns:1fr auto 1fr; gap:8px; margin-bottom:10px; }
+.scorecard{ background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:8px 14px; box-shadow:var(--shadow); display:flex; align-items:center; gap:10px; min-width:0; }
+.scorecard.active{ outline:3px solid var(--accent); outline-offset:-1px; }
+.scorecard .who{ font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.scorecard .pts{ font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:1.7rem; margin-left:auto; }
+.scorecard .sub{ font-size:.78rem; color:var(--ink-soft); }
+.bagbox{ background:var(--board-frame); color:#eafaf3; border-radius:14px; padding:8px 12px; text-align:center; display:flex; flex-direction:column; justify-content:center; min-width:74px; }
+.bagbox .n{ font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:1.4rem; line-height:1; }
+.bagbox .l{ font-size:.7rem; letter-spacing:.06em; text-transform:uppercase; opacity:.85; }
+.layout{ display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:14px; align-items:start; }
+@media (max-width:820px){ .layout{ grid-template-columns:1fr; } }
+.boardframe{ background:var(--board-frame); padding:10px; border-radius:16px; box-shadow:var(--shadow); }
+.board{ display:grid; grid-template-columns:repeat(11,1fr); gap:2px; width:100%; max-width:560px; margin:0 auto; user-select:none; touch-action:manipulation; }
+.cell{ aspect-ratio:1/1; border-radius:4px; background:var(--cell); border:1px solid var(--cell-line); display:flex; align-items:center; justify-content:center; position:relative; cursor:pointer; font-size:clamp(9px,2.4vw,14px); padding:0; min-height:0; color:var(--ink); }
+.cell .prem{ font-size:.6em; font-weight:800; text-align:center; line-height:1.05; pointer-events:none; }
+.cell.dl{ background:var(--dl); color:var(--dl-ink); }
+.cell.tl{ background:var(--tl); color:var(--tl-ink); }
+.cell.dw{ background:var(--dw); color:var(--dw-ink); }
+.cell.tw{ background:var(--tw); color:var(--tw-ink); }
+.cell.star{ background:var(--dw); color:var(--dw-ink); font-size:1.1em; }
+.cell.filled{ background:var(--tile); border-color:var(--tile-edge); cursor:default; }
+.cell.filled.ai{ background:var(--ai-tile); border-color:#7ea6d8; }
+.cell.temp{ background:var(--tile-placed); border:2px dashed var(--gold); cursor:pointer; }
+.cell.lastmove{ box-shadow:inset 0 0 0 2px var(--gold); }
+.tileface{ font-family:"Source Serif 4",serif; font-weight:900; line-height:1; display:flex; align-items:flex-start; pointer-events:none; }
+.tileface .v{ font-family:ui-rounded,system-ui,sans-serif; font-size:.52em; font-weight:700; margin-left:1px; margin-top:.55em; }
+.playarea{ margin-top:12px; background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:12px; box-shadow:var(--shadow); }
+.rack{ display:flex; gap:6px; justify-content:center; flex-wrap:nowrap; }
+.racktile{ width:clamp(38px,11.5vw,52px); height:clamp(44px,13vw,60px); border-radius:9px; flex:0 1 auto; background:var(--tile); border:2px solid var(--tile-edge); color:var(--tile-ink); display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:clamp(1.15rem,5vw,1.6rem); position:relative; padding:0; }
+.racktile .tileface .v{ font-size:.42em; margin-top:.7em; }
+.racktile.selected{ outline:3px solid var(--accent); outline-offset:1px; transform:translateY(-5px); }
+.racktile.marked{ outline:3px solid var(--danger); outline-offset:1px; opacity:.75; }
+.racktile:disabled{ opacity:.35; cursor:not-allowed; }
+.rackhint{ text-align:center; color:var(--ink-soft); font-size:.86rem; min-height:1.2em; margin-top:8px; }
+.actions{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:10px; }
+.actions .btn{ flex:1 1 auto; min-width:92px; }
+.msg{ margin-top:10px; border-radius:10px; padding:9px 12px; font-weight:600; text-align:center; background:var(--accent-soft); color:var(--ink); min-height:2.5rem; display:flex; align-items:center; justify-content:center; }
+.msg.error{ background:#f7dcd8; color:#6d1226; }
+@media (prefers-color-scheme: dark){ .msg.error{ background:#4a2019; color:#ffc9c0; } }
+.side{ display:flex; flex-direction:column; gap:12px; }
+.card{ background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:12px 14px; box-shadow:var(--shadow); }
+.card h2{ font-family:"Bricolage Grotesque",sans-serif; font-size:1.05rem; margin:0 0 8px; }
+.card p{ margin:0 0 8px; line-height:1.45; }
+.movelog{ list-style:none; margin:0; padding:0; max-height:300px; overflow:auto; }
+.movelog li{ padding:6px 2px; border-bottom:1px dashed var(--line); font-size:.92rem; display:flex; justify-content:space-between; gap:8px; }
+.movelog li:last-child{ border-bottom:none; }
+.movelog .who{ font-weight:700; }
+.movelog .pts{ font-weight:800; color:var(--accent); white-space:nowrap; }
+.lookup{ display:flex; gap:8px; }
+.lookup input{ flex:1; min-width:0; border:1px solid var(--line); border-radius:10px; padding:8px 10px; background:var(--panel2); color:var(--ink); text-transform:uppercase; }
+.lookupresult{ font-size:.9rem; min-height:1.2em; margin-top:6px; font-weight:600; }
+.legend{ display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:.85rem; }
+.legend span{ display:flex; align-items:center; gap:7px; }
+.swatch{ width:18px; height:18px; border-radius:5px; border:1px solid var(--cell-line); flex:none; }
+.stats{ font-size:.92rem; color:var(--ink-soft); line-height:1.6; }
+.stats b{ color:var(--ink); }
+footer{ text-align:center; color:var(--ink-soft); margin-top:22px; font-size:.9rem; }
+footer .brand{ font-family:"Bricolage Grotesque",sans-serif; font-weight:800; color:var(--ink); }
+dialog{ border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:18px; padding:0; max-width:min(94vw,560px); width:560px; box-shadow:0 18px 50px rgba(0,0,0,.35); }
+dialog::backdrop{ background:rgba(8,20,15,.55); }
+.dlg-body{ padding:20px 22px 22px; max-height:82vh; overflow:auto; }
+.dlg-body h2{ font-family:"Bricolage Grotesque",sans-serif; margin:0 0 10px; font-size:1.45rem; }
+.dlg-body h3{ margin:16px 0 6px; font-size:1.02rem; }
+.dlg-body p,.dlg-body li{ line-height:1.5; }
+.dlg-body ul{ margin:6px 0 10px; padding-left:20px; }
+.dlg-actions{ display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; margin-top:16px; }
+.lettergrid{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-top:10px; }
+.lettergrid button{ border:1px solid var(--tile-edge); background:var(--tile); color:var(--tile-ink); border-radius:8px; font-family:"Source Serif 4",serif; font-weight:900; font-size:1.15rem; cursor:pointer; padding:6px 0; min-height:2.75rem; }
+textarea.fb{ width:100%; min-height:170px; border:1px solid var(--line); border-radius:10px; padding:10px; background:var(--panel2); color:var(--ink); resize:vertical; }
+.finalscore{ display:flex; gap:10px; margin:14px 0; }
+.finalscore .fs{ flex:1; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px; text-align:center; }
+.finalscore .fs .n{ font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:2rem; }
+.winnerline{ font-family:"Bricolage Grotesque",sans-serif; font-weight:800; font-size:1.25rem; text-align:center; }
+.kbd-note{ font-size:.85rem; color:var(--ink-soft); }
+@media (max-width:560px){
+  .scores{ gap:6px; }
+  .scorecard{ padding:6px 9px; gap:6px; }
+  .scorecard .who{ font-size:.88rem; }
+  .scorecard .sub{ font-size:.7rem; }
+  .scorecard .pts{ font-size:1.25rem; }
+  .bagbox{ min-width:58px; padding:6px 7px; }
+  .bagbox .n{ font-size:1.15rem; }
+  .bagbox .l{ font-size:.6rem; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="toolbar">
+    <div class="group">
+      <button class="btn primary" id="btnNew" type="button">New game</button>
+      <label class="sel">Difficulty
+        <select class="btn" id="selDifficulty" aria-label="Difficulty">
+          <option value="easy">Easy</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </label>
+      <button class="btn" id="btnPractice" type="button" aria-pressed="false">Practice mode</button>
+    </div>
+    <div class="group">
+      <button class="btn" id="btnTutorial" type="button">How to play</button>
+      <button class="btn" id="btnRules" type="button">Rules</button>
+      <button class="btn" id="btnFeedback" type="button">Spotted something weird?</button>
+    </div>
+  </div>
+
+  <div class="scores" role="status" aria-label="Scores">
+    <div class="scorecard" id="cardYou">
+      <div><div class="who">You</div><div class="sub" id="subYou">Your turn</div></div>
+      <div class="pts" id="scoreYou">0</div>
+    </div>
+    <div class="bagbox"><div class="n" id="bagCount">100</div><div class="l">tiles left</div></div>
+    <div class="scorecard" id="cardAI">
+      <div><div class="who">Lexi (computer)</div><div class="sub" id="subAI">Waiting</div></div>
+      <div class="pts" id="scoreAI">0</div>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="boardframe"><div class="board" id="board" role="grid" aria-label="Word Board playing grid"></div></div>
+      <div class="playarea">
+        <div class="rack" id="rack" aria-label="Your tile rack"></div>
+        <div class="rackhint" id="rackHint">Tap a tile, then tap a square on the board to place it.</div>
+        <div class="actions">
+          <button class="btn primary" id="btnPlay" type="button">Play word</button>
+          <button class="btn" id="btnRecall" type="button">Recall tiles</button>
+          <button class="btn" id="btnShuffle" type="button">Shuffle</button>
+          <button class="btn" id="btnExchange" type="button">Exchange</button>
+          <button class="btn" id="btnPass" type="button">Pass</button>
+          <button class="btn" id="btnHint" type="button" hidden>Hint</button>
+          <button class="btn warn" id="btnEnd" type="button" hidden>End game</button>
+        </div>
+        <div class="msg" id="msg" role="status">First word must cover the star in the middle.</div>
+      </div>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h2>Word check</h2>
+        <div class="lookup">
+          <input id="lookupInput" type="text" maxlength="15" placeholder="TYPE A WORD" aria-label="Word to check" />
+          <button class="btn" id="btnLookup" type="button">Check</button>
+        </div>
+        <div class="lookupresult" id="lookupResult"></div>
+      </div>
+      <div class="card">
+        <h2>Bonus squares</h2>
+        <div class="legend">
+          <span><span class="swatch" style="background:var(--dl)"></span>Letter ×2</span>
+          <span><span class="swatch" style="background:var(--tl)"></span>Letter ×3</span>
+          <span><span class="swatch" style="background:var(--dw)"></span>Word ×2</span>
+          <span><span class="swatch" style="background:var(--tw)"></span>Word ×3</span>
+        </div>
+        <p class="kbd-note" style="margin-top:8px">Bonuses count only on the turn a tile is first placed on them. Use all 7 rack tiles in one word for a <b>+50 Full Rack bonus</b>.</p>
+      </div>
+      <div class="card">
+        <h2>Moves</h2>
+        <ul class="movelog" id="moveLog"><li><span>No moves yet — you start!</span></li></ul>
+      </div>
+      <div class="card">
+        <h2>Your record</h2>
+        <div class="stats" id="statsBox">No finished games yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="brand">Ridiculously Fit and Fed</div>
+    <div>Word Board — an original tile game from the arcade. Good luck out there.</div>
+  </footer>
+</div>
+
+<dialog id="dlgBlank">
+  <div class="dlg-body">
+    <h2>Pick a letter for your blank</h2>
+    <p>The blank can stand for any letter, but it scores 0 points.</p>
+    <div class="lettergrid" id="letterGrid"></div>
+    <div class="dlg-actions"><button class="btn" id="btnBlankCancel" type="button">Cancel</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgTutorial">
+  <div class="dlg-body">
+    <h2 id="tutTitle">How to play — step 1 of 5</h2>
+    <div id="tutBody"></div>
+    <div class="dlg-actions">
+      <button class="btn" id="btnTutBack" type="button">Back</button>
+      <button class="btn primary" id="btnTutNext" type="button">Next</button>
+      <button class="btn" id="btnTutClose" type="button">Close</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="dlgRules">
+  <div class="dlg-body">
+    <h2>Word Board rules</h2>
+    <h3>The goal</h3>
+    <p>Outscore Lexi, the computer, by building words on the 11×11 board. Letters are worth points, bonus squares multiply them, and the game ends when the tiles run out.</p>
+    <h3>Your turn</h3>
+    <ul>
+      <li>You hold 7 tiles. Tap a tile, then tap a board square to place it. Tap a tile you just placed to pick it back up.</li>
+      <li>All tiles placed in one turn must sit in a single row or column and form one main word, reading left-to-right or top-to-bottom.</li>
+      <li>The very first word of the game must cover the star centre square and be at least 2 letters long.</li>
+      <li>After the first word, every new word must connect to tiles already on the board — by building on them or by touching them to form cross-words.</li>
+      <li>Every word formed — the main word and any cross-words — must be in the game's built-in word list and at least 2 letters long.</li>
+      <li>Blank tiles can be any letter but score 0.</li>
+    </ul>
+    <h3>Scoring</h3>
+    <ul>
+      <li>Letter values are printed on each tile. Letter ×2 and Letter ×3 squares multiply that tile; Word ×2 and Word ×3 squares multiply the whole word.</li>
+      <li>Bonus squares only count on the turn the tile is first placed on them.</li>
+      <li>Cross-words score too, with bonuses from the newly placed tile that forms them.</li>
+      <li>Play all 7 rack tiles in one turn for a +50 Full Rack bonus.</li>
+      <li>After you play, you draw back up to 7 tiles while the bag lasts.</li>
+    </ul>
+    <h3>Other moves</h3>
+    <ul>
+      <li><b>Exchange:</b> tap Exchange, tap the tiles you want to swap, then tap Exchange again to confirm. This uses your turn.</li>
+      <li><b>Pass:</b> skip your turn. Six scoreless turns in a row (passes and exchanges by both sides) end the game.</li>
+      <li><b>Shuffle</b> and <b>Recall</b> are free — they never use your turn.</li>
+    </ul>
+    <h3>How the game ends</h3>
+    <ul>
+      <li>The game ends when the bag is empty and one player plays their last tile, or after six straight scoreless turns.</li>
+      <li>At the end, each player loses the value of tiles left in their rack. If you empty your rack to finish, you also gain the value of Lexi's leftover tiles.</li>
+      <li>Highest final score wins.</li>
+    </ul>
+    <h3>Modes</h3>
+    <ul>
+      <li><b>Difficulty</b> (Easy / Medium / Hard) changes how sharp Lexi plays. It is saved on this device, so it will be right where you left it next visit.</li>
+      <li><b>Practice mode</b> is just you and the board — no opponent, no pressure. You get a Hint button, and you can end whenever you like. Practice games do not count in your record.</li>
+    </ul>
+    <div class="dlg-actions"><button class="btn primary" id="btnRulesClose" type="button">Got it</button></div>
+  </div>
+</dialog>
+
+<dialog id="dlgFeedback">
+  <div class="dlg-body">
+    <h2>Spotted something weird?</h2>
+    <p>No worries — tell us what happened in your own words. We have already jotted down the game details below (scores, difficulty, last moves) so you do not have to. Edit anything you like, then copy it and send it our way.</p>
+    <textarea class="fb" id="fbText" aria-label="Feedback text"></textarea>
+    <div class="dlg-actions">
+      <button class="btn" id="btnFbClose" type="button">Close</button>
+      <a class="btn" id="fbMail" href="#" style="text-decoration:none; display:inline-flex; align-items:center;">Send by email</a>
+      <button class="btn primary" id="btnFbCopy" type="button">Copy feedback</button>
+    </div>
+    <p class="kbd-note" id="fbNote"></p>
+  </div>
+</dialog>
+
+<dialog id="dlgOver">
+  <div class="dlg-body">
+    <h2>Game over</h2>
+    <div class="winnerline" id="overWinner"></div>
+    <div class="finalscore">
+      <div class="fs"><div>You</div><div class="n" id="overYou">0</div></div>
+      <div class="fs"><div>Lexi</div><div class="n" id="overAI">0</div></div>
+    </div>
+    <p id="overDetail"></p>
+    <div class="dlg-actions">
+      <button class="btn primary" id="btnAgain" type="button">Play again</button>
+      <button class="btn" id="btnOverClose" type="button">Look at the board</button>
+    </div>
+  </div>
+</dialog>
+<script>
+"use strict";
+/* ---------- Word list (small built-in list, ~520 common words) ---------- */
+var WORDS_STR = "an as at be by do go he hi if in is it me my no of oh on or ox so to up us we am ace act add age ago aid aim air ale all and ant ape apt arc are arm art ash ask ate awe axe bad bag ban bar bat bay bed bee beg bet bib bid big bin bit bow box boy bud bug bun bus but buy cab can cap car cat cod cog con cop cow coy cry cub cue cup cut dab dam day den dew did die dig dim dip dog dot dry dub due dug ear eat eel egg ego elf elk elm end era eve eye fan far fat fax fed fee few fig fin fir fit fix flu fly fog for fox fry fun fur gag gal gap gas gem get gig gin got gum gun gut guy gym ham has hat hay hen her hey hid him hip his hit hog hop hot how hub hue hug hum hut ice ill ink inn ion its jam jar jaw jet job jog jot joy jug jut keg ken key kid kin kit lab lad lag lap law lay leg let lid lie lip lit log lot low mad man map mat may men met mix mob mom mop mud mug nap net new nil nod nor not now nut oak oar oat odd off oil old one opt orb ore our out owl own pad pal pan pap par pat paw pay pea peg pen pep per pet pie pig pin pit ply pod pop pot pox pro pry pub pud pug pun pup put rag ram ran rap rat raw ray red rib rid rig rim rip rob rod roe rot row rub rue rug rum run rut rye sad sag sal sap sat saw say sea see set sew sex shy sin sip sir sit six ski sky sly sob sod son sop sow soy spa spy sty sub sue sum sun sup tab tad tag tan tap tar tea ten the tie tin tip toe tog ton too top tot tow toy try tub tug tun two use van vat vet via vow war was wax way web wed wee wet who why wig win wit wok won yak yam yap yaw yep yes yet you zip zoo able acid aged also area army atom aunt auto away axis baby back bake bald ball band bank bare bark barn base bash bask bath bats bead beak beam bean bear beat beef been beer bell belt bend bent best beta bets bike bill bind bird bite blew blog blow blue boat body boil bold bolt bomb bond bone book boom boot bore born boss both bout bowl bulk bull bump bunch burn bury bush busy butt buzz cafe cage cake calf call calm came camp cane cape card care carp cart case cash cast cave cell cent chap char chat chef chew chin chip chop city clad clam clan clap claw clay club clue coal coat code coil coin cold colt comb come cone cook cool cope copy cord core cork corn cost cozy crab crew crib crop crow cube cups curb cure curl cute dads dale dame damp dare dark darn dart dash data date dawn days dead deaf deal dean dear debt deck deed deem deep deer desk dial dice died diet digs dime dine ding dirt dish disk dive dock does dogs doll dome done doom door dose dots dove down doze drag draw drew drip drop drum dual duck dude dues dull duly dump dune dusk dust duty each earn ears ease east easy eats echo edge edit eggs else emit ends epic eras errs even ever evil exam exit eyes face fact fade fail fair fake fall fame fans fare farm fast fate fear feat feed feel feet fell felt fern file fill film find fine fins fire firm fish fist fits five fizz flag flat flaw flea fled flee flew flex flip flow flu flux foam foil fold folk fond food fool foot ford fore fork form fort foul four free frog from fuel full fund funk fury fuse fuzz gain gala game gaps gape garb garden gasp gate gave gaze gear gems gene genre germ gets gift girl give glad glam glow glue goal goat goes gold golf gone good gore grab gram gray grid grin grip grit grow grub guard guess guest guide guilt guitar gulf gull gulp guns guru gust guts guys hail hair half hall halo halt hand hang hard harm harp harsh haste hats haul have hawk haze head heal heap hear heat heel held hell helm help herb herd here hero hers hide high hike hill hint hire hiss hits hive hoax hold hole holy home hone hood hook hoop hope horn hose host hour hove howl huge hull hunt hurt hush hut hymn icon idea idle idol inch indeed info ink inn input iron isle item ivy jazz jeans jelly jerk jest jets jewel jobs join joke jolt joy judge juice jump june junk jury just keen keep kept keys kick kids kill kind king kiss kite knee knew knit knot know lab lack lady laid lake lamb lamp land lane lap large lark laser last late laugh lava lawn laws lazy lead leaf leak lean leap learn lease leash least leave ledge leek left legs lend lens lent less lets liar lick lid life lift light like limb lime limit limp line link lion lip list live load loaf loan lock lodge log lone long look loom loop loose lord lose loss lost lots loud love low luck lump lunch lung lure lush lust lute lying lynx lyric made mage maid mail main major make male mall malt mane many map mare mark mars mash mask mass mast mate math maze meal mean meat meek meet melt memo men mend menu mere mesh mess metal meter mice mild mile milk mill mind mine mint mire miss mist mite mix moan mob mock mode mold mole mom monk mood moon moor moose mop more morn moss most moth move mow much mud mug mule muse mush music must mute myth nail name nap narrow nasty nation native nature navy near neat neck need needle negative neither nerve nest net never new news next nice niche night nine noble nod noise none noon nor norm north nose note noun now nurse nut oak obey object ocean odd odor off offer often oil okay old olive omit once one onion only onto open opera opt oral orb order organ origin other otter ounce our out outer outfit oven over owl own pace pack pact pad page paid pain pair pale palm pan panda pane panel panic pant paper par parade parent park part party pass past pat patch path patio pause pave paw pay peace peak peanut pear peas peck pedal peek peel peep peer peg pen people pep per pet phase phone photo pick pic pie piece pig pike pile pill pilot pin pine pink pint pipe pit pitch pity place plain plan plane planet plant plate play plea please plot plow plug plum plus poach pocket poem poet point poke pole poll pond pool poor pop pope pore pork port pose posh post pot pouch pound pour pout power praise prank pray preach press price pride prime print prior prison prize pro probe problem proceed prod profit prom prone proof prop prose proud prove prow prune pub public pud pug pull pulp pulse pump pun punch pupil pure purge purse push put puzzle quack quaint quake qual queen query quest quick quiet quilt quit quiz quota quote race rack radar radio rag raid rail rain raise rake rally ram ramp ran ranch range rank rant rap rare rash rasp rat rate ratio raw ray reach react read ready real realm reap rear reason rebel recall receive recent recess recipe reckon record red reed reef reel refer reform refuse regal region reign rein relax relay release relic rely remain remark remedy remind remote remove rent repair repay repeat repel reply report rest result resume retain retire return reveal revenue review rhyme rice rich rid ride rifle right rigid rim ring rinse riot ripe rise risk rival river road roam roar roast robe rock rode role roll roof rook room root rope rose rosy rot rough round route row royal rub rude rug rule rum run rural rush rust rut ruth rye sacred sad saddle safe saga sage said sail saint salad sale salt same sand sane sang sank sap sash sat sauce save saw say scale scan scar scare scene scent scheme school science score scout scrap screw script scrub sea seal seam search season seat second secret section seed seek seem seen seep segment select self sell send sense sent series serve session set settle seven several severe sew sex shade shaft shake shall shame shape share shark sharp shave shear shed sheep sheet shelf shell shift shin shine ship shirt shock shoe shop shore short shot should show shower shrink shut shy sick side sigh sight sign silk sill silly silver similar simple sin since sing sink sip sir sister sit site six size skew ski skid skill skin skip skirt sky slab slam slant slap slash slate slave sled sleek sleep slice slick slide slim slip slit slogan slope slot slow slug slum slung smack small smart smash smell smile smoke smooth snack snail snake snap snare snarl sneak sneer sneeze sniff snore snort snout snow snug soak soap soar sob social sock soda sofa soft soil sold sole solid solo solve some son song soon soot sore sort soul soup sour sow space spare spark speak spear special speed spell spend sphere spice spill spin spine spirit split spoil spoke spoon sport spot spout spray spread spring sprint sprout spruce spur spy squad square squash squat squeak squeal squeeze stab stable stack staff stage stain stair stake stale stamp stand star stare stark start state station statue status stay steady steak steal steam steel steep steer stem step stern stew stick stiff still sting stir stock stone stood stool stoop stop store storm story stove straight strain strap straw stray stream street stress stretch strict stride strike string strip strive stroke strong struggle stub student studio study stuff stumble stump stun stunt style suave sub such suck sudden suffer sugar suit sum sun sung sunk super supper sure surf surge surprise surround survey survive suspect sustain swab swag swam swamp swan swap swarm swat sway swear sweat sweep sweet swell swept swift swim swing swipe swirl switch swoop sword symbol symptom system table tackle tactic tad tag tail take tale talent talk tall tame tan tank tap tape tar target tarnish tart task taste taught taunt tax tea teach teak teal tear teas tech teem teen tell temper temple tempt ten tend tense tent term test text than thank that thaw the their them theme then theory there these they thick thief thigh thin thing think third this thorn those though thought thread threat three threw thrill thrive throat throne through throw thrust thumb thump thus ticket tide tidy tie tier tiger tight tile till tilt time tin tint tiny tip tire title toad toast today toe toil token told toll tomb tone tongue took tool tooth top topic torch torn toss total touch tough tour tow towel tower town toy trace track trade trail train trait tramp trap trash travel tray tread treat tree trek trench trend trial tribe trick tried tries trim trio trip troop trot trouble trout troy truck true truly trunk trust truth try tub tube tuck tuft tug tuip tulip tumble tuna tune turf turn turtle tutor tweak tweed tweet twelve twenty twice twig twin twirl twist two type typical ugly ulcer ultra uncle under undo undue unfair unfold union unique unit unity unless unlike until upon upper upset urban urge us use used useful user usual utter vague vain valid valley value valve van vanish vapor variety various vary vase vast vat vault veal vector veil vein velvet vendor vent verb verse version very vessel vest vet via vial vibe vice video view vigil villa vine vintage vinyl violin virtual virus visa vision visit visual vital vivid vocal voice void volcano volume vote vow voyage wade wage wagon waist wait wake walk wall wander want war ward ware warm warn warp wart was wash wasp waste watch water wave wax way weak wealth weapon wear weave web wed wedge weed week weep weigh weird welcome weld well went were west wet whale what wheat wheel when where which while whim whine whip whirl whisk whisper white who whole whom whose why wide widow width wife wild will win wind wine wing wink winter wipe wire wisdom wise wish with within without witness wives wizard woke wolf woman women wonder wood wool word wore work world worm worn worry worse worship worst worth would wound woven wrap wrath wreck wrist write wrong wrote yard yarn yawn year yell yellow yelp yen yes yet yield yoga yoke yolk you young your youth zeal zero zest zigzag zinc zip zone zoom";
+var DICT = {};
+var BYLEN = {};
+WORDS_STR.split(/\s+/).forEach(function(w){
+  w = w.toUpperCase();
+  if(w.length < 2 || DICT[w]) return;
+  DICT[w] = 1;
+  (BYLEN[w.length] = BYLEN[w.length] || []).push(w);
+});
+
+/* ---------- Tiles ---------- */
+var VALUES = {A:1,B:3,C:3,D:2,E:1,F:4,G:2,H:4,I:1,J:8,K:5,L:1,M:3,N:1,O:1,P:3,Q:10,R:1,S:1,T:1,U:1,V:4,W:4,X:8,Y:4,Z:10,"":0};
+var COUNTS = {A:9,B:2,C:2,D:4,E:12,F:2,G:3,H:2,I:9,J:1,K:1,L:4,M:2,N:6,O:8,P:2,Q:1,R:6,S:4,T:6,U:4,V:2,W:2,X:1,Y:2,Z:1,"":2};
+var N = 11, CENTER = 5;
+var PREM = {};
+function setPrem(list, t){ list.forEach(function(p){ PREM[p[0]+","+p[1]] = t; }); }
+setPrem([[0,0],[0,10],[10,0],[10,10],[0,5],[5,0],[5,10],[10,5]], "tw");
+setPrem([[1,1],[2,2],[3,3],[4,4],[5,5],[6,6],[7,7],[8,8],[9,9],[1,9],[2,8],[3,7],[4,6],[6,4],[7,3],[8,2],[9,1]], "dw");
+setPrem([[1,5],[5,1],[5,9],[9,5]], "tl");
+setPrem([[0,3],[0,7],[2,5],[3,0],[3,10],[5,2],[5,8],[7,0],[7,10],[8,5],[10,3],[10,7]], "dl");
+var PREM_LABEL = {dl:"DL", tl:"TL", dw:"DW", tw:"TW"};
+
+/* ---------- State ---------- */
+var $ = function(id){ return document.getElementById(id); };
+var board, bag, rackYou, rackAI, scoreYou, scoreAI, temp, selected, exchangeMode, marked;
+var turn, gameOver, scoreless, moveHistory, lastCells, boardEmpty, practice;
+var difficulty = "medium";
+try{ difficulty = localStorage.getItem("wb_difficulty") || "medium"; }catch(e){}
+if(["easy","medium","hard"].indexOf(difficulty) < 0) difficulty = "medium";
+practice = false;
+
+function shuffleArr(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+function newBag(){
+  var b = [];
+  Object.keys(COUNTS).forEach(function(L){ for(var i=0;i<COUNTS[L];i++) b.push({letter:L, blank:(L==="")}); });
+  return shuffleArr(b);
+}
+function draw(rack, n){ while(rack.length < 7 && bag.length && n > 0){ rack.push(bag.pop()); n--; } }
+function rackValue(rack){ return rack.reduce(function(s,t){ return s + (t.blank?0:VALUES[t.letter]); }, 0); }
+
+function newGame(){
+  board = []; for(var i=0;i<N*N;i++) board.push(null);
+  bag = newBag();
+  rackYou = []; rackAI = [];
+  draw(rackYou, 7); draw(rackAI, 7);
+  scoreYou = 0; scoreAI = 0;
+  temp = []; selected = -1; exchangeMode = false; marked = {};
+  turn = "you"; gameOver = false; scoreless = 0; moveHistory = []; lastCells = {}; boardEmpty = true;
+  setMsg(practice ? "Practice — just you and the board. First word covers the star." : "Your move! First word must cover the star in the middle.", false);
+  $("rackHint").textContent = "Tap a tile, then tap a square on the board to place it.";
+  render();
+}
+
+/* ---------- Rendering ---------- */
+var boardEl = $("board"), cellEls = [];
+(function buildBoard(){
+  for(var r=0;r<N;r++) for(var c=0;c<N;c++){
+    (function(r,c){
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "cell"; b.setAttribute("role","gridcell");
+      b.addEventListener("click", function(){ onCell(r,c); });
+      boardEl.appendChild(b); cellEls.push(b);
+    })(r,c);
+  }
+})();
+function tempAt(r,c){ for(var i=0;i<temp.length;i++) if(temp[i].r===r && temp[i].c===c) return temp[i]; return null; }
+function faceHTML(letter, val, blank){
+  if(letter === "") return '<span class="tileface">&nbsp;</span>';
+  return '<span class="tileface">' + letter + '<span class="v">' + val + '</span></span>';
+}
+function render(){
+  for(var r=0;r<N;r++) for(var c=0;c<N;c++){
+    var el = cellEls[r*N+c], cell = board[r*N+c], t = tempAt(r,c), prem = PREM[r+","+c];
+    el.className = "cell";
+    if(cell){
+      el.classList.add("filled"); if(cell.by === "ai") el.classList.add("ai");
+      if(lastCells[r+","+c]) el.classList.add("lastmove");
+      el.innerHTML = faceHTML(cell.letter, cell.blank?0:VALUES[cell.letter], cell.blank);
+      el.setAttribute("aria-label", "Tile " + cell.letter);
+    } else if(t){
+      el.classList.add("temp");
+      el.innerHTML = faceHTML(t.letter, t.blank?0:VALUES[t.letter], t.blank);
+      el.setAttribute("aria-label", "Placed tile " + t.letter + " — tap to pick back up");
+    } else {
+      if(prem) el.classList.add(prem);
+      if(r===CENTER && c===CENTER) el.classList.add("star");
+      el.innerHTML = (r===CENTER && c===CENTER) ? '<span class="prem">★</span>' : (prem ? '<span class="prem">' + PREM_LABEL[prem] + '</span>' : '');
+      el.setAttribute("aria-label", "Empty square row " + (r+1) + " column " + (c+1));
+    }
+  }
+  var rackEl = $("rack"); rackEl.innerHTML = "";
+  rackYou.forEach(function(t, i){
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "racktile";
+    if(i === selected) b.classList.add("selected");
+    if(marked[i]) b.classList.add("marked");
+    b.disabled = (turn !== "you" || gameOver);
+    b.innerHTML = t.blank ? '<span class="tileface">?</span>' : faceHTML(t.letter, VALUES[t.letter], false);
+    b.setAttribute("aria-label", t.blank ? "Blank tile" : "Tile " + t.letter + ", " + VALUES[t.letter] + " points");
+    b.addEventListener("click", function(){ onRackTile(i); });
+    rackEl.appendChild(b);
+  });
+  $("scoreYou").textContent = scoreYou;
+  $("scoreAI").textContent = scoreAI;
+  $("bagCount").textContent = bag.length;
+  $("subYou").textContent = gameOver ? "Game over" : (turn === "you" ? "Your turn" : "Waiting…");
+  $("subAI").textContent = practice ? "Practice mode" : (gameOver ? "Game over" : (turn === "ai" ? "Thinking…" : "Waiting"));
+  $("cardYou").classList.toggle("active", turn === "you" && !gameOver);
+  $("cardAI").classList.toggle("active", turn === "ai" && !gameOver && !practice);
+  $("cardAI").style.display = practice ? "none" : "";
+  $("btnPlay").disabled = (turn !== "you" || gameOver);
+  $("btnPass").disabled = (turn !== "you" || gameOver);
+  $("btnExchange").disabled = (turn !== "you" || gameOver || bag.length === 0);
+  $("btnExchange").textContent = exchangeMode ? "Confirm exchange" : "Exchange";
+  renderLog(); renderStats();
+}
+function renderLog(){
+  var ul = $("moveLog");
+  if(!moveHistory.length){ ul.innerHTML = "<li><span>No moves yet — you start!</span></li>"; return; }
+  ul.innerHTML = moveHistory.slice(-30).reverse().map(function(m){
+    return '<li><span><span class="who">' + m.who + '</span> ' + m.text + '</span>' + (m.pts !== null ? '<span class="pts">+' + m.pts + '</span>' : '') + '</li>';
+  }).join("");
+}
+function stats(){
+  try{ return JSON.parse(localStorage.getItem("wb_stats") || "{}"); }catch(e){ return {}; }
+}
+function renderStats(){
+  var s = stats(), box = $("statsBox");
+  if(!s.games){ box.textContent = "No finished games yet."; return; }
+  box.innerHTML = "Games played: <b>" + s.games + "</b><br>Wins: <b>" + (s.wins||0) + "</b> · Losses: <b>" + (s.losses||0) + "</b> · Ties: <b>" + (s.ties||0) + "</b><br>Best score: <b>" + (s.best||0) + "</b>";
+}
+function setMsg(text, isErr){
+  var m = $("msg"); m.textContent = text; m.classList.toggle("error", !!isErr);
+}
+function logMove(who, text, pts){ moveHistory.push({who:who, text:text, pts:pts}); }
+
+/* ---------- Placement ---------- */
+function onRackTile(i){
+  if(turn !== "you" || gameOver) return;
+  if(exchangeMode){ marked[i] = !marked[i]; if(!marked[i]) delete marked[i]; render(); return; }
+  selected = (selected === i) ? -1 : i;
+  render();
+}
+var pendingBlank = null;
+function onCell(r, c){
+  if(turn !== "you" || gameOver || exchangeMode) return;
+  var t = tempAt(r,c);
+  if(t){
+    rackYou.push({letter:t.blank ? "" : t.letter, blank:t.blank});
+    temp.splice(temp.indexOf(t), 1);
+    selected = -1; render(); return;
+  }
+  if(board[r*N+c] || selected < 0) return;
+  var tile = rackYou[selected];
+  if(tile.blank){
+    pendingBlank = {r:r, c:c, rackIndex:selected};
+    showBlankPicker();
+    return;
+  }
+  placeTemp(r, c, selected, tile.letter, false);
+}
+function placeTemp(r, c, rackIndex, letter, isBlank){
+  var tile = rackYou.splice(rackIndex, 1)[0];
+  temp.push({r:r, c:c, letter:letter, blank:isBlank});
+  selected = -1;
+  render();
+}
+function showBlankPicker(){
+  var grid = $("letterGrid"); grid.innerHTML = "";
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").forEach(function(L){
+    var b = document.createElement("button");
+    b.type = "button"; b.textContent = L;
+    b.addEventListener("click", function(){
+      $("dlgBlank").close();
+      if(pendingBlank) placeTemp(pendingBlank.r, pendingBlank.c, pendingBlank.rackIndex, L, true);
+      pendingBlank = null;
+    });
+    grid.appendChild(b);
+  });
+  $("dlgBlank").showModal();
+}
+$("btnBlankCancel").addEventListener("click", function(){ pendingBlank = null; $("dlgBlank").close(); });
+
+/* Evaluate a set of placements [{r,c,letter,blank}] against a board array.
+   Returns {ok, reason, score, words:[...], cells:[indices]} */
+function evaluate(bd, placed, isFirst){
+  if(!placed.length) return {ok:false, reason:"Place at least one tile first."};
+  var rows = {}, cols = {};
+  placed.forEach(function(p){ rows[p.r] = 1; cols[p.c] = 1; });
+  var sameRow = Object.keys(rows).length === 1, sameCol = Object.keys(cols).length === 1;
+  if(!sameRow && !sameCol) return {ok:false, reason:"Tiles must all sit in one row or one column."};
+  var horiz = sameRow;
+  if(placed.length === 1){
+    // direction decided by neighbours
+    var p0 = placed[0];
+    var hasH = (c0(p0.r,p0.c-1,bd,placed) || c0(p0.r,p0.c+1,bd,placed));
+    var hasV = (c0(p0.r-1,p0.c,bd,placed) || c0(p0.r+1,p0.c,bd,placed));
+    horiz = hasH || !hasV;
+  }
+  function c0(r,c,bd,pl){
+    if(r<0||c<0||r>=N||c>=N) return false;
+    if(bd[r*N+c]) return true;
+    for(var i=0;i<pl.length;i++) if(pl[i].r===r && pl[i].c===c) return true;
+    return false;
+  }
+  function cellLetter(r,c){
+    if(r<0||c<0||r>=N||c>=N) return null;
+    for(var i=0;i<placed.length;i++) if(placed[i].r===r && placed[i].c===c) return placed[i];
+    var b = bd[r*N+c];
+    return b ? {letter:b.letter, blank:b.blank, old:true} : null;
+  }
+  var dr = horiz ? 0 : 1, dc = horiz ? 1 : 0;
+  var anchor = placed[0];
+  var sr = anchor.r, sc = anchor.c;
+  while(cellLetter(sr-dr, sc-dc)) { sr -= dr; sc -= dc; }
+  var wordCells = [], wordStr = "";
+  var cr = sr, cc = sc;
+  while(cellLetter(cr, cc)){ var cl = cellLetter(cr,cc); wordCells.push({r:cr,c:cc,letter:cl.letter,blank:cl.blank,old:!!cl.old}); wordStr += cl.letter; cr += dr; cc += dc; }
+  // contiguity: every placed tile must be inside the main word span
+  for(var i=0;i<placed.length;i++){
+    var found = false;
+    wordCells.forEach(function(w){ if(w.r===placed[i].r && w.c===placed[i].c) found = true; });
+    if(!found) return {ok:false, reason:"Tiles must form one unbroken word — no gaps."};
+  }
+  if(wordStr.length < 2) return {ok:false, reason:"Words need at least 2 letters."};
+  if(isFirst){
+    var covers = wordCells.some(function(w){ return w.r===CENTER && w.c===CENTER; });
+    if(!covers) return {ok:false, reason:"The first word must cover the star in the middle."};
+  }
+  var words = [{word:wordStr, cells:wordCells}];
+  var connected = isFirst || wordCells.some(function(w){ return w.old; });
+  // cross words
+  var pdr = horiz ? 1 : 0, pdc = horiz ? 0 : 1;
+  for(var j=0;j<placed.length;j++){
+    var p = placed[j];
+    var xr = p.r, xc = p.c;
+    while(cellLetter(xr-pdr, xc-pdc)){ xr -= pdr; xc -= pdc; }
+    var cross = [], cs = "";
+    var yr = xr, yc = xc;
+    while(cellLetter(yr, yc)){ var cl2 = cellLetter(yr,yc); cross.push({r:yr,c:yc,letter:cl2.letter,blank:cl2.blank,old:!!cl2.old}); cs += cl2.letter; yr += pdr; yc += pdc; }
+    if(cross.length >= 2){
+      words.push({word:cs, cells:cross});
+      if(cross.some(function(w){ return w.old; })) connected = true;
+    }
+  }
+  if(!connected) return {ok:false, reason:"Your word must connect to tiles already on the board."};
+  for(var k=0;k<words.length;k++){
+    if(!DICT[words[k].word]) return {ok:false, reason:"“" + words[k].word + "” is not in the word list.", badWord:words[k].word};
+  }
+  // scoring
+  var total = 0;
+  words.forEach(function(w){
+    var sum = 0, mult = 1;
+    w.cells.forEach(function(cell){
+      var v = cell.blank ? 0 : VALUES[cell.letter];
+      if(!cell.old){
+        var prem = PREM[cell.r+","+cell.c];
+        if(prem === "dl") v *= 2; else if(prem === "tl") v *= 3;
+        else if(prem === "dw") mult *= 2; else if(prem === "tw") mult *= 3;
+      }
+      sum += v;
+    });
+    total += sum * mult;
+  });
+  if(placed.length === 7) total += 50;
+  return {ok:true, score:total, words:words, main:wordStr};
+}
+
+/* ---------- Player actions ---------- */
+$("btnPlay").addEventListener("click", function(){
+  if(turn !== "you" || gameOver) return;
+  var res = evaluate(board, temp, boardEmpty);
+  if(!res.ok){ setMsg(res.reason, true); return; }
+  commitPlaced("you", res);
+  scoreYou += res.score;
+  logMove("You", "played " + res.main, res.score);
+  var usedAll = rackYou.length === 0;
+  temp = [];
+  draw(rackYou, 7);
+  lastCells = {}; res.words.forEach(function(w){ w.cells.forEach(function(cl){ lastCells[cl.r+","+cl.c] = 1; }); });
+  boardEmpty = false;
+  scoreless = 0;
+  if(bag.length === 0 && rackYou.length === 0){ endGame("out"); return; }
+  setMsg("You scored " + res.score + " for " + res.main + ".", false);
+  if(practice){ render(); return; }
+  turn = "ai"; render();
+  setTimeout(aiTurn, 650);
+});
+function commitPlaced(who, res){
+  // mark placed tiles permanent using temp-equivalent info from words: use evaluate cells that aren't old
+  res.words[0].cells.forEach(function(){});
+  // placed tiles are tracked separately by caller via placedList
+}
+function applyPlacedToBoard(placed, who){
+  placed.forEach(function(p){ board[p.r*N+p.c] = {letter:p.letter, blank:p.blank, by:who}; });
+}
+/* Wrap play: intercept commit — simpler: patch btnPlay flow via applyPlacedToBoard call inside handler above is replaced below */
+$("btnRecall").addEventListener("click", function(){
+  temp.forEach(function(t){ rackYou.push({letter:t.blank ? "" : t.letter, blank:t.blank}); });
+  temp = []; selected = -1; render();
+});
+$("btnShuffle").addEventListener("click", function(){ shuffleArr(rackYou); selected = -1; render(); });
+$("btnPass").addEventListener("click", function(){
+  if(turn !== "you" || gameOver) return;
+  if(temp.length){ setMsg("Recall your placed tiles before passing.", true); return; }
+  exchangeMode = false; marked = {};
+  logMove("You", "passed", null);
+  scoreless++;
+  if(scoreless >= 6){ endGame("stall"); return; }
+  if(practice){ setMsg("Passed. Still your board — keep going!", false); render(); return; }
+  turn = "ai"; setMsg("You passed. Lexi is thinking…", false); render();
+  setTimeout(aiTurn, 650);
+});
+$("btnExchange").addEventListener("click", function(){
+  if(turn !== "you" || gameOver) return;
+  if(!exchangeMode){
+    if(temp.length){ setMsg("Recall your placed tiles before exchanging.", true); return; }
+    exchangeMode = true; selected = -1;
+    $("rackHint").textContent = "Tap the tiles you want to swap, then tap Confirm exchange.";
+    render(); return;
+  }
+  var idxs = Object.keys(marked).map(Number);
+  if(!idxs.length){ exchangeMode = false; $("rackHint").textContent = "Tap a tile, then tap a square on the board to place it."; render(); return; }
+  idxs.sort(function(a,b){ return b-a; });
+  var returned = idxs.map(function(i){ return rackYou.splice(i,1)[0]; });
+  returned.forEach(function(t){ bag.push(t); });
+  shuffleArr(bag);
+  draw(rackYou, 7);
+  exchangeMode = false; marked = {};
+  $("rackHint").textContent = "Tap a tile, then tap a square on the board to place it.";
+  logMove("You", "exchanged " + returned.length + " tile" + (returned.length>1?"s":""), null);
+  scoreless++;
+  if(scoreless >= 6){ endGame("stall"); return; }
+  if(practice){ setMsg("Tiles swapped. Keep going!", false); render(); return; }
+  turn = "ai"; setMsg("Tiles exchanged. Lexi is thinking…", false); render();
+  setTimeout(aiTurn, 650);
+});
+$("btnHint").addEventListener("click", function(){
+  var moves = findMoves(board, rackYou);
+  if(!moves.length){ setMsg("No word found from your rack — try exchanging some tiles.", true); return; }
+  moves.sort(function(a,b){ return b.score - a.score; });
+  setMsg("Hint: " + moves[0].main + " scores " + moves[0].score + ". Look for a spot that fits it.", false);
+});
+$("btnEnd").addEventListener("click", function(){ if(practice) endGame("practice"); });
+
+/* Patch: the Play handler needs to write tiles to the board. We do it by
+   listening in capture order — instead, redefine: store placed before clearing. */
+var _origPlay = null;
+
+/* ---------- AI ---------- */
+function rackCounts(rack){
+  var cnt = {}, blanks = 0;
+  rack.forEach(function(t){ if(t.blank) blanks++; else cnt[t.letter] = (cnt[t.letter]||0)+1; });
+  return {cnt:cnt, blanks:blanks};
+}
+function findMoves(bd, rack){
+  var rc = rackCounts(rack), moves = [];
+  var empty = bd.every(function(x){ return !x; });
+  for(var dir=0; dir<2; dir++){
+    var dr = dir===0 ? 0 : 1, dc = dir===0 ? 1 : 0;
+    for(var line=0; line<N; line++){
+      for(var start=0; start<N; start++){
+        for(var len=2; len<=Math.min(8, N-start); len++){
+          var wordsOfLen = BYLEN[len]; if(!wordsOfLen) continue;
+          var cells = [], existing = 0, coversCenter = false, ok = true;
+          for(var k=0;k<len;k++){
+            var r = dir===0 ? line : start+k, c = dir===0 ? start+k : line;
+            var b = bd[r*N+c];
+            cells.push({r:r, c:c, old:b||null});
+            if(b) existing++;
+            if(r===CENTER && c===CENTER) coversCenter = true;
+          }
+          // neighbours just outside the span must be empty, else the word would be longer
+          var br = dir===0 ? line : start-1, bc = dir===0 ? start-1 : line;
+          var ar = dir===0 ? line : start+len, ac = dir===0 ? start+len : line;
+          if(br>=0 && bc>=0 && br<N && bc<N && bd[br*N+bc]) continue;
+          if(ar>=0 && ac>=0 && ar<N && ac<N && bd[ar*N+ac]) continue;
+          if(empty){ if(!coversCenter) continue; }
+          else if(existing === 0){
+            // must touch an existing tile sideways (cross) — checked per-word below via a flag
+          }
+          if(existing === len) continue;
+          for(var wi=0; wi<wordsOfLen.length; wi++){
+            var w = wordsOfLen[wi], match = true, need = {}, needCount = 0;
+            for(var m=0;m<len;m++){
+              if(cells[m].old){ if(cells[m].old.letter !== w[m]){ match = false; break; } }
+              else { need[w[m]] = (need[w[m]]||0)+1; needCount++; }
+            }
+            if(!match) continue;
+            var shortfall = 0;
+            Object.keys(need).forEach(function(L){ var have = rc.cnt[L]||0; if(need[L] > have) shortfall += need[L]-have; });
+            if(shortfall > rc.blanks) continue;
+            var placed = [];
+            for(var q=0;q<len;q++) if(!cells[q].old){
+              var useBlank = !(rc.cnt[w[q]] > (placed.filter(function(pp){ return pp.letter===w[q] && !pp.blank; }).length + countUsed(need, placed, w[q])));
+              placed.push({r:cells[q].r, c:cells[q].c, letter:w[q], blank:useBlank});
+            }
+            // fix blank assignment simply: recompute with running counts
+            placed = assignBlanks(cells, w, rc);
+            var res = evaluate(bd, placed, empty);
+            if(res.ok) moves.push({placed:placed, score:res.score, main:res.main, words:res.words});
+            if(moves.length > 400) return moves;
+          }
+        }
+      }
+    }
+  }
+  return moves;
+}
+function countUsed(){ return 0; }
+function assignBlanks(cells, w, rc){
+  var used = {}, placed = [];
+  for(var i=0;i<cells.length;i++){
+    if(cells[i].old) continue;
+    var L = w[i];
+    used[L] = (used[L]||0)+1;
+    var blank = used[L] > (rc.cnt[L]||0);
+    placed.push({r:cells[i].r, c:cells[i].c, letter:L, blank:blank});
+  }
+  return placed;
+}
+function aiTurn(){
+  if(gameOver || practice) return;
+  var moves = findMoves(board, rackAI);
+  if(!moves.length){
+    if(bag.length >= 2){
+      // exchange two worst tiles
+      var idx = [0,1];
+      var returned = idx.map(function(i){ return rackAI[i]; });
+      rackAI.splice(0,2);
+      returned.forEach(function(t){ bag.push(t); });
+      shuffleArr(bag); draw(rackAI, 7);
+      logMove("Lexi", "exchanged tiles", null);
+      setMsg("Lexi couldn't find a word and swapped tiles. Your turn!", false);
+    } else {
+      logMove("Lexi", "passed", null);
+      setMsg("Lexi passes. Your turn!", false);
+    }
+    scoreless++;
+    turn = "you"; render();
+    if(scoreless >= 6) endGame("stall");
+    return;
+  }
+  moves.sort(function(a,b){ return b.score - a.score; });
+  var pick;
+  if(difficulty === "easy"){
+    var low = moves.filter(function(m){ return m.score <= 12; });
+    pick = (low.length && Math.random() < 0.75) ? low[Math.floor(Math.random()*low.length)] : moves[Math.floor(Math.random()*Math.min(moves.length, 6))];
+  } else if(difficulty === "medium"){
+    pick = moves[Math.floor(Math.random()*Math.min(moves.length, 4))];
+  } else {
+    pick = moves[0];
+  }
+  // remove used tiles from AI rack
+  pick.placed.forEach(function(p){
+    var idx = -1;
+    for(var i=0;i<rackAI.length;i++){
+      if(p.blank && rackAI[i].blank){ idx = i; break; }
+      if(!p.blank && !rackAI[i].blank && rackAI[i].letter === p.letter){ idx = i; break; }
+    }
+    if(idx < 0) for(var j=0;j<rackAI.length;j++) if(rackAI[j].blank){ idx = j; break; }
+    if(idx >= 0) rackAI.splice(idx, 1);
+  });
+  applyPlacedToBoard(pick.placed, "ai");
+  scoreAI += pick.score;
+  logMove("Lexi", "played " + pick.main, pick.score);
+  lastCells = {}; pick.words.forEach(function(w){ w.cells.forEach(function(cl){ lastCells[cl.r+","+cl.c] = 1; }); });
+  boardEmpty = false;
+  scoreless = 0;
+  draw(rackAI, 7);
+  if(bag.length === 0 && rackAI.length === 0){ turn = "you"; render(); endGame("outAI"); return; }
+  turn = "you";
+  setMsg("Lexi played " + pick.main + " for " + pick.score + ". Your turn!", false);
+  render();
+}
+
+/* ---------- End game ---------- */
+function endGame(how){
+  if(gameOver) return;
+  gameOver = true;
+  temp.forEach(function(t){ rackYou.push({letter:t.blank ? "" : t.letter, blank:t.blank}); });
+  temp = [];
+  var youLeft = rackValue(rackYou), aiLeft = practice ? 0 : rackValue(rackAI);
+  var detail = "";
+  if(how === "out"){ scoreYou += aiLeft; scoreAI -= aiLeft; detail = "You played your last tile! You gain Lexi's leftover " + aiLeft + " points, and Lexi loses them."; }
+  else if(how === "outAI"){ scoreAI += youLeft; scoreYou -= youLeft; detail = "Lexi played her last tile and gains your leftover " + youLeft + " points."; }
+  else if(how === "practice"){ detail = "Practice finished — nice work. Leftover tiles were not counted."; }
+  else { scoreYou -= youLeft; if(!practice) scoreAI -= aiLeft; detail = "Six scoreless turns in a row ended the game. Leftover tiles came off each score (you: −" + youLeft + (practice ? "" : ", Lexi: −" + aiLeft) + ")."; }
+  if(practice && how !== "practice"){ scoreYou -= 0; detail = "Practice game over. Score: " + scoreYou + "."; }
+  var winner, result;
+  if(practice){ winner = "Practice complete 🎉"; result = null; }
+  else if(scoreYou > scoreAI){ winner = "You win! 🎉"; result = "win"; }
+  else if(scoreAI > scoreYou){ winner = "Lexi wins this one"; result = "loss"; }
+  else { winner = "It's a tie!"; result = "tie"; }
+  if(!practice){
+    var s = stats();
+    s.games = (s.games||0)+1;
+    if(result === "win") s.wins = (s.wins||0)+1;
+    if(result === "loss") s.losses = (s.losses||0)+1;
+    if(result === "tie") s.ties = (s.ties||0)+1;
+    s.best = Math.max(s.best||0, scoreYou);
+    try{ localStorage.setItem("wb_stats", JSON.stringify(s)); }catch(e){}
+  }
+  logMove("—", "game over", null);
+  render();
+  $("overWinner").textContent = winner;
+  $("overYou").textContent = scoreYou;
+  $("overAI").textContent = practice ? "—" : scoreAI;
+  $("overDetail").textContent = detail;
+  $("dlgOver").showModal();
+}
+$("btnAgain").addEventListener("click", function(){ $("dlgOver").close(); newGame(); });
+$("btnOverClose").addEventListener("click", function(){ $("dlgOver").close(); });
+
+/* Fix the Play flow: applyPlacedToBoard must run before temp clears.
+   The click handler above references commitPlaced (a no-op); we patch by
+   wrapping evaluate results — handled here by re-binding: */
+(function patchPlay(){
+  var btn = $("btnPlay");
+  var clone = btn.cloneNode(true);
+  btn.parentNode.replaceChild(clone, btn);
+  clone.addEventListener("click", function(){
+    if(turn !== "you" || gameOver) return;
+    var res = evaluate(board, temp, boardEmpty);
+    if(!res.ok){ setMsg(res.reason, true); return; }
+    var placedCopy = temp.slice();
+    applyPlacedToBoard(placedCopy, "you");
+    scoreYou += res.score;
+    logMove("You", "played " + res.main, res.score);
+    temp = [];
+    draw(rackYou, 7);
+    lastCells = {}; res.words.forEach(function(w){ w.cells.forEach(function(cl){ lastCells[cl.r+","+cl.c] = 1; }); });
+    boardEmpty = false;
+    scoreless = 0;
+    if(bag.length === 0 && rackYou.length === 0){ render(); endGame("out"); return; }
+    setMsg("You scored " + res.score + " for " + res.main + ".", false);
+    if(practice){ render(); return; }
+    turn = "ai"; render();
+    setTimeout(aiTurn, 650);
+  });
+  // keep render() disabling the right button
+  var origRender = render;
+  render = function(){ origRender(); clone.disabled = (turn !== "you" || gameOver); };
+})();
+
+/* ---------- Toolbar / dialogs ---------- */
+$("btnNew").addEventListener("click", newGame);
+$("selDifficulty").value = difficulty;
+$("selDifficulty").addEventListener("change", function(){
+  difficulty = this.value;
+  try{ localStorage.setItem("wb_difficulty", difficulty); }catch(e){}
+  setMsg("Difficulty set to " + difficulty + " — saved for next time.", false);
+});
+$("btnPractice").addEventListener("click", function(){
+  practice = !practice;
+  this.setAttribute("aria-pressed", practice ? "true" : "false");
+  this.textContent = practice ? "Practice mode: on" : "Practice mode";
+  $("btnHint").hidden = !practice;
+  $("btnEnd").hidden = !practice;
+  newGame();
+  setMsg(practice ? "Practice mode — no opponent, hints on, end whenever you like." : "Versus mode — Lexi is back. Good luck!", false);
+});
+var TUT = [
+  ["<p><b>Welcome to Word Board!</b> You and Lexi take turns building words on an 11×11 board with letter tiles — a bit like a crossword you build together.</p><p>First word of the game has to cover the ★ star in the middle.</p>", "Step 1 of 5 — the board"],
+  ["<p>Your 7 tiles sit in the rack under the board. <b>Tap a tile</b> to pick it up, then <b>tap a board square</b> to put it down.</p><p>Changed your mind? Tap a tile you just placed to pick it back up, or hit <b>Recall tiles</b> to start the turn over.</p>", "Step 2 of 5 — placing tiles"],
+  ["<p>All tiles in one turn go in a single row or column. Every word you form — including little cross-words where your tiles touch others — must be a real word in the game's word list.</p><p>Not sure about a word? Use the <b>Word check</b> box on the side before you play it.</p>", "Step 3 of 5 — making words"],
+  ["<p>Each tile shows its points. Coloured squares boost you: <b>DL/TL</b> multiply one letter, <b>DW/TW</b> multiply the whole word — but only on the turn the tile lands there.</p><p>Use all 7 tiles in one turn for a <b>+50 Full Rack bonus</b>.</p>", "Step 4 of 5 — scoring"],
+  ["<p>Stuck? <b>Exchange</b> swaps tiles (costs your turn) or <b>Pass</b> skips. After you play, you draw back up to 7 tiles.</p><p>The game ends when the bag is empty and someone plays their last tile. Leftover tiles come off your score, so spend those big letters!</p>", "Step 5 of 5 — finishing"]
+];
+var tutStep = 0;
+function showTut(){
+  $("tutTitle").textContent = "How to play — " + TUT[tutStep][1];
+  $("tutBody").innerHTML = TUT[tutStep][0];
+  $("btnTutBack").disabled = tutStep === 0;
+  $("btnTutNext").textContent = tutStep === TUT.length-1 ? "Start playing" : "Next";
+}
+$("btnTutorial").addEventListener("click", function(){ tutStep = 0; showTut(); $("dlgTutorial").showModal(); });
+$("btnTutBack").addEventListener("click", function(){ if(tutStep > 0){ tutStep--; showTut(); } });
+$("btnTutNext").addEventListener("click", function(){ if(tutStep < TUT.length-1){ tutStep++; showTut(); } else $("dlgTutorial").close(); });
+$("btnTutClose").addEventListener("click", function(){ $("dlgTutorial").close(); });
+$("btnRules").addEventListener("click", function(){ $("dlgRules").showModal(); });
+$("btnRulesClose").addEventListener("click", function(){ $("dlgRules").close(); });
+$("btnLookup").addEventListener("click", doLookup);
+$("lookupInput").addEventListener("keydown", function(e){ if(e.key === "Enter") doLookup(); });
+function doLookup(){
+  var w = $("lookupInput").value.trim().toUpperCase();
+  var out = $("lookupResult");
+  if(!w){ out.textContent = ""; return; }
+  out.textContent = DICT[w] ? "✓ “" + w + "” is in the word list." : "✗ “" + w + "” is not in the word list.";
+}
+$("btnFeedback").addEventListener("click", function(){
+  var last = moveHistory.slice(-5).map(function(m){ return m.who + " " + m.text + (m.pts !== null ? " (+" + m.pts + ")" : ""); }).join("; ") || "none yet";
+  var text = "What happened (in your own words):\n\n\n--- Game details (auto-filled) ---\nMode: " + (practice ? "Practice" : "Versus Lexi") + "\nDifficulty: " + difficulty + "\nScore: You " + scoreYou + " — Lexi " + scoreAI + "\nTiles left in bag: " + bag.length + "\nRecent moves: " + last + "\nBoard words so far: " + moveHistory.filter(function(m){ return m.pts; }).length + " played";
+  $("fbText").value = text;
+  $("fbMail").href = "mailto:?subject=" + encodeURIComponent("Word Board feedback") + "&body=" + encodeURIComponent(text);
+  $("fbNote").textContent = "";
+  $("dlgFeedback").showModal();
+});
+$("btnFbClose").addEventListener("click", function(){ $("dlgFeedback").close(); });
+$("btnFbCopy").addEventListener("click", function(){
+  var ta = $("fbText");
+  /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+  try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "word-board", rating: (typeof fbRating!=="undefined"?fbRating:0), text: (ta.value||"").trim(), tag: "", mode: (typeof practice!=="undefined"&&practice)?"practice":"real", level: "", difficulty: (typeof difficulty!=="undefined"?difficulty:""), score: (typeof scoreYou==="number"?scoreYou:0), device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+  ta.select();
+  function done(){ $("fbNote").textContent = "Copied! Paste it wherever you usually send feedback."; }
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(ta.value).then(done, function(){ document.execCommand("copy"); done(); }); }
+  else { document.execCommand("copy"); done(); }
+});
+
+newGame();
+</script>
+</body>
+</html>

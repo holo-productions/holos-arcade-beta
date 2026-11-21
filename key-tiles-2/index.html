@@ -1,0 +1,787 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Key Tiles</title>
+<style>
+:root{
+  --bg:#f6f2fb; --surface:#ffffff; --ink:#211a2e; --muted:#6b617e; --line:#e2d9f2;
+  --accent:#7c3aed; --accent-ink:#ffffff; --gold:#f5b301; --good:#1d9e57; --bad:#d92d20;
+  --board:#171221; --board2:#241a38; --lane-line:rgba(255,255,255,.14);
+  --tile:#0d0a14; --hitline:#f5b301;
+  --c0:#a78bfa; --c1:#2dd4bf; --c2:#fbbf24; --c3:#fb7185;
+  --shadow:0 12px 32px rgba(33,26,46,.14); --radius:18px;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#120e1c; --surface:#1d1730; --ink:#f2ecff; --muted:#b3a8cc; --line:#342a52;
+    --board:#0b0814; --board2:#17102a; --shadow:0 12px 32px rgba(0,0,0,.5); }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0;padding:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;min-height:100vh}
+button{font-family:inherit;cursor:pointer}
+.wrap{max-width:640px;margin:0 auto;padding:14px 14px 36px}
+.topbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.topbar .spacer{flex:1}
+.btn{appearance:none;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font-weight:700;font-size:14px;padding:9px 14px;border-radius:999px;min-height:42px;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.big{font-size:17px;padding:14px 28px;min-height:52px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn:focus-visible,.seg button:focus-visible,.lane:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.stat{background:var(--surface);border:1.5px solid var(--line);border-radius:14px;padding:8px 6px;text-align:center}
+.stat .num{font-weight:800;font-size:1.35rem;line-height:1.15;display:block}
+.stat .lbl{font-size:.66rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.stat .lives{color:var(--bad);letter-spacing:.12em}
+.panel{background:var(--surface);border:1.5px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:14px}
+h1{font-size:32px;margin:0 0 6px;line-height:1.1}
+h2{font-size:20px;margin:0 0 8px}
+.lede{color:var(--muted);margin:0 0 14px}
+.field{margin:14px 0}
+.field>span{font-weight:800;display:block;margin-bottom:8px}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg button{min-height:46px;padding:10px 18px;border-radius:999px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font-weight:700;font-size:15px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.note{color:var(--muted);font-size:14px;margin:8px 0 0}
+.bests{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.best{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:13px}
+.best b{display:block;font-size:17px}
+.rowbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+/* Board */
+.boardwrap{position:relative;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);margin-bottom:12px;background:linear-gradient(180deg,var(--board2),var(--board))}
+.board{position:relative;height:min(62vh,560px);min-height:420px;display:grid;grid-template-columns:repeat(4,1fr);touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+.lane{position:relative;border:0;border-right:1px solid var(--lane-line);background:transparent;padding:0;margin:0;cursor:pointer}
+.lane:last-child{border-right:0}
+.lane .keylbl{position:absolute;left:50%;transform:translateX(-50%);bottom:10px;font-weight:800;font-size:13px;color:rgba(255,255,255,.75);background:rgba(255,255,255,.12);border-radius:8px;padding:3px 9px;pointer-events:none}
+.lane.flash{animation:laneflash .18s}
+@keyframes laneflash{0%{background:rgba(255,255,255,.22)}100%{background:transparent}}
+.lane.badflash{animation:lanebad .25s}
+@keyframes lanebad{0%{background:rgba(217,45,32,.4)}100%{background:transparent}}
+.hitline{position:absolute;left:0;right:0;top:88%;height:3px;background:var(--hitline);box-shadow:0 0 14px var(--hitline);pointer-events:none;z-index:3}
+.hitzone{position:absolute;left:0;right:0;top:76%;height:24%;background:linear-gradient(180deg,transparent,rgba(245,179,1,.10));pointer-events:none;z-index:1}
+.tile{position:absolute;left:4%;width:92%;height:15%;border-radius:10px;background:var(--tile);border:2px solid rgba(255,255,255,.85);z-index:2;pointer-events:none;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:18px}
+.tile.l0{border-color:var(--c0);box-shadow:inset 0 -6px 0 var(--c0)}
+.tile.l1{border-color:var(--c1);box-shadow:inset 0 -6px 0 var(--c1)}
+.tile.l2{border-color:var(--c2);box-shadow:inset 0 -6px 0 var(--c2)}
+.tile.l3{border-color:var(--c3);box-shadow:inset 0 -6px 0 var(--c3)}
+.tile.hit{animation:tilehit .16s forwards}
+@keyframes tilehit{to{opacity:0;transform:scale(1.12)}}
+.judge{position:absolute;left:50%;top:62%;transform:translateX(-50%);font-weight:900;font-size:26px;z-index:5;pointer-events:none;text-shadow:0 2px 10px rgba(0,0,0,.6);opacity:0}
+.judge.show{animation:judgepop .5s forwards}
+.judge.perfect{color:var(--gold)}
+.judge.good{color:#7ef0b2}
+.judge.miss{color:#ff8a7a}
+@keyframes judgepop{0%{opacity:0;transform:translateX(-50%) translateY(8px) scale(.9)}20%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-14px) scale(1.05)}}
+.pausedveil{position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;flex-direction:column;gap:12px;align-items:center;justify-content:center;z-index:6;color:#fff;text-align:center;padding:16px}
+.status{text-align:center;font-weight:700;min-height:26px;margin:8px 0}
+.hint{text-align:center;color:var(--muted);font-size:13px;margin:0 0 8px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:10px 0 14px}
+.btn.practice{background:#0f766e;color:#fff;border-color:#0f766e}
+.practice-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#ccfbf1;border:1.5px solid #5eead4;color:#134e4a;border-radius:12px;padding:10px 12px;font-weight:700;font-size:14px;margin-bottom:10px}
+@media (prefers-color-scheme: dark){ .practice-banner{background:#134e4a;border-color:#2dd4bf;color:#ccfbf1} }
+.practice-banner .tag{background:#0f766e;color:#fff;border-radius:999px;padding:2px 9px;font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+.mode-note strong{color:var(--ink)}
+/* Overlays */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:14px;z-index:60}
+.overlay.open{display:flex}
+.sheet{background:var(--surface);color:var(--ink);border-radius:var(--radius);max-width:540px;width:100%;padding:22px;box-shadow:var(--shadow);max-height:90vh;overflow:auto}
+.sheet h2{margin-top:0}
+.sheet h3{margin:16px 0 6px;font-size:16px}
+.sheet ul,.sheet ol{margin:6px 0 10px;padding-left:22px}
+.sheet li{margin:4px 0}
+.close-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+/* Feedback */
+.fb-stars{display:flex;gap:6px;margin:8px 0 12px}
+.fb-star{font-size:30px;line-height:1;background:none;border:none;cursor:pointer;padding:6px;min-width:46px;min-height:46px;color:#c9c2d8}
+.fb-star.on{color:#f5a623}
+.sheet textarea{width:100%;min-height:92px;font:inherit;padding:10px;border:1.5px solid var(--line);border-radius:10px;resize:vertical;background:var(--surface);color:var(--ink)}
+.sheet select{width:100%;font:inherit;padding:10px;margin-top:10px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+.fb-thanks{display:none;text-align:center;font-size:17px;padding:16px 0 6px}
+footer{margin-top:26px;border-top:2px solid var(--line);padding-top:16px;color:var(--muted);font-weight:600;font-size:.88rem;line-height:1.6;text-align:center}
+footer strong{color:var(--ink)}
+footer a{color:var(--accent);font-weight:800}
+footer .rff-line{margin:8px 0 0}
+@media (max-width:520px){ h1{font-size:27px} .board{min-height:400px} .stat .num{font-size:1.15rem} }
+@media (prefers-reduced-motion: reduce){ .lane.flash,.lane.badflash,.tile.hit,.judge.show{animation:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="topbar" aria-label="Game options">
+    <a class="btn" href="../games-hub/">← Arcade</a>
+    <span class="spacer"></span>
+    <button class="btn" id="btnHow" type="button">❓ How to play</button>
+    <button class="btn" id="btnRules" type="button">📜 Rules</button>
+    <button class="btn" id="btnSound" type="button" aria-pressed="true" aria-label="Toggle sound">🔊</button>
+  </nav>
+
+  <div class="stats" aria-label="Scoreboard">
+    <div class="stat"><span class="num" id="statScore">0</span><span class="lbl">Score</span></div>
+    <div class="stat"><span class="num" id="statBest">0</span><span class="lbl" id="statBestLbl">Best</span></div>
+    <div class="stat"><span class="num" id="statCombo">×0</span><span class="lbl">Combo</span></div>
+    <div class="stat"><span class="num lives" id="statLives">♥♥♥</span><span class="lbl" id="statLivesLbl">Lives</span></div>
+  </div>
+
+  <!-- START -->
+  <section class="panel" id="startScreen" aria-label="Start a game">
+    <h1>🎹 Key Tiles</h1>
+    <p class="lede">Tiles fall down four lanes. Tap each tile as it crosses the gold line to play the melody — every good tap plays the next note. Miss a tile and you lose a life. The tiles get faster the longer you last! New or warming up? Start a <strong>practice round</strong> — no lives, no speed-up, no score saved.</p>
+    <div class="field">
+      <span id="diffLbl">Difficulty</span>
+      <div class="seg" role="group" aria-labelledby="diffLbl" id="diffSeg">
+        <button type="button" data-diff="easy" aria-pressed="false">😌 Easy</button>
+        <button type="button" data-diff="normal" aria-pressed="true">🎯 Normal</button>
+        <button type="button" data-diff="hard" aria-pressed="false">🔥 Hard</button>
+      </div>
+      <p class="note" id="diffNote">Normal: steady fall speed, 3 lives.</p>
+    </div>
+    <div class="field">
+      <span id="melLbl">Melody (all original, played live by your device)</span>
+      <div class="seg" role="group" aria-labelledby="melLbl" id="melSeg">
+        <button type="button" data-mel="sunny" aria-pressed="true">☀️ Sunny Steps</button>
+        <button type="button" data-mel="rainy" aria-pressed="false">🌧️ Rainy Window</button>
+        <button type="button" data-mel="starlight" aria-pressed="false">✨ Starlight Waltz</button>
+      </div>
+    </div>
+    <div class="field">
+      <span id="modeLbl">Round type</span>
+      <div class="seg" role="group" aria-labelledby="modeLbl" id="modeSeg">
+        <button type="button" data-mode="scored" aria-pressed="true">🏆 Scored game</button>
+        <button type="button" data-mode="practice" aria-pressed="false">🧘 Practice round</button>
+      </div>
+      <p class="note mode-note" id="modeNote"><strong>Scored game:</strong> lives, speed-up and best scores count, just like normal.</p>
+    </div>
+    <div class="rowbtns">
+      <button class="btn primary big" id="btnPlay" type="button">▶ Play</button>
+      <button class="btn practice big" id="btnPractice" type="button">🧘 Practice round</button>
+      <button class="btn" id="btnHow2" type="button">❓ How to play</button>
+      <button class="btn" id="btnRules2" type="button">📜 Rules</button>
+    </div>
+    <div class="bests" id="bestsBox" aria-label="Your best scores"></div>
+  </section>
+
+  <!-- GAME -->
+  <section id="gameScreen" hidden aria-label="Game board">
+    <div class="practice-banner" id="practiceBanner" hidden>
+      <span class="tag">Practice</span>
+      <span>No lives to lose, speed stays steady, and this score won't be saved as a best. Play as long as you like, then tap <strong>Finish practice</strong>.</span>
+    </div>
+    <div class="boardwrap">
+      <div class="board" id="board">
+        <div class="hitzone" aria-hidden="true"></div>
+        <button class="lane" type="button" data-lane="0" aria-label="Lane 1, key D"><span class="keylbl">D · 1</span></button>
+        <button class="lane" type="button" data-lane="1" aria-label="Lane 2, key F"><span class="keylbl">F · 2</span></button>
+        <button class="lane" type="button" data-lane="2" aria-label="Lane 3, key J"><span class="keylbl">J · 3</span></button>
+        <button class="lane" type="button" data-lane="3" aria-label="Lane 4, key K"><span class="keylbl">K · 4</span></button>
+        <div class="hitline" aria-hidden="true"></div>
+        <div class="judge" id="judge" aria-hidden="true"></div>
+        <div class="pausedveil" id="pauseVeil" hidden>
+          <h2 style="color:#fff;margin:0">⏸ Paused</h2>
+          <button class="btn primary big" id="btnResume" type="button">▶ Resume</button>
+          <button class="btn" id="btnQuit" type="button">Quit to start</button>
+        </div>
+      </div>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite">Tap tiles on the gold line!</p>
+    <p class="hint">Tap / click a lane, or use keys D F J K (or 1–4). Sound on for the melody 🎵</p>
+    <div class="controls">
+      <button class="btn" id="btnPause" type="button">⏸ Pause</button>
+      <button class="btn" id="btnRestart" type="button">↺ Restart</button>
+      <button class="btn practice" id="btnFinishPractice" type="button" hidden>✓ Finish practice</button>
+    </div>
+  </section>
+
+  <!-- END -->
+  <section class="panel" id="endScreen" hidden aria-label="Game over">
+    <h2 id="endTitle">Game over</h2>
+    <p class="lede" id="endText"></p>
+    <div class="bests" id="endBests"></div>
+    <div class="rowbtns">
+      <button class="btn primary big" id="btnAgain" type="button">▶ Play again</button>
+      <button class="btn practice" id="btnAgainPractice" type="button">🧘 Practice round</button>
+      <button class="btn" id="btnBack" type="button">Back to start</button>
+    </div>
+  </section>
+
+  <footer>
+    <strong>Key Tiles</strong> is a Holo's Arcade game. Every melody is original and synthesized live in your browser — no recordings, no samples.
+    <p class="rff-line">More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener noreferrer">Ridiculously Fit and Fed</a></p>
+    <button class="btn" id="btnFeedback" type="button" style="margin-top:10px">💬 Feedback</button>
+  </footer>
+</div>
+
+<!-- How to play (opt-in tutorial only — never shown automatically) -->
+<div class="overlay" id="howOverlay" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+  <div class="sheet">
+    <h2 id="howTitle">❓ How to play</h2>
+    <p>Key Tiles is a falling-tile music game. Tiles drop down four lanes — your taps play the tune!</p>
+    <ol>
+      <li>Pick a <strong>difficulty</strong> and a <strong>melody</strong>, then tap <strong>▶ Play</strong>.</li>
+      <li>Watch the tiles fall. When a tile reaches the <strong>gold line</strong> near the bottom, tap its lane.</li>
+      <li>A good tap plays the <strong>next note</strong> of the melody and scores points. Closer to the line = better score.</li>
+      <li>If a tile falls past the bottom, or you tap a lane with no tile on the line, you <strong>lose a life</strong>.</li>
+      <li>Tiles fall faster the longer you survive. Keep your combo going for bonus points!</li>
+    </ol>
+    <h3>Controls</h3>
+    <ul>
+      <li><strong>Touch / mouse:</strong> tap or click the lane under the tile.</li>
+      <li><strong>Keyboard:</strong> D · F · J · K or 1 · 2 · 3 · 4 (one key per lane, left to right).</li>
+      <li><strong>P</strong> or <strong>Esc</strong> pauses. The 🔊 button mutes the music.</li>
+    </ul>
+    <h3>Practice round</h3>
+    <ul>
+      <li>Tap <strong>🧘 Practice round</strong> on the start screen (or pick <strong>Practice round</strong> under Round type, then Play).</li>
+      <li>In practice you <strong>can't lose</strong>: misses and wrong taps don't cost a life and the round never ends on its own.</li>
+      <li>The fall speed <strong>stays steady</strong> — no speed-up — so you can learn a melody and get your timing down.</li>
+      <li>You still see your score, combo, Perfect/Good counts and misses while you play, but practice scores are <strong>not saved</strong> as bests.</li>
+      <li>Tap <strong>✓ Finish practice</strong> under the board whenever you're done to see your practice summary.</li>
+    </ul>
+    <h3>Quick tips</h3>
+    <ul>
+      <li>Tap when the tile's middle crosses the gold line for a <strong>Perfect</strong>.</li>
+      <li>Don't tap empty lanes — in a scored game a wrong tap costs a life, just like a missed tile. In practice it just resets your combo.</li>
+      <li>New here? Start with a <strong>Practice round</strong> on <strong>Easy</strong>: slower tiles, wider timing, no pressure.</li>
+    </ul>
+    <div class="close-row"><button class="btn primary" type="button" data-close>Got it</button></div>
+  </div>
+</div>
+
+<!-- Rules (full rules + scoring, separate from the tutorial) -->
+<div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="sheet">
+    <h2 id="rulesTitle">📜 Rules</h2>
+    <h3>Objective</h3>
+    <p>Tap falling tiles as they cross the gold hit line to play an original melody note by note. Survive as long as you can and score as many points as possible. The game ends when you run out of lives.</p>
+    <h3>How play works</h3>
+    <ul>
+      <li>Tiles fall one at a time down four lanes. Each tile belongs to one lane.</li>
+      <li>Tap a tile's lane while the tile is in the hit zone around the gold line to play it. The tile disappears and the next note of your chosen melody sounds.</li>
+      <li>Only one tile can be played per tap. Tapping a lane whose tile is still high above the hit zone counts as a wrong tap.</li>
+      <li>Tiles speed up gradually as your hit count grows. The melody loops until the game ends.</li>
+    </ul>
+    <h3>Scoring</h3>
+    <ul>
+      <li><strong>Perfect</strong> (tile centred on the gold line): <strong>100 points</strong>.</li>
+      <li><strong>Good</strong> (tile in the hit zone but off-centre): <strong>60 points</strong>.</li>
+      <li><strong>Combo bonus:</strong> every hit adds bonus points equal to your current combo streak, up to +50. Example: a Perfect on a ×20 combo scores 100 + 20 = 120.</li>
+      <li>Your combo grows by 1 with every successful tap and resets to 0 on any miss or wrong tap.</li>
+      <li>Best score and best combo are saved per difficulty on this device.</li>
+    </ul>
+    <h3>Misses &amp; lives</h3>
+    <ul>
+      <li>A tile that falls past the bottom unplayed is a <strong>miss</strong>: you lose 1 life and your combo resets.</li>
+      <li>Tapping a lane with no tile in the hit zone is a <strong>wrong tap</strong>: you lose 1 life and your combo resets.</li>
+      <li>When lives reach 0, the game ends and your final score is shown.</li>
+    </ul>
+    <h3>Practice round</h3>
+    <ul>
+      <li>A practice round uses the difficulty and melody you picked, but with relaxed rules: <strong>unlimited lives</strong>, <strong>no speed-up</strong> (fall speed stays at that difficulty's starting speed), and <strong>no game over</strong>.</li>
+      <li>Misses and wrong taps still reset your combo and count as misses in your summary, so you can see what to work on — they just don't end the round.</li>
+      <li>Points and combos are shown live for feedback only. Practice scores and combos are <strong>never saved</strong> as best scores and don't count as a played scored game.</li>
+      <li>End a practice round any time with <strong>✓ Finish practice</strong>, Pause → Quit to start, or Restart. Finishing shows a summary: score, Perfect, Good, misses, best combo and accuracy.</li>
+    </ul>
+    <h3>Difficulty</h3>
+    <ul>
+      <li><strong>Easy:</strong> slowest fall speed, widest hit zone, <strong>5 lives</strong>, gentle speed-up.</li>
+      <li><strong>Normal:</strong> steady fall speed, standard hit zone, <strong>3 lives</strong>.</li>
+      <li><strong>Hard:</strong> fastest fall speed, tightest hit zone, <strong>2 lives</strong>, quickest speed-up.</li>
+      <li>Difficulty, melody and round type are chosen before a game starts and are remembered for next time. Scoring values are the same on every difficulty.</li>
+    </ul>
+    <h3>Sound</h3>
+    <ul>
+      <li>All music is synthesized live with WebAudio — original melodies only, no recordings or samples.</li>
+      <li>Use the 🔊 button to mute or unmute. Your choice is remembered.</li>
+    </ul>
+    <div class="close-row"><button class="btn primary" type="button" data-close>Close</button></div>
+  </div>
+</div>
+
+<!-- Feedback -->
+<div class="overlay" id="fbOverlay" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+  <div class="sheet">
+    <h2 id="fbTitle">💬 Feedback</h2>
+    <div id="fbForm">
+      <p style="margin:0">How would you rate Key Tiles?</p>
+      <div class="fb-stars" id="fbStars" role="radiogroup" aria-label="Rating">
+        <button type="button" class="fb-star" data-v="1" aria-label="1 star">★</button>
+        <button type="button" class="fb-star" data-v="2" aria-label="2 stars">★</button>
+        <button type="button" class="fb-star" data-v="3" aria-label="3 stars">★</button>
+        <button type="button" class="fb-star" data-v="4" aria-label="4 stars">★</button>
+        <button type="button" class="fb-star" data-v="5" aria-label="5 stars">★</button>
+      </div>
+      <textarea id="fbText" placeholder="Tell us what you think…" aria-label="Your feedback"></textarea>
+      <select id="fbTag" aria-label="Feedback type">
+        <option value="">Tag (optional)</option>
+        <option value="Bug">Bug</option>
+        <option value="Suggestion">Suggestion</option>
+        <option value="Other">Other</option>
+      </select>
+      <p class="note">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+      <div class="close-row">
+        <button type="button" class="btn" id="fbCancel">Cancel</button>
+        <button type="button" class="btn primary" id="fbSave">Save</button>
+      </div>
+    </div>
+    <div class="fb-thanks" id="fbThanks">Thanks! 💜</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/*LOGIC_START*/
+var LANES = 4;
+var HIT_LINE = 0.88;          /* tile-centre position (fraction of board height) of the gold line */
+var TILE_H = 0.15;            /* tile height as fraction of board height */
+var DIFFS = {
+  easy:   { label:"Easy",   speed:0.30, lives:5, perfectW:0.055, goodW:0.13,  ramp:0.04, note:"Easy: gentle fall speed, widest timing, 5 lives." },
+  normal: { label:"Normal", speed:0.44, lives:3, perfectW:0.042, goodW:0.105, ramp:0.05, note:"Normal: steady fall speed, 3 lives." },
+  hard:   { label:"Hard",   speed:0.60, lives:2, perfectW:0.032, goodW:0.085, ramp:0.07, note:"Hard: fast tiles, tight timing, 2 lives." }
+};
+var NOTE_SEMI = { C:0, "C#":1, D:2, "D#":3, E:4, F:5, "F#":6, G:7, "G#":8, A:9, "A#":10, B:11 };
+function noteToFreq(name){
+  var m = /^([A-G]#?)(\d)$/.exec(name);
+  if(!m) return 440;
+  var midi = NOTE_SEMI[m[1]] + (parseInt(m[2],10)+1)*12;
+  return 440 * Math.pow(2, (midi-69)/12);
+}
+/* Original melodies, invented for Key Tiles. Each loops. */
+var MELODIES = {
+  sunny: { label:"Sunny Steps", notes:["C5","E5","G5","E5","A5","G5","E5","D5","E5","G5","A5","G5","E5","D5","C5","D5","E5","D5","C5","E5","G5","A5","G5","E5","D5","E5","D5","C5","D5","E5","G5","E5"] },
+  rainy: { label:"Rainy Window", notes:["A4","C5","E5","C5","D5","E5","F5","E5","D5","C5","D5","E5","C5","A4","B4","C5","D5","C5","B4","A4","C5","E5","D5","C5","B4","C5","D5","E5","D5","C5","B4","A4"] },
+  starlight: { label:"Starlight Waltz", notes:["G4","B4","D5","B4","C5","D5","E5","D5","B4","D5","G5","D5","E5","D5","B4","A4","B4","D5","E5","D5","C5","B4","A4","B4","G4","B4","D5","B4","A4","B4","G4","B4"] }
+};
+function speedAt(diffKey, hits){
+  var d = DIFFS[diffKey] || DIFFS.normal;
+  var steps = Math.floor(hits/10);
+  var s = d.speed * (1 + d.ramp*steps);
+  var cap = d.speed * 2.2;
+  return s > cap ? cap : s;
+}
+function speedAtPractice(diffKey){
+  var d = DIFFS[diffKey] || DIFFS.normal;
+  return d.speed;
+}
+var MODE_NOTES = {
+  scored: "Scored game: lives, speed-up and best scores count, just like normal.",
+  practice: "Practice round: unlimited lives, steady speed (no speed-up), and your score is not saved as a best. Finish whenever you're ready."
+};
+/* centreY: tile centre as fraction of board height. Returns "perfect" | "good" | "early" | "late" */
+function judgeTile(diffKey, centreY){
+  var d = DIFFS[diffKey] || DIFFS.normal;
+  var dist = Math.abs(centreY - HIT_LINE);
+  if(dist <= d.perfectW) return "perfect";
+  if(dist <= d.goodW) return "good";
+  return centreY < HIT_LINE ? "early" : "late";
+}
+function scoreFor(judgement, combo){
+  var base = judgement === "perfect" ? 100 : (judgement === "good" ? 60 : 0);
+  if(!base) return 0;
+  return base + Math.min(50, combo);
+}
+function pickLane(rng, lastLane, runLen){
+  rng = rng || Math.random;
+  var lane = Math.floor(rng()*LANES);
+  if(lane === lastLane && runLen >= 2) lane = (lane + 1 + Math.floor(rng()*(LANES-1))) % LANES;
+  return lane;
+}
+/*LOGIC_END*/
+
+/* ---------- Storage ---------- */
+var LS_DIFF = "key-tiles-difficulty";
+var LS_MEL = "key-tiles-melody";
+var LS_MODE = "key-tiles-mode";
+var LS_SOUND = "key-tiles-sound";
+var LS_BESTS = "key-tiles-bests-v1";
+var FB_KEY = "holos-arcade-feedback";
+var GAME_SLUG = "key-tiles";
+function lsGet(k, fb){ try{ var v = localStorage.getItem(k); return v == null ? fb : v; }catch(e){ return fb; } }
+function lsSet(k, v){ try{ localStorage.setItem(k, v); }catch(e){} }
+var bests = { easy:{score:0,combo:0,games:0}, normal:{score:0,combo:0,games:0}, hard:{score:0,combo:0,games:0} };
+try{ var sb = JSON.parse(lsGet(LS_BESTS, "null")); if(sb && sb.easy && sb.normal && sb.hard) bests = sb; }catch(e){}
+function saveBests(){ lsSet(LS_BESTS, JSON.stringify(bests)); }
+
+var settings = { diff:"normal", mel:"sunny", mode:"scored", sound:true };
+var sd = lsGet(LS_DIFF, "normal"); if(DIFFS[sd]) settings.diff = sd;
+var sm = lsGet(LS_MEL, "sunny"); if(MELODIES[sm]) settings.mel = sm;
+var smo = lsGet(LS_MODE, "scored"); if(smo === "practice" || smo === "scored") settings.mode = smo;
+settings.sound = lsGet(LS_SOUND, "1") !== "0";
+
+function $(id){ return document.getElementById(id); }
+
+/* ---------- Audio (100% synthesized, no samples) ---------- */
+var actx = null, master = null;
+function ensureAudio(){
+  if(actx) { if(actx.state === "suspended") actx.resume(); return; }
+  var AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC) return;
+  actx = new AC();
+  master = actx.createGain(); master.gain.value = 0.5; master.connect(actx.destination);
+}
+function playTone(freq, dur, type, vol, when){
+  if(!settings.sound || !actx || !master) return;
+  var t = actx.currentTime + (when || 0);
+  var o = actx.createOscillator(), g = actx.createGain();
+  o.type = type || "triangle"; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(vol || 0.5, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + (dur || 0.7));
+  o.connect(g); g.connect(master); o.start(t); o.stop(t + (dur || 0.7) + 0.05);
+}
+function playNote(freq){
+  playTone(freq, 0.85, "triangle", 0.55, 0);
+  playTone(freq*2, 0.45, "sine", 0.16, 0);
+}
+function playMissSound(){ playTone(110, 0.22, "square", 0.28, 0); playTone(82, 0.3, "square", 0.2, 0.02); }
+function playGameOverSound(){
+  var seq = ["E5","C5","A4","E4"];
+  for(var i=0;i<seq.length;i++) playTone(noteToFreq(seq[i]), 0.5, "triangle", 0.4, i*0.16);
+}
+
+/* ---------- Game state ---------- */
+var G = null;
+var rafId = null, lastTs = 0;
+var laneEls = [], boardEl = null;
+
+function newGameState(){
+  var d = DIFFS[settings.diff];
+  var practice = settings.mode === "practice";
+  return { running:true, paused:false, over:false, practice:practice, score:0, combo:0, bestComboRun:0,
+    lives:d.lives, hits:0, perfects:0, goods:0, misses:0, noteIdx:0,
+    tiles:[], lastLane:-1, runLen:0, spawnGap:0.30 };
+}
+function renderStats(){
+  var isPractice = G ? !!G.practice : settings.mode === "practice";
+  $("statScore").textContent = G ? G.score : 0;
+  $("statBest").textContent = isPractice ? "—" : bests[settings.diff].score;
+  $("statBestLbl").textContent = isPractice ? "Best · Practice" : "Best";
+  $("statCombo").textContent = "×" + (G ? G.combo : 0);
+  if(isPractice){
+    $("statLives").textContent = "∞";
+    $("statLivesLbl").textContent = "Lives · Practice";
+    return;
+  }
+  $("statLivesLbl").textContent = "Lives";
+  var lives = G ? G.lives : DIFFS[settings.diff].lives;
+  var hearts = "";
+  for(var i=0;i<DIFFS[settings.diff].lives;i++) hearts += (i < lives ? "♥" : "♡");
+  $("statLives").textContent = hearts;
+}
+function renderMode(){
+  var isPractice = settings.mode === "practice";
+  $("modeNote").innerHTML = isPractice
+    ? "<strong>Practice round:</strong> unlimited lives, steady speed (no speed-up), and your score is not saved as a best. Finish whenever you're ready."
+    : "<strong>Scored game:</strong> lives, speed-up and best scores count, just like normal.";
+  $("btnPlay").textContent = isPractice ? "▶ Play practice" : "▶ Play";
+}
+function renderBests(el){
+  if(!el) return;
+  el.innerHTML = "";
+  ["easy","normal","hard"].forEach(function(k){
+    var d = document.createElement("div"); d.className = "best";
+    var b = document.createElement("b"); b.textContent = bests[k].score;
+    var s = document.createElement("span"); s.textContent = DIFFS[k].label + " best" + (bests[k].combo ? " · combo ×" + bests[k].combo : "");
+    d.appendChild(b); d.appendChild(s); el.appendChild(d);
+  });
+}
+function setStatus(msg){ $("status").textContent = msg; }
+function showJudge(text, cls){
+  var j = $("judge");
+  j.textContent = text; j.className = "judge " + cls;
+  void j.offsetWidth; j.classList.add("show");
+}
+function flashLane(lane, bad){
+  var el = laneEls[lane]; if(!el) return;
+  el.classList.remove("flash","badflash"); void el.offsetWidth;
+  el.classList.add(bad ? "badflash" : "flash");
+}
+
+function spawnTile(){
+  var lane = pickLane(Math.random, G.lastLane, G.runLen);
+  G.runLen = (lane === G.lastLane) ? G.runLen + 1 : 1;
+  G.lastLane = lane;
+  var el = document.createElement("div");
+  el.className = "tile l" + lane;
+  el.textContent = "♪";
+  el.style.top = (-TILE_H*100) + "%";
+  laneEls[lane].appendChild(el);
+  G.tiles.push({ lane:lane, y:-TILE_H, el:el, judged:false });
+}
+function removeTile(t){
+  if(t.el && t.el.parentNode) t.el.parentNode.removeChild(t.el);
+  var i = G.tiles.indexOf(t); if(i >= 0) G.tiles.splice(i,1);
+}
+function loseLife(reason){
+  G.combo = 0; G.misses++;
+  playMissSound();
+  showJudge("Miss!", "miss");
+  if(G.practice){
+    setStatus(reason + " Practice — no life lost, keep going!");
+    renderStats();
+    return;
+  }
+  G.lives--;
+  setStatus(reason + " Lives left: " + G.lives + ".");
+  renderStats();
+  if(G.lives <= 0) endGame();
+}
+function tapLane(lane){
+  if(!G || !G.running || G.paused || G.over) return;
+  ensureAudio();
+  /* lowest (largest y) unjudged tile in this lane */
+  var cand = null;
+  for(var i=0;i<G.tiles.length;i++){
+    var t = G.tiles[i];
+    if(t.lane === lane && !t.judged && (!cand || t.y > cand.y)) cand = t;
+  }
+  if(!cand){ flashLane(lane, true); loseLife("Wrong tap — no tile there!"); return; }
+  var centre = cand.y + TILE_H/2;
+  var j = judgeTile(settings.diff, centre);
+  if(j === "early"){ flashLane(lane, true); loseLife("Too early! Wait for the gold line."); return; }
+  if(j === "late"){ flashLane(lane, true); loseLife("Too late!"); cand.judged = true; removeTile(cand); return; }
+  /* hit! */
+  cand.judged = true;
+  var pts = scoreFor(j, G.combo);
+  G.score += pts; G.combo++; G.hits++;
+  if(G.combo > G.bestComboRun) G.bestComboRun = G.combo;
+  if(j === "perfect") G.perfects++; else G.goods++;
+  var notes = MELODIES[settings.mel].notes;
+  playNote(noteToFreq(notes[G.noteIdx % notes.length]));
+  G.noteIdx++;
+  flashLane(lane, false);
+  showJudge(j === "perfect" ? "Perfect! +" + pts : "Good +" + pts, j);
+  setStatus(j === "perfect" ? "Perfect! Combo ×" + G.combo : "Good. Combo ×" + G.combo);
+  cand.el.classList.add("hit");
+  (function(tile){ setTimeout(function(){ if(G) removeTile(tile); }, 150); })(cand);
+  renderStats();
+}
+function step(ts){
+  if(!G || !G.running) return;
+  if(G.paused){ lastTs = ts; rafId = requestAnimationFrame(step); return; }
+  var dt = Math.min(0.05, (ts - lastTs)/1000 || 0.016);
+  lastTs = ts;
+  var speed = G.practice ? speedAtPractice(settings.diff) : speedAt(settings.diff, G.hits);
+  /* spawn when the newest tile has travelled past the gap */
+  var newest = null;
+  for(var i=0;i<G.tiles.length;i++) if(!newest || G.tiles[i].y < newest.y) newest = G.tiles[i];
+  if(!newest || newest.y > G.spawnGap - TILE_H) spawnTile();
+  /* move tiles */
+  var fallen = [];
+  for(var k=0;k<G.tiles.length;k++){
+    var t = G.tiles[k];
+    if(t.judged) continue;
+    t.y += speed * dt;
+    t.el.style.top = (t.y*100) + "%";
+    if(t.y > 1.0) fallen.push(t);
+  }
+  for(var f=0;f<fallen.length;f++){
+    fallen[f].judged = true;
+    flashLane(fallen[f].lane, true);
+    removeTile(fallen[f]);
+    loseLife("Missed a tile!");
+    if(G.over) return;
+  }
+  rafId = requestAnimationFrame(step);
+}
+function clearTiles(){
+  if(!G) return;
+  for(var i=G.tiles.length-1;i>=0;i--) removeTile(G.tiles[i]);
+}
+function startGame(modeOverride){
+  if(modeOverride === "practice" || modeOverride === "scored"){
+    settings.mode = modeOverride; lsSet(LS_MODE, modeOverride);
+    syncSeg("modeSeg", "data-mode", settings.mode); renderMode();
+  }
+  ensureAudio();
+  if(rafId) cancelAnimationFrame(rafId);
+  G = newGameState();
+  $("startScreen").hidden = true; $("endScreen").hidden = true; $("gameScreen").hidden = false;
+  $("pauseVeil").hidden = true;
+  $("practiceBanner").hidden = !G.practice;
+  $("btnFinishPractice").hidden = !G.practice;
+  $("btnRestart").textContent = G.practice ? "↺ Restart practice" : "↺ Restart";
+  spawnTile();
+  renderStats();
+  setStatus(G.practice
+    ? "Practice round — tap tiles on the gold line! No lives, take your time. " + DIFFS[settings.diff].label + " · " + MELODIES[settings.mel].label
+    : "Tap tiles on the gold line! " + DIFFS[settings.diff].label + " · " + MELODIES[settings.mel].label);
+  lastTs = performance.now();
+  rafId = requestAnimationFrame(step);
+}
+function startPractice(){ startGame("practice"); }
+function finishPractice(){ if(G && G.practice && !G.over) endGame(); }
+function endGame(){
+  var wasPractice = !!(G && G.practice);
+  G.over = true; G.running = false;
+  if(rafId) cancelAnimationFrame(rafId);
+  playGameOverSound();
+  clearTiles();
+  $("gameScreen").hidden = true; $("endScreen").hidden = false;
+  if(wasPractice){
+    var total = G.perfects + G.goods + G.misses;
+    var acc = total ? Math.round(((G.perfects + G.goods) / total) * 100) : 0;
+    $("endTitle").textContent = "🧘 Practice round done";
+    $("endText").textContent = "Practice on " + DIFFS[settings.diff].label +
+      " (" + MELODIES[settings.mel].label + "): " + G.score + " points (not saved), " +
+      G.perfects + " Perfect, " + G.goods + " Good, " + G.misses + " missed, best combo ×" + G.bestComboRun +
+      ", accuracy " + acc + "%. Ready for a scored game when you are!";
+    $("btnAgain").textContent = "🧘 Practice again";
+  } else {
+    var b = bests[settings.diff];
+    var isBest = G.score > b.score;
+    if(isBest) b.score = G.score;
+    if(G.bestComboRun > b.combo) b.combo = G.bestComboRun;
+    b.games++;
+    saveBests();
+    $("endTitle").textContent = isBest ? "🎉 New best score!" : "Game over";
+    $("endText").textContent = "You scored " + G.score + " points on " + DIFFS[settings.diff].label +
+      " (" + MELODIES[settings.mel].label + "): " + G.perfects + " Perfect, " + G.goods + " Good, best combo ×" + G.bestComboRun + ".";
+    $("btnAgain").textContent = "▶ Play again";
+  }
+  renderBests($("endBests")); renderBests($("bestsBox")); renderStats();
+}
+function pauseGame(){
+  if(!G || G.over) return;
+  G.paused = true; $("pauseVeil").hidden = false;
+}
+function resumeGame(){
+  if(!G || G.over) return;
+  ensureAudio();
+  G.paused = false; $("pauseVeil").hidden = true;
+  lastTs = performance.now();
+}
+function quitToStart(){
+  if(G){ G.running = false; clearTiles(); }
+  if(rafId) cancelAnimationFrame(rafId);
+  G = null;
+  $("gameScreen").hidden = true; $("endScreen").hidden = true; $("startScreen").hidden = false;
+  renderStats(); renderBests($("bestsBox"));
+}
+
+/* ---------- Wiring ---------- */
+function wireSeg(id, attr, fn){
+  $(id).addEventListener("click", function(e){
+    var b = e.target.closest("button"); if(!b) return;
+    Array.prototype.forEach.call($(id).querySelectorAll("button"), function(x){ x.setAttribute("aria-pressed","false"); });
+    b.setAttribute("aria-pressed","true"); fn(b.getAttribute(attr));
+  });
+}
+function syncSeg(id, attr, val){
+  Array.prototype.forEach.call($(id).querySelectorAll("button"), function(x){
+    x.setAttribute("aria-pressed", x.getAttribute(attr) === val ? "true" : "false");
+  });
+}
+wireSeg("diffSeg", "data-diff", function(v){
+  settings.diff = v; lsSet(LS_DIFF, v);
+  $("diffNote").textContent = DIFFS[v].note; renderStats();
+});
+wireSeg("melSeg", "data-mel", function(v){ settings.mel = v; lsSet(LS_MEL, v); });
+wireSeg("modeSeg", "data-mode", function(v){
+  settings.mode = v; lsSet(LS_MODE, v); renderMode(); renderStats();
+});
+
+$("btnPlay").addEventListener("click", function(){ startGame(); });
+$("btnPractice").addEventListener("click", startPractice);
+$("btnAgain").addEventListener("click", function(){ startGame(); });
+$("btnAgainPractice").addEventListener("click", startPractice);
+$("btnFinishPractice").addEventListener("click", finishPractice);
+$("btnRestart").addEventListener("click", function(){ startGame(); });
+$("btnBack").addEventListener("click", quitToStart);
+$("btnQuit").addEventListener("click", quitToStart);
+$("btnPause").addEventListener("click", pauseGame);
+$("btnResume").addEventListener("click", resumeGame);
+
+boardEl = $("board");
+laneEls = Array.prototype.slice.call(boardEl.querySelectorAll(".lane"));
+laneEls.forEach(function(el){
+  el.addEventListener("pointerdown", function(e){
+    e.preventDefault();
+    tapLane(parseInt(el.getAttribute("data-lane"),10));
+  });
+});
+document.addEventListener("keydown", function(e){
+  if(e.repeat) return;
+  var k = (e.key || "").toLowerCase();
+  var map = { d:0, f:1, j:2, k:3, "1":0, "2":1, "3":2, "4":3, arrowleft:0, arrowdown:1, arrowup:2, arrowright:3 };
+  if(k in map && G && !$("gameScreen").hidden){ e.preventDefault(); tapLane(map[k]); return; }
+  if(k === "p" && G && !$("gameScreen").hidden){ G.paused ? resumeGame() : pauseGame(); return; }
+  if(k === "escape"){
+    document.querySelectorAll(".overlay.open").forEach(function(o){ o.classList.remove("open"); });
+    if(G && !$("gameScreen").hidden && !G.paused) pauseGame();
+  }
+  if(k === "enter" && !$("startScreen").hidden && !document.querySelector(".overlay.open")) startGame();
+});
+document.addEventListener("visibilitychange", function(){
+  if(document.hidden && G && G.running && !G.paused && !G.over) pauseGame();
+});
+
+/* Sound toggle */
+function renderSound(){
+  $("btnSound").textContent = settings.sound ? "🔊" : "🔇";
+  $("btnSound").setAttribute("aria-pressed", settings.sound ? "true" : "false");
+}
+$("btnSound").addEventListener("click", function(){
+  settings.sound = !settings.sound; lsSet(LS_SOUND, settings.sound ? "1" : "0");
+  if(settings.sound) ensureAudio();
+  renderSound();
+});
+
+/* Overlays (How to play is opt-in only — nothing auto-opens on load) */
+function openOverlay(id){ $(id).classList.add("open"); }
+function wireOverlay(btnId, overlayId){
+  var b = $(btnId); if(b) b.addEventListener("click", function(){ openOverlay(overlayId); });
+}
+wireOverlay("btnHow", "howOverlay"); wireOverlay("btnHow2", "howOverlay");
+wireOverlay("btnRules", "rulesOverlay"); wireOverlay("btnRules2", "rulesOverlay");
+wireOverlay("btnFeedback", "fbOverlay");
+document.querySelectorAll(".overlay").forEach(function(o){
+  o.addEventListener("click", function(e){ if(e.target === o) o.classList.remove("open"); });
+  o.querySelectorAll("[data-close]").forEach(function(b){
+    b.addEventListener("click", function(){ o.classList.remove("open"); });
+  });
+});
+
+/* Feedback: rating + comment (+ optional tag) -> localStorage holos-arcade-feedback */
+var fbRating = 0;
+var fbStars = Array.prototype.slice.call(document.querySelectorAll(".fb-star"));
+function paintStars(){
+  fbStars.forEach(function(s){ s.classList.toggle("on", Number(s.getAttribute("data-v")) <= fbRating); });
+}
+fbStars.forEach(function(s){
+  s.addEventListener("click", function(){ fbRating = Number(s.getAttribute("data-v")); paintStars(); });
+});
+$("fbCancel").addEventListener("click", function(){ $("fbOverlay").classList.remove("open"); });
+$("fbSave").addEventListener("click", function(){
+  var rec = { game: GAME_SLUG, rating: fbRating, text: $("fbText").value.trim(),
+    tag: $("fbTag").value, mode: (G && G.practice) ? "practice" : settings.mode,
+    difficulty: settings.diff, melody: settings.mel,
+    score: G ? G.score : null, timestamp: new Date().toISOString() };
+  try{
+    var arr = [];
+    try{ arr = JSON.parse(localStorage.getItem(FB_KEY) || "[]"); if(!Array.isArray(arr)) arr = []; }catch(e){ arr = []; }
+    arr.push(rec);
+    localStorage.setItem(FB_KEY, JSON.stringify(arr));
+  }catch(e){}
+  $("fbForm").style.display = "none";
+  $("fbThanks").style.display = "block";
+  fbRating = 0; paintStars();
+  $("fbText").value = ""; $("fbTag").value = "";
+  setTimeout(function(){
+    $("fbOverlay").classList.remove("open");
+    $("fbForm").style.display = ""; $("fbThanks").style.display = "none";
+  }, 1200);
+});
+
+/* ---------- Init (no forced tutorial on first run) ---------- */
+syncSeg("diffSeg", "data-diff", settings.diff);
+syncSeg("melSeg", "data-mel", settings.mel);
+syncSeg("modeSeg", "data-mode", settings.mode);
+$("diffNote").textContent = DIFFS[settings.diff].note;
+renderMode();
+renderSound(); renderStats(); renderBests($("bestsBox"));
+</script>
+</body>
+</html>

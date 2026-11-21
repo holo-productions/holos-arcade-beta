@@ -1,0 +1,1194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Block Fit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#eef2f1;
+    --panel:#ffffff;
+    --panel-2:#e3eae8;
+    --ink:#1c2b2e;
+    --ink-soft:#4c5f63;
+    --line:#cfdad7;
+    --accent:#0f766e;
+    --accent-ink:#ffffff;
+    --amber:#d97706;
+    --board:#22333b;
+    --board-cell:rgba(255,255,255,.07);
+    --board-cell-line:rgba(255,255,255,.05);
+    --shadow:0 10px 28px rgba(20,40,45,.14);
+    --danger:#c2410c;
+    color-scheme:light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0e1518;
+      --panel:#182227;
+      --panel-2:#212e34;
+      --ink:#e8f0ee;
+      --ink-soft:#a7bab5;
+      --line:#31434a;
+      --accent:#2dd4bf;
+      --accent-ink:#0b2220;
+      --amber:#f5b14c;
+      --board:#16232a;
+      --board-cell:rgba(255,255,255,.06);
+      --board-cell-line:rgba(255,255,255,.04);
+      --shadow:0 10px 28px rgba(0,0,0,.45);
+      --danger:#fb923c;
+      color-scheme:dark;
+    }
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-tap-highlight-color:transparent;
+  }
+  button,select,textarea{font-family:inherit;}
+  button,[role="button"],select,summary{ min-height:44px; }
+  .wrap{max-width:560px;margin:0 auto;padding:14px 14px 28px;}
+
+  /* ---------- Score strip ---------- */
+  .score-strip{
+    display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:stretch;
+    margin-bottom:12px;
+  }
+  .stat{
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:8px 12px;text-align:center;box-shadow:var(--shadow);
+  }
+  .stat .label{font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);}
+  .stat .value{font-family:"Baloo 2",sans-serif;font-size:1.65rem;font-weight:800;line-height:1.05;}
+  .stat.score{background:var(--accent);border-color:transparent;color:var(--accent-ink);}
+  .stat.score .label{color:inherit;opacity:.8;}
+  .stat.score .value{font-size:2rem;}
+  .combo-tag{
+    display:none;margin-top:2px;font-size:.78rem;font-weight:800;color:var(--amber);
+  }
+  .combo-tag.on{display:block;}
+  .practice-tag{
+    display:none;margin-top:2px;font-size:.72rem;font-weight:800;letter-spacing:.04em;
+    color:inherit;opacity:.85;text-transform:uppercase;
+  }
+  .practice-tag.on{display:block;}
+  .stat.dimmed{opacity:.55;}
+
+  /* ---------- Practice round ---------- */
+  .practice-banner{
+    display:none;gap:10px;align-items:flex-start;
+    background:color-mix(in srgb,var(--amber) 14%,var(--panel));
+    border:1px solid var(--amber);border-radius:14px;
+    padding:10px 14px;margin-bottom:12px;font-size:.92rem;line-height:1.5;font-weight:700;
+  }
+  .practice-banner.on{display:flex;}
+  .practice-banner .badge{
+    flex:none;background:var(--amber);color:#231400;font-weight:800;
+    border-radius:999px;padding:2px 10px;font-size:.78rem;margin-top:1px;
+  }
+  .controls.practice-tools{display:none;}
+  .controls.practice-tools.on{display:flex;}
+  .btn.practice-on{background:var(--amber);border-color:transparent;color:#231400;}
+  .cell.hint-cell{
+    background:rgba(245,177,76,.55)!important;
+    box-shadow:inset 0 0 0 2px var(--amber);
+    animation:hintpulse 1s ease-in-out infinite alternate;
+  }
+  @keyframes hintpulse{from{filter:brightness(1);}to{filter:brightness(1.3);}}
+  .slot.hint-slot{border-color:var(--amber);box-shadow:0 0 0 3px color-mix(in srgb,var(--amber) 35%,transparent);}
+
+  /* ---------- Controls ---------- */
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;}
+  .controls .spacer{flex:1;}
+  .btn{
+    appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    border-radius:999px;padding:10px 16px;font-weight:800;font-size:.92rem;cursor:pointer;
+    display:inline-flex;align-items:center;gap:6px;justify-content:center;
+  }
+  .btn:active{transform:translateY(1px);}
+  .btn.primary{background:var(--accent);border-color:transparent;color:var(--accent-ink);}
+  .btn.small{padding:8px 12px;font-size:.85rem;}
+  .btn[aria-pressed="true"]{background:var(--panel-2);border-color:var(--accent);}
+  .diff-wrap{display:inline-flex;align-items:center;gap:8px;font-weight:800;font-size:.9rem;color:var(--ink-soft);}
+  select.diff{
+    appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+    border-radius:999px;padding:10px 34px 10px 14px;font-weight:800;font-size:.92rem;cursor:pointer;
+    background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+    background-position:calc(100% - 18px) 55%,calc(100% - 13px) 55%;
+    background-size:5px 5px;background-repeat:no-repeat;
+  }
+  .hint-line{font-size:.85rem;color:var(--ink-soft);font-weight:700;margin:0 0 10px;min-height:1.2em;}
+
+  /* ---------- Board ---------- */
+  .board-shell{position:relative;width:min(100%,440px);margin:0 auto;}
+  .board{
+    display:grid;grid-template-columns:repeat(8,1fr);gap:3px;
+    background:var(--board);border-radius:16px;padding:8px;
+    box-shadow:var(--shadow);aspect-ratio:1/1;touch-action:none;
+    user-select:none;-webkit-user-select:none;
+  }
+  .cell{
+    border-radius:22%;background:var(--board-cell);
+    box-shadow:inset 0 0 0 1px var(--board-cell-line);
+    position:relative;
+  }
+  .cell.filled{box-shadow:inset 0 -4px 0 rgba(0,0,0,.18),inset 0 2px 0 rgba(255,255,255,.25);}
+  .cell.ghost-ok{background:rgba(94,234,212,.45)!important;box-shadow:inset 0 0 0 2px rgba(94,234,212,.9);}
+  .cell.ghost-bad{background:rgba(248,113,113,.4)!important;}
+  .cell.clearing{animation:pop .38s ease forwards;}
+  @keyframes pop{0%{transform:scale(1);}40%{transform:scale(1.18);}100%{transform:scale(.2);opacity:0;}}
+  .board.flash{animation:boardflash .35s ease;}
+  @keyframes boardflash{0%{filter:brightness(1);}40%{filter:brightness(1.25);}100%{filter:brightness(1);}}
+
+  .float-score{
+    position:absolute;z-index:5;pointer-events:none;
+    font-family:"Baloo 2",sans-serif;font-weight:800;font-size:1.7rem;color:#fff;
+    text-shadow:0 2px 10px rgba(0,0,0,.45);
+    animation:floatup 1s ease forwards;transform:translate(-50%,-50%);
+  }
+  @keyframes floatup{0%{opacity:0;margin-top:10px;}15%{opacity:1;}100%{opacity:0;margin-top:-46px;}}
+
+  .gameover{
+    position:absolute;inset:0;z-index:6;display:none;
+    background:rgba(10,20,24,.78);border-radius:16px;
+    align-items:center;justify-content:center;text-align:center;padding:20px;
+  }
+  .gameover.on{display:flex;}
+  .gameover .card{color:#fff;}
+  .gameover h2{font-family:"Baloo 2",sans-serif;font-size:2rem;margin:0 0 4px;}
+  .gameover p{margin:4px 0 14px;font-weight:700;color:#cfe3de;}
+  .gameover .final{font-family:"Baloo 2",sans-serif;font-size:2.6rem;font-weight:800;line-height:1;}
+  .newbest{display:inline-block;background:var(--amber);color:#231400;font-weight:800;border-radius:999px;padding:3px 12px;font-size:.82rem;margin-top:8px;}
+
+  /* ---------- Tray ---------- */
+  .tray{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:10px;
+    width:min(100%,440px);margin:14px auto 0;
+  }
+  .slot{
+    background:var(--panel);border:2px dashed var(--line);border-radius:14px;
+    min-height:104px;display:flex;align-items:center;justify-content:center;
+    padding:8px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;
+    position:relative;
+  }
+  .slot.has-piece{border-style:solid;cursor:grab;}
+  .slot.selected{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 30%,transparent);}
+  .slot.no-fit{opacity:.38;}
+  .slot:active{cursor:grabbing;}
+  .piece{display:grid;gap:3px;pointer-events:none;}
+  .piece .pcell{width:19px;height:19px;border-radius:5px;}
+  .piece .pcell.on{box-shadow:inset 0 -3px 0 rgba(0,0,0,.18),inset 0 2px 0 rgba(255,255,255,.28);}
+  .piece .pcell.off{background:transparent;box-shadow:none;}
+  @media (max-width:380px){ .piece .pcell{width:16px;height:16px;} .slot{min-height:92px;} }
+
+  .drag-ghost{
+    position:fixed;z-index:60;pointer-events:none;display:none;
+    filter:drop-shadow(0 10px 14px rgba(0,0,0,.35));opacity:.95;
+  }
+  .drag-ghost .pcell{border-radius:22%;box-shadow:inset 0 -4px 0 rgba(0,0,0,.18),inset 0 2px 0 rgba(255,255,255,.25);}
+  .drag-ghost .pcell.off{background:transparent!important;box-shadow:none;}
+
+  /* ---------- Views / panels ---------- */
+  .view{display:none;}
+  .view.on{display:block;}
+  .panel{
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:18px;box-shadow:var(--shadow);
+  }
+  .panel h2{font-family:"Baloo 2",sans-serif;margin:0 0 10px;font-size:1.5rem;}
+  .panel h3{font-family:"Baloo 2",sans-serif;margin:18px 0 6px;font-size:1.12rem;}
+  .panel p,.panel li{line-height:1.55;color:var(--ink);}
+  .panel ul{padding-left:20px;margin:6px 0;}
+  .panel .back-row{margin-bottom:12px;}
+  table.score-table{border-collapse:collapse;width:100%;margin:8px 0;}
+  table.score-table th,table.score-table td{border:1px solid var(--line);padding:8px 10px;text-align:left;font-size:.93rem;}
+  table.score-table th{background:var(--panel-2);}
+
+  /* ---------- Modals ---------- */
+  .modal-back{
+    position:fixed;inset:0;z-index:80;background:rgba(8,16,19,.6);
+    display:none;align-items:flex-end;justify-content:center;padding:0;
+  }
+  .modal-back.on{display:flex;}
+  .modal{
+    background:var(--panel);color:var(--ink);width:100%;max-width:560px;max-height:88vh;overflow:auto;
+    border-radius:20px 20px 0 0;padding:20px 20px 26px;box-shadow:var(--shadow);
+  }
+  @media (min-width:640px){
+    .modal-back{align-items:center;padding:20px;}
+    .modal{border-radius:20px;}
+  }
+  .modal h2{font-family:"Baloo 2",sans-serif;margin:0 0 6px;font-size:1.45rem;}
+  .modal p{line-height:1.55;}
+  .modal .close-row{display:flex;justify-content:flex-end;margin-top:16px;gap:8px;flex-wrap:wrap;}
+  .tut-diagram{display:flex;gap:14px;align-items:center;background:var(--panel-2);border-radius:12px;padding:12px;margin:12px 0;}
+  .tut-board{display:grid;grid-template-columns:repeat(4,20px);gap:2px;flex:none;}
+  .tut-board i{width:20px;height:20px;border-radius:5px;background:var(--board-cell);display:block;}
+  .tut-board i.f1{background:#e4572e;} .tut-board i.f2{background:#2a9d8f;} .tut-board i.hl{background:rgba(20,120,110,.4);box-shadow:inset 0 0 0 2px var(--accent);}
+  .tut-dots{display:flex;gap:6px;justify-content:center;margin:10px 0 2px;}
+  .tut-dots i{width:9px;height:9px;border-radius:50%;background:var(--line);display:block;}
+  .tut-dots i.on{background:var(--accent);}
+  .stars{display:flex;gap:6px;margin:8px 0 4px;}
+  .stars button{
+    width:48px;height:48px;border-radius:12px;border:1px solid var(--line);
+    background:var(--panel-2);font-size:1.5rem;cursor:pointer;color:var(--ink-soft);line-height:1;
+  }
+  .stars button.on{color:#d97706;border-color:#d97706;background:#fef3c7;}
+  @media (prefers-color-scheme: dark){ .stars button.on{background:#3a2c10;} }
+  textarea.fb{
+    width:100%;min-height:96px;border:1px solid var(--line);border-radius:12px;
+    background:var(--panel);color:var(--ink);padding:10px 12px;font-size:1rem;resize:vertical;
+  }
+  .fb-note{font-size:.82rem;color:var(--ink-soft);line-height:1.5;margin-top:8px;}
+  .saved-msg{display:none;background:color-mix(in srgb,var(--accent) 14%,transparent);border:1px solid var(--accent);
+    border-radius:12px;padding:10px 12px;font-weight:700;margin-top:12px;}
+  .saved-msg.on{display:block;}
+
+  footer.rff{
+    margin-top:26px;padding-top:16px;border-top:1px solid var(--line);
+    text-align:center;color:var(--ink-soft);font-size:.86rem;line-height:1.6;
+  }
+  footer.rff strong{color:var(--ink);}
+  @media (prefers-reduced-motion: reduce){
+    .cell.clearing,.board.flash,.float-score,.cell.hint-cell{animation:none;}
+    .btn:active{transform:none;}
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <!-- ================= GAME VIEW ================= -->
+  <section id="view-game" class="view on" aria-label="Block Fit game">
+    <div class="score-strip">
+      <div class="stat" id="bestStat">
+        <div class="label">Best</div>
+        <div class="value" id="bestVal">0</div>
+      </div>
+      <div class="stat score" id="scoreStat">
+        <div class="label" id="scoreLabel">Score</div>
+        <div class="value" id="scoreVal">0</div>
+        <div class="combo-tag" id="comboTag">Combo ×2</div>
+        <div class="practice-tag" id="practiceTag">Not saved</div>
+      </div>
+      <div class="stat">
+        <div class="label">Lines</div>
+        <div class="value" id="linesVal">0</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label class="diff-wrap" for="diffSel">Difficulty
+        <select class="diff" id="diffSel" aria-label="Difficulty">
+          <option value="easy">Easy</option>
+          <option value="normal" selected>Normal</option>
+          <option value="hard">Hard</option>
+        </select>
+      </label>
+      <button class="btn primary" id="newGameBtn" type="button">↻ New game</button>
+      <button class="btn" id="practiceBtn" type="button" aria-pressed="false" aria-label="Toggle practice round">🎓 Practice</button>
+      <span class="spacer"></span>
+      <button class="btn small" id="soundBtn" type="button" aria-pressed="true" aria-label="Toggle sound">🔊 Sound</button>
+    </div>
+
+    <div class="practice-banner" id="practiceBanner" role="status">
+      <span class="badge">PRACTICE</span>
+      <span>No score is saved and your Best is untouched. Use <strong>Hint</strong> to see a good spot, <strong>Undo</strong> to take a move back, or <strong>Fresh pieces</strong> when you're stuck — just learn the board.</span>
+    </div>
+
+    <div class="controls practice-tools" id="practiceTools">
+      <button class="btn primary" id="hintBtn" type="button">💡 Hint</button>
+      <button class="btn" id="undoBtn" type="button">↩ Undo move</button>
+      <button class="btn" id="freshPiecesBtn" type="button">🎲 Fresh pieces</button>
+    </div>
+
+    <div class="controls">
+      <button class="btn" id="tutorialBtn" type="button">▶ How to play</button>
+      <button class="btn" id="rulesBtn" type="button">📖 Rules</button>
+      <button class="btn" id="feedbackBtn" type="button">⭐ Feedback</button>
+    </div>
+
+    <p class="hint-line" id="hintLine">Drag a piece onto the board — or tap a piece, then tap the board.</p>
+
+    <div class="board-shell" id="boardShell">
+      <div class="board" id="board" role="grid" aria-label="8 by 8 block board"></div>
+      <div class="gameover" id="gameOver">
+        <div class="card">
+          <h2 id="gameOverTitle">No more fits!</h2>
+          <div class="final" id="finalScore">0</div>
+          <p id="finalLine">Nice run.</p>
+          <span class="newbest" id="newBestTag" style="display:none">★ New best!</span>
+          <div style="margin-top:16px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+            <button class="btn primary" id="playAgainBtn" type="button">Play again</button>
+            <button class="btn" id="practiceContinueBtn" type="button" style="display:none">Keep practising — fresh pieces</button>
+            <button class="btn" id="exitPracticeBtn" type="button" style="display:none">Start a scored game</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tray" id="tray" aria-label="Your pieces"></div>
+  </section>
+
+  <!-- ================= RULES VIEW ================= -->
+  <section id="view-rules" class="view" aria-label="Block Fit rules">
+    <div class="panel">
+      <div class="back-row">
+        <button class="btn" id="rulesBackBtn" type="button">← Back to game</button>
+      </div>
+      <h2>Block Fit — Rules</h2>
+      <p>Block Fit is a relaxing block puzzle. Place pieces on the 8 × 8 board, fill complete rows or columns to clear them, and keep the board open as long as you can. There is no timer — the game ends only when none of your pieces fit.</p>
+
+      <h3>How a turn works</h3>
+      <ul>
+        <li>You always have <strong>3 pieces</strong> in the tray below the board.</li>
+        <li><strong>Drag</strong> a piece onto the board, or <strong>tap a piece, then tap the board</strong> to place it where you tapped (the piece centres on your tap).</li>
+        <li>Pieces cannot overlap other blocks or hang off the edge of the board. They cannot be rotated.</li>
+        <li>When all 3 pieces are used, 3 fresh pieces arrive.</li>
+        <li>The game ends when <strong>none</strong> of your remaining pieces can fit anywhere on the board. Pieces that no longer fit are dimmed in the tray.</li>
+      </ul>
+
+      <h3>Clearing lines</h3>
+      <ul>
+        <li>Fill every cell of a <strong>row</strong> or a <strong>column</strong> and it clears, freeing that space.</li>
+        <li>One placement can clear several rows and columns at once — that's where the big points are.</li>
+      </ul>
+
+      <h3>Scoring</h3>
+      <table class="score-table">
+        <tr><th>Action</th><th>Points</th></tr>
+        <tr><td>Each block you place</td><td>1 point per cell</td></tr>
+        <tr><td>Clear 1 line</td><td>10 points</td></tr>
+        <tr><td>Clear 2 lines at once</td><td>40 points</td></tr>
+        <tr><td>Clear 3 lines at once</td><td>90 points</td></tr>
+        <tr><td>Clear 4 lines at once</td><td>160 points</td></tr>
+      </table>
+      <p><strong>Combo:</strong> clear lines on back-to-back placements and the line points multiply — ×2 on the second clearing placement in a row, ×3 on the third, and so on. Placing a piece that clears nothing resets the combo to ×1.</p>
+
+      <h3>Practice round</h3>
+      <p>Tap <strong>🎓 Practice</strong> any time to start a practice round. Practice is for learning — it never touches your Best score.</p>
+      <ul>
+        <li><strong>No score saved</strong> — points are shown just as feedback while you play; nothing is recorded and there is no new-best.</li>
+        <li><strong>💡 Hint</strong> — highlights a piece in the tray and a good spot for it on the board, preferring a spot that clears a line.</li>
+        <li><strong>↩ Undo move</strong> — takes back your last placement, as many times as you like, so you can try a different idea.</li>
+        <li><strong>🎲 Fresh pieces</strong> — swaps your remaining pieces for 3 new ones when you're stuck.</li>
+        <li>When no piece fits, a practice round doesn't have to end — choose <strong>Keep practising</strong> for fresh pieces on the same board, or start a scored game.</li>
+        <li>Tap <strong>🎓 Practice</strong> again (or New game on the end screen) to go back to a normal scored game. Your difficulty stays the same in practice.</li>
+      </ul>
+
+      <h3>Difficulty</h3>
+      <ul>
+        <li><strong>Easy</strong> — smaller, friendlier pieces: singles, dominoes, small corners and 2 × 2 squares.</li>
+        <li><strong>Normal</strong> — the full mix, including 3 × 3 squares and 5-long bars now and then.</li>
+        <li><strong>Hard</strong> — big, awkward pieces turn up much more often. Plan two moves ahead.</li>
+      </ul>
+      <p>Your difficulty choice and your best score for each difficulty are saved on this device. Changing difficulty starts a fresh game.</p>
+
+      <h3>Tips</h3>
+      <ul>
+        <li>Keep the middle of the board open — big pieces need somewhere to land.</li>
+        <li>Don't rush to clear a single line if one more piece could clear two.</li>
+        <li>Watch the dimmed pieces: if a piece stops fitting, work around it before it's too late.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer class="rff">
+    <strong>Block Fit</strong> · Part of <strong>Holo's Arcade</strong><br />
+    A Ridiculously Fit and Fed game — getting ridiculously fit and fed, one idea (and one block) at a time.
+  </footer>
+</main>
+
+<!-- Drag ghost -->
+<div class="drag-ghost" id="dragGhost"></div>
+
+<!-- ================= TUTORIAL MODAL ================= -->
+<div class="modal-back" id="tutorialModal" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+  <div class="modal">
+    <h2 id="tutTitle">How to play</h2>
+    <div id="tutBody"></div>
+    <div class="tut-dots" id="tutDots"></div>
+    <div class="close-row">
+      <button class="btn" id="tutBackBtn" type="button">Back</button>
+      <button class="btn primary" id="tutNextBtn" type="button">Next</button>
+      <button class="btn" id="tutCloseBtn" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= FEEDBACK MODAL ================= -->
+<div class="modal-back" id="feedbackModal" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+  <div class="modal">
+    <h2 id="fbTitle">Rate Block Fit</h2>
+    <p>Tell us what you think — it helps make the arcade better.</p>
+    <div class="stars" id="fbStars" role="radiogroup" aria-label="Your rating">
+      <button type="button" data-star="1" aria-label="1 star">★</button>
+      <button type="button" data-star="2" aria-label="2 stars">★</button>
+      <button type="button" data-star="3" aria-label="3 stars">★</button>
+      <button type="button" data-star="4" aria-label="4 stars">★</button>
+      <button type="button" data-star="5" aria-label="5 stars">★</button>
+    </div>
+    <label for="fbText" style="font-weight:800;display:block;margin:10px 0 6px;">Your comment</label>
+    <textarea class="fb" id="fbText" placeholder="What did you like? What should change?" maxlength="1000"></textarea>
+    <div class="saved-msg" id="fbSaved">Thanks! Your feedback was saved on this device. 💚</div>
+    <p class="fb-note">Feedback is saved only on this device (nothing is sent anywhere yet). Please keep it clean and don't include personal information — feedback follows the same Terms as the rest of the arcade, and may be used to improve the games.</p>
+    <div class="close-row">
+      <button class="btn" id="fbCancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="fbSaveBtn" type="button">Save feedback</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ================= Constants & data ================= */
+var SIZE = 8;
+var COLORS = ["#e4572e","#2a9d8f","#e9b44c","#4a7fd4","#6ab04c","#d96ba0","#e8833a","#5b8e7d"];
+var LS = {
+  diff: "blockfit_difficulty",
+  bestPrefix: "blockfit_best_",
+  feedback: "blockfit_feedback",
+  sound: "blockfit_sound",
+  practice: "blockfit_practice"
+};
+
+function parseShape(rows){
+  var cells = [];
+  for (var r = 0; r < rows.length; r++){
+    for (var c = 0; c < rows[r].length; c++){
+      if (rows[r][c] === "X") cells.push([r, c]);
+    }
+  }
+  var h = rows.length, w = 0;
+  rows.forEach(function(row){ w = Math.max(w, row.length); });
+  return { cells: cells, h: h, w: w };
+}
+
+/* tier 1 = small/friendly, tier 2 = medium, tier 3 = big/awkward */
+var SHAPES = [
+  { t:1, s:["X"] },
+  { t:1, s:["XX"] },
+  { t:1, s:["X","X"] },
+  { t:1, s:["XXX"] },
+  { t:1, s:["X","X","X"] },
+  { t:1, s:["XX","X."] },
+  { t:1, s:["XX",".X"] },
+  { t:1, s:["X.","XX"] },
+  { t:1, s:[".X","XX"] },
+  { t:1, s:["XX","XX"] },
+  { t:2, s:["XXXX"] },
+  { t:2, s:["X","X","X","X"] },
+  { t:2, s:["XXX",".X."] },
+  { t:2, s:[".X.","XXX"] },
+  { t:2, s:["X.","X.","XX"] },
+  { t:2, s:[".X",".X","XX"] },
+  { t:2, s:["XX.",".XX"] },
+  { t:2, s:[".XX","XX."] },
+  { t:2, s:["XXX","X.."] },
+  { t:2, s:["XXX","..X"] },
+  { t:2, s:["X..","XXX"] },
+  { t:2, s:["..X","XXX"] },
+  { t:2, s:["XX","XX","XX"] },
+  { t:2, s:["XXX","XXX"] },
+  { t:3, s:["XXXXX"] },
+  { t:3, s:["X","X","X","X","X"] },
+  { t:3, s:["XXX","XXX","XXX"] },
+  { t:3, s:[".X.","XXX",".X."] },
+  { t:3, s:["X..","X..","XXX"] },
+  { t:3, s:["..X","..X","XXX"] },
+  { t:3, s:["XXX","X..","X.."] },
+  { t:3, s:["XXX","..X","..X"] },
+  { t:3, s:["XXXX","X..."] },
+  { t:3, s:["X...","XXXX"] }
+];
+SHAPES.forEach(function(sh){ var p = parseShape(sh.s); sh.cells = p.cells; sh.h = p.h; sh.w = p.w; });
+
+var TIER_WEIGHTS = {
+  easy:   { 1: 72, 2: 28, 3: 0 },
+  normal: { 1: 38, 2: 44, 3: 18 },
+  hard:   { 1: 16, 2: 44, 3: 40 }
+};
+
+/* ================= State ================= */
+var difficulty = "normal";
+try { difficulty = localStorage.getItem(LS.diff) || "normal"; } catch(e){}
+if (!TIER_WEIGHTS[difficulty]) difficulty = "normal";
+var soundOn = true;
+try { soundOn = localStorage.getItem(LS.sound) !== "off"; } catch(e){}
+var practiceMode = false;
+try { practiceMode = localStorage.getItem(LS.practice) === "on"; } catch(e){}
+
+var board = [];        /* SIZE x SIZE, null or colour index */
+var tray = [null, null, null];
+var score = 0, linesCleared = 0, combo = 0, piecesPlaced = 0;
+var best = 0;
+var gameIsOver = false;
+var selectedSlot = -1;
+var uidCounter = 1;
+var undoStack = [];    /* practice only: snapshots taken before each placement */
+var hintState = null;  /* practice only: {slot, br, bc} currently highlighted */
+var clearingNow = false;
+
+function defaultHintText(){
+  return practiceMode
+    ? "Practice round — no score saved. Tap 💡 Hint any time for a good spot."
+    : "Drag a piece onto the board — or tap a piece, then tap the board.";
+}
+
+function loadBest(){
+  best = 0;
+  try { best = parseInt(localStorage.getItem(LS.bestPrefix + difficulty) || "0", 10) || 0; } catch(e){}
+}
+function saveBest(){
+  try { localStorage.setItem(LS.bestPrefix + difficulty, String(best)); } catch(e){}
+}
+
+/* ================= Audio (tiny synth blips) ================= */
+var audioCtx = null;
+function beep(freq, dur, type, vol){
+  if (!soundOn) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type || "sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol || 0.08, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + (dur || 0.12));
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + (dur || 0.12));
+  } catch(e){}
+}
+function sndPlace(){ beep(330, 0.1, "triangle", 0.09); }
+function sndClear(n){
+  beep(523, 0.12, "triangle", 0.1);
+  setTimeout(function(){ beep(659, 0.12, "triangle", 0.1); }, 70);
+  if (n >= 2) setTimeout(function(){ beep(784, 0.16, "triangle", 0.11); }, 140);
+}
+function sndOver(){ beep(220, 0.25, "sine", 0.1); setTimeout(function(){ beep(165, 0.35, "sine", 0.1); }, 160); }
+function sndPick(){ beep(440, 0.06, "sine", 0.05); }
+
+/* ================= DOM ================= */
+var $ = function(id){ return document.getElementById(id); };
+var boardEl = $("board"), trayEl = $("tray"), shellEl = $("boardShell");
+var scoreEl = $("scoreVal"), bestEl = $("bestVal"), linesEl = $("linesVal");
+var comboEl = $("comboTag"), hintEl = $("hintLine");
+var gameOverEl = $("gameOver");
+
+var cellEls = [];
+(function buildBoard(){
+  for (var r = 0; r < SIZE; r++){
+    cellEls.push([]);
+    for (var c = 0; c < SIZE; c++){
+      var d = document.createElement("div");
+      d.className = "cell";
+      d.setAttribute("role", "gridcell");
+      d.dataset.r = r; d.dataset.c = c;
+      boardEl.appendChild(d);
+      cellEls[r].push(d);
+    }
+  }
+})();
+
+/* ================= Piece logic ================= */
+function randomPiece(){
+  var w = TIER_WEIGHTS[difficulty];
+  var pool = [];
+  SHAPES.forEach(function(sh){
+    var n = w[sh.t] || 0;
+    for (var i = 0; i < n; i++) pool.push(sh);
+  });
+  var sh = pool[Math.floor(Math.random() * pool.length)];
+  return {
+    uid: uidCounter++,
+    cells: sh.cells, h: sh.h, w: sh.w,
+    color: Math.floor(Math.random() * COLORS.length)
+  };
+}
+function dealTray(){
+  tray = [randomPiece(), randomPiece(), randomPiece()];
+  renderTray();
+}
+function canPlace(piece, br, bc){
+  for (var i = 0; i < piece.cells.length; i++){
+    var r = br + piece.cells[i][0], c = bc + piece.cells[i][1];
+    if (r < 0 || r >= SIZE || c < 0 || c >= SIZE) return false;
+    if (board[r][c] !== null) return false;
+  }
+  return true;
+}
+function fitsAnywhere(piece){
+  for (var r = 0; r <= SIZE - piece.h; r++)
+    for (var c = 0; c <= SIZE - piece.w; c++)
+      if (canPlace(piece, r, c)) return true;
+  return false;
+}
+
+/* ================= Rendering ================= */
+function renderBoard(){
+  for (var r = 0; r < SIZE; r++)
+    for (var c = 0; c < SIZE; c++){
+      var el = cellEls[r][c], v = board[r][c];
+      if (v === null){
+        el.className = "cell";
+        el.style.background = "";
+      } else {
+        el.className = "cell filled";
+        el.style.background = COLORS[v];
+      }
+    }
+}
+function pieceEl(piece, cellPx){
+  var g = document.createElement("div");
+  g.className = "piece";
+  g.style.gridTemplateColumns = "repeat(" + piece.w + ", 1fr)";
+  var filled = {};
+  piece.cells.forEach(function(cell){ filled[cell[0] + "," + cell[1]] = true; });
+  for (var r = 0; r < piece.h; r++)
+    for (var c = 0; c < piece.w; c++){
+      var d = document.createElement("div");
+      d.className = "pcell " + (filled[r + "," + c] ? "on" : "off");
+      if (filled[r + "," + c]) d.style.background = COLORS[piece.color];
+      if (cellPx){ d.style.width = cellPx + "px"; d.style.height = cellPx + "px"; }
+      g.appendChild(d);
+    }
+  return g;
+}
+function renderTray(){
+  trayEl.innerHTML = "";
+  tray.forEach(function(piece, i){
+    var slot = document.createElement("div");
+    slot.className = "slot";
+    slot.dataset.slot = i;
+    if (piece){
+      slot.classList.add("has-piece");
+      if (!fitsAnywhere(piece)) slot.classList.add("no-fit");
+      if (i === selectedSlot) slot.classList.add("selected");
+      if (hintState && hintState.slot === i) slot.classList.add("hint-slot");
+      slot.setAttribute("role", "button");
+      slot.setAttribute("aria-label", "Piece " + (i + 1) + ", " + piece.cells.length + " blocks. Drag it onto the board, or tap to select it.");
+      slot.appendChild(pieceEl(piece, null));
+    }
+    trayEl.appendChild(slot);
+  });
+}
+function renderStats(){
+  scoreEl.textContent = score;
+  bestEl.textContent = practiceMode ? "—" : best;
+  linesEl.textContent = linesCleared;
+  if (combo >= 2){ comboEl.textContent = "Combo ×" + combo; comboEl.classList.add("on"); }
+  else comboEl.classList.remove("on");
+}
+function clearGhost(){
+  boardEl.querySelectorAll(".ghost-ok,.ghost-bad").forEach(function(el){
+    el.classList.remove("ghost-ok"); el.classList.remove("ghost-bad");
+  });
+}
+function paintGhost(piece, br, bc){
+  clearGhost();
+  var ok = canPlace(piece, br, bc);
+  piece.cells.forEach(function(cell){
+    var r = br + cell[0], c = bc + cell[1];
+    if (r >= 0 && r < SIZE && c >= 0 && c < SIZE)
+      cellEls[r][c].classList.add(ok ? "ghost-ok" : "ghost-bad");
+  });
+  return ok;
+}
+function clearHint(){
+  hintState = null;
+  boardEl.querySelectorAll(".hint-cell").forEach(function(el){ el.classList.remove("hint-cell"); });
+}
+function paintPractice(){
+  var btn = $("practiceBtn");
+  btn.setAttribute("aria-pressed", practiceMode ? "true" : "false");
+  btn.classList.toggle("practice-on", practiceMode);
+  btn.textContent = practiceMode ? "🎓 Practice: ON" : "🎓 Practice";
+  $("practiceBanner").classList.toggle("on", practiceMode);
+  $("practiceTools").classList.toggle("on", practiceMode);
+  $("practiceTag").classList.toggle("on", practiceMode);
+  $("scoreLabel").textContent = practiceMode ? "Practice points" : "Score";
+  $("bestStat").classList.toggle("dimmed", practiceMode);
+  $("playAgainBtn").textContent = practiceMode ? "Practise again" : "Play again";
+  renderStats();
+}
+function floatScore(text, br, bc){
+  var rect = shellEl.getBoundingClientRect();
+  var cell = rect.width / SIZE;
+  var s = document.createElement("div");
+  s.className = "float-score";
+  s.textContent = text;
+  s.style.left = ((bc + 1) * cell) + "px";
+  s.style.top = (br * cell + cell) + "px";
+  shellEl.appendChild(s);
+  setTimeout(function(){ s.remove(); }, 1050);
+}
+
+/* ================= Practice: hint & undo ================= */
+function boardAfter(piece, br, bc){
+  var bd = board.map(function(row){ return row.slice(); });
+  piece.cells.forEach(function(cell){ bd[br + cell[0]][bc + cell[1]] = piece.color; });
+  /* clear any completed lines, like a real placement */
+  var rows = [], cols = [], r, c, full;
+  for (r = 0; r < SIZE; r++){ full = true; for (c = 0; c < SIZE; c++) if (bd[r][c] === null){ full = false; break; } if (full) rows.push(r); }
+  for (c = 0; c < SIZE; c++){ full = true; for (r = 0; r < SIZE; r++) if (bd[r][c] === null){ full = false; break; } if (full) cols.push(c); }
+  rows.forEach(function(rr){ for (var cc = 0; cc < SIZE; cc++) bd[rr][cc] = null; });
+  cols.forEach(function(cc){ for (var rr = 0; rr < SIZE; rr++) bd[rr][cc] = null; });
+  return { bd: bd, lines: rows.length + cols.length };
+}
+function fitsOn(bd, piece){
+  for (var r = 0; r <= SIZE - piece.h; r++)
+    for (var c = 0; c <= SIZE - piece.w; c++){
+      var ok = true;
+      for (var i = 0; i < piece.cells.length; i++){
+        if (bd[r + piece.cells[i][0]][c + piece.cells[i][1]] !== null){ ok = false; break; }
+      }
+      if (ok) return true;
+    }
+  return false;
+}
+function findHint(){
+  var bestCand = null;
+  tray.forEach(function(piece, slot){
+    if (!piece) return;
+    for (var br = 0; br <= SIZE - piece.h; br++){
+      for (var bc = 0; bc <= SIZE - piece.w; bc++){
+        if (!canPlace(piece, br, bc)) continue;
+        var sim = boardAfter(piece, br, bc);
+        var othersFit = 0;
+        tray.forEach(function(p2, s2){ if (p2 && s2 !== slot && fitsOn(sim.bd, p2)) othersFit++; });
+        /* clear lines first, then keep other pieces playable, then pack toward a corner */
+        var val = sim.lines * 1000 + othersFit * 100 - (br + bc);
+        if (!bestCand || val > bestCand.val) bestCand = { slot: slot, br: br, bc: bc, val: val, lines: sim.lines };
+      }
+    }
+  });
+  return bestCand;
+}
+function showHint(){
+  if (gameIsOver) return;
+  var cand = findHint();
+  clearHint();
+  if (!cand){
+    hintEl.textContent = "No piece fits right now — tap 🎲 Fresh pieces to keep practising.";
+    renderTray();
+    return;
+  }
+  hintState = { slot: cand.slot, br: cand.br, bc: cand.bc };
+  var piece = tray[cand.slot];
+  piece.cells.forEach(function(cell){
+    cellEls[cand.br + cell[0]][cand.bc + cell[1]].classList.add("hint-cell");
+  });
+  selectedSlot = -1;
+  renderTray();
+  hintEl.textContent = cand.lines > 0
+    ? "Hint: the glowing piece goes on the glowing squares — it clears " + cand.lines + (cand.lines === 1 ? " line!" : " lines!")
+    : "Hint: try the glowing piece on the glowing squares — it keeps your other pieces playable.";
+  sndPick();
+}
+function pushUndo(){
+  undoStack.push({
+    board: board.map(function(row){ return row.slice(); }),
+    tray: tray.slice(),
+    score: score, linesCleared: linesCleared, combo: combo, piecesPlaced: piecesPlaced
+  });
+  if (undoStack.length > 40) undoStack.shift();
+}
+function undoMove(){
+  if (clearingNow){ hintEl.textContent = "One moment — let that line finish clearing, then undo."; return; }
+  var snap = undoStack.pop();
+  if (!snap){ hintEl.textContent = "Nothing to undo yet — place a piece first."; return; }
+  board = snap.board.map(function(row){ return row.slice(); });
+  tray = snap.tray.slice();
+  score = snap.score; linesCleared = snap.linesCleared; combo = snap.combo; piecesPlaced = snap.piecesPlaced;
+  gameIsOver = false;
+  gameOverEl.classList.remove("on");
+  selectedSlot = -1;
+  clearHint(); clearGhost();
+  renderBoard(); renderStats(); renderTray();
+  hintEl.textContent = "Undone! Try a different spot — or tap 💡 Hint.";
+  sndPick();
+}
+function freshPieces(){
+  if (clearingNow) return;
+  clearHint(); clearGhost();
+  selectedSlot = -1;
+  gameIsOver = false;
+  gameOverEl.classList.remove("on");
+  dealTray();
+  var anyFit = tray.some(function(p){ return p && fitsAnywhere(p); });
+  hintEl.textContent = anyFit
+    ? "Fresh pieces dealt — the board stays as it is. Keep practising!"
+    : "Even the fresh pieces don't fit on this board — try ↩ Undo to free up space, or start a new round.";
+  sndPick();
+}
+
+/* ================= Placement ================= */
+function placePiece(slotIdx, br, bc){
+  var piece = tray[slotIdx];
+  if (!piece || gameIsOver) return false;
+  if (!canPlace(piece, br, bc)) return false;
+
+  if (practiceMode) pushUndo();
+  clearHint();
+  piece.cells.forEach(function(cell){ board[br + cell[0]][bc + cell[1]] = piece.color; });
+  tray[slotIdx] = null;
+  selectedSlot = -1;
+  hintEl.textContent = defaultHintText();
+  piecesPlaced++;
+
+  /* find full rows / cols */
+  var rows = [], cols = [], r, c, full;
+  for (r = 0; r < SIZE; r++){
+    full = true;
+    for (c = 0; c < SIZE; c++) if (board[r][c] === null){ full = false; break; }
+    if (full) rows.push(r);
+  }
+  for (c = 0; c < SIZE; c++){
+    full = true;
+    for (r = 0; r < SIZE; r++) if (board[r][c] === null){ full = false; break; }
+    if (full) cols.push(c);
+  }
+  var nLines = rows.length + cols.length;
+  var gained = piece.cells.length;
+
+  if (nLines > 0){
+    clearingNow = true;
+    combo++;
+    gained += 10 * nLines * nLines * combo;
+    linesCleared += nLines;
+
+    var clearing = {};
+    rows.forEach(function(rr){ for (var cc = 0; cc < SIZE; cc++) clearing[rr + "," + cc] = true; });
+    cols.forEach(function(cc2){ for (var rr2 = 0; rr2 < SIZE; rr2++) clearing[rr2 + "," + cc2] = true; });
+    Object.keys(clearing).forEach(function(k){
+      var p = k.split(",");
+      cellEls[+p[0]][+p[1]].classList.add("clearing");
+    });
+    boardEl.classList.remove("flash"); void boardEl.offsetWidth; boardEl.classList.add("flash");
+    sndClear(nLines);
+    (function(rowsCopy, colsCopy){
+      setTimeout(function(){
+        rowsCopy.forEach(function(rr){ for (var cc = 0; cc < SIZE; cc++) board[rr][cc] = null; });
+        colsCopy.forEach(function(cc){ for (var rr = 0; rr < SIZE; rr++) board[rr][cc] = null; });
+        clearingNow = false;
+        renderBoard(); renderTray(); checkGameOver();
+      }, 360);
+    })(rows, cols);
+  } else {
+    combo = 0;
+    sndPlace();
+  }
+
+  score += gained;
+  if (!practiceMode && score > best){ best = score; saveBest(); }
+  renderBoard(); renderStats(); renderTray();
+  floatScore("+" + gained, br, bc);
+
+  if (tray.every(function(p){ return p === null; })) dealTray();
+  if (nLines === 0) checkGameOver();
+  return true;
+}
+
+function checkGameOver(){
+  if (gameIsOver) return;
+  var anyLeft = false, anyFits = false;
+  tray.forEach(function(p){
+    if (p){ anyLeft = true; if (fitsAnywhere(p)) anyFits = true; }
+  });
+  if (anyLeft && !anyFits){
+    gameIsOver = true;
+    $("finalScore").textContent = score;
+    if (practiceMode){
+      $("gameOverTitle").textContent = "No fits left — good practice!";
+      $("newBestTag").style.display = "none";
+      $("finalLine").textContent =
+        "Practice round · " + difficulty.charAt(0).toUpperCase() + difficulty.slice(1) +
+        " · " + linesCleared + " lines cleared · " + piecesPlaced + " pieces placed · score not saved";
+      $("practiceContinueBtn").style.display = "";
+      $("exitPracticeBtn").style.display = "";
+    } else {
+      saveBest();
+      $("gameOverTitle").textContent = "No more fits!";
+      var isBest = score >= best && score > 0;
+      $("newBestTag").style.display = isBest ? "inline-block" : "none";
+      $("finalLine").textContent =
+        "Difficulty: " + difficulty.charAt(0).toUpperCase() + difficulty.slice(1) +
+        " · " + linesCleared + " lines cleared · " + piecesPlaced + " pieces placed";
+      $("practiceContinueBtn").style.display = "none";
+      $("exitPracticeBtn").style.display = "none";
+    }
+    gameOverEl.classList.add("on");
+    sndOver();
+  }
+}
+
+/* ================= New game ================= */
+function newGame(){
+  board = [];
+  for (var r = 0; r < SIZE; r++){ board.push([]); for (var c = 0; c < SIZE; c++) board[r].push(null); }
+  score = 0; linesCleared = 0; combo = 0; piecesPlaced = 0;
+  gameIsOver = false; selectedSlot = -1;
+  undoStack = []; hintState = null; clearingNow = false;
+  loadBest();
+  gameOverEl.classList.remove("on");
+  renderBoard(); renderStats();
+  dealTray();
+  hintEl.textContent = defaultHintText();
+}
+
+/* ================= Drag & tap input ================= */
+var dragGhost = $("dragGhost");
+var drag = null; /* {slot, piece, pointerId, startX, startY, moved, cellSize, targetR, targetC, valid} */
+
+function ghostCellFromPointer(piece, x, y, liftCells){
+  /* Measure from real cell elements so padding/gaps are exact. */
+  var r0 = cellEls[0][0].getBoundingClientRect();
+  var r1 = cellEls[0][1].getBoundingClientRect();
+  var rB = cellEls[1][0].getBoundingClientRect();
+  var pitchX = r1.left - r0.left, pitchY = rB.top - r0.top;
+  var cell = r0.width;
+  var ghostW = piece.w * pitchX, ghostH = piece.h * pitchY;
+  var left = x - ghostW / 2;
+  var top = y - ghostH / 2 - liftCells * pitchY;
+  var bc = Math.round((left - r0.left) / pitchX);
+  var br = Math.round((top - r0.top) / pitchY);
+  return { br: br, bc: bc, left: left, top: top, cell: cell };
+}
+function showGhost(piece, x, y, cellPx){
+  dragGhost.innerHTML = "";
+  var g = pieceEl(piece, cellPx);
+  g.style.gap = "3px";
+  dragGhost.appendChild(g);
+  dragGhost.style.display = "block";
+  dragGhost.style.left = x + "px";
+  dragGhost.style.top = y + "px";
+}
+function hideGhost(){ dragGhost.style.display = "none"; dragGhost.innerHTML = ""; }
+
+trayEl.addEventListener("pointerdown", function(e){
+  var slotEl = e.target.closest(".slot");
+  if (!slotEl) return;
+  var idx = +slotEl.dataset.slot;
+  var piece = tray[idx];
+  if (!piece || gameIsOver) return;
+  e.preventDefault();
+  drag = { slot: idx, piece: piece, pointerId: e.pointerId,
+           startX: e.clientX, startY: e.clientY, moved: false,
+           targetR: null, targetC: null, valid: false, pointerType: e.pointerType };
+  sndPick();
+});
+
+window.addEventListener("pointermove", function(e){
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  var dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+  if (!drag.moved && Math.hypot(dx, dy) < 9) return;
+  drag.moved = true;
+  if (!drag.hintCleared){ drag.hintCleared = true; clearHint(); renderTray(); }
+  var lift = drag.pointerType === "touch" ? 1.4 : 0.4;
+  var pos = ghostCellFromPointer(drag.piece, e.clientX, e.clientY, lift);
+  showGhost(drag.piece, pos.left, pos.top, Math.max(14, pos.cell - 3));
+  drag.targetR = pos.br; drag.targetC = pos.bc;
+  drag.valid = paintGhost(drag.piece, pos.br, pos.bc);
+});
+
+window.addEventListener("pointerup", function(e){
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  var d = drag; drag = null;
+  hideGhost(); clearGhost();
+  if (d.moved){
+    if (d.valid && d.targetR !== null) placePiece(d.slot, d.targetR, d.targetC);
+  } else {
+    /* tap: toggle selection */
+    if (selectedSlot === d.slot){ selectedSlot = -1; hintEl.textContent = defaultHintText(); }
+    else {
+      selectedSlot = d.slot;
+      hintEl.textContent = "Piece selected — now tap the board where it should land.";
+    }
+    renderTray();
+  }
+});
+window.addEventListener("pointercancel", function(){
+  drag = null; hideGhost(); clearGhost();
+});
+
+boardEl.addEventListener("pointerdown", function(e){
+  if (selectedSlot < 0 || gameIsOver) return;
+  var piece = tray[selectedSlot];
+  if (!piece) return;
+  var cellEl = e.target.closest(".cell");
+  if (!cellEl) return;
+  var tr = +cellEl.dataset.r, tc = +cellEl.dataset.c;
+  var br = tr - Math.floor(piece.h / 2), bc = tc - Math.floor(piece.w / 2);
+  /* clamp attempts toward the tapped point if off-board */
+  if (placePiece(selectedSlot, br, bc)) return;
+  /* try the tapped cell as the top-left corner as a second chance */
+  if (placePiece(selectedSlot, tr, tc)) return;
+  beep(140, 0.12, "square", 0.06);
+  hintEl.textContent = "That piece doesn't fit there — try another spot.";
+});
+
+/* ================= Views (Rules) ================= */
+function showView(name){
+  $("view-game").classList.toggle("on", name === "game");
+  $("view-rules").classList.toggle("on", name === "rules");
+  window.scrollTo(0, 0);
+}
+$("rulesBtn").addEventListener("click", function(){ showView("rules"); });
+$("rulesBackBtn").addEventListener("click", function(){ showView("game"); });
+
+/* ================= Tutorial ================= */
+var TUT_STEPS = [
+  {
+    title: "Step 1 of 4 — Place your pieces",
+    html: "<p>You get <strong>3 pieces</strong> at a time in the tray under the board. <strong>Drag</strong> one onto the 8 × 8 board — or tap a piece, then tap the board. Pieces can't overlap or hang off the edge, and they can't be rotated.</p>",
+    diagram: "f1f1.." + "f1..." + "...." + "..f2f2"
+  },
+  {
+    title: "Step 2 of 4 — Fill lines to clear them",
+    html: "<p>When a whole <strong>row or column</strong> is filled, it clears and frees up space. One smart placement can clear several lines at once — and clearing on back-to-back moves builds a <strong>combo multiplier</strong> for big points.</p>",
+    diagram: "f2f2f2f2" + "...." + "f1..f1" + "f1..f1"
+  },
+  {
+    title: "Step 3 of 4 — Keep the board open",
+    html: "<p>There's <strong>no timer</strong>. The game ends only when none of your 3 pieces fit anywhere. Pieces that no longer fit are dimmed — keep the middle open and save room for the big pieces!</p>",
+    diagram: "f1..f2" + ".f1.f2" + "..f1." + "..f2f1"
+  },
+  {
+    title: "Step 4 of 4 — Practise first, stress-free",
+    html: "<p>New to the game? Tap <strong>🎓 Practice</strong> for a practice round: <strong>no score is saved</strong>, and you get a <strong>Hint</strong> button that shows a good spot, <strong>Undo</strong> to take moves back, and fresh pieces whenever you're stuck.</p>",
+    diagram: "f2f2.." + "f2f2.." + "..f1f1" + "..f1f1"
+  }
+];
+var tutIdx = 0;
+function renderTut(){
+  var step = TUT_STEPS[tutIdx];
+  var cells = "";
+  var code = step.diagram;
+  for (var i = 0; i < code.length; i++){
+    var ch = code[i];
+    var cls = "";
+    if (ch === "f"){ cls = code[i+1] === "1" ? "f1" : "f2"; i++; }
+    cells += "<i class='" + cls + "'></i>";
+  }
+  $("tutBody").innerHTML =
+    "<p style='font-weight:800;margin:0 0 4px;'>" + step.title + "</p>" +
+    "<div class='tut-diagram'><div class='tut-board'>" + cells + "</div><div>" + step.html + "</div></div>";
+  var dots = "";
+  for (var d = 0; d < TUT_STEPS.length; d++) dots += "<i class='" + (d === tutIdx ? "on" : "") + "'></i>";
+  $("tutDots").innerHTML = dots;
+  $("tutBackBtn").style.visibility = tutIdx === 0 ? "hidden" : "visible";
+  $("tutNextBtn").textContent = tutIdx === TUT_STEPS.length - 1 ? "Got it!" : "Next";
+}
+$("tutorialBtn").addEventListener("click", function(){
+  tutIdx = 0; renderTut();
+  $("tutorialModal").classList.add("on");
+});
+$("tutNextBtn").addEventListener("click", function(){
+  if (tutIdx >= TUT_STEPS.length - 1){ $("tutorialModal").classList.remove("on"); return; }
+  tutIdx++; renderTut();
+});
+$("tutBackBtn").addEventListener("click", function(){ if (tutIdx > 0){ tutIdx--; renderTut(); } });
+$("tutCloseBtn").addEventListener("click", function(){ $("tutorialModal").classList.remove("on"); });
+$("tutorialModal").addEventListener("click", function(e){ if (e.target === this) this.classList.remove("on"); });
+
+/* ================= Feedback ================= */
+var fbRating = 0;
+function paintStars(){
+  $("fbStars").querySelectorAll("button").forEach(function(b){
+    b.classList.toggle("on", +b.dataset.star <= fbRating);
+  });
+}
+$("fbStars").addEventListener("click", function(e){
+  var b = e.target.closest("button[data-star]");
+  if (!b) return;
+  fbRating = +b.dataset.star;
+  paintStars();
+});
+$("feedbackBtn").addEventListener("click", function(){
+  fbRating = 0; $("fbText").value = ""; $("fbSaved").classList.remove("on");
+  try {
+    var prev = JSON.parse(localStorage.getItem(LS.feedback) || "null");
+    if (prev){ fbRating = prev.rating || 0; $("fbText").value = prev.comment || ""; }
+  } catch(e){}
+  paintStars();
+  $("feedbackModal").classList.add("on");
+});
+$("fbCancelBtn").addEventListener("click", function(){ $("feedbackModal").classList.remove("on"); });
+$("feedbackModal").addEventListener("click", function(e){ if (e.target === this) this.classList.remove("on"); });
+$("fbSaveBtn").addEventListener("click", function(){
+  if (fbRating === 0 && !$("fbText").value.trim()){
+    $("fbSaved").textContent = "Pick a star rating or write a comment first 🙂";
+    $("fbSaved").classList.add("on");
+    return;
+  }
+  try {
+    localStorage.setItem(LS.feedback, JSON.stringify({
+      game: "Block Fit", rating: fbRating, comment: $("fbText").value.trim(),
+      date: new Date().toISOString()
+    }));
+  } catch(e){}
+  /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+  try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "block-fit", rating: fbRating||0, text: $("fbText").value.trim(), tag: "", mode: "real", level: "", difficulty: (typeof difficulty!=="undefined"?difficulty:""), score: (typeof score==="number"?score:0), device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+  $("fbSaved").textContent = "Thanks! Your feedback was saved on this device. 💚";
+  $("fbSaved").classList.add("on");
+  beep(659, 0.12, "triangle", 0.08);
+  setTimeout(function(){ $("feedbackModal").classList.remove("on"); }, 1100);
+});
+
+/* ================= Controls ================= */
+var diffSel = $("diffSel");
+diffSel.value = difficulty;
+diffSel.addEventListener("change", function(){
+  difficulty = diffSel.value;
+  try { localStorage.setItem(LS.diff, difficulty); } catch(e){}
+  newGame();
+});
+$("newGameBtn").addEventListener("click", newGame);
+$("playAgainBtn").addEventListener("click", newGame);
+
+function setPractice(on){
+  practiceMode = on;
+  try { localStorage.setItem(LS.practice, on ? "on" : "off"); } catch(e){}
+  paintPractice();
+  newGame();
+}
+$("practiceBtn").addEventListener("click", function(){
+  setPractice(!practiceMode);
+  if (practiceMode) hintEl.textContent = "Practice round started — no score saved. Tap 💡 Hint whenever you want a good spot.";
+});
+$("hintBtn").addEventListener("click", showHint);
+$("undoBtn").addEventListener("click", undoMove);
+$("freshPiecesBtn").addEventListener("click", freshPieces);
+$("practiceContinueBtn").addEventListener("click", freshPieces);
+$("exitPracticeBtn").addEventListener("click", function(){ setPractice(false); });
+paintPractice();
+
+var soundBtn = $("soundBtn");
+function paintSound(){
+  soundBtn.textContent = soundOn ? "🔊 Sound" : "🔇 Muted";
+  soundBtn.setAttribute("aria-pressed", soundOn ? "true" : "false");
+}
+soundBtn.addEventListener("click", function(){
+  soundOn = !soundOn;
+  try { localStorage.setItem(LS.sound, soundOn ? "on" : "off"); } catch(e){}
+  paintSound();
+  if (soundOn) sndPick();
+});
+paintSound();
+
+/* ================= Go ================= */
+newGame();
+})();
+</script>
+</body>
+</html>

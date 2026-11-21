@@ -1,0 +1,1640 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Tile 2048</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2.25rem; }
+
+      :root {
+        --bg: #faf6ef;
+        --bg-soft: #f3ecdd;
+        --ink: #3d3428;
+        --ink-soft: #7a6c58;
+        --board: #b3a48d;
+        --cell: #c9bda6;
+        --card: #ffffff;
+        --line: #e3d9c6;
+        --accent: #e07b39;
+        --accent-ink: #ffffff;
+        --accent-soft: #f6e3d3;
+        --gold: #edc22e;
+        --practice: #4e7d4a;
+        --practice-soft: #e2efdb;
+        --shadow: 0 10px 30px rgba(84, 64, 32, .14);
+        --radius: 14px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #171410;
+          --bg-soft: #201b15;
+          --ink: #f0e7d7;
+          --ink-soft: #b3a68d;
+          --board: #4a4033;
+          --cell: #5b5041;
+          --card: #262019;
+          --line: #3a3226;
+          --accent: #e8873f;
+          --accent-ink: #1c150e;
+          --accent-soft: #3a2a1a;
+          --practice: #9cc48f;
+          --practice-soft: #26351f;
+          --shadow: 0 10px 30px rgba(0, 0, 0, .45);
+        }
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Rubik", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+        background:
+          radial-gradient(1100px 500px at 85% -10%, var(--accent-soft), transparent 60%),
+          var(--bg);
+        color: var(--ink);
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      main {
+        max-width: 540px;
+        margin: 0 auto;
+        padding: 20px 16px 40px;
+      }
+
+      /* ---------- Score strip ---------- */
+      .score-strip {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+      .score-box {
+        background: var(--board);
+        border-radius: 10px;
+        padding: 8px 6px 9px;
+        text-align: center;
+        color: #fff8ec;
+        position: relative;
+        overflow: hidden;
+      }
+      .score-box .label {
+        display: block;
+        font-size: .68rem;
+        font-weight: 700;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        opacity: .75;
+      }
+      .score-box .value {
+        display: block;
+        font-size: 1.45rem;
+        font-weight: 800;
+        line-height: 1.15;
+        font-variant-numeric: tabular-nums;
+      }
+      .score-gain {
+        position: absolute;
+        left: 50%;
+        top: 55%;
+        transform: translateX(-50%);
+        font-weight: 800;
+        font-size: 1.05rem;
+        color: #fff8ec;
+        pointer-events: none;
+        animation: gain-float .8s ease-out forwards;
+      }
+      @keyframes gain-float {
+        0% { opacity: 0; transform: translate(-50%, 6px); }
+        20% { opacity: 1; }
+        100% { opacity: 0; transform: translate(-50%, -22px); }
+      }
+
+      /* ---------- Toolbar ---------- */
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+      }
+      .btn {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--ink);
+        font: inherit;
+        font-weight: 600;
+        font-size: .92rem;
+        border-radius: 10px;
+        padding: 8px 16px;
+        min-height: 44px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        transition: transform .08s ease, background .15s ease, opacity .15s ease;
+      }
+      .btn:hover { background: var(--bg-soft); }
+      .btn:active { transform: scale(.97); }
+      .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+      .btn.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: var(--accent-ink);
+      }
+      .btn.primary:hover { filter: brightness(1.06); background: var(--accent); }
+      .btn:disabled { opacity: .45; cursor: default; }
+      .btn:disabled:active { transform: none; }
+      .toolbar .spacer { flex: 1; }
+
+      /* ---------- Difficulty ---------- */
+      .difficulty-bar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        margin-bottom: 8px;
+      }
+      .difficulty-bar .diff-label {
+        font-size: .78rem;
+        font-weight: 700;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+        color: var(--ink-soft);
+      }
+      .diff-group {
+        display: inline-flex;
+        background: var(--bg-soft);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 3px;
+        gap: 3px;
+      }
+      .diff-btn {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: var(--ink-soft);
+        font: inherit;
+        font-weight: 600;
+        font-size: .9rem;
+        border-radius: 8px;
+        padding: 6px 16px;
+        min-height: 38px;
+        cursor: pointer;
+        transition: background .15s ease, color .15s ease;
+      }
+      .diff-btn:hover { color: var(--ink); }
+      .diff-btn[aria-checked="true"] {
+        background: var(--accent);
+        color: var(--accent-ink);
+        box-shadow: 0 2px 8px rgba(84, 64, 32, .18);
+      }
+      .diff-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+      .diff-desc {
+        margin: 0 2px 14px;
+        color: var(--ink-soft);
+        font-size: .88rem;
+        line-height: 1.45;
+      }
+      .diff-desc strong { color: var(--ink); }
+
+      /* ---------- Round type (real / practice) ---------- */
+      .mode-bar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        margin-bottom: 10px;
+      }
+      .mode-btn[aria-checked="true"] {
+        background: var(--practice);
+        color: #fff8ec;
+        box-shadow: 0 2px 8px rgba(84, 64, 32, .18);
+      }
+      @media (prefers-color-scheme: dark) {
+        .mode-btn[aria-checked="true"] { color: #171d12; }
+      }
+      .mode-btn[data-mode="counted"][aria-checked="true"] {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .practice-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+        background: var(--practice-soft);
+        border: 1px solid var(--practice);
+        border-radius: 10px;
+        padding: 10px 13px;
+        margin: 0 0 14px;
+        font-size: .9rem;
+        line-height: 1.5;
+      }
+      .practice-banner[hidden] { display: none; }
+      .practice-banner .practice-dot {
+        flex: none;
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        background: var(--practice);
+        margin-top: 6px;
+      }
+      .practice-banner strong { color: var(--ink); }
+      .board-wrap.practice .board {
+        box-shadow: 0 0 0 3px var(--practice), var(--shadow);
+      }
+      .practice-tip {
+        margin: 10px 2px 0;
+        background: var(--practice-soft);
+        border-radius: 10px;
+        padding: 9px 13px;
+        color: var(--ink);
+        font-size: .9rem;
+        line-height: 1.5;
+      }
+      .practice-tip[hidden] { display: none; }
+      .practice-tip .tip-label {
+        font-weight: 800;
+        color: var(--practice);
+      }
+
+      /* ---------- Board ---------- */
+      .board-wrap { position: relative; }
+      .board {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        background: var(--board);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        container-type: inline-size;
+        overflow: hidden;
+      }
+      .cells {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        grid-template-columns: repeat(var(--size, 4), 1fr);
+        grid-template-rows: repeat(var(--size, 4), 1fr);
+        gap: 3.2%;
+        padding: 3.2%;
+      }
+      .cells i {
+        background: var(--cell);
+        border-radius: 9px;
+        opacity: .55;
+      }
+      .tile-layer { position: absolute; inset: 0; }
+      .tile {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: var(--tile, 21cqi);
+        height: var(--tile, 21cqi);
+        transition: transform 120ms ease-in-out;
+        will-change: transform;
+      }
+      .tile-inner {
+        width: 100%;
+        height: 100%;
+        border-radius: 9px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: var(--tile-font, 13cqi);
+        line-height: 1;
+        font-variant-numeric: tabular-nums;
+      }
+      .tile.d3 .tile-inner { font-size: var(--tile-font-d3, 10.5cqi); }
+      .tile.d4 .tile-inner { font-size: var(--tile-font-d4, 8.5cqi); }
+      .tile.new .tile-inner { animation: tile-in 180ms ease 100ms backwards; }
+      .tile.pop .tile-inner { animation: tile-pop 200ms ease; }
+      @keyframes tile-in {
+        from { transform: scale(0); opacity: 0; }
+        to { transform: scale(1); opacity: 1; }
+      }
+      @keyframes tile-pop {
+        0% { transform: scale(0); }
+        55% { transform: scale(1.18); }
+        100% { transform: scale(1); }
+      }
+
+      .v2   .tile-inner { background: #eee4da; color: #776e65; }
+      .v4   .tile-inner { background: #ede0c8; color: #776e65; }
+      .v8   .tile-inner { background: #f2b179; color: #fdf6ec; }
+      .v16  .tile-inner { background: #f59563; color: #fdf6ec; }
+      .v32  .tile-inner { background: #f67c5f; color: #fdf6ec; }
+      .v64  .tile-inner { background: #f65e3b; color: #fdf6ec; }
+      .v128 .tile-inner { background: #edcf72; color: #fdf6ec; box-shadow: 0 0 18px rgba(237, 207, 114, .45); }
+      .v256 .tile-inner { background: #edcc61; color: #fdf6ec; box-shadow: 0 0 20px rgba(237, 204, 97, .5); }
+      .v512 .tile-inner { background: #edc850; color: #fdf6ec; box-shadow: 0 0 22px rgba(237, 200, 80, .55); }
+      .v1024 .tile-inner { background: #edc53f; color: #fdf6ec; box-shadow: 0 0 24px rgba(237, 197, 63, .6); }
+      .v2048 .tile-inner { background: var(--gold); color: #fffbeF; box-shadow: 0 0 30px rgba(237, 194, 46, .75); }
+      .vsuper .tile-inner { background: #3c3a32; color: #f9f6f2; }
+
+      /* ---------- Board overlay (win / game over) ---------- */
+      .board-overlay {
+        position: absolute;
+        inset: 0;
+        border-radius: var(--radius);
+        background: rgba(250, 246, 239, .78);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        text-align: center;
+        padding: 24px;
+        z-index: 5;
+      }
+      @media (prefers-color-scheme: dark) {
+        .board-overlay { background: rgba(23, 20, 16, .82); }
+      }
+      .board-overlay.show { display: flex; }
+      .board-overlay h2 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 800;
+      }
+      .board-overlay p { margin: 0 0 8px; color: var(--ink-soft); font-weight: 500; }
+      .board-overlay .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+      /* ---------- Hint + stats line ---------- */
+      .hint {
+        margin: 14px 2px 0;
+        color: var(--ink-soft);
+        font-size: .92rem;
+        line-height: 1.5;
+      }
+      .hint strong { color: var(--ink); }
+      .stat-line {
+        margin: 6px 2px 0;
+        color: var(--ink-soft);
+        font-size: .88rem;
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ---------- D-pad (touch) ---------- */
+      .dpad {
+        display: none;
+        margin: 18px auto 0;
+        width: 168px;
+        grid-template-columns: repeat(3, 52px);
+        grid-template-rows: repeat(3, 52px);
+        gap: 6px;
+        justify-content: center;
+      }
+      @media (pointer: coarse) { .dpad { display: grid; } }
+      .dpad button {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--ink);
+        border-radius: 12px;
+        font-size: 1.15rem;
+        cursor: pointer;
+        min-height: 52px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .dpad button:active { background: var(--accent-soft); }
+      .dpad button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+      .dpad .up { grid-area: 1 / 2; }
+      .dpad .left { grid-area: 2 / 1; }
+      .dpad .right { grid-area: 2 / 3; }
+      .dpad .down { grid-area: 3 / 2; }
+
+      /* ---------- Modals ---------- */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(24, 18, 10, .55);
+        display: none;
+        align-items: flex-end;
+        justify-content: center;
+        z-index: 20;
+        padding: 0;
+      }
+      .modal-backdrop.show { display: flex; }
+      .modal {
+        background: var(--bg);
+        color: var(--ink);
+        width: 100%;
+        max-width: 560px;
+        max-height: 88vh;
+        overflow-y: auto;
+        border-radius: 18px 18px 0 0;
+        padding: 22px 22px 30px;
+        box-shadow: var(--shadow);
+      }
+      @media (min-width: 640px) {
+        .modal-backdrop { align-items: center; padding: 20px; }
+        .modal { border-radius: 18px; }
+      }
+      .modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 6px;
+      }
+      .modal-head h2 { margin: 0; font-size: 1.35rem; font-weight: 800; }
+      .modal-close {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--ink);
+        width: 44px;
+        height: 44px;
+        min-height: 44px;
+        border-radius: 50%;
+        font-size: 1.15rem;
+        cursor: pointer;
+        flex: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-close:focus-visible, .modal .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+      .modal h3 {
+        margin: 20px 0 6px;
+        font-size: 1rem;
+        font-weight: 700;
+      }
+      .modal p, .modal li { line-height: 1.55; font-size: .95rem; }
+      .modal ul { margin: 6px 0; padding-left: 20px; }
+      .modal li { margin-bottom: 4px; }
+      .modal table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8px 0 4px;
+        font-size: .93rem;
+      }
+      .modal th, .modal td {
+        text-align: left;
+        padding: 7px 8px;
+        border-bottom: 1px solid var(--line);
+      }
+      .modal th { font-weight: 700; }
+      .modal td.num, .modal th.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+      .demo-board {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        background: var(--board);
+        border-radius: 10px;
+        padding: 6px;
+        max-width: 240px;
+        margin: 10px 0 4px;
+      }
+      .demo-board span {
+        aspect-ratio: 1;
+        border-radius: 6px;
+        background: var(--cell);
+        opacity: .55;
+      }
+      .demo-board b {
+        aspect-ratio: 1;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.05rem;
+        font-weight: 800;
+      }
+      .demo-board .a { background: #eee4da; color: #776e65; }
+      .demo-board .b { background: #f2b179; color: #fdf6ec; }
+      .demo-board .c { background: #edcf72; color: #fdf6ec; }
+      .step { display: flex; gap: 12px; margin-top: 14px; }
+      .step-num {
+        flex: none;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .95rem;
+        margin-top: 2px;
+      }
+      .step p { margin: 3px 0 0; }
+      .step h4 { margin: 0; font-size: 1rem; }
+
+      /* ---------- Feedback ---------- */
+      .feedback-footer {
+        margin-top: 28px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .feedback-footer p { margin: 0; color: var(--ink-soft); font-size: .88rem; }
+      .star-row { display: flex; gap: 6px; margin: 8px 0 4px; }
+      .star-btn {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--ink-soft);
+        width: 48px; height: 48px; min-height: 48px;
+        border-radius: 12px;
+        font-size: 1.45rem;
+        line-height: 1;
+        cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .star-btn[aria-checked="true"], .star-btn.lit { color: #b8860b; border-color: var(--gold); background: #fdf6d8; }
+      @media (prefers-color-scheme: dark) {
+        .star-btn[aria-checked="true"], .star-btn.lit { background: #3a3216; color: var(--gold); }
+      }
+      .star-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+      .feedback-label { display: block; font-weight: 700; font-size: .92rem; margin: 18px 0 6px; }
+      .feedback-label span { font-weight: 500; color: var(--ink-soft); }
+      .feedback-textarea {
+        width: 100%;
+        font: inherit;
+        font-size: .95rem;
+        color: var(--ink);
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 10px 12px;
+        min-height: 96px;
+        resize: vertical;
+      }
+      .feedback-textarea:focus { outline: 3px solid var(--accent); outline-offset: 1px; }
+      .tag-group { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+      .tag-btn {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: var(--card);
+        color: var(--ink-soft);
+        font: inherit; font-weight: 600; font-size: .9rem;
+        border-radius: 999px;
+        padding: 7px 16px; min-height: 40px;
+        cursor: pointer;
+      }
+      .tag-btn[aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+      .tag-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+      .feedback-actions { margin-top: 22px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .feedback-terms { margin: 16px 0 0; color: var(--ink-soft); font-size: .82rem; line-height: 1.45; }
+      .feedback-thanks {
+        text-align: center;
+        padding: 28px 10px 12px;
+      }
+      .feedback-thanks .thanks-icon { font-size: 2.4rem; line-height: 1; }
+      .feedback-thanks h3 { margin: 12px 0 6px; font-size: 1.3rem; }
+      .feedback-thanks p { color: var(--ink-soft); margin: 0; }
+
+      .sr-only {
+        position: absolute;
+        width: 1px; height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .tile { transition: none; }
+        .tile.new .tile-inner, .tile.pop .tile-inner, .score-gain { animation: none; }
+        .btn { transition: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <!-- Score strip -->
+      <div class="score-strip" aria-label="Scores">
+        <div class="score-box" id="scoreBox">
+          <span class="label">Score</span>
+          <span class="value" id="scoreVal">0</span>
+        </div>
+        <div class="score-box">
+          <span class="label">Best</span>
+          <span class="value" id="bestVal">0</span>
+        </div>
+        <div class="score-box">
+          <span class="label">Moves</span>
+          <span class="value" id="movesVal">0</span>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <button class="btn primary" id="newGameBtn" type="button">↻ New game</button>
+        <button class="btn" id="undoBtn" type="button" disabled>↩ Undo</button>
+        <span class="spacer"></span>
+        <button class="btn" id="howToBtn" type="button">How to play</button>
+        <button class="btn" id="rulesBtn" type="button">Rules</button>
+        <button class="btn" id="feedbackBtn" type="button">Feedback</button>
+      </div>
+
+      <!-- Round type -->
+      <div class="mode-bar">
+        <span class="diff-label" id="modeLabel">Round</span>
+        <div class="diff-group" role="radiogroup" aria-labelledby="modeLabel" id="modeGroup">
+          <button class="diff-btn mode-btn" type="button" role="radio" aria-checked="true" data-mode="counted">Real game</button>
+          <button class="diff-btn mode-btn" type="button" role="radio" aria-checked="false" data-mode="practice">Practice round</button>
+        </div>
+      </div>
+      <div class="practice-banner" id="practiceBanner" hidden>
+        <span class="practice-dot" aria-hidden="true"></span>
+        <span><strong>Practice round — just messing about.</strong> This score doesn't count and won't touch your best. Undo as much as you like, try daft ideas, and peek at the coach tip under the board.</span>
+      </div>
+
+      <!-- Difficulty -->
+      <div class="difficulty-bar">
+        <span class="diff-label" id="diffLabel">Difficulty</span>
+        <div class="diff-group" role="radiogroup" aria-labelledby="diffLabel" id="diffGroup">
+          <button class="diff-btn" type="button" role="radio" aria-checked="false" data-diff="easy">Easy</button>
+          <button class="diff-btn" type="button" role="radio" aria-checked="true" data-diff="normal">Normal</button>
+          <button class="diff-btn" type="button" role="radio" aria-checked="false" data-diff="hard">Hard</button>
+        </div>
+      </div>
+      <p class="diff-desc" id="diffDesc"></p>
+
+      <!-- Board -->
+      <div class="board-wrap" id="boardWrap">
+        <div class="board" id="board" role="application" aria-label="2048 board. Use arrow keys, W A S D, swipe, or the direction pad to slide tiles.">
+          <div class="cells" id="cells" aria-hidden="true">
+            <i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i>
+            <i></i><i></i><i></i><i></i>
+          </div>
+          <div class="tile-layer" id="tileLayer"></div>
+        </div>
+
+        <div class="board-overlay" id="overlay">
+          <h2 id="overlayTitle">You made 2048!</h2>
+          <p id="overlayText">Nice work — that's the winning tile.</p>
+          <div class="row">
+            <button class="btn primary" id="overlayPrimary" type="button">Keep playing</button>
+            <button class="btn" id="overlayNew" type="button">New game</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="hint" id="hint"><strong>Hint:</strong> slide tiles with the arrow keys, <strong>W A S D</strong>, a swipe, or the pad below. Matching numbers merge into one — get to <strong id="hintTarget">2048</strong>.</p>
+      <p class="stat-line" id="statLine">Highest tile: 2</p>
+      <p class="practice-tip" id="practiceTip" hidden></p>
+
+      <!-- Direction pad (touch devices) -->
+      <div class="dpad" aria-label="Direction pad">
+        <button type="button" class="up" data-dir="up" aria-label="Slide up">▲</button>
+        <button type="button" class="left" data-dir="left" aria-label="Slide left">◀</button>
+        <button type="button" class="right" data-dir="right" aria-label="Slide right">▶</button>
+        <button type="button" class="down" data-dir="down" aria-label="Slide down">▼</button>
+      </div>
+
+      <p class="sr-only" aria-live="polite" id="announcer"></p>
+
+      <div class="feedback-footer">
+        <p>Enjoying Tile 2048? Spotted a bug?</p>
+        <button class="btn" id="feedbackBtnFooter" type="button">Feedback</button>
+      </div>
+    </main>
+
+    <!-- ============ HOW TO PLAY (tutorial) ============ -->
+    <div class="modal-backdrop" id="howToModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="howToTitle">
+        <div class="modal-head">
+          <h2 id="howToTitle">How to play</h2>
+          <button class="modal-close" type="button" data-close aria-label="Close how to play">✕</button>
+        </div>
+        <p>2048 is a sliding-tile puzzle. Every move slides <em>all</em> the tiles at once — your job is to combine matching numbers until you build the target tile. The board and target depend on your difficulty (see step 5).</p>
+
+        <div class="step">
+          <div class="step-num">1</div>
+          <div>
+            <h4>Slide the whole board</h4>
+            <p>Press an arrow key (or W A S D), swipe, or tap the direction pad. Every tile slides as far as it can in that direction, and one new tile — usually a 2 — appears in a random empty square.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div>
+            <h4>Matching tiles merge</h4>
+            <p>When two tiles with the same number bump into each other, they merge into one tile worth double. Two 4s become an 8, two 8s become a 16, and so on.</p>
+            <div class="demo-board" aria-hidden="true">
+              <b class="a">4</b><b class="a">4</b><span></span><span></span>
+              <span></span><span></span><span></span><span></span>
+              <span></span><b class="b">8</b><span></span><span></span>
+              <span></span><span></span><span></span><b class="c">128</b>
+            </div>
+            <p>Slide left and the two 4s on the top row merge into a single 8.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div>
+            <h4>Reach the target before you run out of room</h4>
+            <p>The board fills up fast. If it fills completely and no two neighbouring tiles match, the game is over. A good habit: keep your biggest tile tucked in one corner and build toward it.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">4</div>
+          <div>
+            <h4>Made a slip?</h4>
+            <p>The <strong>Undo</strong> button takes back your last move, including the tile that spawned. Your best score is saved on this device for each difficulty, so you can always chase it next game.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">5</div>
+          <div>
+            <h4>Pick your difficulty</h4>
+            <p>Use the <strong>Easy / Normal / Hard</strong> switch above the board — switching starts a fresh game at that level.</p>
+            <ul>
+              <li><strong>Easy:</strong> a roomier 5 × 5 board, new tiles are always 2s, and the target is <strong>1024</strong>.</li>
+              <li><strong>Normal:</strong> the classic 4 × 4 game — new tiles are mostly 2s with the odd 4, target <strong>2048</strong>.</li>
+              <li><strong>Hard:</strong> the same 4 × 4 board, but new tiles are 4s far more often and the target is <strong>4096</strong>.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">6</div>
+          <div>
+            <h4>Just want a knockabout? Try a practice round</h4>
+            <p>Flip the <strong>Round</strong> switch above the board to <strong>Practice round</strong>. Nothing counts — your best score is safe no matter how it goes — undo is bottomless, and a little coach tip under the board suggests a move to try. Perfect for testing a new corner strategy before it counts. Flip back to <strong>Real game</strong> when you're ready to make it official.</p>
+          </div>
+        </div>
+
+        <p style="margin-top:20px"><button class="btn primary" type="button" data-close>Start playing</button></p>
+      </div>
+    </div>
+
+    <!-- ============ RULES ============ -->
+    <div class="modal-backdrop" id="rulesModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+        <div class="modal-head">
+          <h2 id="rulesTitle">Rules</h2>
+          <button class="modal-close" type="button" data-close aria-label="Close rules">✕</button>
+        </div>
+
+        <h3>Objective</h3>
+        <p>Combine matching numbered tiles to create the target tile for your difficulty: <strong>1024</strong> on Easy, <strong>2048</strong> on Normal, <strong>4096</strong> on Hard. Reaching the target wins the game; you may keep playing afterwards to chase a higher score and even bigger tiles.</p>
+        <p>2048 is a <strong>single-player</strong> game — it's just you against the board. There is no opponent and no timer; your only rival is your own best score, which is saved on this device separately for each difficulty.</p>
+
+        <h3>Difficulty</h3>
+        <p>Pick <strong>Easy</strong>, <strong>Normal</strong>, or <strong>Hard</strong> with the switch above the board. Switching difficulty starts a new game, and your choice is remembered on this device. Everything else — sliding, merging, scoring, and undo — works the same at every level; only the board, the new-tile mix, and the target change:</p>
+        <table>
+          <tr><th>Difficulty</th><th>Board</th><th>New tiles</th><th class="num">Target</th></tr>
+          <tr><td><strong>Easy</strong></td><td>5 × 5 (25 squares)</td><td>Always a 2</td><td class="num">1024</td></tr>
+          <tr><td><strong>Normal</strong></td><td>4 × 4 (16 squares)</td><td>2 nine times out of ten, 4 the other time</td><td class="num">2048</td></tr>
+          <tr><td><strong>Hard</strong></td><td>4 × 4 (16 squares)</td><td>2 seven times out of ten, 4 three times out of ten</td><td class="num">4096</td></tr>
+        </table>
+
+        <h3>Practice rounds</h3>
+        <p>Use the <strong>Round</strong> switch above the board to pick <strong>Real game</strong> or <strong>Practice round</strong>. Switching starts a fresh round, and your choice is remembered on this device. Practice rounds play by exactly the same sliding, merging, and spawning rules for your difficulty — the differences are all about pressure, or rather the lack of it:</p>
+        <ul>
+          <li>A practice score is <strong>never</strong> recorded as a best score, win or lose.</li>
+          <li>Undo has no practical limit in a practice round — step back through as many moves as you like.</li>
+          <li>A coach tip under the board suggests a next move after every slide. It's a nudge, not gospel — ignore it whenever you fancy.</li>
+          <li>Filling the board in practice just ends that practice round; undo or start a fresh one and carry on experimenting.</li>
+        </ul>
+
+        <h3>How a move works</h3>
+        <ul>
+          <li>A move is one slide: up, down, left, or right. All tiles slide as far as they can in that direction until they hit the edge of the grid or another tile.</li>
+          <li>If a sliding tile meets a tile of the <strong>same value</strong>, the two merge into a single tile of double value in the far tile's square.</li>
+          <li>A tile created by a merge <strong>cannot merge again in the same move</strong>. Example: 2 – 2 – 4 sliding left becomes 4 – 4, not a single 8.</li>
+          <li>When three or more identical tiles line up, the pair closest to the edge you're sliding toward merges first. Example: 2 – 2 – 2 sliding left becomes 4 – 2.</li>
+          <li>A slide that changes nothing (no tile moves and no merge happens) does not count as a move, and no new tile spawns.</li>
+        </ul>
+
+        <h3>New tiles</h3>
+        <ul>
+          <li>After every successful move, exactly <strong>one</strong> new tile appears in a random empty square.</li>
+          <li>What that tile can be depends on difficulty: on <strong>Easy</strong> it is always a <strong>2</strong>; on <strong>Normal</strong> it is a 2 nine times out of ten and a 4 the other time; on <strong>Hard</strong> it is a 2 seven times out of ten and a 4 three times out of ten.</li>
+          <li>Every game starts with two tiles already on the board.</li>
+        </ul>
+
+        <h3>Scoring</h3>
+        <p>Your score increases by the value of each tile created by a merge. Merging two 8s into a 16 adds 16 points; merging two 1024s into the 2048 tile adds 2,048 points. Tiles that simply slide, and newly spawned tiles, add nothing.</p>
+        <table>
+          <tr><th>Merge</th><th class="num">Points</th></tr>
+          <tr><td>2 + 2 → 4</td><td class="num">4</td></tr>
+          <tr><td>8 + 8 → 16</td><td class="num">16</td></tr>
+          <tr><td>64 + 64 → 128</td><td class="num">128</td></tr>
+          <tr><td>512 + 512 → 1024</td><td class="num">1,024</td></tr>
+          <tr><td>1024 + 1024 → 2048</td><td class="num">2,048</td></tr>
+        </table>
+        <p>Your <strong>best score</strong> is saved on this device separately for each difficulty and carries over between games at that level. The move counter counts successful slides only. Practice-round scores are the one exception — they never become a best score.</p>
+
+        <h3>Winning and losing</h3>
+        <ul>
+          <li><strong>Win:</strong> create your difficulty's target tile (1024 on Easy, 2048 on Normal, 4096 on Hard). You'll be offered the choice to stop there or keep playing — the game continues with no upper limit on tile values.</li>
+          <li><strong>Game over:</strong> the grid is completely full <em>and</em> no two horizontally or vertically neighbouring tiles share a value, so no slide can change the board. Diagonal neighbours do not count.</li>
+          <li>There is no timer and no move limit.</li>
+        </ul>
+
+        <h3>Undo</h3>
+        <ul>
+          <li>Undo takes back the most recent successful move: the board, score, and move count return to exactly what they were before it, and the tile that spawned after that move is removed.</li>
+          <li>Undo can be used repeatedly to step back through earlier moves, but there is no redo — once you make a new move, the undone path is gone.</li>
+          <li>Undo is available after a game over, so one bad slide doesn't have to end a good run.</li>
+        </ul>
+
+        <h3>Controls</h3>
+        <ul>
+          <li><strong>Keyboard:</strong> arrow keys or W A S D.</li>
+          <li><strong>Touch:</strong> swipe on the board, or use the direction pad.</li>
+          <li><strong>Mouse:</strong> click and drag on the board, or use the direction pad.</li>
+        </ul>
+
+        <p style="margin-top:20px"><button class="btn primary" type="button" data-close>Back to the game</button></p>
+      </div>
+    </div>
+
+    <!-- ============ FEEDBACK ============ -->
+    <div class="modal-backdrop" id="feedbackModal">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+        <div class="modal-head">
+          <h2 id="feedbackTitle">Feedback</h2>
+          <button class="modal-close" type="button" data-close aria-label="Close feedback">✕</button>
+        </div>
+
+        <div id="feedbackFormWrap">
+          <p>How's Tile 2048 treating you? Rate it, leave a note, and tag it if you like.</p>
+
+          <span class="feedback-label" id="ratingLabel">Your rating</span>
+          <div class="star-row" role="radiogroup" aria-labelledby="ratingLabel" id="starRow">
+            <button class="star-btn" type="button" role="radio" aria-checked="false" data-rating="1" aria-label="1 star">★</button>
+            <button class="star-btn" type="button" role="radio" aria-checked="false" data-rating="2" aria-label="2 stars">★</button>
+            <button class="star-btn" type="button" role="radio" aria-checked="false" data-rating="3" aria-label="3 stars">★</button>
+            <button class="star-btn" type="button" role="radio" aria-checked="false" data-rating="4" aria-label="4 stars">★</button>
+            <button class="star-btn" type="button" role="radio" aria-checked="false" data-rating="5" aria-label="5 stars">★</button>
+          </div>
+
+          <label class="feedback-label" for="feedbackText">Comment</label>
+          <textarea class="feedback-textarea" id="feedbackText" placeholder="What did you like? What could be better?" maxlength="1000"></textarea>
+
+          <span class="feedback-label" id="tagLabel">Tag <span>(optional)</span></span>
+          <div class="tag-group" role="radiogroup" aria-labelledby="tagLabel" id="tagGroup">
+            <button class="tag-btn" type="button" role="radio" aria-checked="false" data-tag="Bug">Bug</button>
+            <button class="tag-btn" type="button" role="radio" aria-checked="false" data-tag="Suggestion">Suggestion</button>
+            <button class="tag-btn" type="button" role="radio" aria-checked="false" data-tag="Other">Other</button>
+          </div>
+
+          <p class="feedback-terms">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+
+          <div class="feedback-actions">
+            <button class="btn primary" type="button" id="feedbackSaveBtn">Save feedback</button>
+            <button class="btn" type="button" data-close>Cancel</button>
+          </div>
+        </div>
+
+        <div id="feedbackThanks" class="feedback-thanks" hidden aria-live="polite">
+          <div class="thanks-icon" aria-hidden="true">★</div>
+          <h3>Thanks!</h3>
+          <p>Your feedback has been saved.</p>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        var DIFFICULTIES = {
+          easy:   { label: "Easy",   size: 5, target: 1024, fourChance: 0,
+                    desc: "<strong>Easy:</strong> a roomier 5 × 5 board, every new tile is a 2, and the target is <strong>1024</strong>. A gentler way in." },
+          normal: { label: "Normal", size: 4, target: 2048, fourChance: 0.1,
+                    desc: "<strong>Normal:</strong> the classic 4 × 4 game — new tiles are a 2 nine times out of ten, a 4 the other time. Target: <strong>2048</strong>." },
+          hard:   { label: "Hard",   size: 4, target: 4096, fourChance: 0.3,
+                    desc: "<strong>Hard:</strong> the classic 4 × 4 board, but new tiles are 4s three times out of ten, cluttering your merges. Target: <strong>4096</strong>." }
+        };
+        var DIFF_KEY = "tile2048-difficulty";
+        var BEST_KEY = "tile2048-best"; // legacy key: the Normal best
+
+        var difficulty = "normal";
+        try {
+          var savedDiff = localStorage.getItem(DIFF_KEY);
+          if (savedDiff && DIFFICULTIES[savedDiff]) difficulty = savedDiff;
+        } catch (e) { /* storage unavailable */ }
+        var SIZE = DIFFICULTIES[difficulty].size;
+
+        var MODE_KEY = "tile2048-mode";
+        var mode = "counted"; // "counted" = real game, "practice" = practice round
+        try {
+          var savedMode = localStorage.getItem(MODE_KEY);
+          if (savedMode === "practice" || savedMode === "counted") mode = savedMode;
+        } catch (e) { /* storage unavailable */ }
+        function isPractice() { return mode === "practice"; }
+
+        var boardEl = document.getElementById("board");
+        var cellsEl = document.getElementById("cells");
+        var layerEl = document.getElementById("tileLayer");
+        var diffDesc = document.getElementById("diffDesc");
+        var hintTarget = document.getElementById("hintTarget");
+        var diffBtns = Array.prototype.slice.call(document.querySelectorAll(".diff-btn[data-diff]"));
+        var modeBtns = Array.prototype.slice.call(document.querySelectorAll(".mode-btn"));
+        var boardWrap = document.getElementById("boardWrap");
+        var practiceBanner = document.getElementById("practiceBanner");
+        var practiceTip = document.getElementById("practiceTip");
+        var newGameBtn = document.getElementById("newGameBtn");
+        var overlayNewBtn = document.getElementById("overlayNew");
+        var scoreVal = document.getElementById("scoreVal");
+        var bestVal = document.getElementById("bestVal");
+        var movesVal = document.getElementById("movesVal");
+        var scoreBox = document.getElementById("scoreBox");
+        var undoBtn = document.getElementById("undoBtn");
+        var statLine = document.getElementById("statLine");
+        var announcer = document.getElementById("announcer");
+        var overlay = document.getElementById("overlay");
+        var overlayTitle = document.getElementById("overlayTitle");
+        var overlayText = document.getElementById("overlayText");
+        var overlayPrimary = document.getElementById("overlayPrimary");
+
+        var tiles = [];        // {id, value, x, y, dead}
+        var nextId = 1;
+        var score = 0;
+        var moves = 0;
+        var best = 0;
+        var history = [];      // stack of snapshots for undo
+        var animating = false;
+        var wonOnce = false;
+        var keepPlaying = false;
+        var gameOver = false;
+
+        function bestKey() { return BEST_KEY + "-" + difficulty; }
+        function loadBest() {
+          try {
+            var v = localStorage.getItem(bestKey());
+            if (v === null && difficulty === "normal") v = localStorage.getItem(BEST_KEY);
+            best = parseInt(v, 10) || 0;
+          } catch (e) { best = 0; }
+        }
+        function saveBest() {
+          try { localStorage.setItem(bestKey(), String(best)); } catch (e) { /* storage unavailable */ }
+        }
+        loadBest();
+
+        /* ---------- difficulty UI / board sizing ---------- */
+        function layoutMetrics() {
+          var gap = 3.2;
+          var pad = 3.2;
+          var tileSize = (100 - pad * 2 - gap * (SIZE - 1)) / SIZE;
+          var step = tileSize + gap;
+          return { gap: gap, pad: pad, tileSize: tileSize, step: step };
+        }
+        function applyLayout() {
+          var m = layoutMetrics();
+          boardEl.style.setProperty("--size", SIZE);
+          boardEl.style.setProperty("--tile", m.tileSize + "cqi");
+          // Font scales with tile size; smaller digits for longer numbers handled by d3/d4 classes
+          boardEl.style.setProperty("--tile-font", (m.tileSize * 0.62) + "cqi");
+          boardEl.style.setProperty("--tile-font-d3", (m.tileSize * 0.50) + "cqi");
+          boardEl.style.setProperty("--tile-font-d4", (m.tileSize * 0.40) + "cqi");
+          cellsEl.style.setProperty("--size", SIZE);
+        }
+        function buildCells() {
+          cellsEl.innerHTML = "";
+          cellsEl.style.gridTemplateColumns = "repeat(" + SIZE + ", 1fr)";
+          cellsEl.style.gridTemplateRows = "repeat(" + SIZE + ", 1fr)";
+          for (var i = 0; i < SIZE * SIZE; i++) {
+            cellsEl.appendChild(document.createElement("i"));
+          }
+        }
+        function updateDifficultyUI() {
+          var cfg = DIFFICULTIES[difficulty];
+          diffBtns.forEach(function (b) {
+            b.setAttribute("aria-checked", b.dataset.diff === difficulty ? "true" : "false");
+          });
+          diffDesc.innerHTML = cfg.desc;
+          if (hintTarget) hintTarget.textContent = cfg.target.toLocaleString("en-US");
+          applyLayout();
+        }
+        /* ---------- round type (real / practice) ---------- */
+        function updateModeUI() {
+          modeBtns.forEach(function (b) {
+            b.setAttribute("aria-checked", b.dataset.mode === mode ? "true" : "false");
+          });
+          if (practiceBanner) practiceBanner.hidden = !isPractice();
+          if (boardWrap) boardWrap.classList.toggle("practice", isPractice());
+          if (newGameBtn) newGameBtn.textContent = isPractice() ? "↻ New practice round" : "↻ New game";
+          if (overlayNewBtn) overlayNewBtn.textContent = isPractice() ? "New practice round" : "New game";
+          if (!isPractice() && practiceTip) practiceTip.hidden = true;
+        }
+        function setMode(next, startNew) {
+          if (next !== "practice" && next !== "counted") return;
+          var changed = next !== mode;
+          mode = next;
+          try { localStorage.setItem(MODE_KEY, mode); } catch (e) { /* storage unavailable */ }
+          updateModeUI();
+          if (changed || startNew) newGame();
+          else render(true);
+        }
+
+        /* ---------- coach tip (practice rounds only) ---------- */
+        // Simulate a slide on a plain value grid; returns null if nothing changes.
+        function simulateGrid(grid, dirName) {
+          var v = VECTORS[dirName];
+          var out = [];
+          var x, y;
+          for (y = 0; y < SIZE; y++) { out.push([]); for (x = 0; x < SIZE; x++) out[y].push(0); }
+          var gained = 0, changed = false;
+          // Walk each line from the edge we're sliding toward.
+          for (var line = 0; line < SIZE; line++) {
+            var coords = [];
+            for (var k = 0; k < SIZE; k++) {
+              var cx = v.x === 0 ? line : (v.x < 0 ? k : SIZE - 1 - k);
+              var cy = v.y === 0 ? line : (v.y < 0 ? k : SIZE - 1 - k);
+              coords.push({ x: cx, y: cy });
+            }
+            var vals = [];
+            coords.forEach(function (c) { if (grid[c.y][c.x]) vals.push(grid[c.y][c.x]); });
+            var mergedLine = [];
+            for (var i = 0; i < vals.length; i++) {
+              if (i + 1 < vals.length && vals[i] === vals[i + 1]) {
+                mergedLine.push(vals[i] * 2);
+                gained += vals[i] * 2;
+                i++;
+              } else mergedLine.push(vals[i]);
+            }
+            coords.forEach(function (c, idx) {
+              var nv = idx < mergedLine.length ? mergedLine[idx] : 0;
+              out[c.y][c.x] = nv;
+              if (nv !== grid[c.y][c.x]) changed = true;
+            });
+          }
+          if (!changed) return null;
+          var empties = 0, maxVal = 0;
+          for (y = 0; y < SIZE; y++) for (x = 0; x < SIZE; x++) {
+            if (!out[y][x]) empties++;
+            if (out[y][x] > maxVal) maxVal = out[y][x];
+          }
+          var cornerBonus = 0;
+          if (out[0][0] === maxVal || out[0][SIZE - 1] === maxVal ||
+              out[SIZE - 1][0] === maxVal || out[SIZE - 1][SIZE - 1] === maxVal) cornerBonus = 6;
+          return { gained: gained, empties: empties, rank: gained * 4 + empties + cornerBonus };
+        }
+        var DIR_WORDS = {
+          up: "↑ up", down: "↓ down", left: "← left", right: "→ right"
+        };
+        function updatePracticeTip() {
+          if (!practiceTip) return;
+          if (!isPractice()) { practiceTip.hidden = true; return; }
+          practiceTip.hidden = false;
+          var grid = [];
+          var x, y;
+          for (y = 0; y < SIZE; y++) { grid.push([]); for (x = 0; x < SIZE; x++) grid[y].push(0); }
+          tiles.forEach(function (t) { if (!t.dead) grid[t.y][t.x] = t.value; });
+          var bestDir = null, bestSim = null;
+          ["left", "up", "right", "down"].forEach(function (d) {
+            var sim = simulateGrid(grid, d);
+            if (sim && (!bestSim || sim.rank > bestSim.rank)) { bestSim = sim; bestDir = d; }
+          });
+          if (!bestDir) {
+            practiceTip.innerHTML = "<span class=\"tip-label\">Coach tip:</span> no moves left on this board — undo a few steps or start a fresh practice round.";
+          } else if (bestSim.gained > 0) {
+            practiceTip.innerHTML = "<span class=\"tip-label\">Coach tip:</span> try sliding <strong>" + DIR_WORDS[bestDir] + "</strong> — it merges for <strong>+" + bestSim.gained.toLocaleString("en-US") + "</strong>. Just a nudge; go your own way if you fancy.";
+          } else {
+            practiceTip.innerHTML = "<span class=\"tip-label\">Coach tip:</span> try sliding <strong>" + DIR_WORDS[bestDir] + "</strong> — no merge this time, but it opens up the board. Just a nudge; go your own way if you fancy.";
+          }
+        }
+
+        function setDifficulty(next, startNew) {
+          if (!DIFFICULTIES[next]) return;
+          var changed = next !== difficulty;
+          difficulty = next;
+          SIZE = DIFFICULTIES[difficulty].size;
+          try { localStorage.setItem(DIFF_KEY, difficulty); } catch (e) { /* storage unavailable */ }
+          loadBest();
+          buildCells();
+          updateDifficultyUI();
+          if (changed || startNew) newGame();
+          else render(true);
+        }
+
+        /* ---------- helpers ---------- */
+        function emptyCells() {
+          var occupied = {};
+          tiles.forEach(function (t) { if (!t.dead) occupied[t.x + "," + t.y] = true; });
+          var out = [];
+          for (var x = 0; x < SIZE; x++)
+            for (var y = 0; y < SIZE; y++)
+              if (!occupied[x + "," + y]) out.push({ x: x, y: y });
+          return out;
+        }
+        function tileAt(x, y) {
+          // Includes tiles consumed by a merge this turn: they still occupy
+          // their square as blockers until the animation finishes.
+          for (var i = 0; i < tiles.length; i++) {
+            var t = tiles[i];
+            if (t.x === x && t.y === y) return t;
+          }
+          return null;
+        }
+        function spawnTile(isNew) {
+          var empties = emptyCells();
+          if (!empties.length) return null;
+          var cell = empties[Math.floor(Math.random() * empties.length)];
+          var t = {
+            id: nextId++,
+            value: Math.random() < DIFFICULTIES[difficulty].fourChance ? 4 : 2,
+            x: cell.x, y: cell.y,
+            dead: false,
+            justSpawned: !!isNew
+          };
+          tiles.push(t);
+          return t;
+        }
+        function snapshot() {
+          return {
+            tiles: tiles.filter(function (t) { return !t.dead; }).map(function (t) {
+              return { id: t.id, value: t.value, x: t.x, y: t.y };
+            }),
+            score: score, moves: moves, wonOnce: wonOnce, keepPlaying: keepPlaying,
+            difficulty: difficulty
+          };
+        }
+        function restore(snap) {
+          tiles = snap.tiles.map(function (t) {
+            return { id: t.id, value: t.value, x: t.x, y: t.y, dead: false };
+          });
+          score = snap.score;
+          moves = snap.moves;
+          wonOnce = snap.wonOnce;
+          keepPlaying = snap.keepPlaying;
+          gameOver = false;
+          hideOverlay();
+          render(true);
+          updatePracticeTip();
+        }
+
+        /* ---------- rendering ---------- */
+        function tileClass(t) {
+          var cls = "tile";
+          cls += t.value >= 2048 && t.value > 2048 ? " vsuper" : " v" + Math.min(t.value, 2048);
+          if (t.value >= 1000) cls += " d4";
+          else if (t.value >= 100) cls += " d3";
+          if (t.justSpawned) cls += " new";
+          if (t.justMerged) cls += " pop";
+          return cls;
+        }
+        function render(instant) {
+          var m = layoutMetrics();
+          var seen = {};
+          tiles.forEach(function (t) {
+            if (t.dead && !t.el) return;
+            seen[t.id] = true;
+            if (!t.el) {
+              var el = document.createElement("div");
+              el.className = tileClass(t);
+              var inner = document.createElement("div");
+              inner.className = "tile-inner";
+              inner.textContent = t.value;
+              el.appendChild(inner);
+              layerEl.appendChild(el);
+              t.el = el;
+            }
+            t.el.className = tileClass(t);
+            t.el.firstChild.textContent = t.value;
+            t.el.style.transform = "translate(" + (m.pad + t.x * m.step) + "cqi, " + (m.pad + t.y * m.step) + "cqi)";
+            t.el.style.zIndex = t.dead ? 1 : 2;
+          });
+          // drop consumed tiles whose elements have been retired
+          tiles = tiles.filter(function (t) { return t.el || !t.dead; });
+          for (var i = tiles.length - 1; i >= 0; i--) {
+            if (tiles[i].removeEl) {
+              if (tiles[i].el) tiles[i].el.remove();
+              tiles.splice(i, 1);
+            }
+          }
+          scoreVal.textContent = score.toLocaleString("en-US");
+          bestVal.textContent = best.toLocaleString("en-US");
+          movesVal.textContent = moves.toLocaleString("en-US");
+          undoBtn.disabled = history.length === 0;
+          var highest = 0;
+          tiles.forEach(function (t) { if (!t.dead && t.value > highest) highest = t.value; });
+          statLine.textContent = "Highest tile: " + (highest ? highest.toLocaleString("en-US") : "—") +
+            (isPractice() ? " · Practice round — this score doesn't count" : "");
+        }
+        function showGain(amount) {
+          var s = document.createElement("span");
+          s.className = "score-gain";
+          s.textContent = "+" + amount.toLocaleString("en-US");
+          scoreBox.appendChild(s);
+          setTimeout(function () { s.remove(); }, 850);
+        }
+
+        /* ---------- move logic ---------- */
+        var VECTORS = {
+          up:    { x: 0, y: -1 },
+          down:  { x: 0, y: 1 },
+          left:  { x: -1, y: 0 },
+          right: { x: 1, y: 0 }
+        };
+        function within(x, y) { return x >= 0 && x < SIZE && y >= 0 && y < SIZE; }
+
+        function doMove(dirName) {
+          if (animating || gameOver) return;
+          if (!overlay.classList.contains("show") || keepPlaying) { /* allow moves under win overlay only after keep playing */ }
+          if (overlay.classList.contains("show")) return;
+
+          var vector = VECTORS[dirName];
+          if (!vector) return;
+
+          var xs = [], ys = [], ii;
+          for (ii = 0; ii < SIZE; ii++) { xs.push(ii); ys.push(ii); }
+          if (vector.x === 1) xs.reverse();
+          if (vector.y === 1) ys.reverse();
+
+          var preSnap = snapshot();
+          var moved = false;
+          var gained = 0;
+          var merges = []; // {x, y, value, sourceA, sourceB}
+
+          // clear per-turn flags
+          tiles.forEach(function (t) { t.justSpawned = false; t.justMerged = false; t.mergedThisTurn = false; });
+
+          xs.forEach(function (x) {
+            ys.forEach(function (y) {
+              var tile = tileAt(x, y);
+              if (!tile) return;
+              var cx = x, cy = y;
+              var nx = x + vector.x, ny = y + vector.y;
+              while (within(nx, ny) && !tileAt(nx, ny)) {
+                cx = nx; cy = ny;
+                nx += vector.x; ny += vector.y;
+              }
+              var target = within(nx, ny) ? tileAt(nx, ny) : null;
+              if (target && target.value === tile.value && !target.mergedThisTurn && !tile.mergedThisTurn) {
+                // merge into target's square
+                tile.x = nx; tile.y = ny;
+                tile.dead = true;
+                target.dead = true;
+                tile.mergedThisTurn = true;
+                target.mergedThisTurn = true;
+                merges.push({ x: nx, y: ny, value: tile.value * 2 });
+                gained += tile.value * 2;
+                moved = true;
+              } else if (cx !== x || cy !== y) {
+                tile.x = cx; tile.y = cy;
+                moved = true;
+              }
+            });
+          });
+
+          if (!moved) return;
+
+          history.push(preSnap);
+          if (history.length > 200) history.shift();
+          score += gained;
+          moves += 1;
+          if (!isPractice() && score > best) {
+            best = score;
+            saveBest();
+            // Keep legacy Normal key in sync for backwards compatibility
+            if (difficulty === "normal") {
+              try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) { /* storage unavailable */ }
+            }
+          }
+          if (gained > 0) showGain(gained);
+
+          animating = true;
+          render();
+
+          setTimeout(function () {
+            // retire merged-away tiles, add merged results
+            tiles.forEach(function (t) { if (t.dead) t.removeEl = true; });
+            merges.forEach(function (m) {
+              tiles.push({
+                id: nextId++, value: m.value, x: m.x, y: m.y,
+                dead: false, justMerged: true
+              });
+            });
+            var spawned = spawnTile(true);
+            render();
+            tiles.forEach(function (t) { t.justMerged = false; if (spawned && t.id === spawned.id) { /* keep new flag one frame */ } });
+            animating = false;
+
+            // win check — target depends on difficulty
+            var target = DIFFICULTIES[difficulty].target;
+            var hasTarget = tiles.some(function (t) { return !t.dead && t.value >= target; });
+            if (hasTarget && !wonOnce) {
+              wonOnce = true;
+              showOverlay("win");
+              announce("You made the " + target.toLocaleString("en-US") + " tile. You win — keep playing or start a new game.");
+              render();
+              updatePracticeTip();
+              return;
+            }
+            // game over check
+            if (isGameOver()) {
+              gameOver = true;
+              showOverlay("over");
+              announce(isPractice()
+                ? "Practice board full. Final practice score " + score + "."
+                : "Game over. Final score " + score + ".");
+            }
+            render();
+            updatePracticeTip();
+          }, 135);
+        }
+
+        function isGameOver() {
+          if (emptyCells().length > 0) return false;
+          for (var x = 0; x < SIZE; x++) {
+            for (var y = 0; y < SIZE; y++) {
+              var t = tileAt(x, y);
+              if (!t) continue;
+              var r = x + 1 < SIZE ? tileAt(x + 1, y) : null;
+              var d = y + 1 < SIZE ? tileAt(x, y + 1) : null;
+              if (r && r.value === t.value) return false;
+              if (d && d.value === t.value) return false;
+            }
+          }
+          return true;
+        }
+
+        /* ---------- overlay ---------- */
+        function showOverlay(kind) {
+          if (kind === "win") {
+            var target = DIFFICULTIES[difficulty].target;
+            var nextTarget = target * 2;
+            overlayTitle.textContent = "You made " + target.toLocaleString("en-US") + "!";
+            overlayText.textContent = isPractice()
+              ? "That's the winning tile on " + DIFFICULTIES[difficulty].label + " — in practice, so it doesn't count, but it absolutely still feels good. Keep going for " + nextTarget.toLocaleString("en-US") + ", or flip to a real game and do it for keeps."
+              : "That's the winning tile on " + DIFFICULTIES[difficulty].label + ". Keep going for " + nextTarget.toLocaleString("en-US") + " — or start fresh.";
+            overlayPrimary.textContent = "Keep playing";
+          } else if (isPractice()) {
+            overlayTitle.textContent = "Board's full";
+            overlayText.textContent = "No moves left — and that's practice done its job. Final practice score: " + score.toLocaleString("en-US") + " (not saved, never counted). Undo a few steps and try a different line, or start a fresh round.";
+            overlayPrimary.textContent = "Undo last move";
+          } else {
+            overlayTitle.textContent = "Game over";
+            overlayText.textContent = "No moves left. Final score: " + score.toLocaleString("en-US") +
+              (score >= best && score > 0 ? " — a new best!" : " · Best: " + best.toLocaleString("en-US"));
+            overlayPrimary.textContent = "Undo last move";
+          }
+          overlayPrimary.dataset.kind = kind;
+          overlay.classList.add("show");
+        }
+        function hideOverlay() { overlay.classList.remove("show"); }
+        overlayPrimary.addEventListener("click", function () {
+          if (overlayPrimary.dataset.kind === "win") {
+            keepPlaying = true;
+            hideOverlay();
+          } else {
+            hideOverlay();
+            undo();
+          }
+        });
+        document.getElementById("overlayNew").addEventListener("click", function () {
+          hideOverlay();
+          newGame();
+        });
+
+        /* ---------- game control ---------- */
+        function newGame() {
+          tiles.forEach(function (t) { if (t.el) t.el.remove(); });
+          tiles = [];
+          score = 0; moves = 0;
+          history = [];
+          wonOnce = false; keepPlaying = false; gameOver = false;
+          animating = false;
+          hideOverlay();
+          spawnTile(false);
+          spawnTile(false);
+          render();
+          updatePracticeTip();
+          announce(isPractice() ? "New practice round started. This one doesn't count." : "New game started.");
+        }
+        function undo() {
+          if (animating || history.length === 0) return;
+          tiles.forEach(function (t) { if (t.el) t.el.remove(); t.el = null; });
+          var snap = history.pop();
+          restore(snap);
+          announce("Undid the last move.");
+        }
+        newGameBtn.addEventListener("click", newGame);
+        undoBtn.addEventListener("click", undo);
+
+        function announce(msg) { announcer.textContent = msg; }
+
+        /* ---------- input: keyboard ---------- */
+        var KEYMAP = {
+          ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+          w: "up", s: "down", a: "left", d: "right",
+          W: "up", S: "down", A: "left", D: "right"
+        };
+        document.addEventListener("keydown", function (e) {
+          if (document.querySelector(".modal-backdrop.show")) {
+            if (e.key === "Escape") closeModals();
+            return;
+          }
+          var dir = KEYMAP[e.key];
+          if (dir) {
+            e.preventDefault();
+            doMove(dir);
+          }
+        });
+
+        /* ---------- input: swipe / drag ---------- */
+        var startX = null, startY = null;
+        function pointerStart(x, y) { startX = x; startY = y; }
+        function pointerEnd(x, y) {
+          if (startX === null) return;
+          var dx = x - startX, dy = y - startY;
+          startX = startY = null;
+          if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+          if (Math.abs(dx) > Math.abs(dy)) doMove(dx > 0 ? "right" : "left");
+          else doMove(dy > 0 ? "down" : "up");
+        }
+        boardEl.addEventListener("touchstart", function (e) {
+          var t = e.touches[0];
+          pointerStart(t.clientX, t.clientY);
+        }, { passive: true });
+        boardEl.addEventListener("touchend", function (e) {
+          var t = e.changedTouches[0];
+          pointerEnd(t.clientX, t.clientY);
+        });
+        boardEl.addEventListener("mousedown", function (e) { pointerStart(e.clientX, e.clientY); });
+        document.addEventListener("mouseup", function (e) { pointerEnd(e.clientX, e.clientY); });
+
+        /* ---------- input: d-pad ---------- */
+        document.querySelectorAll(".dpad button").forEach(function (btn) {
+          btn.addEventListener("click", function () { doMove(btn.dataset.dir); });
+        });
+
+        /* ---------- modals ---------- */
+        function openModal(id) {
+          document.getElementById(id).classList.add("show");
+          var close = document.querySelector("#" + id + " .modal-close");
+          if (close) close.focus();
+        }
+        function closeModals() {
+          document.querySelectorAll(".modal-backdrop.show").forEach(function (m) { m.classList.remove("show"); });
+        }
+        document.getElementById("howToBtn").addEventListener("click", function () { openModal("howToModal"); });
+        document.getElementById("rulesBtn").addEventListener("click", function () { openModal("rulesModal"); });
+
+        /* ---------- feedback ---------- */
+        var FEEDBACK_KEY = "holos-arcade-feedback";
+        var feedbackRating = 0;
+        var feedbackTag = null;
+        var starBtns = Array.prototype.slice.call(document.querySelectorAll(".star-btn"));
+        var tagBtns = Array.prototype.slice.call(document.querySelectorAll(".tag-btn"));
+        var feedbackTextEl = document.getElementById("feedbackText");
+        var feedbackFormWrap = document.getElementById("feedbackFormWrap");
+        var feedbackThanksEl = document.getElementById("feedbackThanks");
+        var feedbackThanksTimer = null;
+
+        function paintStars() {
+          starBtns.forEach(function (b) {
+            var v = parseInt(b.dataset.rating, 10);
+            var on = v <= feedbackRating;
+            b.classList.toggle("lit", on);
+            b.setAttribute("aria-checked", v === feedbackRating ? "true" : "false");
+          });
+        }
+        function resetFeedbackForm() {
+          feedbackRating = 0;
+          feedbackTag = null;
+          if (feedbackTextEl) feedbackTextEl.value = "";
+          paintStars();
+          tagBtns.forEach(function (b) { b.setAttribute("aria-checked", "false"); });
+          if (feedbackFormWrap) feedbackFormWrap.hidden = false;
+          if (feedbackThanksEl) feedbackThanksEl.hidden = true;
+          if (feedbackThanksTimer) { clearTimeout(feedbackThanksTimer); feedbackThanksTimer = null; }
+        }
+        function openFeedback() {
+          resetFeedbackForm();
+          openModal("feedbackModal");
+        }
+        document.getElementById("feedbackBtn").addEventListener("click", openFeedback);
+        document.getElementById("feedbackBtnFooter").addEventListener("click", openFeedback);
+        starBtns.forEach(function (b) {
+          b.addEventListener("click", function () {
+            feedbackRating = parseInt(b.dataset.rating, 10);
+            paintStars();
+          });
+        });
+        tagBtns.forEach(function (b) {
+          b.addEventListener("click", function () {
+            if (feedbackTag === b.dataset.tag) {
+              feedbackTag = null;
+              b.setAttribute("aria-checked", "false");
+            } else {
+              feedbackTag = b.dataset.tag;
+              tagBtns.forEach(function (o) { o.setAttribute("aria-checked", o === b ? "true" : "false"); });
+            }
+          });
+        });
+        document.getElementById("feedbackSaveBtn").addEventListener("click", function () {
+          var highestNow = 0;
+          tiles.forEach(function (t) { if (!t.dead && t.value > highestNow) highestNow = t.value; });
+          var record = {
+            game: "tile-2048",
+            rating: feedbackRating,
+            text: feedbackTextEl ? feedbackTextEl.value.trim() : "",
+            tag: feedbackTag,
+            mode: isPractice() ? "practice" : "counted",
+            difficulty: difficulty,
+            score: score,
+            moves: moves,
+            highestTile: highestNow,
+            timestamp: new Date().toISOString()
+          };
+          try {
+            var raw = localStorage.getItem(FEEDBACK_KEY);
+            var arr = [];
+            if (raw) {
+              var parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) arr = parsed;
+            }
+            arr.push(record);
+            localStorage.setItem(FEEDBACK_KEY, JSON.stringify(arr));
+          } catch (e) { /* storage unavailable */ }
+          if (feedbackFormWrap) feedbackFormWrap.hidden = true;
+          if (feedbackThanksEl) feedbackThanksEl.hidden = false;
+          announce("Thanks! Your feedback has been saved.");
+          feedbackThanksTimer = setTimeout(function () {
+            closeModals();
+            resetFeedbackForm();
+          }, 1800);
+        });
+        document.querySelectorAll("[data-close]").forEach(function (el) {
+          el.addEventListener("click", closeModals);
+        });
+        document.querySelectorAll(".modal-backdrop").forEach(function (m) {
+          m.addEventListener("click", function (e) { if (e.target === m) closeModals(); });
+        });
+
+        /* ---------- difficulty switching ---------- */
+        diffBtns.forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            if (btn.dataset.diff === difficulty) return;
+            setDifficulty(btn.dataset.diff, true);
+            announce("Difficulty set to " + DIFFICULTIES[difficulty].label + ". New game started.");
+          });
+        });
+        // Arrow-key navigation inside the difficulty radiogroup
+        document.getElementById("diffGroup").addEventListener("keydown", function (e) {
+          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          e.preventDefault();
+          e.stopPropagation();
+          var order = ["easy", "normal", "hard"];
+          var idx = order.indexOf(difficulty);
+          idx = e.key === "ArrowRight" ? (idx + 1) % order.length : (idx + order.length - 1) % order.length;
+          setDifficulty(order[idx], true);
+          var active = diffBtns.filter(function (b) { return b.dataset.diff === difficulty; })[0];
+          if (active) active.focus();
+        });
+
+        /* ---------- round-type switching ---------- */
+        modeBtns.forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            if (btn.dataset.mode === mode) return;
+            setMode(btn.dataset.mode, true);
+            announce(isPractice()
+              ? "Practice round started. Scores don't count here."
+              : "Real game started. This one counts.");
+          });
+        });
+        // Arrow-key navigation inside the round-type radiogroup
+        document.getElementById("modeGroup").addEventListener("keydown", function (e) {
+          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          e.preventDefault();
+          e.stopPropagation();
+          setMode(mode === "counted" ? "practice" : "counted", true);
+          var active = modeBtns.filter(function (b) { return b.dataset.mode === mode; })[0];
+          if (active) active.focus();
+          announce(isPractice()
+            ? "Practice round started. Scores don't count here."
+            : "Real game started. This one counts.");
+        });
+
+        /* ---------- start ---------- */
+        buildCells();
+        updateDifficultyUI();
+        updateModeUI();
+        newGame();
+      })();
+    </script>
+  </body>
+</html>

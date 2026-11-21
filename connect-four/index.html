@@ -1,0 +1,1045 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Connect Four — vs AI or 2 Players</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2.25rem; }
+      :root{
+        color-scheme: light dark;
+        --page:#eef1ea;
+        --ink:#1d2733;
+        --muted:#5c6a72;
+        --chrome:#ffffff;
+        --chrome-line:#d3dcd0;
+        --accent:#c8402f;
+        --accent-ink:#a02f21;
+        --btn:#1d2733;
+        --btn-ink:#ffffff;
+        --board:#2456b8;
+        --board-deep:#1a4191;
+        --board-edge:#123064;
+        --hole:#eef1ea;
+        --hole-ring:rgba(0,0,0,.18);
+        --p1:#e2483d;
+        --p1-deep:#b92f24;
+        --p2:#f2b824;
+        --p2-deep:#c78f0a;
+        --win-ring:#ffffff;
+        --shadow:0 12px 32px rgba(18,40,90,.28);
+        --good:#1e7a3c;
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --page:#10151d;
+          --ink:#eef2f6;
+          --muted:#9fb0bd;
+          --chrome:#1a2330;
+          --chrome-line:#33415479;
+          --chrome-line:#334154;
+          --accent:#ff7a6b;
+          --accent-ink:#ff9a8d;
+          --btn:#eef2f6;
+          --btn-ink:#141c26;
+          --board:#1f4da6;
+          --board-deep:#173b82;
+          --board-edge:#0e2657;
+          --hole:#10151d;
+          --hole-ring:rgba(0,0,0,.35);
+          --win-ring:#ffffff;
+          --shadow:0 12px 32px rgba(0,0,0,.55);
+          --good:#5fd68a;
+        }
+      }
+      * { box-sizing: border-box; }
+      html,body{ margin:0; padding:0; }
+      body{
+        font-family:"Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+        background:var(--page); color:var(--ink);
+        -webkit-tap-highlight-color: transparent;
+      }
+      .wrap{ max-width:640px; margin:0 auto; padding:14px 12px 28px; }
+      .backlink{
+        display:inline-flex; align-items:center; min-height:36px; padding:4px 2px;
+        color:var(--accent-ink); font-weight:700; font-size:14.5px; text-decoration:none;
+      }
+      .backlink:hover{ text-decoration:underline; }
+      h1{
+        font-family:"Bricolage Grotesque","Public Sans",sans-serif;
+        font-size:clamp(30px,7vw,44px); font-weight:800; letter-spacing:-.01em;
+        margin:2px 0 2px; line-height:1.02;
+      }
+      .sub{ color:var(--muted); margin:0 0 12px; font-size:15px; }
+      /* Controls */
+      .panel{
+        background:var(--chrome); border:1px solid var(--chrome-line); border-radius:14px;
+        padding:10px; margin-bottom:10px;
+      }
+      .segrow{ display:flex; gap:8px; flex-wrap:wrap; }
+      .seg{
+        flex:1 1 28%; cursor:pointer; min-height:48px;
+        border:2px solid var(--chrome-line); background:var(--chrome); color:var(--ink);
+        border-radius:12px; padding:7px 10px; text-align:left; font-family:inherit;
+      }
+      .seg b{ display:block; font-size:15.5px; font-family:"Bricolage Grotesque",sans-serif; }
+      .seg small{ display:block; color:var(--muted); font-size:12px; margin-top:1px; }
+      .seg[aria-pressed="true"]{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset; }
+      .seg:focus-visible, .btn:focus-visible, select:focus-visible, .colbtn:focus-visible, a:focus-visible{
+        outline:3px solid var(--accent); outline-offset:2px;
+      }
+      .optrow{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:10px; }
+      .optrow label{ font-size:13.5px; font-weight:700; display:flex; align-items:center; gap:7px; }
+      select{
+        font:600 14px "Public Sans",sans-serif; color:var(--ink);
+        background:var(--chrome); border:1px solid var(--chrome-line); border-radius:10px;
+        padding:8px; min-height:40px; max-width:56vw;
+      }
+      .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:10px; }
+      .btn{
+        cursor:pointer; border:1px solid var(--chrome-line); background:var(--chrome); color:var(--ink);
+        border-radius:10px; padding:8px 14px; font:600 14px "Public Sans",sans-serif; min-height:40px;
+      }
+      .btn.primary{ background:var(--btn); color:var(--btn-ink); border-color:var(--btn); }
+      .btn:disabled{ opacity:.45; cursor:default; }
+      /* Scoreboard */
+      .score{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+      .chip{
+        flex:1 1 30%; background:var(--chrome); border:1px solid var(--chrome-line);
+        border-radius:12px; padding:8px 10px; text-align:center;
+      }
+      .chip .n{ font-family:"Bricolage Grotesque",sans-serif; font-size:24px; font-weight:800; line-height:1.1; font-variant-numeric:tabular-nums; }
+      .chip .l{ font-size:12px; color:var(--muted); font-weight:600; }
+      .dot{ display:inline-block; width:11px; height:11px; border-radius:50%; vertical-align:-1px; margin-right:5px; }
+      .dot.r{ background:var(--p1); } .dot.y{ background:var(--p2); } .dot.d{ background:var(--muted); }
+      /* Turn banner */
+      .turn{
+        display:flex; align-items:center; gap:9px; min-height:30px;
+        font-size:16.5px; font-weight:700; margin:2px 2px 8px;
+      }
+      .turn .disc{ width:22px; height:22px; border-radius:50%; flex:0 0 auto; box-shadow:inset 0 -3px 0 rgba(0,0,0,.22); }
+      .turn .disc.r{ background:var(--p1); } .turn .disc.y{ background:var(--p2); }
+      .turn.win{ color:var(--good); }
+      /* Board */
+      .boardwrap{ position:relative; }
+      .colbtns{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-bottom:6px; }
+      .colbtn{
+        cursor:pointer; border:none; background:transparent; color:var(--muted);
+        font-size:19px; line-height:1; padding:6px 0 2px; min-height:40px; border-radius:10px;
+      }
+      .colbtn:hover:not(:disabled){ color:var(--ink); background:var(--chrome); }
+      .colbtn:disabled{ opacity:.25; cursor:default; }
+      .colbtn.suggest{ color:var(--good); background:color-mix(in srgb, var(--good) 16%, transparent); font-weight:800; }
+      .board{
+        background:linear-gradient(165deg, var(--board) 0%, var(--board-deep) 85%);
+        border:3px solid var(--board-edge); border-radius:18px;
+        padding:12px 10px 14px; box-shadow:var(--shadow);
+        display:grid; grid-template-columns:repeat(7,1fr); gap:6px;
+        user-select:none; -webkit-user-select:none; touch-action:manipulation;
+      }
+      .cell{
+        position:relative; aspect-ratio:1/1; border-radius:50%;
+        background:var(--hole); box-shadow:inset 0 3px 7px var(--hole-ring);
+        overflow:hidden;
+      }
+      .cell .disc{
+        position:absolute; inset:7%; border-radius:50%;
+        box-shadow:inset 0 -5px 0 rgba(0,0,0,.20), inset 0 3px 0 rgba(255,255,255,.28);
+      }
+      .cell .disc::after{
+        content:""; position:absolute; inset:26%; border-radius:50%;
+        box-shadow:inset 0 2px 4px rgba(0,0,0,.18);
+        background:rgba(255,255,255,.10);
+      }
+      .disc.r{ background:radial-gradient(circle at 35% 30%, #ff7a6d, var(--p1) 62%, var(--p1-deep)); }
+      .disc.y{ background:radial-gradient(circle at 35% 30%, #ffd968, var(--p2) 62%, var(--p2-deep)); }
+      .disc.drop{ animation:drop .34s cubic-bezier(.3,.7,.5,1.15); }
+      @keyframes drop{ from{ transform:translateY(-560%); } to{ transform:translateY(0); } }
+      .cell.win .disc{ animation:winpulse .7s ease-in-out infinite alternate; }
+      .cell.win{ box-shadow:inset 0 0 0 3px var(--win-ring), inset 0 3px 7px var(--hole-ring); }
+      @keyframes winpulse{ from{ filter:brightness(1); } to{ filter:brightness(1.35); } }
+      .cell.ghost-r, .cell.ghost-y{ }
+      .ghostdisc{
+        position:absolute; inset:7%; border-radius:50%; opacity:.45;
+      }
+      .ghostdisc.r{ background:var(--p1); } .ghostdisc.y{ background:var(--p2); }
+      .boardhint{
+        text-align:center; font-size:13.5px; color:var(--muted); margin:8px 2px 0; min-height:19px;
+      }
+      .boardhint b{ color:var(--ink); }
+      /* Bests */
+      .bests h2, .howto h2{
+        font-family:"Bricolage Grotesque",sans-serif; font-size:19px; margin:2px 0 8px;
+      }
+      .bestgrid{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+      .best{
+        border:1px solid var(--chrome-line); border-radius:10px; padding:8px 10px;
+      }
+      .best .n{ font-size:20px; font-weight:800; font-variant-numeric:tabular-nums; }
+      .best .l{ font-size:12px; color:var(--muted); font-weight:600; }
+      .bests .resetrow{ margin-top:10px; display:flex; justify-content:flex-end; }
+      /* Modal */
+      .scrim{
+        position:fixed; inset:0; background:rgba(10,16,26,.55);
+        display:none; align-items:flex-end; justify-content:center; z-index:40;
+      }
+      .scrim.open{ display:flex; }
+      .sheet{
+        background:var(--chrome); color:var(--ink); width:100%; max-width:560px;
+        max-height:88vh; overflow:auto; border-radius:20px 20px 0 0; padding:20px 18px 26px;
+      }
+      @media (min-width:560px){ .scrim{ align-items:center; } .sheet{ border-radius:20px; } }
+      .sheet h2{ font-family:"Bricolage Grotesque",sans-serif; font-size:24px; margin:0 0 4px; }
+      .sheet h3{ font-family:"Bricolage Grotesque",sans-serif; font-size:16.5px; margin:16px 0 4px; }
+      .sheet p, .sheet li{ font-size:15px; line-height:1.5; }
+      .sheet ul{ margin:6px 0; padding-left:20px; }
+      .steps{ display:grid; gap:10px; margin-top:10px; }
+      .step{ display:flex; gap:12px; align-items:flex-start; }
+      .step .num{
+        flex:0 0 auto; width:30px; height:30px; border-radius:50%;
+        background:var(--btn); color:var(--btn-ink); font-weight:800;
+        display:flex; align-items:center; justify-content:center; font-size:15px; margin-top:2px;
+      }
+      .step p{ margin:0; }
+      .sheet .closeRow{ display:flex; gap:8px; margin-top:18px; }
+      .sheet .closeRow .btn{ flex:1; min-height:48px; font-size:15.5px; }
+      /* Feedback */
+      .stars{ display:flex; gap:6px; margin:8px 0 4px; }
+      .star{
+        cursor:pointer; width:48px; height:48px; border-radius:12px; border:2px solid var(--chrome-line);
+        background:var(--chrome); font-size:26px; line-height:1; color:var(--muted); padding:0;
+      }
+      .star[aria-pressed="true"]{ border-color:var(--p2); background:color-mix(in srgb, var(--p2) 18%, var(--chrome)); color:#b97e00; }
+      @media (prefers-color-scheme: dark){ .star[aria-pressed="true"]{ color:var(--p2); } }
+      .star:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+      .fb-tags{ display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 4px; }
+      .fb-tag{
+        cursor:pointer; min-height:44px; border-radius:999px; border:2px solid var(--chrome-line);
+        background:var(--chrome); color:var(--ink); font:600 14px "Public Sans",sans-serif; padding:8px 16px;
+      }
+      .fb-tag[aria-pressed="true"]{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset; }
+      .fb-tag:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+      .fb-label{ display:block; font-size:13.5px; font-weight:700; margin-top:14px; }
+      textarea.fb-comment{
+        width:100%; margin-top:6px; font:400 15px/1.5 "Public Sans",sans-serif; color:var(--ink);
+        background:var(--chrome); border:1px solid var(--chrome-line); border-radius:10px; padding:10px; min-height:96px; resize:vertical;
+      }
+      textarea.fb-comment:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+      .fb-note{ font-size:13px; color:var(--muted); line-height:1.5; margin-top:10px; }
+      .fb-note a{ color:var(--accent-ink); font-weight:600; }
+      .fb-status{ min-height:20px; font-size:14px; font-weight:600; margin-top:8px; }
+      .fb-status.ok{ color:var(--good); }
+      .fb-status.err{ color:var(--accent-ink); }
+      footer{ margin-top:18px; font-size:13px; color:var(--muted); text-align:center; }
+      footer a{ color:var(--accent-ink); font-weight:600; }
+      @media (prefers-reduced-motion: reduce){
+        .disc.drop{ animation:none; }
+        .cell.win .disc{ animation:none; filter:brightness(1.25); }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <a class="backlink" href="../games-hub/">← Games Hub</a>
+      <h1>Connect Four</h1>
+      <p class="sub">Drop discs, line up four in a row — across, down, or diagonal. Beat the computer, pass-and-play with a friend, or warm up with a no-stakes practice round.</p>
+
+      <section class="panel" aria-label="Game options">
+        <div class="segrow" role="group" aria-label="Mode">
+          <button class="seg" id="modeAi" aria-pressed="true"><b>🤖 Vs Computer</b><small>Three difficulty levels</small></button>
+          <button class="seg" id="mode2p" aria-pressed="false"><b>👥 2 Players</b><small>Pass-and-play, same device</small></button>
+          <button class="seg" id="modePractice" aria-pressed="false"><b>🎯 Practice round</b><small>Hints on — nothing counts</small></button>
+        </div>
+        <div class="optrow">
+          <label id="diffLabel">Difficulty
+            <select id="difficulty">
+              <option value="easy">Easy — learning the ropes</option>
+              <option value="medium" selected>Medium — a real game</option>
+              <option value="hard">Hard — thinks 7 moves deep</option>
+            </select>
+          </label>
+          <label>First move
+            <select id="firstMove">
+              <option value="player" selected>You / Red</option>
+              <option value="other">Computer / Yellow</option>
+              <option value="alternate">Alternate each game</option>
+            </select>
+          </label>
+        </div>
+        <div class="toolbar">
+          <button class="btn primary" id="newGameBtn">New game</button>
+          <button class="btn" id="undoBtn">Undo</button>
+          <button class="btn" id="howBtn">How to play</button>
+          <button class="btn" id="rulesBtn">Rules</button>
+          <button class="btn" id="soundBtn" aria-pressed="true">Sound: on</button>
+          <button class="btn" id="feedbackBtn">💬 Feedback</button>
+        </div>
+      </section>
+
+      <div class="score" aria-label="Score this session and all time">
+        <div class="chip"><div class="n" id="scoreP1">0</div><div class="l"><span class="dot r"></span><span id="scoreP1Label">Your wins</span></div></div>
+        <div class="chip"><div class="n" id="scoreDraws">0</div><div class="l"><span class="dot d"></span>Draws</div></div>
+        <div class="chip"><div class="n" id="scoreP2">0</div><div class="l"><span class="dot y"></span><span id="scoreP2Label">Computer wins</span></div></div>
+      </div>
+
+      <p class="turn" id="turnBanner" aria-live="polite"></p>
+
+      <div class="boardwrap">
+        <div class="colbtns" id="colBtns" aria-label="Drop a disc in a column"></div>
+        <div class="board" id="board" role="grid" aria-label="Connect Four board, 7 columns by 6 rows"></div>
+        <p class="boardhint" id="boardHint"></p>
+      </div>
+
+      <section class="panel bests" aria-label="Your bests">
+        <h2>Your bests <span style="font-size:13px;color:var(--muted);font-weight:600;">(saved on this device)</span></h2>
+        <div class="bestgrid">
+          <div class="best"><div class="n" id="bestStreak">0</div><div class="l">Best win streak vs computer</div></div>
+          <div class="best"><div class="n" id="bestFastest">—</div><div class="l">Fastest win (your moves)</div></div>
+          <div class="best"><div class="n" id="bestGames">0</div><div class="l">Games vs computer</div></div>
+          <div class="best"><div class="n" id="bestWinRate">—</div><div class="l">Win rate vs computer</div></div>
+        </div>
+        <div class="resetrow"><button class="btn" id="resetStatsBtn">Reset bests</button></div>
+      </section>
+
+      <footer>
+        Part of the games arcade · <a href="../games-hub/">Back to the Games Hub</a> · <a href="../games-hub/#legal">Terms &amp; policies</a>
+      </footer>
+    </main>
+
+    <!-- Tutorial / How to play -->
+    <div class="scrim" id="tutScrim" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+      <div class="sheet">
+        <h2 id="tutTitle">How to play — quick tutorial</h2>
+        <p>Two players take turns dropping discs into a 7-wide, 6-tall grid. First to line up <b>four of their discs in a row</b> wins.</p>
+        <div class="steps">
+          <div class="step"><div class="num">1</div><p><b>Drop a disc.</b> Tap or click any column (or use keys 1–7). Your disc falls to the lowest empty slot in that column — you can't float a disc mid-air.</p></div>
+          <div class="step"><div class="num">2</div><p><b>Build your line.</b> Fours count across, straight down, or diagonally. Watch for setups where one drop completes two lines at once — those are nearly impossible to block.</p></div>
+          <div class="step"><div class="num">3</div><p><b>Block theirs.</b> If your opponent has three in a row with an open end, drop there first — unless you can win outright this turn. Winning beats blocking.</p></div>
+        </div>
+        <h3>Good to know</h3>
+        <ul>
+          <li><b>Center is king early.</b> The middle column (column 4) joins more possible lines than any other.</li>
+          <li><b>Vs Computer:</b> Easy makes friendly mistakes, Medium plays solid, Hard looks 7 moves ahead. Your bests are tracked against the computer only.</li>
+          <li><b>Practice round:</b> play the computer with a suggested move and a short explanation every turn — the suggested column is highlighted above the board. Practice games never count toward your score or bests, so experiment and undo freely.</li>
+          <li><b>2 Players:</b> pass the device back and forth — Red always drops first unless you change “First move”.</li>
+          <li><b>Undo</b> takes back the last round (your move + the reply) in Vs Computer, or one move in 2 Players.</li>
+          <li>If the board fills with no four in a row, it's a draw.</li>
+        </ul>
+        <div class="closeRow">
+          <button class="btn primary" id="tutClose">Start playing</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full rules -->
+    <div class="scrim" id="rulesScrim" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+      <div class="sheet">
+        <h2 id="rulesTitle">Connect Four — full rules</h2>
+        <h3>Objective</h3>
+        <p>Be the first player to connect <b>four of your discs in an unbroken line</b> — horizontally, vertically, or diagonally — on the 7-column × 6-row grid.</p>
+        <h3>Setup</h3>
+        <ul>
+          <li>Red always plays the first colour slot; Yellow plays second. In Vs Computer you are Red unless “First move” says otherwise.</li>
+          <li>“First move” decides who drops first: You/Red, Computer/Yellow, or Alternate (the starter swaps every game).</li>
+          <li>Each player has an unlimited supply of discs — you never run out.</li>
+        </ul>
+        <h3>Playing a turn</h3>
+        <ul>
+          <li>On your turn, choose one of the 7 columns. Your disc drops to the <b>lowest empty slot</b> in that column — discs always stack from the bottom.</li>
+          <li>A column with all 6 slots filled is closed; you cannot play there.</li>
+          <li>Turns strictly alternate. There is no passing and no timer.</li>
+        </ul>
+        <h3>Winning &amp; draws</h3>
+        <ul>
+          <li>The game ends the instant a player completes a line of four — even if that drop also fills the last slot on the board.</li>
+          <li>Lines of five or more contain a line of four and also win.</li>
+          <li>If all 42 slots fill with no line of four, the game is a <b>draw</b>.</li>
+          <li>The winning four discs are highlighted on the board.</li>
+        </ul>
+        <h3>Scoring &amp; bests</h3>
+        <ul>
+          <li>The score chips count wins and draws for this session and reset when you switch mode.</li>
+          <li><b>Bests</b> (saved on this device) track games against the computer only: best win streak, fastest win measured in your own moves, total games, and win rate. Draws break a win streak.</li>
+          <li>2-player pass-and-play games don't affect your bests.</li>
+          <li><b>Practice rounds</b> don't count at all — no score chips, no bests. They're just for learning.</li>
+          <li>“Reset bests” clears the saved record; it can't be undone.</li>
+        </ul>
+        <h3>Special rules in this version</h3>
+        <ul>
+          <li><b>Undo:</b> in Vs Computer, Undo takes back the last full round (the computer's reply and your move), so it's always your turn again. In 2 Players it takes back one move. Undoing a finished game also removes it from the score and bests.</li>
+          <li><b>Difficulty:</b> Easy looks 2 moves ahead and sometimes plays a friendly random move; Medium looks 5 ahead; Hard looks 7 ahead and picks the strongest line it can find.</li>
+          <li><b>Practice mode:</b> a third mode against the computer. Every turn it highlights a suggested column above the board and explains the pick — a win, a block, or the strongest build it can find. Nothing in a practice round is scored.</li>
+          <li><b>Rematch</b> starts a fresh board with the same mode, difficulty, and first-move setting.</li>
+          <li>No chat, no accounts, no real-money play — just the board.</li>
+        </ul>
+        <div class="closeRow">
+          <button class="btn primary" id="rulesClose">Got it</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback -->
+    <div class="scrim" id="feedbackScrim" role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+      <div class="sheet">
+        <h2 id="feedbackTitle">Feedback — Connect Four</h2>
+        <p>Tell us how this game plays. A quick rating and a line or two help decide what gets fixed or added next.</p>
+        <span class="fb-label" id="ratingLabel">Your rating</span>
+        <div class="stars" role="group" aria-labelledby="ratingLabel" id="starRow">
+          <button type="button" class="star" data-value="1" aria-pressed="false" aria-label="1 star">★</button>
+          <button type="button" class="star" data-value="2" aria-pressed="false" aria-label="2 stars">★</button>
+          <button type="button" class="star" data-value="3" aria-pressed="false" aria-label="3 stars">★</button>
+          <button type="button" class="star" data-value="4" aria-pressed="false" aria-label="4 stars">★</button>
+          <button type="button" class="star" data-value="5" aria-pressed="false" aria-label="5 stars">★</button>
+        </div>
+        <span class="fb-label" id="tagLabel">Tag (optional)</span>
+        <div class="fb-tags" role="group" aria-labelledby="tagLabel" id="tagRow">
+          <button type="button" class="fb-tag" data-tag="Bug" aria-pressed="false">Bug</button>
+          <button type="button" class="fb-tag" data-tag="Suggestion" aria-pressed="false">Suggestion</button>
+          <button type="button" class="fb-tag" data-tag="Other" aria-pressed="false">Other</button>
+        </div>
+        <label class="fb-label" for="feedbackComment">Your comment (optional)</label>
+        <textarea class="fb-comment" id="feedbackComment" maxlength="1000" placeholder="What worked? What was annoying? What would you change?"></textarea>
+        <p class="fb-note">Feedback follows the same <a href="../games-hub/#legal">Terms &amp; policies</a> as the rest of the arcade: please don't include personal information, keep it clean (moderation rules apply), and feedback may be used to improve the games. Saved on this device for now.</p>
+        <p class="fb-status" id="feedbackStatus" aria-live="polite"></p>
+        <div class="closeRow">
+          <button class="btn primary" id="feedbackSubmit">Save</button>
+          <button class="btn" id="feedbackClose">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Game over -->
+    <div class="scrim" id="overScrim" role="dialog" aria-modal="true" aria-labelledby="overTitle">
+      <div class="sheet">
+        <h2 id="overTitle">Game over</h2>
+        <p id="overText"></p>
+        <div class="closeRow">
+          <button class="btn primary" id="rematchBtn">Rematch</button>
+          <button class="btn" id="overClose">Look at the board</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    (function(){
+      "use strict";
+      var ROWS = 6, COLS = 7;
+      var EMPTY = 0, P1 = 1, P2 = 2;
+
+      var LS_STATS = "connect-four-stats-v1";
+      var LS_TUT = "connect-four-tutorial-v1";
+      var LS_PREFS = "connect-four-prefs-v1";
+
+      // ---------- State ----------
+      var board, current, winner, winCells, moveHistory, gameOver, movesMade;
+      var mode = "ai";               // effective play mode: "ai" | "2p"
+      var uiMode = "ai";             // selected option: "ai" | "2p" | "practice"
+      var practice = false;          // practice = ai play + hints, nothing scored
+      var suggestCol = -1, suggestKey = -1, suggestReason = "";
+      var difficulty = "medium";
+      var firstMove = "player";
+      var gameNumber = 0;
+      var soundOn = true;
+      var aiThinking = false;
+      var session = { p1: 0, p2: 0, draws: 0 };
+      var stats = loadStats();
+      var firstGameHint = true;
+
+      function loadStats(){
+        var d = { games:0, wins:0, losses:0, draws:0, streak:0, bestStreak:0, fastestWin:null };
+        try {
+          var raw = localStorage.getItem(LS_STATS);
+          if (raw) { var p = JSON.parse(raw); for (var k in d) if (p[k] !== undefined) d[k] = p[k]; }
+        } catch(e){}
+        return d;
+      }
+      function saveStats(){ try { localStorage.setItem(LS_STATS, JSON.stringify(stats)); } catch(e){} }
+      function loadPrefs(){
+        try {
+          var p = JSON.parse(localStorage.getItem(LS_PREFS) || "{}");
+          if (p.mode) uiMode = p.mode;
+          if (p.difficulty) difficulty = p.difficulty;
+          if (p.firstMove) firstMove = p.firstMove;
+          if (typeof p.soundOn === "boolean") soundOn = p.soundOn;
+        } catch(e){}
+      }
+      function savePrefs(){
+        try { localStorage.setItem(LS_PREFS, JSON.stringify({ mode:uiMode, difficulty:difficulty, firstMove:firstMove, soundOn:soundOn })); } catch(e){}
+      }
+
+      // ---------- DOM ----------
+      var $ = function(id){ return document.getElementById(id); };
+      var boardEl = $("board"), colBtnsEl = $("colBtns"), turnEl = $("turnBanner"), hintEl = $("boardHint");
+
+      function buildBoardDom(){
+        boardEl.innerHTML = "";
+        for (var r = 0; r < ROWS; r++){
+          for (var c = 0; c < COLS; c++){
+            var cell = document.createElement("div");
+            cell.className = "cell";
+            cell.setAttribute("role","gridcell");
+            cell.dataset.r = r; cell.dataset.c = c;
+            cell.addEventListener("click", function(){ dropInColumn(+this.dataset.c); });
+            cell.addEventListener("mouseenter", function(){ showGhost(+this.dataset.c); });
+            boardEl.appendChild(cell);
+          }
+        }
+        boardEl.addEventListener("mouseleave", clearGhost);
+        colBtnsEl.innerHTML = "";
+        for (var c2 = 0; c2 < COLS; c2++){
+          var b = document.createElement("button");
+          b.className = "colbtn"; b.textContent = "▼";
+          b.setAttribute("aria-label", "Drop disc in column " + (c2 + 1));
+          (function(col){ b.addEventListener("click", function(){ dropInColumn(col); }); })(c2);
+          colBtnsEl.appendChild(b);
+        }
+      }
+      function cellEl(r, c){ return boardEl.children[r * COLS + c]; }
+
+      function render(dropInfo){
+        for (var r = 0; r < ROWS; r++){
+          for (var c = 0; c < COLS; c++){
+            var cell = cellEl(r, c);
+            var v = board[r][c];
+            cell.classList.toggle("win", !!winCells && winCells.some(function(w){ return w[0]===r && w[1]===c; }));
+            var existing = cell.querySelector(".disc:not(.ghostdisc)");
+            if (v !== EMPTY && !existing){
+              var d = document.createElement("div");
+              d.className = "disc " + (v === P1 ? "r" : "y");
+              if (dropInfo && dropInfo.r === r && dropInfo.c === c) d.classList.add("drop");
+              cell.appendChild(d);
+            } else if (v === EMPTY && existing){
+              existing.remove();
+            }
+          }
+        }
+        // Column buttons availability
+        var btns = colBtnsEl.children;
+        for (var c3 = 0; c3 < COLS; c3++){
+          btns[c3].disabled = gameOver || board[0][c3] !== EMPTY || aiThinking || (mode === "ai" && current === P2);
+        }
+        updateTurn();
+        updateScore();
+        updatePracticeUI();
+      }
+
+      function updateTurn(){
+        var name1 = mode === "ai" ? "You" : "Red";
+        var name2 = mode === "ai" ? "Computer" : "Yellow";
+        if (gameOver){
+          turnEl.className = "turn win";
+          if (winner === 0){ turnEl.innerHTML = "🤝 It's a draw — board's full, nobody got four."; }
+          else {
+            var wn = winner === P1 ? name1 : name2;
+            turnEl.innerHTML = "<span class='disc " + (winner === P1 ? "r" : "y") + "'></span> " +
+              (mode === "ai" ? (winner === P1 ? "You win! 🎉 Four in a row." : "Computer wins this one.") : wn + " wins! 🎉 Four in a row.");
+          }
+          return;
+        }
+        turnEl.className = "turn";
+        var who = current === P1 ? name1 : name2;
+        var label = (mode === "ai")
+          ? (current === P1 ? "Your turn — pick a column" : "Computer is thinking…")
+          : who + "'s turn — pick a column";
+        if (practice) label = "Practice · " + label;
+        turnEl.innerHTML = "<span class='disc " + (current === P1 ? "r" : "y") + "'></span> " + label;
+      }
+
+      function updateScore(){
+        $("scoreP1").textContent = session.p1;
+        $("scoreP2").textContent = session.p2;
+        $("scoreDraws").textContent = session.draws;
+        $("scoreP1Label").textContent = mode === "ai" ? "Your wins" : "Red wins";
+        $("scoreP2Label").textContent = mode === "ai" ? "Computer wins" : "Yellow wins";
+        $("bestStreak").textContent = stats.bestStreak;
+        $("bestFastest").textContent = stats.fastestWin === null ? "—" : stats.fastestWin;
+        $("bestGames").textContent = stats.games;
+        $("bestWinRate").textContent = stats.games ? Math.round(100 * stats.wins / stats.games) + "%" : "—";
+      }
+
+      // ---------- Sound (tiny WebAudio blips) ----------
+      var audioCtx = null;
+      function beep(freq, dur, delay, type){
+        if (!soundOn) return;
+        try {
+          if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          if (audioCtx.state === "suspended") audioCtx.resume();
+          var t = audioCtx.currentTime + (delay || 0);
+          var o = audioCtx.createOscillator(), g = audioCtx.createGain();
+          o.type = type || "sine"; o.frequency.value = freq;
+          g.gain.setValueAtTime(0.12, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+          o.connect(g); g.connect(audioCtx.destination);
+          o.start(t); o.stop(t + dur);
+        } catch(e){}
+      }
+      function sndDrop(){ beep(300, .12, 0, "triangle"); beep(180, .1, .05, "triangle"); }
+      function sndWin(){ [523,659,784,1047].forEach(function(f,i){ beep(f, .22, i * .11, "sine"); }); }
+      function sndLose(){ [392,330,262].forEach(function(f,i){ beep(f, .22, i * .12, "sine"); }); }
+
+      // ---------- Game logic ----------
+      function emptyBoard(){
+        var b = [];
+        for (var r = 0; r < ROWS; r++){ var row = []; for (var c = 0; c < COLS; c++) row.push(EMPTY); b.push(row); }
+        return b;
+      }
+      function landingRow(b, c){
+        for (var r = ROWS - 1; r >= 0; r--) if (b[r][c] === EMPTY) return r;
+        return -1;
+      }
+      function findWin(b, p){
+        var dirs = [[0,1],[1,0],[1,1],[1,-1]];
+        for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++){
+          if (b[r][c] !== p) continue;
+          for (var d = 0; d < 4; d++){
+            var cells = [[r,c]], ok = true;
+            for (var k = 1; k < 4; k++){
+              var rr = r + dirs[d][0]*k, cc = c + dirs[d][1]*k;
+              if (rr < 0 || rr >= ROWS || cc < 0 || cc >= COLS || b[rr][cc] !== p){ ok = false; break; }
+              cells.push([rr,cc]);
+            }
+            if (ok) return cells;
+          }
+        }
+        return null;
+      }
+      function boardFull(b){ return b[0].every(function(v){ return v !== EMPTY; }); }
+
+      function startingPlayer(){
+        if (firstMove === "player") return P1;
+        if (firstMove === "other") return P2;
+        return (gameNumber % 2 === 0) ? P1 : P2;
+      }
+
+      function newGame(){
+        board = emptyBoard();
+        moveHistory = [];
+        winner = null; winCells = null; gameOver = false; movesMade = 0; aiThinking = false;
+        suggestKey = -1; suggestCol = -1;
+        current = startingPlayer();
+        $("overScrim").classList.remove("open");
+        clearGhost();
+        render(null);
+        if (firstGameHint){
+          hintEl.innerHTML = "New here? Tap <b>How to play</b> for a quick tutorial — or just tap any column to drop your first disc.";
+        } else {
+          hintEl.textContent = "";
+        }
+        if (practice) updatePracticeUI();
+        if (mode === "ai" && current === P2) scheduleAi();
+      }
+
+      function dropInColumn(c){
+        if (gameOver || aiThinking) return;
+        if (mode === "ai" && current === P2) return;
+        var r = landingRow(board, c);
+        if (r < 0) return;
+        firstGameHint = false; hintEl.textContent = "";
+        placeDisc(r, c, current);
+        afterMove();
+      }
+
+      function placeDisc(r, c, p){
+        board[r][c] = p;
+        moveHistory.push({ r:r, c:c, p:p });
+        movesMade++;
+        sndDrop();
+        render({ r:r, c:c });
+      }
+
+      function afterMove(){
+        var w = findWin(board, current);
+        if (w){ winCells = w; winner = current; gameOver = true; finishGame(); render(null); return; }
+        if (boardFull(board)){ winner = 0; gameOver = true; finishGame(); render(null); return; }
+        current = current === P1 ? P2 : P1;
+        render(null);
+        if (mode === "ai" && current === P2 && !gameOver) scheduleAi();
+      }
+
+      function finishGame(){
+        if (!practice){
+          if (winner === P1) session.p1++;
+          else if (winner === P2) session.p2++;
+          else session.draws++;
+        }
+        if (mode === "ai" && !practice){
+          stats.games++;
+          if (winner === P1){
+            stats.wins++; stats.streak++;
+            if (stats.streak > stats.bestStreak) stats.bestStreak = stats.streak;
+            var myMoves = Math.ceil(movesMade / 2);
+            if (stats.fastestWin === null || myMoves < stats.fastestWin) stats.fastestWin = myMoves;
+          } else if (winner === P2){
+            stats.losses++; stats.streak = 0;
+          } else {
+            stats.draws++; stats.streak = 0;
+          }
+          saveStats();
+        }
+        if (winner === P1 && mode === "ai") sndWin();
+        else if (winner === P2 && mode === "ai") sndLose();
+        else if (winner !== 0) sndWin();
+        var name1 = mode === "ai" ? "You" : "Red", name2 = mode === "ai" ? "the computer" : "Yellow";
+        var txt;
+        if (winner === 0) txt = "The board filled up with no four in a row. Honours even — run it back?";
+        else if (winner === P1) txt = (mode === "ai" ? "You" : "Red") + " connected four in " + movesMade + " total moves. " + (mode === "ai" && stats.streak > 1 ? "That's a " + stats.streak + "-game win streak! " : "") + "Rematch?";
+        else txt = (mode === "ai" ? "The computer" : "Yellow") + " connected four in " + movesMade + " total moves. Rematch?";
+        if (practice) txt = "Practice round over — " + (winner === 0 ? "that one filled up for a draw." : winner === P1 ? "you connected four!" : "the computer connected four this time.") + " Practice never counts toward your score or bests, so run it back and try a different line.";
+        $("overText").textContent = txt;
+        $("overTitle").textContent = winner === 0 ? "It's a draw 🤝" : (winner === P1 ? name1 + " win! 🎉" : (mode === "ai" ? "Computer wins" : name2 + " wins! 🎉"));
+        setTimeout(function(){ if (gameOver) $("overScrim").classList.add("open"); }, 650);
+        updateScore();
+      }
+
+      function undo(){
+        if (aiThinking || moveHistory.length === 0) return;
+        $("overScrim").classList.remove("open");
+        var steps = 1;
+        if (mode === "ai"){
+          // Take back the AI reply + your move (or just the last move if game ended on yours)
+          steps = (moveHistory[moveHistory.length - 1].p === P2) ? 2 : 1;
+          if (gameOver && winner === P1) steps = 1;
+          if (moveHistory.length < steps) steps = moveHistory.length;
+        }
+        var wasOver = gameOver;
+        for (var i = 0; i < steps; i++){
+          var m = moveHistory.pop();
+          board[m.r][m.c] = EMPTY;
+          movesMade--;
+        }
+        if (wasOver && !practice){
+          // Roll back session score (stats vs AI are kept as played — a finished game counts)
+          if (winner === P1) session.p1 = Math.max(0, session.p1 - 1);
+          else if (winner === P2) session.p2 = Math.max(0, session.p2 - 1);
+          else session.draws = Math.max(0, session.draws - 1);
+          if (mode === "ai"){
+            stats.games = Math.max(0, stats.games - 1);
+            if (winner === P1){ stats.wins = Math.max(0, stats.wins - 1); stats.streak = Math.max(0, stats.streak - 1); }
+            else if (winner === P2){ stats.losses = Math.max(0, stats.losses - 1); }
+            else { stats.draws = Math.max(0, stats.draws - 1); }
+            saveStats();
+          }
+        }
+        winner = null; winCells = null; gameOver = false;
+        current = (mode === "ai") ? P1 : (moveHistory.length ? (moveHistory[moveHistory.length-1].p === P1 ? P2 : P1) : startingPlayer());
+        if (mode === "2p" && moveHistory.length === 0) current = startingPlayer();
+        if (mode === "ai" && moveHistory.length === 0 && startingPlayer() === P2){
+          current = P2; render(null); scheduleAi(); return;
+        }
+        render(null);
+      }
+
+      // ---------- Ghost preview ----------
+      function clearGhost(){
+        boardEl.querySelectorAll(".ghostdisc").forEach(function(g){ g.remove(); });
+      }
+      function showGhost(c){
+        clearGhost();
+        if (gameOver || aiThinking) return;
+        if (mode === "ai" && current === P2) return;
+        var r = landingRow(board, c);
+        if (r < 0) return;
+        var g = document.createElement("div");
+        g.className = "ghostdisc " + (current === P1 ? "r" : "y");
+        cellEl(r, c).appendChild(g);
+      }
+
+      // ---------- AI ----------
+      function scoreWindow(w, p){
+        var opp = p === P1 ? P2 : P1;
+        var mine = 0, theirs = 0, empty = 0;
+        for (var i = 0; i < 4; i++){ if (w[i] === p) mine++; else if (w[i] === opp) theirs++; else empty++; }
+        if (mine === 4) return 100000;
+        if (mine === 3 && empty === 1) return 800;
+        if (mine === 2 && empty === 2) return 40;
+        if (theirs === 3 && empty === 1) return -900;
+        if (theirs === 2 && empty === 2) return -35;
+        return 0;
+      }
+      function evaluate(b, p){
+        var s = 0, r, c, k;
+        // Center preference
+        for (r = 0; r < ROWS; r++) if (b[r][3] === p) s += 60;
+        // Horizontal
+        for (r = 0; r < ROWS; r++) for (c = 0; c <= COLS - 4; c++)
+          s += scoreWindow([b[r][c], b[r][c+1], b[r][c+2], b[r][c+3]], p);
+        // Vertical
+        for (c = 0; c < COLS; c++) for (r = 0; r <= ROWS - 4; r++)
+          s += scoreWindow([b[r][c], b[r+1][c], b[r+2][c], b[r+3][c]], p);
+        // Diagonals
+        for (r = 0; r <= ROWS - 4; r++) for (c = 0; c <= COLS - 4; c++)
+          s += scoreWindow([b[r][c], b[r+1][c+1], b[r+2][c+2], b[r+3][c+3]], p);
+        for (r = 3; r < ROWS; r++) for (c = 0; c <= COLS - 4; c++)
+          s += scoreWindow([b[r][c], b[r-1][c+1], b[r-2][c+2], b[r-3][c+3]], p);
+        return s;
+      }
+      var ORDER = [3, 2, 4, 1, 5, 0, 6];
+      function minimax(b, depth, alpha, beta, maximizing, aiP){
+        var humanP = aiP === P1 ? P2 : P1;
+        if (findWin(b, aiP)) return 1000000 + depth;
+        if (findWin(b, humanP)) return -1000000 - depth;
+        if (boardFull(b)) return 0;
+        if (depth === 0) return evaluate(b, aiP);
+        var i, c, r;
+        if (maximizing){
+          var best = -Infinity;
+          for (i = 0; i < COLS; i++){
+            c = ORDER[i]; r = landingRow(b, c); if (r < 0) continue;
+            b[r][c] = aiP;
+            best = Math.max(best, minimax(b, depth - 1, alpha, beta, false, aiP));
+            b[r][c] = EMPTY;
+            alpha = Math.max(alpha, best);
+            if (alpha >= beta) break;
+          }
+          return best;
+        } else {
+          var worst = Infinity;
+          for (i = 0; i < COLS; i++){
+            c = ORDER[i]; r = landingRow(b, c); if (r < 0) continue;
+            b[r][c] = humanP;
+            worst = Math.min(worst, minimax(b, depth - 1, alpha, beta, true, aiP));
+            b[r][c] = EMPTY;
+            beta = Math.min(beta, worst);
+            if (alpha >= beta) break;
+          }
+          return worst;
+        }
+      }
+      function aiChooseColumn(){
+        var depth = difficulty === "easy" ? 2 : difficulty === "medium" ? 5 : 7;
+        var valid = [];
+        for (var i = 0; i < COLS; i++){ var c = ORDER[i]; if (landingRow(board, c) >= 0) valid.push(c); }
+        if (difficulty === "easy" && Math.random() < 0.3){
+          return valid[Math.floor(Math.random() * valid.length)];
+        }
+        var bestScore = -Infinity, bestCols = [];
+        for (var j = 0; j < valid.length; j++){
+          var cc = valid[j], rr = landingRow(board, cc);
+          board[rr][cc] = P2;
+          var s = minimax(board, depth - 1, -Infinity, Infinity, false, P2);
+          board[rr][cc] = EMPTY;
+          if (s > bestScore){ bestScore = s; bestCols = [cc]; }
+          else if (s === bestScore) bestCols.push(cc);
+        }
+        return bestCols[Math.floor(Math.random() * bestCols.length)];
+      }
+      function scheduleAi(){
+        aiThinking = true; render(null);
+        setTimeout(function(){
+          if (gameOver) { aiThinking = false; return; }
+          var c = aiChooseColumn();
+          aiThinking = false;
+          var r = landingRow(board, c);
+          if (r >= 0){ placeDisc(r, c, P2); afterMove(); }
+        }, 380);
+      }
+
+      // ---------- Practice mode ----------
+      function practiceSuggestion(){
+        // Best move for the player (P1) on the current board, with a plain reason.
+        var valid = [], c, r, i;
+        for (i = 0; i < COLS; i++){ c = ORDER[i]; if (landingRow(board, c) >= 0) valid.push(c); }
+        if (!valid.length) return null;
+        // 1) A move that wins right now beats everything.
+        for (i = 0; i < valid.length; i++){
+          r = landingRow(board, valid[i]); board[r][valid[i]] = P1;
+          var w = findWin(board, P1); board[r][valid[i]] = EMPTY;
+          if (w) return { col: valid[i], reason: "it completes your four in a row. Take the win!" };
+        }
+        // Columns where the computer (P2) would win on its next turn.
+        var threats = [];
+        for (i = 0; i < valid.length; i++){
+          r = landingRow(board, valid[i]); board[r][valid[i]] = P2;
+          var w2 = findWin(board, P2); board[r][valid[i]] = EMPTY;
+          if (w2) threats.push(valid[i]);
+        }
+        // 2) Otherwise the strongest move the engine can find from P1's side.
+        var bestScore = -Infinity, bestCol = valid[0];
+        for (i = 0; i < valid.length; i++){
+          r = landingRow(board, valid[i]); board[r][valid[i]] = P1;
+          var s = minimax(board, 4, -Infinity, Infinity, false, P1);
+          board[r][valid[i]] = EMPTY;
+          if (s > bestScore){ bestScore = s; bestCol = valid[i]; }
+        }
+        if (threats.length && threats.indexOf(bestCol) >= 0)
+          return { col: bestCol, reason: "careful — the computer can win next turn, and this blocks its four in a row." };
+        if (threats.length)
+          return { col: bestCol, reason: "the computer is threatening a win in column " + (threats[0] + 1) + ", but this is the strongest reply I can find." };
+        return { col: bestCol, reason: "it's the strongest move I can find — it builds the most ways to reach four." };
+      }
+      function updatePracticeUI(){
+        var btns = colBtnsEl.children, i;
+        for (i = 0; i < btns.length; i++) btns[i].classList.remove("suggest");
+        if (!practice){ suggestCol = -1; return; }
+        if (gameOver){
+          suggestCol = -1;
+          hintEl.textContent = "Practice round over — nothing was added to your score or bests.";
+          return;
+        }
+        if (current === P2){
+          suggestCol = -1;
+          hintEl.textContent = "Practice: watch where the computer drops, then check for its three-in-a-rows before your next move.";
+          return;
+        }
+        if (suggestKey !== movesMade || suggestCol < 0){
+          var s = practiceSuggestion();
+          suggestCol = s ? s.col : -1;
+          suggestReason = s ? s.reason : "";
+          suggestKey = movesMade;
+        }
+        if (suggestCol >= 0 && btns[suggestCol]) btns[suggestCol].classList.add("suggest");
+        if (suggestCol >= 0)
+          hintEl.innerHTML = "💡 <b>Practice hint:</b> try <b>column " + (suggestCol + 1) + "</b> — " + suggestReason;
+      }
+
+      // ---------- Controls wiring ----------
+      function setMode(m){
+        uiMode = m;
+        practice = (m === "practice");
+        mode = practice ? "ai" : m;
+        suggestCol = -1; suggestKey = -1; suggestReason = "";
+        $("modeAi").setAttribute("aria-pressed", m === "ai" ? "true" : "false");
+        $("mode2p").setAttribute("aria-pressed", m === "2p" ? "true" : "false");
+        $("modePractice").setAttribute("aria-pressed", practice ? "true" : "false");
+        $("diffLabel").style.display = mode === "ai" ? "" : "none";
+        $("firstMove").innerHTML = mode === "ai"
+          ? '<option value="player">You / Red</option><option value="other">Computer / Yellow</option><option value="alternate">Alternate each game</option>'
+          : '<option value="player">Red</option><option value="other">Yellow</option><option value="alternate">Alternate each game</option>';
+        $("firstMove").value = firstMove;
+        savePrefs();
+        session = { p1: 0, p2: 0, draws: 0 };
+        gameNumber = 0;
+        newGame();
+      }
+      $("modeAi").addEventListener("click", function(){ if (uiMode !== "ai") setMode("ai"); });
+      $("mode2p").addEventListener("click", function(){ if (uiMode !== "2p") setMode("2p"); });
+      $("modePractice").addEventListener("click", function(){ if (uiMode !== "practice") setMode("practice"); });
+      $("difficulty").addEventListener("change", function(){ difficulty = this.value; savePrefs(); });
+      $("firstMove").addEventListener("change", function(){ firstMove = this.value; savePrefs(); newGame(); });
+      $("newGameBtn").addEventListener("click", function(){ gameNumber++; newGame(); });
+      $("undoBtn").addEventListener("click", undo);
+      $("rematchBtn").addEventListener("click", function(){ gameNumber++; newGame(); });
+      $("overClose").addEventListener("click", function(){ $("overScrim").classList.remove("open"); });
+      $("resetStatsBtn").addEventListener("click", function(){
+        stats = { games:0, wins:0, losses:0, draws:0, streak:0, bestStreak:0, fastestWin:null };
+        saveStats(); updateScore();
+        hintEl.textContent = "Bests cleared. Fresh start!";
+      });
+      $("soundBtn").addEventListener("click", function(){
+        soundOn = !soundOn;
+        this.textContent = "Sound: " + (soundOn ? "on" : "off");
+        this.setAttribute("aria-pressed", soundOn ? "true" : "false");
+        savePrefs();
+        if (soundOn) sndDrop();
+      });
+
+      // Tutorial
+      function openTut(){ $("tutScrim").classList.add("open"); }
+      function closeTut(){
+        $("tutScrim").classList.remove("open");
+        try { localStorage.setItem(LS_TUT, "1"); } catch(e){}
+      }
+      $("howBtn").addEventListener("click", openTut);
+      $("tutClose").addEventListener("click", closeTut);
+      $("tutScrim").addEventListener("click", function(e){ if (e.target === this) closeTut(); });
+      // Rules (separate from the tutorial, also opt-in only)
+      $("rulesBtn").addEventListener("click", function(){ $("rulesScrim").classList.add("open"); });
+      $("rulesClose").addEventListener("click", function(){ $("rulesScrim").classList.remove("open"); });
+      $("rulesScrim").addEventListener("click", function(e){ if (e.target === this) this.classList.remove("open"); });
+      $("overScrim").addEventListener("click", function(e){ if (e.target === this) this.classList.remove("open"); });
+
+      // Feedback (standard across all games: rating + comment + tag, saved on this device for now)
+      var LS_FEEDBACK = "holos-arcade-feedback";
+      var feedbackRating = 0;
+      var feedbackTag = "";
+      function paintStars(){
+        var stars = $("starRow").children;
+        for (var i = 0; i < stars.length; i++){
+          stars[i].setAttribute("aria-pressed", (+stars[i].dataset.value <= feedbackRating) ? "true" : "false");
+        }
+      }
+      function paintTags(){
+        var tags = $("tagRow").children;
+        for (var i = 0; i < tags.length; i++){
+          tags[i].setAttribute("aria-pressed", (tags[i].dataset.tag === feedbackTag) ? "true" : "false");
+        }
+      }
+      function openFeedback(){
+        feedbackRating = 0; paintStars();
+        feedbackTag = ""; paintTags();
+        $("feedbackComment").value = "";
+        var st = $("feedbackStatus"); st.textContent = ""; st.className = "fb-status";
+        $("feedbackSubmit").disabled = false;
+        $("feedbackScrim").classList.add("open");
+      }
+      function closeFeedback(){ $("feedbackScrim").classList.remove("open"); }
+      $("feedbackBtn").addEventListener("click", openFeedback);
+      $("feedbackClose").addEventListener("click", closeFeedback);
+      $("feedbackScrim").addEventListener("click", function(e){ if (e.target === this) closeFeedback(); });
+      $("starRow").addEventListener("click", function(e){
+        var b = e.target.closest ? e.target.closest(".star") : null;
+        if (!b) return;
+        feedbackRating = +b.dataset.value;
+        paintStars();
+        var st = $("feedbackStatus"); st.textContent = ""; st.className = "fb-status";
+      });
+      $("tagRow").addEventListener("click", function(e){
+        var b = e.target.closest ? e.target.closest(".fb-tag") : null;
+        if (!b) return;
+        feedbackTag = (feedbackTag === b.dataset.tag) ? "" : b.dataset.tag;
+        paintTags();
+      });
+      $("feedbackSubmit").addEventListener("click", function(){
+        var st = $("feedbackStatus");
+        var comment = $("feedbackComment").value.trim();
+        if (!feedbackRating && !comment){
+          st.textContent = "Pick a star rating or write a comment first.";
+          st.className = "fb-status err";
+          return;
+        }
+        var entry = { game: "connect-four", rating: feedbackRating || null, text: comment, tag: feedbackTag || null, timestamp: new Date().toISOString() };
+        try {
+          var list = JSON.parse(localStorage.getItem(LS_FEEDBACK) || "[]");
+          if (!Array.isArray(list)) list = [];
+          list.push(entry);
+          localStorage.setItem(LS_FEEDBACK, JSON.stringify(list));
+        } catch(e){}
+        st.textContent = "Thanks! Your feedback was saved on this device.";
+        st.className = "fb-status ok";
+        this.disabled = true;
+        setTimeout(closeFeedback, 900);
+      });
+
+      // Keyboard: 1–7 drop, arrows + Enter, U undo, N new
+      var kbCol = 3;
+      document.addEventListener("keydown", function(e){
+        if ($("tutScrim").classList.contains("open") || $("overScrim").classList.contains("open") || $("rulesScrim").classList.contains("open") || $("feedbackScrim").classList.contains("open")){
+          if (e.key === "Escape"){ closeTut(); $("overScrim").classList.remove("open"); $("rulesScrim").classList.remove("open"); closeFeedback(); }
+          return;
+        }
+        if (e.key >= "1" && e.key <= "7"){ dropInColumn(+e.key - 1); }
+        else if (e.key === "ArrowLeft"){ kbCol = Math.max(0, kbCol - 1); showGhost(kbCol); }
+        else if (e.key === "ArrowRight"){ kbCol = Math.min(COLS - 1, kbCol + 1); showGhost(kbCol); }
+        else if (e.key === "Enter" || e.key === " "){ if (document.activeElement === document.body){ dropInColumn(kbCol); e.preventDefault(); } }
+        else if (e.key.toLowerCase() === "u"){ undo(); }
+        else if (e.key.toLowerCase() === "n"){ gameNumber++; newGame(); }
+      });
+
+      // ---------- Init ----------
+      loadPrefs();
+      $("difficulty").value = difficulty;
+      $("soundBtn").textContent = "Sound: " + (soundOn ? "on" : "off");
+      $("soundBtn").setAttribute("aria-pressed", soundOn ? "true" : "false");
+      buildBoardDom();
+      setMode(uiMode);
+      // Tutorial is opt-in only (Holo, 2026-11-20): never auto-shown.
+      // The one-time hint under the board points new players to "How to play".
+    })();
+    </script>
+  </body>
+</html>

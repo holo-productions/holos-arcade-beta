@@ -1,0 +1,1079 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Cribbage</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2rem; }
+    </style>
+    <style>
+      :root{
+        --bg:#f4efe4; --panel:#fffdf6; --ink:#22301f; --muted:#68755f; --line:#ddd3ba;
+        --felt:#1d6a4a; --felt-deep:#14503a; --felt-edge:#0f3d2c;
+        --gold:#b98a1c; --gold-soft:#f3e3ae; --wood:#8a5a2b; --wood-dark:#6e4520;
+        --red:#b3372e; --black:#263238; --card:#fffef9; --card-edge:#d8d2c0;
+        --accent:#1d6a4a; --accent-ink:#ffffff; --danger:#b3372e;
+        --peg-you:#c8433c; --peg-ai:#2b5ea7; --track:#e7dfc9; --hole:#cbbd97;
+        --shadow:0 10px 28px rgba(60,48,16,.16);
+      }
+      @media (prefers-color-scheme: dark){
+        :root{
+          --bg:#131711; --panel:#1d231b; --ink:#e9eedd; --muted:#a3b198; --line:#39422f;
+          --felt:#1a5c40; --felt-deep:#124631; --felt-edge:#0b3524;
+          --gold:#d9a92e; --gold-soft:#4a3d14; --card:#f7f4ea; --card-edge:#b9bfae;
+          --accent:#2c8a63; --track:#2a3324; --hole:#48543c;
+          --shadow:0 10px 28px rgba(0,0,0,.5);
+        }
+      }
+      * { box-sizing: border-box; }
+      body { margin:0; background:var(--bg); color:var(--ink); font-family:"Public Sans",system-ui,sans-serif; }
+      main { max-width:880px; margin:0 auto; padding:14px 14px 30px; }
+      h1,h2,h3 { font-family:"Bricolage Grotesque","Public Sans",sans-serif; }
+      .game-title { font-size:clamp(26px,6vw,38px); margin:2px 0 2px; letter-spacing:.2px; }
+      .game-sub { color:var(--muted); margin:0 0 8px; font-size:14.5px; }
+      .play-money { display:inline-flex; align-items:center; gap:6px; background:var(--panel); border:1px solid var(--gold); color:var(--ink); border-radius:999px; padding:5px 12px; font-size:13px; font-weight:700; margin:0 0 12px; }
+      .play-money span { font-weight:500; color:var(--muted); }
+      .toprow { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+      .spacer { flex:1; }
+      .btn { font:inherit; font-weight:600; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:10px; padding:8px 14px; min-height:40px; cursor:pointer; }
+      .btn:hover { border-color:var(--gold); }
+      .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+      .btn.primary:disabled { opacity:.45; cursor:not-allowed; }
+      .btn.go-btn { background:var(--gold); border-color:var(--gold); color:#241a02; }
+      .diff-group { display:inline-flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+      .diff-btn { font:inherit; font-weight:600; border:0; background:var(--panel); color:var(--muted); padding:8px 12px; min-height:40px; cursor:pointer; }
+      .diff-btn.active { background:var(--felt); color:#fff; }
+      .hud { display:flex; flex-wrap:wrap; gap:6px 18px; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:9px 14px; font-size:13.5px; color:var(--muted); margin-bottom:12px; }
+      .hud b { color:var(--ink); }
+
+      /* Cribbage board */
+      .board { background:linear-gradient(180deg,var(--wood),var(--wood-dark)); border-radius:14px; padding:12px 14px 10px; box-shadow:var(--shadow); margin-bottom:12px; color:#fdf6e3; }
+      .board-head { display:flex; justify-content:space-between; align-items:baseline; font-size:13px; letter-spacing:.4px; text-transform:uppercase; opacity:.92; margin-bottom:8px; }
+      .board-head b { font-size:15px; }
+      .track-row { display:flex; align-items:center; gap:10px; margin:7px 0; }
+      .track-name { width:64px; font-weight:700; font-size:13.5px; display:flex; align-items:center; gap:6px; }
+      .peg-dot { width:11px; height:11px; border-radius:50%; border:2px solid rgba(255,255,255,.75); flex:none; }
+      .track { position:relative; flex:1; height:16px; background:rgba(0,0,0,.28); border-radius:999px; }
+      .track .fill { position:absolute; inset:0 auto 0 0; border-radius:999px; opacity:.85; }
+      .track .skunk-line { position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--gold-soft); opacity:.9; }
+      .track .skunk-line::after { content:"SKUNK 90"; position:absolute; top:-13px; left:50%; transform:translateX(-50%); font-size:8.5px; letter-spacing:.5px; color:var(--gold-soft); white-space:nowrap; }
+      .track .peg { position:absolute; top:50%; width:15px; height:15px; border-radius:50%; transform:translate(-50%,-50%); border:2.5px solid #fff8e6; box-shadow:0 1px 4px rgba(0,0,0,.5); transition:left .6s ease; z-index:2; }
+      .track .peg.back { width:11px; height:11px; opacity:.65; z-index:1; }
+      .track-score { width:40px; text-align:right; font-weight:800; font-size:17px; font-variant-numeric:tabular-nums; }
+      .dealer-line { font-size:12.5px; opacity:.9; margin-top:6px; }
+
+      /* Table */
+      .table { background:radial-gradient(120% 130% at 50% 0%, var(--felt) 0%, var(--felt-deep) 78%); border:6px solid var(--felt-edge); border-radius:18px; padding:14px; box-shadow:var(--shadow); color:#f4fbf6; }
+      .seat-label { display:flex; align-items:center; gap:8px; font-weight:700; font-size:14px; margin-bottom:6px; }
+      .seat-label .turn-dot { width:9px; height:9px; border-radius:50%; background:var(--gold); box-shadow:0 0 0 4px rgba(217,169,46,.3); display:none; }
+      .seat-label.active .turn-dot { display:inline-block; }
+      .seat-label .dealer-chip { background:var(--gold); color:#241a02; font-size:11px; font-weight:800; border-radius:999px; padding:2px 8px; letter-spacing:.4px; }
+      .hand { display:flex; flex-wrap:wrap; gap:7px; min-height:78px; align-items:flex-start; }
+      .mid { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; margin:14px 0; background:rgba(0,0,0,.16); border-radius:12px; padding:10px 12px; }
+      .slot { text-align:center; }
+      .slot .slot-label { font-size:11px; letter-spacing:.6px; text-transform:uppercase; opacity:.85; margin-top:4px; }
+      .pile-wrap { flex:1; min-width:170px; }
+      .pile { display:flex; flex-wrap:wrap; gap:5px; min-height:64px; }
+      .count-badge { display:inline-block; background:rgba(0,0,0,.35); border-radius:999px; padding:5px 13px; font-weight:800; font-size:15px; margin-bottom:6px; font-variant-numeric:tabular-nums; }
+      .count-badge.hot { background:var(--gold); color:#241a02; }
+      .msg { font-size:15px; font-weight:600; min-height:22px; margin:8px 0 2px; }
+      .coach { font-size:13.5px; color:#ffe9a8; min-height:18px; margin:0 0 4px; }
+      .coach:empty { display:none; }
+
+      /* Cards */
+      .card { width:52px; height:74px; border-radius:8px; background:var(--card); border:1.5px solid var(--card-edge); color:var(--black); position:relative; font-weight:800; box-shadow:0 2px 5px rgba(0,0,0,.3); flex:none; }
+      .card .rk { position:absolute; top:3px; left:6px; font-size:16px; line-height:1.05; text-align:center; }
+      .card .rk small { display:block; font-size:13px; }
+      .card .pip { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:26px; }
+      .card.red { color:var(--red); }
+      .card.back { background:repeating-linear-gradient(45deg,#7c2d26 0 7px,#93392f 7px 14px); border-color:#5f1f1a; }
+      .card.starter-card { outline:3px solid var(--gold); outline-offset:1px; }
+      .card.dim { opacity:.45; }
+      button.card { font:inherit; padding:0; cursor:pointer; text-align:left; min-height:74px; }
+      button.card.playable:hover, button.card.playable:focus-visible { transform:translateY(-6px); border-color:var(--gold); }
+      button.card.selected { transform:translateY(-9px); outline:3px solid var(--gold); outline-offset:1px; }
+      button.card:disabled { cursor:not-allowed; }
+      .card.mini { width:40px; height:57px; }
+      .card.mini .rk { font-size:13px; } .card.mini .rk small { font-size:11px; } .card.mini .pip { font-size:19px; }
+      button.card.mini { min-height:57px; }
+
+      .actionbar { display:flex; flex-wrap:wrap; gap:9px; align-items:center; margin-top:12px; }
+      .actionbar .prompt { width:100%; font-weight:700; font-size:15px; margin:0; }
+
+      .panel { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-top:12px; }
+      .panel h3 { margin:0 0 8px; font-size:19px; }
+      .count-step { border-top:1px dashed var(--line); padding:10px 0; }
+      .count-step:first-of-type { border-top:0; }
+      .count-step .cs-head { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:6px; }
+      .count-step .cs-cards { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:6px; }
+      .count-step .cs-pts { margin-left:auto; font-weight:800; font-size:17px; }
+      .count-step ul { margin:4px 0 0; padding-left:18px; color:var(--muted); font-size:13.5px; }
+      .result-panel { text-align:center; }
+      .result-panel .big { font-size:24px; font-weight:800; margin:4px 0; }
+      details.info { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:4px 16px; margin-top:12px; }
+      details.info summary { font-weight:700; padding:10px 0; cursor:pointer; min-height:40px; }
+      .score-list { margin:6px 0 14px; padding-left:0; list-style:none; }
+      .score-list li { display:flex; gap:10px; padding:5px 0; border-top:1px dashed var(--line); font-size:14px; }
+      .score-list li:first-child { border-top:0; }
+      .score-list b { min-width:118px; }
+      .score-list span { color:var(--muted); }
+      .log-list { margin:6px 0 12px; padding-left:18px; color:var(--muted); font-size:13.5px; max-height:180px; overflow:auto; }
+      .pane-footer { margin:26px 0 0; padding-top:14px; border-top:1px solid var(--line); font-size:13.5px; color:var(--muted); text-align:center; }
+      .pane-footer a { color:var(--felt); font-weight:700; text-decoration:underline; text-underline-offset:2px; }
+      @media (prefers-color-scheme: dark){ .pane-footer a { color:#7fd6ae; } }
+
+      .btn.practice-on { background:var(--gold); border-color:var(--gold); color:#241a02; }
+      .practice-banner { display:flex; flex-wrap:wrap; gap:6px 14px; align-items:center; background:var(--gold-soft); border:1.5px solid var(--gold); border-radius:12px; padding:10px 14px; margin:0 0 12px; font-size:14px; }
+      .practice-banner[hidden] { display:none; }
+      .practice-banner b { font-size:14.5px; }
+      .practice-banner span { color:var(--ink); opacity:.85; }
+      .practice-banner .btn { margin-left:auto; min-height:36px; padding:6px 12px; font-size:13.5px; }
+      .hint { display:flex; align-items:center; gap:6px; flex-wrap:wrap; background:var(--gold-soft); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:8px 12px; font-size:13.5px; margin:0 0 10px; }
+      .hint[hidden] { display:none; }
+      .hint-x { margin-left:auto; font:inherit; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:7px; width:28px; height:28px; min-height:28px; cursor:pointer; line-height:1; }
+      .rules-body h4 { margin:18px 0 6px; font-size:16px; }
+      .rules-body h4:first-child { margin-top:6px; }
+      .rules-body p, .rules-body li { font-size:14px; line-height:1.55; color:var(--ink); }
+      .rules-body p { margin:0 0 8px; }
+      .rules-body ul { margin:4px 0 10px; padding-left:20px; }
+      .rules-body li { margin:3px 0; }
+      .rules-body .muted { color:var(--muted); }
+
+      /* Tutorial overlay */
+      .overlay { position:fixed; inset:0; background:rgba(10,16,10,.62); display:flex; align-items:flex-start; justify-content:center; overflow:auto; padding:18px 12px; z-index:50; }
+      .overlay[hidden] { display:none; }
+      .tut-card { background:var(--panel); color:var(--ink); border-radius:16px; max-width:620px; width:100%; padding:20px; box-shadow:var(--shadow); }
+      .tut-head { display:flex; gap:12px; align-items:flex-start; }
+      .tut-head h3 { margin:0; font-size:21px; }
+      .tut-head p { margin:2px 0 0; color:var(--muted); font-size:13.5px; }
+      .tut-icon { font-size:30px; }
+      .tut-x { margin-left:auto; font:inherit; border:1px solid var(--line); background:var(--panel); border-radius:9px; width:40px; height:40px; cursor:pointer; font-size:16px; }
+      .tut-steps { list-style:none; margin:16px 0 0; padding:0; }
+      .tut-steps li { display:flex; gap:12px; padding:9px 0; border-top:1px dashed var(--line); }
+      .tut-steps li:first-child { border-top:0; }
+      .tut-num { width:26px; height:26px; flex:none; border-radius:50%; background:var(--felt); color:#fff; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:14px; }
+      .tut-steps li > div > b { display:block; font-size:15px; }
+      .tut-steps span.txt { color:var(--muted); font-size:14px; line-height:1.45; }
+      .tut-scores { margin-top:14px; }
+      .tut-scores h4 { margin:0 0 4px; font-size:15px; }
+      .tut-foot { margin-top:16px; text-align:center; }
+      .tut-go { font:inherit; font-weight:800; background:var(--accent); color:#fff; border:0; border-radius:11px; padding:12px 22px; min-height:46px; cursor:pointer; font-size:16px; }
+      /* Feedback (standard) */
+      .stars { display:flex; gap:6px; margin:10px 0 4px; flex-wrap:wrap; }
+      .stars button { font-size:26px; line-height:1; background:transparent; border:1px solid var(--line); border-radius:10px; padding:5px 10px; color:var(--muted); min-width:46px; min-height:44px; cursor:pointer; }
+      .stars button.on { color:var(--gold); border-color:var(--gold); background:var(--gold-soft); }
+      .stars button:hover { border-color:var(--gold); }
+      .fb-field label { display:block; font-size:14px; font-weight:700; margin:14px 0 6px; }
+      .fb-field textarea { width:100%; font:inherit; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 12px; min-height:104px; resize:vertical; }
+      .fb-field textarea:focus { outline:2px solid var(--gold); outline-offset:1px; }
+      .fb-tags { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 4px; }
+      .fb-tags button { font:inherit; font-size:13.5px; font-weight:600; background:transparent; color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:7px 14px; min-height:36px; cursor:pointer; }
+      .fb-tags button.on { color:var(--gold); border-color:var(--gold); background:var(--gold-soft); }
+      .fb-tags button:hover { border-color:var(--gold); }
+      .fb-note { font-size:13px; color:var(--muted); line-height:1.5; margin:10px 0 0; }
+      .fb-done { display:none; border-radius:10px; padding:10px 12px; font-weight:600; font-size:14px; background:#e2f2e6; border:1px solid var(--felt); color:#14532d; margin-top:14px; }
+      .fb-done.show { display:block; }
+      @media (prefers-color-scheme: dark){ .fb-done { background:#173a26; color:#a9e5bf; } }
+      .fb-actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:16px; }
+      @media (max-width:560px){
+        .card { width:46px; height:66px; } button.card { min-height:66px; }
+        .card .pip { font-size:22px; }
+        .hand { min-height:70px; }
+        .track-name { width:52px; font-size:12.5px; }
+      }
+      @media (prefers-reduced-motion: reduce){ .track .peg { transition:none; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 class="game-title">Cribbage</h1>
+      <p class="game-sub">You vs the AI — peg your way around the board, first to 121 wins. Watch the skunk line at 90!</p>
+      <p class="play-money" role="note">🪙 Play money — no real gambling <span>· Points only — no real-money wagering, prizes, or side bets</span></p>
+
+      <div class="toprow">
+        <div class="diff-group" role="group" aria-label="AI difficulty">
+          <button class="diff-btn" type="button" data-diff="easy">Easy</button>
+          <button class="diff-btn active" type="button" data-diff="normal">Normal</button>
+          <button class="diff-btn" type="button" data-diff="hard">Hard</button>
+        </div>
+        <button class="btn" id="practiceBtn" type="button" aria-pressed="false">🎓 Practice round</button>
+        <span class="spacer"></span>
+        <button class="btn" id="howBtn" type="button">❓ How to play</button>
+        <button class="btn" id="rulesBtn" type="button">📜 Rules</button>
+        <button class="btn" id="btnFeedback" type="button">💬 Feedback</button>
+        <button class="btn" id="newMatchBtn" type="button">↺ New match</button>
+      </div>
+
+      <p class="hint" id="tutHint" hidden>New here? Tap <b>How to play</b> for a quick walkthrough — or check <b>Rules</b> for the full scoring. <button class="hint-x" id="hintX" type="button" aria-label="Dismiss hint">✕</button></p>
+
+      <div class="practice-banner" id="practiceBanner" hidden role="status">
+        <b>🎓 Practice round</b>
+        <span>No score kept · No records updated · Extra hints on · Untimed — take as long as you like</span>
+        <button class="btn" id="btnExitPracticeTop" type="button">Exit practice ✕</button>
+      </div>
+
+      <div class="hud" aria-label="Your records">
+        <span>🏆 Matches won <b id="hudWins">0</b></span>
+        <span>🎮 Matches played <b id="hudGames">0</b></span>
+        <span>🦨 Skunks dealt <b id="hudSkunks">0</b></span>
+        <span>🃏 Best hand <b id="hudBestHand">—</b></span>
+        <span>⚡ Fastest win <b id="hudFastest">—</b></span>
+      </div>
+
+      <section class="board" aria-label="Cribbage board">
+        <div class="board-head"><span>Race to 121</span><b id="boardHand">Hand #1</b></div>
+        <div class="track-row">
+          <span class="track-name"><span class="peg-dot" style="background:var(--peg-you)"></span>You</span>
+          <div class="track"><div class="fill" id="fillYou" style="background:var(--peg-you);width:0%"></div><span class="skunk-line" style="left:74.4%"></span><span class="peg back" id="pegYouBack" style="background:var(--peg-you);left:0%"></span><span class="peg" id="pegYou" style="background:var(--peg-you);left:0%"></span></div>
+          <span class="track-score" id="scoreYou">0</span>
+        </div>
+        <div class="track-row">
+          <span class="track-name"><span class="peg-dot" style="background:var(--peg-ai)"></span>AI</span>
+          <div class="track"><div class="fill" id="fillAi" style="background:var(--peg-ai);width:0%"></div><span class="skunk-line" style="left:74.4%"></span><span class="peg back" id="pegAiBack" style="background:var(--peg-ai);left:0%"></span><span class="peg" id="pegAi" style="background:var(--peg-ai);left:0%"></span></div>
+          <span class="track-score" id="scoreAi">0</span>
+        </div>
+        <p class="dealer-line" id="dealerLine">Dealer: —</p>
+      </section>
+
+      <section class="table" aria-label="Cribbage table">
+        <div class="seat-label" id="aiLabel"><span class="turn-dot"></span>🤖 AI opponent <span class="dealer-chip" id="aiDealerChip" hidden>DEALER</span></div>
+        <div class="hand" id="aiHand"></div>
+
+        <div class="mid">
+          <div class="slot">
+            <div id="starterSlot"><div class="card back" aria-hidden="true"></div></div>
+            <div class="slot-label">Starter</div>
+          </div>
+          <div class="slot">
+            <div id="cribSlot"><div class="card back" aria-hidden="true"></div></div>
+            <div class="slot-label" id="cribLabel">Crib</div>
+          </div>
+          <div class="pile-wrap">
+            <span class="count-badge" id="countBadge">Count: 0</span>
+            <div class="pile" id="pile"></div>
+          </div>
+        </div>
+
+        <p class="msg" id="tableMsg" role="status">Dealing…</p>
+        <p class="coach" id="coachLine"></p>
+
+        <div class="seat-label" id="youLabel"><span class="turn-dot"></span>🙂 You <span class="dealer-chip" id="youDealerChip" hidden>DEALER</span></div>
+        <div class="hand" id="youHand"></div>
+
+        <div class="actionbar" id="actionBar">
+          <p class="prompt" id="actPrompt"></p>
+          <button class="btn primary" id="btnDiscard" type="button" hidden>Send 2 to the crib →</button>
+          <button class="btn go-btn" id="btnGo" type="button" hidden>Say “Go”</button>
+          <button class="btn primary" id="btnNextHand" type="button" hidden>Next hand →</button>
+        </div>
+      </section>
+
+      <section class="panel" id="countPanel" hidden>
+        <h3>Counting the hands</h3>
+        <div id="countSteps"></div>
+      </section>
+
+      <section class="panel result-panel" id="practicePanel" hidden>
+        <h3>🎓 Practice round complete</h3>
+        <p class="big" id="practiceBig"></p>
+        <p id="practiceSub">Nice work — that was just for learning. Nothing was added to your records and no match score was kept.</p>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;justify-content:center;margin-top:10px">
+          <button class="btn primary" id="btnPracticeAgain" type="button">🎓 Another practice round</button>
+          <button class="btn" id="btnExitPractice" type="button">Play a real match →</button>
+        </div>
+      </section>
+
+      <section class="panel result-panel" id="resultPanel" hidden>
+        <h3 id="resultTitle">Match over</h3>
+        <p class="big" id="resultBig"></p>
+        <p id="resultSub"></p>
+        <button class="btn primary" id="btnRematch" type="button">↺ Rematch</button>
+      </section>
+
+      <details class="info">
+        <summary>🃏 Scoring quick reference</summary>
+        <ul class="score-list">
+          <li><b>15 = 2 pts</b><span>Any cards adding to 15 — in pegging and in the hand count. Face cards count 10.</span></li>
+          <li><b>Pair = 2</b><span>Two of a rank. Three of a kind = 6, four of a kind = 12.</span></li>
+          <li><b>Run = 1 per card</b><span>3+ cards in sequence (any order in pegging), e.g. 4-6-5. Aces are always low.</span></li>
+          <li><b>Flush = 4 or 5</b><span>4 in your hand = 4; all 5 with the starter = 5. A crib flush only counts if all 5 match.</span></li>
+          <li><b>Nobs = 1</b><span>A Jack in your hand in the same suit as the starter card.</span></li>
+          <li><b>His heels = 2</b><span>If the starter card is a Jack, the dealer pegs 2 right away.</span></li>
+          <li><b>31 / last card</b><span>Hitting exactly 31 in pegging = 2. Last card played in a run-out (or a “go”) = 1.</span></li>
+          <li><b>Skunk!</b><span>Finish with your opponent under 91 and they're skunked. Under 61 = double skunk. Shameful. 🦨</span></li>
+        </ul>
+      </details>
+
+      <details class="info">
+        <summary>📜 Game log</summary>
+        <ul class="log-list" id="logList"></ul>
+      </details>
+
+      <p class="pane-footer">Play money — no real gambling. Points only, just for fun.<br>More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener">Ridiculously Fit and Fed</a></p>
+    </main>
+
+    <!-- Tutorial — opt-in only, opened from the How to play button -->
+    <div class="overlay" id="tutOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+      <div class="tut-card">
+        <div class="tut-head">
+          <span class="tut-icon" aria-hidden="true">🃏</span>
+          <div>
+            <h3 id="tutTitle">How to play — Cribbage</h3>
+            <p>The classic race around the board — under two minutes</p>
+          </div>
+          <button class="tut-x" id="tutX" type="button" aria-label="Close tutorial">✕</button>
+        </div>
+        <ol class="tut-steps">
+          <li><span class="tut-num">1</span><div><b>🎯 The goal</b><span class="txt">First to <b>121 points</b> wins. You score by moving pegs around the board — points come from playing cards and from counting your hand at the end. If your opponent finishes under 91, they're <b>skunked</b> 🦨 (under 61 = double skunk).</span></div></li>
+          <li><span class="tut-num">2</span><div><b>🂡 The deal &amp; the crib</b><span class="txt">You each get 6 cards. Tap 2 of yours to send to the <b>crib</b> — a bonus hand that belongs to the dealer. Feeding your own crib? Throw pairs and 5s. Starving the AI's crib? Throw cards that don't combine. Then a starter card is cut for everyone.</span></div></li>
+          <li><span class="tut-num">3</span><div><b>🏃 Pegging</b><span class="txt">Take turns playing cards, keeping the running total at <b>31 or under</b>. Score as you go: a total of <b>15 = 2</b>, a <b>pair = 2</b>, a <b>run = 1 per card</b>, exactly <b>31 = 2</b>, and the last card before a “go” = 1. Can't play without passing 31? Say <b>Go</b>, and the count restarts.</span></div></li>
+          <li><span class="tut-num">4</span><div><b>🧮 Counting hands</b><span class="txt">When the cards run out, hands are counted with the starter: every <b>15 = 2</b>, pairs, runs, a <b>flush</b> (4–5), and <b>nobs</b> — a Jack matching the starter's suit = 1. The non-dealer counts first, then the dealer, then the crib. Order matters when both players are near 121!</span></div></li>
+          <li><span class="tut-num">5</span><div><b>🤖 Your opponent</b><span class="txt">The AI discards to the crib, pegs for points, and counts its own hands. <b>Easy</b> plays loosely, <b>Normal</b> plays a solid game, <b>Hard</b> guards its crib and sets traps in pegging. The dealer swaps every hand. Good luck — mind the skunk line!</span></div></li>
+        </ol>
+        <div class="tut-scores">
+          <h4>Points at a glance</h4>
+          <ul class="score-list">
+            <li><b>15 / 31</b><span>2 pts each</span></li>
+            <li><b>Pair / trips / quads</b><span>2 / 6 / 12 pts</span></li>
+            <li><b>Run</b><span>1 pt per card (3+)</span></li>
+            <li><b>Flush</b><span>4 in hand · 5 with starter</span></li>
+            <li><b>Nobs / heels</b><span>Jack matching starter suit = 1 · Jack as starter = 2 to dealer</span></li>
+          </ul>
+        </div>
+        <div class="tut-foot">
+          <button class="tut-go" id="tutGo" type="button">Got it — deal me in ▶</button>
+          <p style="margin:12px 0 0;font-size:13.5px;color:var(--muted)">Want the complete scoring and special rules? <button class="btn" id="tutToRules" type="button" style="min-height:36px;padding:6px 12px">📜 Open full Rules</button></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full Rules — separate from the short tutorial -->
+    <div class="overlay" id="rulesOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+      <div class="tut-card">
+        <div class="tut-head">
+          <span class="tut-icon" aria-hidden="true">📜</span>
+          <div>
+            <h3 id="rulesTitle">Rules — Cribbage</h3>
+            <p>Full rules: scoring, special rules &amp; win conditions</p>
+          </div>
+          <button class="tut-x" id="rulesX" type="button" aria-label="Close rules">✕</button>
+        </div>
+        <div class="rules-body">
+          <h4>🎯 Goal &amp; win conditions</h4>
+          <p>Cribbage is a race to <b>121 points</b>. Points are pegged immediately as they are scored — during pegging, when hands are counted, and for special plays like his heels. The first player to reach or pass 121 wins instantly, even if the hand hasn't finished being counted.</p>
+          <p><b>Counting order matters at the finish:</b> the non-dealer (pone) counts first, then the dealer, then the crib. If the pone reaches 121 in their count, they win before the dealer or crib is counted at all.</p>
+          <p><b>Skunk:</b> if the loser finishes on 90 or fewer, they are skunked 🦨. On 60 or fewer it's a <b>double skunk</b> 🦨🦨. The board marks the skunk line at 90. In this game a skunk is bragging rights (and tracked in your records) — the winner is still simply first to 121.</p>
+
+          <h4>🂡 Setup &amp; the deal</h4>
+          <ul>
+            <li>Standard 52-card deck. Aces are always low (A-2-3 is a run; Q-K-A is not).</li>
+            <li>Face cards (J, Q, K) count as 10 for all totals. Other cards count face value; Aces count 1.</li>
+            <li>Each player is dealt <b>6 cards</b>. The dealer alternates every hand — in this game the first dealer is chosen at random.</li>
+            <li>The non-dealer leads the pegging.</li>
+          </ul>
+
+          <h4>📥 The crib</h4>
+          <p>Each player discards <b>2 cards</b> face-down into the crib, leaving 4 cards in hand. The crib is an extra 4-card hand that belongs to the <b>dealer</b> and is counted last, after both hands. That's why discarding is strategic: feed your own crib with cards that combine (5s, pairs, cards totalling 15), and starve your opponent's crib with cards that don't.</p>
+
+          <h4>⭐ The starter &amp; his heels</h4>
+          <p>After discards, one card is cut as the <b>starter</b> (also called the turn-up). It stays face-up and counts as a fifth card for <i>every</i> hand — yours, your opponent's, and the crib — when counting.</p>
+          <p><b>His heels:</b> if the starter is a Jack, the dealer immediately pegs <b>2 points</b>.</p>
+
+          <h4>🏃 Pegging (the play)</h4>
+          <p>Players alternate playing one card at a time, announcing a running total. The total may never exceed <b>31</b>.</p>
+          <ul>
+            <li><b>Go:</b> if you have no card that keeps the total at 31 or under, you say “Go.” Your opponent keeps playing while they can. When neither player can play, the player who played the <b>last card scores 1 point</b> (2 points instead if the total is exactly 31 — see below).</li>
+            <li>After a go or a 31, the played cards are set aside, the total resets to 0, and the player who did <i>not</i> play last leads the next sequence. Play continues until all 8 hand cards are played.</li>
+            <li>The very last card of the hand also scores 1 point for last card (unless it makes exactly 31, which scores 2 total, not 3).</li>
+          </ul>
+          <p><b>Pegging scores</b> (scored by the player who just played):</p>
+          <ul class="score-list">
+            <li><b>Fifteen</b><span>Total reaches exactly 15 — 2 pts</span></li>
+            <li><b>Pair</b><span>Same rank as the previous card — 2 pts</span></li>
+            <li><b>Pair royal</b><span>Three of a kind in a row — 6 pts</span></li>
+            <li><b>Double pair royal</b><span>Four of a kind in a row — 12 pts</span></li>
+            <li><b>Run</b><span>Last 3+ cards in sequence, in any order (e.g. 4-6-5) — 1 pt per card. A run interrupted by a pair doesn't count; e.g. 2-3-3-4 is a pair only, not a run.</span></li>
+            <li><b>Thirty-one</b><span>Total reaches exactly 31 — 2 pts</span></li>
+            <li><b>Go / last card</b><span>Last card played before a go, or the final card of the hand — 1 pt</span></li>
+          </ul>
+          <p class="muted">Combinations can stack: a card that makes both 15 and a pair scores for both.</p>
+
+          <h4>🧮 Counting the hands (the show)</h4>
+          <p>When pegging ends, each 4-card hand is scored together with the starter as a 5-card hand, in this order: <b>1)</b> non-dealer's hand, <b>2)</b> dealer's hand, <b>3)</b> the crib. Every distinct combination counts separately.</p>
+          <ul class="score-list">
+            <li><b>Fifteen</b><span>Any combination of 2–5 cards totalling 15 — 2 pts each. Face cards = 10, so J + 5, 10 + 5, 7 + 8, 2 + 3 + 10 all count.</span></li>
+            <li><b>Pair</b><span>2 pts. Three of a kind = 3 pairs = 6 pts. Four of a kind = 6 pairs = 12 pts.</span></li>
+            <li><b>Run</b><span>3, 4 or 5 cards in sequence — 1 pt per card. Double runs (a run plus a pair, e.g. 7-8-8-9) score both runs plus the pair = 8. Only the longest run length counts.</span></li>
+            <li><b>Flush</b><span>All 4 hand cards same suit — 4 pts; if the starter matches too — 5 pts. <b>Crib exception:</b> a crib flush scores only when all 5 cards match — 5 pts; a 4-card crib flush scores 0.</span></li>
+            <li><b>Nobs</b><span>A Jack in your hand (or the crib) in the same suit as the starter — 1 pt. Also called “his nob.”</span></li>
+          </ul>
+          <p><b>The perfect hand is 29</b> — three 5s + a Jack of the fourth 5's suit, with that 5 as starter (eight 15s, a pair royal, and nobs). Scores of 19, 25, 26 and 27 are impossible in a hand count — a zero hand is jokingly called a “19 hand.”</p>
+
+          <h4>📌 Special rules in this game</h4>
+          <ul>
+            <li><b>Play money — no real gambling:</b> this game is points only. There is no real-money wagering, no prizes, and no facilitating side bets — in the game or around it.</li>
+            <li><b>No muggins:</b> points are counted automatically — you can't steal points your opponent missed.</li>
+            <li><b>Front peg / back peg:</b> each track shows two pegs — your current score and where you were before your last score, just like a real board.</li>
+            <li><b>Difficulty</b> (Easy / Normal / Hard) only changes how well the AI discards and pegs. The rules and scoring are identical at every level.</li>
+            <li><b>Records</b> (matches won, skunks dealt, best hand, fastest win) are your personal bests for this device.</li>
+          </ul>
+        </div>
+        <div class="tut-foot">
+          <button class="tut-go" id="rulesGo" type="button">Close rules</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feedback — standard, saved locally -->
+    <div class="overlay" id="feedbackOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+      <div class="tut-card">
+        <div class="tut-head">
+          <span class="tut-icon" aria-hidden="true">💬</span>
+          <div>
+            <h3 id="feedbackTitle">Feedback — Cribbage</h3>
+            <p>Tell us how this game is playing. Your rating and comment are saved on this device only.</p>
+          </div>
+          <button class="tut-x" id="btnCloseFeedbackX" type="button" aria-label="Close feedback">✕</button>
+        </div>
+
+        <div class="fb-field">
+          <label id="starsLabel">Your rating</label>
+          <div class="stars" id="fbStars" role="radiogroup" aria-labelledby="starsLabel">
+            <button type="button" data-star="1" role="radio" aria-checked="false" aria-label="1 star">★</button>
+            <button type="button" data-star="2" role="radio" aria-checked="false" aria-label="2 stars">★</button>
+            <button type="button" data-star="3" role="radio" aria-checked="false" aria-label="3 stars">★</button>
+            <button type="button" data-star="4" role="radio" aria-checked="false" aria-label="4 stars">★</button>
+            <button type="button" data-star="5" role="radio" aria-checked="false" aria-label="5 stars">★</button>
+          </div>
+          <p class="fb-note" id="fbRatingText">Tap a star to rate.</p>
+        </div>
+
+        <div class="fb-field">
+          <label id="tagsLabel">Tag <span style="font-weight:500;color:var(--muted)">(optional)</span></label>
+          <div class="fb-tags" id="fbTags" role="radiogroup" aria-labelledby="tagsLabel">
+            <button type="button" data-tag="Bug" role="radio" aria-checked="false">Bug</button>
+            <button type="button" data-tag="Suggestion" role="radio" aria-checked="false">Suggestion</button>
+            <button type="button" data-tag="Other" role="radio" aria-checked="false">Other</button>
+          </div>
+        </div>
+
+        <div class="fb-field">
+          <label for="fbComment">Your comment</label>
+          <textarea id="fbComment" maxlength="1000" placeholder="What did you like? What should we fix?"></textarea>
+        </div>
+
+        <p class="fb-note">Feedback follows the same Terms &amp; Conditions as the rest of the arcade: no personal info needed, please keep it clean — feedback may be used to improve the games.</p>
+
+        <div class="fb-done" id="fbDone" role="status">Thanks! Your feedback was saved on this device.</div>
+
+        <div class="fb-actions">
+          <button class="btn primary" id="btnSaveFeedback" type="button">Save feedback</button>
+          <button class="btn" id="btnCloseFeedback" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    "use strict";
+    /* ---------- Cards ---------- */
+    var SUITS = ["♠","♥","♦","♣"];
+    var RED = {1:true, 2:true}; // suit idx 1,2 are red
+    function rankLabel(r){ return r===1?"A":r===11?"J":r===12?"Q":r===13?"K":String(r); }
+    function cardVal(r){ return r>10?10:r; }
+    function buildDeck(){
+      var d=[]; for(var s=0;s<4;s++) for(var r=1;r<=13;r++) d.push({r:r, suit:s, val:cardVal(r)});
+      for(var i=d.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=d[i]; d[i]=d[j]; d[j]=t; }
+      return d;
+    }
+    function cardName(c){ return rankLabel(c.r)+SUITS[c.suit]; }
+    function cardEl(c, opts){
+      opts = opts||{};
+      var el = document.createElement(opts.button?"button":"div");
+      el.className = "card" + (RED[c.suit]?" red":"") + (opts.mini?" mini":"") + (opts.starter?" starter-card":"") + (opts.extra?" "+opts.extra:"");
+      if(opts.button){ el.type="button"; }
+      el.innerHTML = '<span class="rk">'+rankLabel(c.r)+'<small>'+SUITS[c.suit]+'</small></span><span class="pip">'+SUITS[c.suit]+'</span>';
+      el.setAttribute("aria-label", cardName(c));
+      return el;
+    }
+    function backEl(mini){
+      var el=document.createElement("div"); el.className="card back"+(mini?" mini":""); el.setAttribute("aria-hidden","true"); return el;
+    }
+    function combos(arr,k){
+      var out=[]; (function rec(start,cur){ if(cur.length===k){ out.push(cur.slice()); return; } for(var i=start;i<arr.length;i++){ cur.push(arr[i]); rec(i+1,cur); cur.pop(); } })(0,[]);
+      return out;
+    }
+
+    /* ---------- Hand scoring (show) ---------- */
+    function scoreHand(hand, starter, isCrib){
+      var all = hand.concat([starter]), pts=0, lines=[];
+      // Fifteens
+      var n15=0;
+      for(var k=2;k<=5;k++){ combos(all,k).forEach(function(cs){ var s=0; cs.forEach(function(c){s+=c.val;}); if(s===15) n15++; }); }
+      if(n15){ pts+=n15*2; lines.push(n15+" fifteen"+(n15>1?"s":"")+" = "+(n15*2)); }
+      // Pairs
+      var np=0; combos(all,2).forEach(function(cs){ if(cs[0].r===cs[1].r) np++; });
+      if(np){ pts+=np*2; lines.push(np===1?"Pair = 2":np===3?"Three of a kind = 6":np===6?"Four of a kind = 12":np+" pairs = "+(np*2)); }
+      // Runs (longest length only, each distinct subset)
+      var runPts=0;
+      for(var L=5;L>=3;L--){
+        var runs = combos(all,L).filter(function(cs){
+          var rs = cs.map(function(c){return c.r;});
+          if(new Set(rs).size!==L) return false;
+          return Math.max.apply(null,rs)-Math.min.apply(null,rs)===L-1;
+        });
+        if(runs.length){ runPts = runs.length*L; lines.push((runs.length>1?runs.length+" runs of "+L:"Run of "+L)+" = "+runPts); break; }
+      }
+      pts+=runPts;
+      // Flush
+      var handFlush = hand.every(function(c){return c.suit===hand[0].suit;});
+      if(handFlush && starter.suit===hand[0].suit){ pts+=5; lines.push("Flush of 5 = 5"); }
+      else if(handFlush && !isCrib){ pts+=4; lines.push("Flush of 4 = 4"); }
+      // Nobs
+      hand.forEach(function(c){ if(c.r===11 && c.suit===starter.suit){ pts+=1; lines.push("Nobs (Jack of starter's suit) = 1"); } });
+      if(!lines.length) lines.push("Nothing — a 19 hand (the impossible score!)");
+      return {pts:pts, lines:lines};
+    }
+
+    /* ---------- Pegging scoring ---------- */
+    function pegScore(seq){
+      var pts=0, lines=[];
+      var total=0; seq.forEach(function(c){ total+=c.val; });
+      if(total===15){ pts+=2; lines.push("15 for 2"); }
+      if(total===31){ pts+=2; lines.push("31 for 2"); }
+      var n=1; for(var i=seq.length-2;i>=0;i--){ if(seq[i].r===seq[seq.length-1].r) n++; else break; }
+      if(n===2){ pts+=2; lines.push("Pair for 2"); }
+      else if(n===3){ pts+=6; lines.push("Pair royal for 6"); }
+      else if(n===4){ pts+=12; lines.push("Double pair royal for 12"); }
+      for(var L=seq.length;L>=3;L--){
+        var suf = seq.slice(seq.length-L), rs = suf.map(function(c){return c.r;});
+        if(new Set(rs).size===L && Math.max.apply(null,rs)-Math.min.apply(null,rs)===L-1){ pts+=L; lines.push("Run of "+L+" for "+L); break; }
+      }
+      return {pts:pts, lines:lines, total:total};
+    }
+    </script>
+    <script>
+    "use strict";
+    /* ---------- Stats (localStorage bests) ---------- */
+    var LS_STATS="cribbage_stats_v1", LS_TUT="cribbage_tut_seen", LS_DIFF="cribbage_diff";
+    var stats = {games:0, wins:0, skunks:0, bestHand:0, fastest:0};
+    try { var sv=JSON.parse(localStorage.getItem(LS_STATS)||"null"); if(sv) stats=Object.assign(stats,sv); } catch(e){}
+    function saveStats(){ try { localStorage.setItem(LS_STATS, JSON.stringify(stats)); } catch(e){} }
+    var difficulty="normal";
+    try { difficulty = localStorage.getItem(LS_DIFF)||"normal"; } catch(e){}
+    if(["easy","normal","hard"].indexOf(difficulty)<0) difficulty="normal";
+
+    /* ---------- State ---------- */
+    var S=null;
+    function other(w){ return w==="you"?"ai":"you"; }
+    function nameOf(w){ return w==="you"?"You":"AI"; }
+    var practiceMode=false;
+    function freshState(){
+      return { scores:{you:0,ai:0}, prev:{you:0,ai:0}, dealer:(Math.random()<0.5?"you":"ai"),
+        handNo:0, phase:"idle", deck:[], you:[], ai:[], crib:[], starter:null,
+        youPeg:[], aiPeg:[], seq:[], pile:[], total:0, turn:null, lastToPlay:null,
+        sel:[], busy:false, winner:null, bestThisMatch:{you:0,ai:0}, practice:false };
+    }
+    function pegHand(w){ return w==="you"?S.youPeg:S.aiPeg; }
+    function canPlay(hand,total){ return hand.some(function(c){ return c.val+total<=31; }); }
+
+    /* ---------- DOM ---------- */
+    function $(id){ return document.getElementById(id); }
+    var els = {};
+    ["aiHand","youHand","pile","starterSlot","cribSlot","cribLabel","countBadge","tableMsg","coachLine",
+     "aiLabel","youLabel","aiDealerChip","youDealerChip","btnDiscard","btnGo","btnNextHand","actPrompt",
+     "scoreYou","scoreAi","fillYou","fillAi","pegYou","pegAi","pegYouBack","pegAiBack","dealerLine","boardHand",
+     "countPanel","countSteps","resultPanel","resultTitle","resultBig","resultSub","logList",
+     "practiceBanner","practicePanel","practiceBig","practiceBtn",
+     "hudWins","hudGames","hudSkunks","hudBestHand","hudFastest"].forEach(function(id){ els[id]=$(id); });
+
+    function log(msg){
+      var li=document.createElement("li"); li.textContent=msg;
+      els.logList.insertBefore(li, els.logList.firstChild);
+      while(els.logList.children.length>30) els.logList.removeChild(els.logList.lastChild);
+    }
+    function say(msg){ els.tableMsg.textContent=msg; }
+    function coach(msg){ els.coachLine.textContent=msg||""; }
+
+    function renderHud(){
+      els.hudWins.textContent=stats.wins; els.hudGames.textContent=stats.games; els.hudSkunks.textContent=stats.skunks;
+      els.hudBestHand.textContent=stats.bestHand?stats.bestHand+" pts":"—";
+      els.hudFastest.textContent=stats.fastest?stats.fastest+" hands":"—";
+    }
+    function pct(n){ return Math.min(100, n/121*100)+"%"; }
+    function renderBoard(){
+      els.scoreYou.textContent=S.scores.you; els.scoreAi.textContent=S.scores.ai;
+      els.fillYou.style.width=pct(S.scores.you); els.fillAi.style.width=pct(S.scores.ai);
+      els.pegYou.style.left=pct(S.scores.you); els.pegAi.style.left=pct(S.scores.ai);
+      els.pegYouBack.style.left=pct(S.prev.you); els.pegAiBack.style.left=pct(S.prev.ai);
+      els.boardHand.textContent="Hand #"+Math.max(1,S.handNo);
+      els.dealerLine.textContent="Dealer: "+(S.dealer==="you"?"You — the crib is yours":"AI — the crib is the AI's")+" · Non-dealer pegs first";
+      els.aiDealerChip.hidden = S.dealer!=="ai"; els.youDealerChip.hidden = S.dealer!=="you";
+    }
+    function renderHands(){
+      els.aiHand.innerHTML=""; els.youHand.innerHTML="";
+      var aiCards = S.phase==="peg"||S.phase==="count"||S.phase==="over" ? S.aiPeg : S.ai;
+      if(S.phase==="count"||S.phase==="over"){ S.ai.forEach(function(c){ els.aiHand.appendChild(cardEl(c)); }); }
+      else { aiCards.forEach(function(){ els.aiHand.appendChild(backEl()); }); }
+      // Your cards
+      var yourCards = S.phase==="peg" ? S.youPeg : S.you;
+      yourCards.forEach(function(c, idx){
+        var inPeg = S.phase==="peg";
+        var playable = inPeg && S.turn==="you" && !S.busy && (c.val+S.total<=31);
+        var b = cardEl(c, {button:true, extra: inPeg ? (playable?" playable":" dim") : ""});
+        if(S.phase==="discard" && S.sel.indexOf(idx)>=0) b.classList.add("selected");
+        if(S.phase==="discard"){ b.addEventListener("click", function(){ toggleSelect(idx); }); }
+        else if(inPeg){ b.disabled = !playable; b.addEventListener("click", function(){ if(playable) pegPlay("you", idx); }); }
+        els.youHand.appendChild(b);
+      });
+      els.aiLabel.classList.toggle("active", S.phase==="peg"&&S.turn==="ai");
+      els.youLabel.classList.toggle("active", S.phase==="peg"&&S.turn==="you");
+    }
+    function renderMid(){
+      els.starterSlot.innerHTML="";
+      if(S.starter) els.starterSlot.appendChild(cardEl(S.starter,{starter:true}));
+      else els.starterSlot.appendChild(backEl());
+      els.cribSlot.innerHTML="";
+      if(S.crib.length){ var b=backEl(); els.cribSlot.appendChild(b); }
+      else els.cribSlot.appendChild(backEl());
+      els.cribLabel.textContent = S.crib.length ? ("Crib · "+(S.dealer==="you"?"yours":"AI's")+" ("+S.crib.length+")") : "Crib";
+      els.pile.innerHTML="";
+      S.pile.forEach(function(p){ var e=cardEl(p.card,{mini:true}); if(p.who==="ai") e.style.outline="2px solid rgba(255,255,255,.45)"; els.pile.appendChild(e); });
+      els.countBadge.textContent = S.phase==="peg" ? "Count: "+S.total+" / 31" : (S.starter?"Starter: "+cardName(S.starter):"Count: 0");
+      els.countBadge.classList.toggle("hot", S.phase==="peg"&&(S.total===15||S.total===31));
+    }
+    function renderActions(){
+      els.btnDiscard.hidden = !(S.phase==="discard");
+      els.btnDiscard.disabled = S.sel.length!==2;
+      els.btnDiscard.textContent = S.sel.length===2 ? "Send 2 to the "+(S.dealer==="you"?"crib (yours)":"crib (AI's)")+" →" : "Pick 2 cards for the crib ("+S.sel.length+"/2)";
+      var showGo = S.phase==="peg" && S.turn==="you" && !S.busy && S.youPeg.length>0 && !canPlay(S.youPeg, S.total);
+      els.btnGo.hidden = !showGo;
+      els.btnNextHand.hidden = !(S.phase==="between");
+      if(S.phase==="discard") els.actPrompt.textContent = S.dealer==="you" ? "Your crib this hand — tap 2 cards to throw." : "AI's crib this hand — tap 2 cards to throw.";
+      else if(S.phase==="peg") els.actPrompt.textContent = S.turn==="you" ? (canPlay(S.youPeg,S.total)?"Your turn — tap a card to play it.":"You can't play without passing 31.") : "AI is thinking…";
+      else els.actPrompt.textContent = "";
+    }
+    /* ---------- Practice hints ---------- */
+    function suggestDiscard(){
+      if(!S || S.you.length!==6) return null;
+      var hand=S.you, best=null;
+      combos([0,1,2,3,4,5],2).forEach(function(pair){
+        var thrown=[hand[pair[0]],hand[pair[1]]];
+        var keep=hand.filter(function(_,i){ return i!==pair[0]&&i!==pair[1]; });
+        var sc = evalKeep4(keep) + (S.dealer==="you" ? evalThrow2(thrown)*0.9 : -evalThrow2(thrown)*0.9);
+        if(!best || sc>best.sc) best={sc:sc, thrown:thrown, keep:keep};
+      });
+      return best;
+    }
+    function suggestPeg(){
+      if(!S || !S.youPeg.length) return null;
+      var best=null;
+      S.youPeg.forEach(function(c){
+        if(c.val+S.total>31) return;
+        var res=pegScore(S.seq.concat([c]));
+        var sc=res.pts*10 - c.val*0.05;
+        if(!best || sc>best.sc) best={card:c, sc:sc, res:res, total:S.total+c.val};
+      });
+      return best;
+    }
+    function practiceHintText(){
+      if(!S || !S.practice) return "";
+      if(S.phase==="discard"){
+        var d=suggestDiscard(); if(!d) return "🎓 Practice: take your time picking 2 for the crib — there's no timer.";
+        var names=d.thrown.map(cardName).join(" and ");
+        return S.dealer==="you"
+          ? "🎓 Practice hint: try throwing "+names+" to your own crib — it keeps your strongest 4 together and gives the crib a chance to score."
+          : "🎓 Practice hint: try throwing "+names+" to the AI's crib — it keeps your strongest 4 and gives the AI the least to work with.";
+      }
+      if(S.phase==="peg" && S.turn==="you"){
+        if(!canPlay(S.youPeg,S.total)) return "🎓 Practice hint: no card keeps the count at 31 or under, so tap “Say Go” — the last player to play scores 1.";
+        var p=suggestPeg(); if(!p) return "";
+        if(p.res.pts>0) return "🎓 Practice hint: try "+cardName(p.card)+" — "+p.res.lines.join(", ")+" (count goes to "+p.total+").";
+        return "🎓 Practice hint: "+cardName(p.card)+" is a safe play — count goes to "+p.total+" with no easy 15, pair, or run handed to the AI.";
+      }
+      if(S.phase==="peg" && S.turn==="ai") return "🎓 Practice: count is "+S.total+". While the AI thinks, check your hand — could you pair its card, make 15, or finish a run?";
+      if(S.phase==="count") return "🎓 Practice: watch the counting order — non-dealer first, then dealer, then the crib. Each 15, pair, and run is listed below.";
+      return "🎓 Practice round — no score kept, no timer. Use How to play or Rules any time.";
+    }
+    function renderPracticeChrome(){
+      if(!els.practiceBanner) return;
+      var on = !!(S && S.practice);
+      els.practiceBanner.hidden = !on;
+      if(els.practiceBtn){
+        els.practiceBtn.classList.toggle("practice-on", on);
+        els.practiceBtn.setAttribute("aria-pressed", on?"true":"false");
+        els.practiceBtn.textContent = on ? "🎓 Practising — tap to exit" : "🎓 Practice round";
+      }
+      if(on){
+        var hint=practiceHintText();
+        if(hint) els.coachLine.textContent=hint;
+      }
+    }
+    function render(){ renderBoard(); renderHands(); renderMid(); renderActions(); renderPracticeChrome(); }
+
+    /* ---------- Scoring into match ---------- */
+    function addScore(who, pts, label){
+      if(pts<=0 || S.phase==="over") return false;
+      S.prev[who]=S.scores[who]; S.scores[who]+=pts;
+      if(pts>S.bestThisMatch[who]) S.bestThisMatch[who]=pts;
+      log(nameOf(who)+" +"+pts+(label?" — "+label:"")+" ("+S.scores[who]+")"+(S.practice?" · practice":""));
+      renderBoard();
+      // Practice rounds never end a match and never touch records — points are shown just so you can learn the scoring.
+      if(!S.practice && S.scores[who]>=121){ gameOver(who); return true; }
+      return false;
+    }
+
+    /* ---------- AI: discarding ---------- */
+    function evalKeep4(cards){
+      var v=0;
+      for(var k=2;k<=4;k++) combos(cards,k).forEach(function(cs){ var s=0; cs.forEach(function(c){s+=c.val;}); if(s===15) v+=2; });
+      combos(cards,2).forEach(function(cs){ if(cs[0].r===cs[1].r) v+=2; });
+      var done=false;
+      [4,3].forEach(function(L){ if(done) return; var runs=combos(cards,L).filter(function(cs){ var rs=cs.map(function(c){return c.r;}); return new Set(rs).size===L && Math.max.apply(null,rs)-Math.min.apply(null,rs)===L-1; }); if(runs.length){ v+=runs.length*L; done=true; } });
+      if(cards.every(function(c){return c.suit===cards[0].suit;})) v+=3;
+      cards.forEach(function(c){ if(c.r===5) v+=0.6; if(c.r===11) v+=0.2; });
+      return v;
+    }
+    function evalThrow2(cs){
+      var v=0; if(cs[0].r===cs[1].r) v+=2; if(cs[0].val+cs[1].val===15) v+=2;
+      if(Math.abs(cs[0].r-cs[1].r)===1) v+=0.7; if(cs[0].r===5||cs[1].r===5) v+=0.8;
+      return v;
+    }
+    function aiDiscard(){
+      var hand=S.ai.slice(), best=null;
+      combos([0,1,2,3,4,5],2).forEach(function(pair){
+        var thrown=[hand[pair[0]],hand[pair[1]]];
+        var keep=hand.filter(function(_,i){ return i!==pair[0]&&i!==pair[1]; });
+        var sc;
+        if(difficulty==="easy" && Math.random()<0.55){ sc=Math.random()*6; }
+        else {
+          sc = evalKeep4(keep) + (S.dealer==="ai" ? evalThrow2(thrown)*0.9 : -evalThrow2(thrown)*0.9);
+          if(difficulty==="normal") sc += Math.random()*1.2;
+        }
+        if(!best || sc>best.sc) best={sc:sc, thrown:thrown, keep:keep};
+      });
+      S.ai = best.keep; S.crib = S.crib.concat(best.thrown);
+    }
+
+    /* ---------- AI: pegging ---------- */
+    function aiPickIndex(){
+      var hand=S.aiPeg, legal=[];
+      hand.forEach(function(c,i){ if(c.val+S.total<=31) legal.push(i); });
+      if(!legal.length) return -1;
+      if(difficulty==="easy") return legal[Math.floor(Math.random()*legal.length)];
+      var bestI=legal[0], bestSc=-1e9;
+      legal.forEach(function(i){
+        var c=hand[i], sim=S.seq.concat([c]);
+        var sc = pegScore(sim).pts*10;
+        if(S.seq.length===0){ sc += (6-c.val); if(difficulty==="hard" && c.r===5) sc-=4; } // lead low, never a 5 on hard
+        if(difficulty==="hard"){
+          var nt=S.total+c.val;
+          if(nt<31){
+            var oppBest=0;
+            S.youPeg.forEach(function(oc){ if(oc.val+nt<=31){ var p=pegScore(sim.concat([oc])).pts; if(p>oppBest) oppBest=p; } });
+            sc -= oppBest*6;
+            if(nt===14||nt===21) sc-=2; // don't sit one below 15 / leave a ten-card 31 trap
+          }
+        } else { sc += Math.random()*1.5; }
+        sc -= c.val*0.05;
+        if(sc>bestSc){ bestSc=sc; bestI=i; }
+      });
+      return bestI;
+    }
+
+    /* ---------- Game flow ---------- */
+    function newMatch(){
+      practiceMode=false;
+      S=freshState(); S.practice=false; els.logList.innerHTML=""; els.countPanel.hidden=true; els.resultPanel.hidden=true; els.practicePanel.hidden=true;
+      log("New match — first to 121. "+(S.dealer==="you"?"You deal first.":"AI deals first."));
+      startHand();
+    }
+    function startPractice(){
+      practiceMode=true;
+      S=freshState(); S.practice=true; els.logList.innerHTML=""; els.countPanel.hidden=true; els.resultPanel.hidden=true; els.practicePanel.hidden=true;
+      log("Practice round started — no score kept, no records updated, hints on, untimed.");
+      startHand();
+      say("🎓 Practice round — one relaxed hand with extra hints. No score is kept.");
+    }
+    function exitPractice(){
+      newMatch();
+      say("Back to a real match — first to 121. Good luck!");
+    }
+    function startHand(){
+      S.handNo++; S.phase="discard"; S.sel=[]; S.crib=[]; S.starter=null;
+      S.seq=[]; S.pile=[]; S.total=0; S.turn=null; S.lastToPlay=null; S.busy=false;
+      S.deck=buildDeck();
+      S.you=S.deck.splice(0,6); S.ai=S.deck.splice(0,6);
+      aiDiscard();
+      els.countPanel.hidden=true; els.countSteps.innerHTML="";
+      say("Hand #"+S.handNo+" — pick 2 cards for the crib.");
+      coach(S.dealer==="you" ? "💡 It's YOUR crib: throw pairs, 5s, or cards that add to 15 — they score for you later." : "💡 It's the AI's crib: throw cards that don't combine — no pairs, no 15s, no 5s if you can help it.");
+      render();
+    }
+    function toggleSelect(idx){
+      var i=S.sel.indexOf(idx);
+      if(i>=0) S.sel.splice(i,1);
+      else { if(S.sel.length>=2) S.sel.shift(); S.sel.push(idx); }
+      render();
+    }
+    function confirmDiscard(){
+      if(S.sel.length!==2) return;
+      var thrown = S.sel.slice().sort(function(a,b){return b-a;}).map(function(i){ return S.you.splice(i,1)[0]; });
+      S.crib = S.crib.concat(thrown);
+      S.sel=[]; S.phase="cut";
+      S.starter = S.deck.pop();
+      log("Crib set ("+(S.dealer==="you"?"yours":"AI's")+"). Starter cut: "+cardName(S.starter)+".");
+      S.youPeg=S.you.slice(); S.aiPeg=S.ai.slice();
+      S.phase="peg"; S.turn=other(S.dealer); S.busy=false;
+      render();
+      if(S.starter.r===11){
+        say("Starter is a Jack — his heels! Dealer pegs 2.");
+        if(addScore(S.dealer,2,"His heels (Jack starter)")) return;
+      } else {
+        say("Starter: "+cardName(S.starter)+". Pegging — "+(S.turn==="you"?"you lead.":"AI leads."));
+      }
+      coach("💡 Pegging: make 15s and 31s, pair the AI's card, and complete runs — in any order, like 4-6-5.");
+      if(S.turn==="ai") scheduleAi();
+    }
+    function scheduleAi(){ S.busy=true; render(); setTimeout(function(){ S.busy=false; if(S.phase==="peg"&&S.turn==="ai") aiTurn(); render(); }, 850); }
+
+    function pegPlay(who, idx){
+      var hand=pegHand(who), card=hand.splice(idx,1)[0];
+      S.seq.push(card); S.pile.push({card:card, who:who}); S.total+=card.val; S.lastToPlay=who;
+      var res=pegScore(S.seq);
+      say(nameOf(who)+" played "+cardName(card)+" — count "+S.total+(res.pts?". "+res.lines.join(", ")+"!":""));
+      if(res.pts && addScore(who,res.pts,res.lines.join(", "))) { render(); return; }
+      if(S.total===31){ segmentReset(other(who)); return; }
+      advanceTurn(who);
+      render();
+    }
+    function advanceTurn(justPlayed){
+      var opp=other(justPlayed), oppHand=pegHand(opp), myHand=pegHand(justPlayed);
+      if(canPlay(oppHand,S.total)){ S.turn=opp; if(opp==="ai") scheduleAi(); return; }
+      if(oppHand.length>0){
+        say(nameOf(opp)+" says “Go”.");
+        if(canPlay(myHand,S.total)){ S.turn=justPlayed; if(justPlayed==="ai") scheduleAi(); return; }
+        if(addScore(justPlayed,1,"Go — last card")) { render(); return; }
+        segmentReset(opp); return;
+      }
+      // opponent out of cards
+      if(canPlay(myHand,S.total)){ S.turn=justPlayed; if(justPlayed==="ai") scheduleAi(); return; }
+      if(addScore(justPlayed,1,"Last card")) { render(); return; }
+      segmentReset(opp);
+    }
+    function segmentReset(nextLeader){
+      S.total=0; S.seq=[];
+      if(S.youPeg.length===0 && S.aiPeg.length===0){ countPhase(); return; }
+      if(pegHand(nextLeader).length===0) nextLeader=other(nextLeader);
+      S.turn=nextLeader;
+      say("New count — "+(nextLeader==="you"?"you lead.":"AI leads."));
+      render();
+      if(nextLeader==="ai") scheduleAi();
+    }
+    function aiTurn(){
+      if(S.phase!=="peg"||S.turn!=="ai") return;
+      var idx=aiPickIndex();
+      if(idx<0){
+        say("AI says “Go”.");
+        if(canPlay(S.youPeg,S.total)){ S.turn="you"; render(); return; }
+        if(addScore(S.lastToPlay,1,"Go — last card")) { render(); return; }
+        segmentReset(other(S.lastToPlay)); return;
+      }
+      pegPlay("ai", idx);
+    }
+    function humanGo(){
+      say("You say “Go”.");
+      if(canPlay(S.aiPeg,S.total)){ S.turn="ai"; scheduleAi(); render(); return; }
+      if(addScore(S.lastToPlay,1,"Go — last card")) { render(); return; }
+      segmentReset(other(S.lastToPlay));
+    }
+
+    /* ---------- Counting (show) ---------- */
+    function countPhase(){
+      S.phase="count"; S.turn=null; render();
+      say("All cards played — time to count the hands.");
+      coach("💡 Counting order matters: non-dealer first, then the dealer, then the crib. First to 121 in that order wins.");
+      els.countPanel.hidden=false; els.countSteps.innerHTML="";
+      var pone=other(S.dealer);
+      var steps=[
+        {who:pone, title:nameOf(pone)+(pone==="you"?"r":"")+" hand", hand:(pone==="you"?S.you:S.ai), crib:false},
+        {who:S.dealer, title:nameOf(S.dealer)+(S.dealer==="you"?"r":"")+" hand", hand:(S.dealer==="you"?S.you:S.ai), crib:false},
+        {who:S.dealer, title:"The crib ("+nameOf(S.dealer)+")", hand:S.crib, crib:true}
+      ];
+      // fix titles ("Your hand" / "AI hand")
+      steps[0].title = pone==="you"?"Your hand":"AI hand";
+      steps[1].title = S.dealer==="you"?"Your hand":"AI hand";
+      var i=0;
+      (function next(){
+        if(S.phase==="over") return;
+        if(i>=steps.length){
+          if(S.practice){
+            S.phase="practice-done";
+            els.practiceBig.textContent="You "+S.scores.you+" — "+S.scores.ai+" AI in this practice hand";
+            say("🎓 Practice round complete — have another go or jump into a real match when you're ready.");
+            coach(""); els.practicePanel.hidden=false; render(); return;
+          }
+          S.phase="between"; S.dealer=other(S.dealer);
+          say("Hand #"+S.handNo+" counted. "+(S.dealer==="you"?"Your deal next.":"AI deals next."));
+          coach(""); render(); return;
+        }
+        var st=steps[i++];
+        var res=scoreHand(st.hand, S.starter, st.crib);
+        var div=document.createElement("div"); div.className="count-step";
+        var cardsHtml=document.createElement("div"); cardsHtml.className="cs-cards";
+        st.hand.forEach(function(c){ cardsHtml.appendChild(cardEl(c,{mini:true})); });
+        var stEl=cardEl(S.starter,{mini:true,starter:true}); cardsHtml.appendChild(stEl);
+        div.innerHTML='<div class="cs-head"><b>'+st.title+'</b><span class="cs-pts">+'+res.pts+'</span></div>';
+        div.appendChild(cardsHtml);
+        var ul=document.createElement("ul");
+        res.lines.forEach(function(l){ var li=document.createElement("li"); li.textContent=l; ul.appendChild(li); });
+        div.appendChild(ul);
+        els.countSteps.appendChild(div);
+        if(!S.practice && st.who==="you" && res.pts>stats.bestHand){ stats.bestHand=res.pts; saveStats(); renderHud(); }
+        var ended = addScore(st.who, res.pts, st.title+" counts "+res.pts);
+        render();
+        if(!ended) setTimeout(next, 1500);
+      })();
+    }
+
+    /* ---------- Game over ---------- */
+    function gameOver(winner){
+      S.phase="over"; S.winner=winner;
+      var loser=other(winner), ls=S.scores[loser];
+      var skunk = ls<=90, dbl = ls<=60;
+      stats.games++;
+      if(winner==="you"){ stats.wins++; if(skunk) stats.skunks++; if(!stats.fastest||S.handNo<stats.fastest) stats.fastest=S.handNo; }
+      saveStats(); renderHud();
+      els.resultPanel.hidden=false;
+      els.resultTitle.textContent = winner==="you" ? "🏆 You win the match!" : "🤖 AI wins the match";
+      els.resultBig.textContent = "You "+S.scores.you+" — "+S.scores.ai+" AI · "+S.handNo+" hands";
+      els.resultSub.textContent =
+        (dbl ? "DOUBLE SKUNK! "+nameOf(loser)+" finished on "+ls+" — under 61. Maximum shame. 🦨🦨"
+        : skunk ? "SKUNK! "+nameOf(loser)+" finished on "+ls+" — under the 91 line. 🦨"
+        : "No skunk — "+nameOf(loser)+" made it past the skunk line with "+ls+".") +
+        (winner==="you" ? " Your best single count this match: "+S.bestThisMatch.you+" pts." : " The AI's best single count: "+S.bestThisMatch.ai+" pts.");
+      say(els.resultTitle.textContent+" Final: You "+S.scores.you+" — AI "+S.scores.ai+".");
+      coach(""); log("Match over: You "+S.scores.you+" — AI "+S.scores.ai+(skunk?" (skunk)":"")+(dbl?" (double skunk)":""));
+      render();
+    }
+
+    /* ---------- Controls ---------- */
+    els.btnDiscard.addEventListener("click", confirmDiscard);
+    els.btnGo.addEventListener("click", humanGo);
+    els.btnNextHand.addEventListener("click", startHand);
+    $("btnRematch").addEventListener("click", newMatch);
+    $("newMatchBtn").addEventListener("click", newMatch);
+    /* ---------- Practice round controls ---------- */
+    els.practiceBtn.addEventListener("click", function(){ if(practiceMode) exitPractice(); else startPractice(); });
+    $("btnExitPracticeTop").addEventListener("click", exitPractice);
+    $("btnPracticeAgain").addEventListener("click", startPractice);
+    $("btnExitPractice").addEventListener("click", exitPractice);
+    document.querySelectorAll(".diff-btn").forEach(function(b){
+      b.classList.toggle("active", b.getAttribute("data-diff")===difficulty);
+      b.addEventListener("click", function(){
+        difficulty=b.getAttribute("data-diff");
+        try { localStorage.setItem(LS_DIFF, difficulty); } catch(e){}
+        document.querySelectorAll(".diff-btn").forEach(function(x){ x.classList.toggle("active", x===b); });
+        say("Difficulty set to "+difficulty+". It applies to the AI's next decisions.");
+      });
+    });
+
+    /* ---------- Tutorial (opt-in only — never auto-shown) ---------- */
+    var tutOverlay=$("tutOverlay");
+    var tutHint=$("tutHint");
+    function hideHint(){ if(tutHint) tutHint.hidden=true; }
+    function openTut(){ tutOverlay.hidden=false; hideHint(); }
+    function closeTut(){ tutOverlay.hidden=true; try { localStorage.setItem(LS_TUT,"1"); } catch(e){} hideHint(); }
+    $("howBtn").addEventListener("click", openTut);
+    $("tutX").addEventListener("click", closeTut);
+    $("tutGo").addEventListener("click", closeTut);
+    tutOverlay.addEventListener("click", function(e){ if(e.target===tutOverlay) closeTut(); });
+    if($("hintX")) $("hintX").addEventListener("click", function(){ hideHint(); try { localStorage.setItem(LS_TUT,"1"); } catch(e){} });
+
+    /* ---------- Rules (opt-in, separate from tutorial) ---------- */
+    var rulesOverlay=$("rulesOverlay");
+    function openRules(){ rulesOverlay.hidden=false; hideHint(); }
+    function closeRules(){ rulesOverlay.hidden=true; }
+    $("rulesBtn").addEventListener("click", openRules);
+    $("rulesX").addEventListener("click", closeRules);
+    $("rulesGo").addEventListener("click", closeRules);
+    rulesOverlay.addEventListener("click", function(e){ if(e.target===rulesOverlay) closeRules(); });
+    $("tutToRules").addEventListener("click", function(){ closeTut(); openRules(); });
+    document.addEventListener("keydown", function(e){ if(e.key==="Escape"){ closeTut(); closeRules(); closeFeedback(); } });
+
+    /* ---------- Feedback (standard, saved locally) ---------- */
+    var feedbackOverlay=$("feedbackOverlay");
+    var FB_KEY="holos-arcade-feedback";
+    var fbRating=0;
+    var fbTag=null;
+    var fbStars=$("fbStars");
+    var fbRatingText=$("fbRatingText");
+    var FB_LABELS=["Tap a star to rate.","1 star — needs work","2 stars — a bit rough","3 stars — okay","4 stars — good","5 stars — love it"];
+    function paintStars(){
+      var btns=fbStars.querySelectorAll("button");
+      for(var i=0;i<btns.length;i++){
+        var on=(i<fbRating);
+        btns[i].classList.toggle("on",on);
+        btns[i].setAttribute("aria-checked", (fbRating===i+1)?"true":"false");
+      }
+      fbRatingText.textContent=FB_LABELS[fbRating]||FB_LABELS[0];
+    }
+    fbStars.addEventListener("click",function(e){
+      var b=e.target.closest("button"); if(!b) return;
+      fbRating=parseInt(b.getAttribute("data-star"),10)||0;
+      paintStars();
+    });
+    var fbTags=$("fbTags");
+    function paintTags(){
+      var btns=fbTags.querySelectorAll("button");
+      for(var i=0;i<btns.length;i++){
+        var on=(btns[i].getAttribute("data-tag")===fbTag);
+        btns[i].classList.toggle("on",on);
+        btns[i].setAttribute("aria-checked", on?"true":"false");
+      }
+    }
+    fbTags.addEventListener("click",function(e){
+      var b=e.target.closest("button"); if(!b) return;
+      var t=b.getAttribute("data-tag");
+      fbTag=(fbTag===t)?null:t;
+      paintTags();
+    });
+    function openFeedback(){ feedbackOverlay.hidden=false; hideHint(); }
+    function closeFeedback(){ feedbackOverlay.hidden=true; }
+    $("btnFeedback").addEventListener("click",openFeedback);
+    $("btnCloseFeedback").addEventListener("click",closeFeedback);
+    $("btnCloseFeedbackX").addEventListener("click",closeFeedback);
+    feedbackOverlay.addEventListener("click",function(e){ if(e.target===feedbackOverlay) closeFeedback(); });
+    $("btnSaveFeedback").addEventListener("click",function(){
+      var comment=$("fbComment").value.trim();
+      if(!fbRating && !comment){
+        fbRatingText.textContent="Add a star rating or a comment first.";
+        return;
+      }
+      var entry={game:"cribbage",rating:fbRating,text:comment,tag:fbTag,timestamp:new Date().toISOString()};
+      try{
+        var list=[]; var raw=localStorage.getItem(FB_KEY);
+        if(raw){ var p=JSON.parse(raw); if(Array.isArray(p)) list=p; }
+        list.push(entry);
+        localStorage.setItem(FB_KEY,JSON.stringify(list));
+      }catch(e){}
+      $("fbDone").classList.add("show");
+      log("Feedback saved on this device — thank you!");
+    });
+    paintStars();
+    paintTags();
+
+    /* ---------- Init ---------- */
+    renderHud();
+    newMatch();
+    // One-time, non-blocking hint only — the tutorial itself is opt-in via the How to play button.
+    var seenTut=false; try { seenTut=!!localStorage.getItem(LS_TUT); } catch(e){}
+    if(!seenTut && tutHint) tutHint.hidden=false;
+    </script>
+  </body>
+</html>

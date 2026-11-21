@@ -1,0 +1,1304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Chess</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#fdfcf7; --bg2:#ffffff; --ink:#171a18; --muted:#5b6560; --line:#e7e2d6;
+  --card:#ffffff; --chip:#f1ede1;
+  --rff:#0e7569;
+  --gold:#ffbe0b; --gold-ink:#7a5b00;
+  --good:#1d7a3a; --bad:#b3261e;
+  --shadow:0 10px 30px rgba(23,26,24,.10);
+  --radius:20px;
+  --sq-light:#efe6cc; --sq-dark:#4e7d5f; --sq-frame:#2c4a38;
+  --sq-sel:#f6c945; --sq-last:rgba(255,190,11,.45); --sq-check:#e2574c;
+  --piece-w:#faf7ee; --piece-b:#191d1a;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#111412; --bg2:#171b19; --ink:#f2efe8; --muted:#a8b0ab; --line:#2a2f2c;
+    --card:#1a1e1c; --chip:#242825;
+    --shadow:0 10px 30px rgba(0,0,0,.4);
+    --sq-light:#d9cda6; --sq-dark:#3d6650; --sq-frame:#12291d;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;font-family:"Public Sans",system-ui,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+button{font-family:inherit;cursor:pointer}
+.wrap{max-width:1020px;margin:0 auto;padding:14px 16px 40px}
+
+/* Top control row */
+.toprow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toprow .spacer{flex:1}
+.btn{appearance:none;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:700;font-size:14.5px;padding:11px 16px;border-radius:12px;min-height:48px;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn:disabled{opacity:.38;cursor:not-allowed}
+.diff-label{font-weight:800;font-size:14.5px}
+.diff-group{display:flex;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px}
+.diff-btn{border:0;background:transparent;padding:8px 14px;border-radius:999px;font-weight:800;min-height:40px;color:var(--muted);font-size:14px}
+.diff-btn.active{background:var(--card);color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.14)}
+.diff-note{font-size:12.5px;font-weight:600;color:var(--muted)}
+.practice-btn[aria-pressed="true"]{background:var(--gold);border-color:#d9a400;color:#3d2e00}
+.practice-banner{display:flex;gap:10px;align-items:flex-start;background:#fff7d6;border:1.5px solid var(--gold);border-radius:14px;padding:12px 14px;margin:0 0 12px}
+@media (prefers-color-scheme: dark){ .practice-banner{background:#2e2a12} }
+.practice-banner b{font-size:14.5px}
+.practice-banner p{margin:2px 0 0;font-size:13.5px;color:var(--muted);line-height:1.45}
+.hint-box{margin-top:12px;background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:11px 12px}
+.hint-box b{font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px}
+.hint-box p{margin:0;font-size:14.5px;line-height:1.5;font-weight:600}
+.sq.hint-from{box-shadow:inset 0 0 0 5px var(--rff)}
+.sq.hint-to{box-shadow:inset 0 0 0 5px var(--gold)}
+
+/* HUD */
+.hud{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.hud span{font-size:12.5px;font-weight:700;background:var(--chip);padding:7px 11px;border-radius:999px}
+.hud span b{font-weight:800}
+.hud span.yours{background:var(--ink);color:var(--bg)}
+
+/* Layout */
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:18px;align-items:start}
+@media (max-width:820px){ .layout{grid-template-columns:1fr} }
+
+/* Board */
+.board-frame{background:var(--sq-frame);border-radius:18px;padding:12px;box-shadow:var(--shadow)}
+.board{display:grid;grid-template-columns:repeat(8,1fr);border-radius:8px;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.sq{position:relative;aspect-ratio:1;border:0;padding:0;display:grid;place-items:center;font-size:clamp(22px,8.4vw,46px);line-height:1;min-height:0}
+.sq.light{background:var(--sq-light)}
+.sq.dark{background:var(--sq-dark)}
+.sq.last::after{content:"";position:absolute;inset:0;background:var(--sq-last);pointer-events:none}
+.sq.sel{background:var(--sq-sel)}
+.sq.incheck{background:var(--sq-check)}
+.sq .pc{position:relative;z-index:2;pointer-events:none}
+.sq .pc.w{color:var(--piece-w);text-shadow:0 0 2px #20241f,0 0 2px #20241f,1.5px 0 0 #20241f,-1.5px 0 0 #20241f,0 1.5px 0 #20241f,0 -1.5px 0 #20241f,0 3px 5px rgba(0,0,0,.35)}
+.sq .pc.b{color:var(--piece-b);text-shadow:0 0 2px rgba(250,247,238,.55),0 3px 5px rgba(0,0,0,.3)}
+.sq .dot{position:absolute;z-index:1;width:30%;height:30%;border-radius:50%;background:rgba(20,30,22,.28);pointer-events:none}
+.sq .ring{position:absolute;z-index:1;inset:4%;border-radius:50%;border:4px solid rgba(20,30,22,.30);pointer-events:none}
+.sq .coord{position:absolute;z-index:1;font-size:10.5px;font-weight:800;pointer-events:none;opacity:.85}
+.sq .coord.f{left:4px;top:3px}
+.sq .coord.r{right:4px;bottom:3px}
+.sq.light .coord{color:var(--sq-dark)}
+.sq.dark .coord{color:var(--sq-light)}
+.board.flip .sq .pc{transform:rotate(180deg)}
+
+/* Side panel */
+.panel{display:flex;flex-direction:column;gap:12px}
+.status-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px}
+.status-card .who{display:flex;align-items:center;gap:10px}
+.avatar{font-size:30px;line-height:1}
+.status-card h2{font-family:"Bricolage Grotesque",sans-serif;font-size:21px;margin:0;line-height:1.15;letter-spacing:-.01em}
+.status-card .sub{font-size:13.5px;color:var(--muted);margin:2px 0 0}
+.status-line{margin:12px 0 0;font-weight:800;font-size:16.5px;display:flex;align-items:center;gap:8px}
+.status-line .pulse{width:10px;height:10px;border-radius:50%;background:var(--rff);flex:0 0 auto}
+.status-line.thinking .pulse{background:var(--gold);animation:pulse 0.8s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.5)}}
+.captured{min-height:30px;font-size:21px;letter-spacing:1px;line-height:1.25;word-break:break-all}
+.captured .cap-w{color:var(--ink)}
+.captured .cap-b{color:var(--ink);opacity:.55}
+.matdiff{font-size:13px;font-weight:800;color:var(--rff)}
+.ctrl-row{display:flex;gap:8px;flex-wrap:wrap}
+.ctrl-row .btn{flex:1;min-height:50px}
+.moves-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 18px}
+.moves-card h3{margin:0 0 8px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.moves{max-height:216px;overflow-y:auto;font-size:14.5px}
+.moves table{border-collapse:collapse;width:100%}
+.moves td{padding:3px 6px;vertical-align:top}
+.moves td.num{color:var(--muted);font-weight:700;width:34px}
+.moves td.mv{font-weight:600;width:44%}
+.moves tr.cur td{background:var(--chip)}
+.moves .empty{color:var(--muted);font-size:14px}
+.stats-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 18px}
+.stats-card h3{margin:0 0 10px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--chip);border-radius:12px;padding:9px 6px;text-align:center}
+.stat b{display:block;font-family:"Bricolage Grotesque",sans-serif;font-size:20px;line-height:1.1}
+.stat span{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+
+/* Result banner */
+.result{margin:0 0 14px;background:var(--card);border:2px solid var(--gold);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;text-align:center}
+.result h3{font-family:"Bricolage Grotesque",sans-serif;font-size:25px;margin:0 0 6px;letter-spacing:-.01em}
+.result p{margin:4px 0;color:var(--muted);font-size:15px}
+.result p.win-line{color:var(--ink);font-weight:700}
+.result .btn{margin-top:12px;min-height:54px;padding:13px 26px;font-size:16px}
+
+/* Piece reference */
+details.info{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:6px 18px 12px}
+details.info summary{font-weight:800;font-size:15.5px;padding:12px 0;cursor:pointer;min-height:44px;display:flex;align-items:center}
+.piece-list{list-style:none;margin:4px 0 10px;padding:0;display:grid;gap:8px;font-size:14.5px}
+.piece-list li{display:flex;gap:11px;align-items:baseline}
+.piece-list .glyph{font-size:21px;line-height:1;flex:0 0 28px;text-align:center;transform:translateY(3px)}
+.piece-list b{white-space:nowrap}
+.piece-list span{color:var(--muted)}
+.pane-footer{margin:26px 0 0;padding-top:14px;border-top:1px solid var(--line);font-size:13.5px;color:var(--muted);text-align:center}
+.pane-footer a{color:var(--rff);font-weight:700;text-decoration:underline;text-underline-offset:2px}
+
+/* One-time hint (non-blocking, dismissible) */
+.hint{display:flex;align-items:center;gap:10px;background:var(--chip);border:1px solid var(--line);border-radius:12px;padding:9px 12px;margin-bottom:12px;font-size:14px;font-weight:600}
+.hint .hint-link{appearance:none;border:0;background:none;padding:4px 2px;font:inherit;font-weight:800;color:var(--rff);text-decoration:underline;text-underline-offset:2px;cursor:pointer;min-height:32px}
+.hint .hint-x{margin-left:auto;appearance:none;border:0;background:none;color:var(--muted);width:36px;height:36px;border-radius:50%;font-size:15px;cursor:pointer;flex:0 0 auto}
+.hint .hint-x:hover{color:var(--ink)}
+
+/* Rules body */
+.rules-body{padding:6px 22px 4px;font-size:14.5px}
+.rules-body h4{margin:16px 0 4px;font-size:14px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.rules-body p{margin:4px 0;color:var(--ink);line-height:1.55}
+.rules-body ul{margin:4px 0 8px;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.rules-body li{line-height:1.5}
+.rules-body .val-table{width:100%;border-collapse:collapse;margin:6px 0 8px}
+.rules-body .val-table td{padding:5px 8px;border-bottom:1px solid var(--line)}
+.rules-body .val-table td:last-child{text-align:right;font-weight:800}
+.rules-body .val-table .glyph{font-size:19px;width:30px;text-align:center}
+
+/* Overlays (tutorial + promotion) — matches the arcade tutorial style */
+.overlay{position:fixed;inset:0;z-index:60;background:rgba(10,12,10,.58);display:flex;align-items:center;justify-content:center;padding:16px}
+.overlay[hidden]{display:none}
+.tut-card{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;max-width:520px;width:100%;max-height:calc(100dvh - 32px);overflow-y:auto;box-shadow:var(--shadow)}
+.tut-head{background:var(--sq-frame);color:#fff;padding:18px 22px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:2}
+.tut-head .tut-icon{font-size:34px;line-height:1}
+.tut-head h3{font-family:"Bricolage Grotesque",sans-serif;font-size:23px;margin:0;line-height:1.1}
+.tut-head p{margin:2px 0 0;font-size:13.5px;color:rgba(255,255,255,.85)}
+.tut-x{margin-left:auto;appearance:none;border:0;background:rgba(255,255,255,.18);color:#fff;width:44px;height:44px;border-radius:50%;font-size:19px;cursor:pointer;flex:0 0 auto}
+.tut-steps{list-style:none;margin:0;padding:18px 22px 6px;display:flex;flex-direction:column;gap:14px}
+.tut-steps li{display:flex;gap:12px;align-items:flex-start}
+.tut-num{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:var(--sq-frame);color:#fff;font-weight:800;font-size:15px;display:grid;place-items:center;margin-top:1px}
+.tut-steps b{display:block;font-size:15.5px;margin-bottom:1px}
+.tut-steps li div span{font-size:14.5px;color:var(--muted);line-height:1.5;display:block}
+.tut-ranks{padding:4px 22px 4px}
+.tut-ranks h4{margin:10px 0 6px;font-size:14px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.tut-foot{padding:12px 22px 20px}
+.tut-go{appearance:none;border:0;width:100%;background:var(--sq-frame);color:#fff;font-weight:800;font-size:16px;padding:14px 18px;border-radius:12px;cursor:pointer;font-family:inherit;min-height:52px}
+.tut-go:hover{opacity:.9}
+.promo-card{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;max-width:380px;width:100%;box-shadow:var(--shadow);padding:20px 22px;text-align:center}
+.promo-card h3{font-family:"Bricolage Grotesque",sans-serif;font-size:21px;margin:0 0 4px}
+.promo-card p{margin:0 0 14px;color:var(--muted);font-size:14px}
+.promo-row{display:flex;gap:8px;justify-content:center}
+.promo-btn{flex:1;appearance:none;border:1.5px solid var(--line);background:var(--chip);border-radius:14px;font-size:42px;line-height:1;padding:12px 0;min-height:72px;color:var(--ink)}
+.promo-btn:hover{border-color:var(--ink)}
+
+/* Feedback */
+.fb-body{padding:18px 22px 6px}
+.fb-label{font-weight:800;font-size:14.5px;margin:0 0 8px}
+.fb-stars{display:flex;gap:6px;margin:0 0 16px}
+.fb-star{appearance:none;border:1.5px solid var(--line);background:var(--chip);width:52px;height:52px;border-radius:12px;font-size:26px;line-height:1;color:#9a9587;cursor:pointer;display:grid;place-items:center}
+.fb-star.on{background:#fff3c4;border-color:var(--gold);color:var(--gold-ink)}
+.fb-star:hover{border-color:var(--ink)}
+.fb-textarea{width:100%;min-height:110px;resize:vertical;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;font:inherit;font-size:15px;background:var(--bg2);color:var(--ink)}
+.fb-textarea:focus{outline:2px solid var(--rff);outline-offset:1px;border-color:transparent}
+.fb-note{font-size:13px;color:var(--muted);line-height:1.5;margin:10px 0 0}
+.fb-error{font-size:13.5px;font-weight:700;color:var(--bad);margin:8px 0 0;min-height:18px}
+.fb-thanks{text-align:center;padding:8px 0 4px}
+.fb-thanks .big{font-size:36px;line-height:1}
+.fb-thanks p{color:var(--muted);font-size:14.5px;margin:8px 0 0}
+.fb-tags{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 16px}
+.fb-tag{appearance:none;border:1.5px solid var(--line);background:var(--chip);color:var(--muted);font-weight:800;font-size:14px;padding:9px 14px;border-radius:999px;min-height:44px;cursor:pointer}
+.fb-tag.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <div class="toprow">
+    <span class="diff-label" id="diffLabel">Difficulty</span>
+    <div class="diff-group" id="diffGroup" role="radiogroup" aria-labelledby="diffLabel">
+      <button class="diff-btn" type="button" role="radio" aria-checked="false" data-diff="easy">Easy</button>
+      <button class="diff-btn active" type="button" role="radio" aria-checked="true" data-diff="normal">Normal</button>
+      <button class="diff-btn" type="button" role="radio" aria-checked="false" data-diff="hard">Hard</button>
+    </div>
+    <span class="diff-note">Changing level starts a new game</span>
+    <button class="btn practice-btn" id="practiceBtn" type="button" aria-pressed="false">🎯 Practice round</button>
+    <span class="spacer"></span>
+    <button class="btn" id="howBtn" type="button">❓ How to play</button>
+    <button class="btn" id="rulesBtn" type="button">📜 Rules</button>
+    <button class="btn" id="feedbackBtn" type="button">💬 Feedback</button>
+  </div>
+
+  <div class="hint" id="hintBar" hidden>
+    <span>New here? <button class="hint-link" id="hintHow" type="button">Tap How to play</button> for a one-minute walkthrough.</span>
+    <button class="hint-x" id="hintX" type="button" aria-label="Dismiss hint">✕</button>
+  </div>
+
+  <div class="hud" aria-label="Match summary">
+    <span class="yours">You play <b>White</b></span>
+    <span>Opponent: <b id="hudAi">Nova</b></span>
+    <span>Level: <b id="hudDiff">Normal</b></span>
+    <span>Mode: <b id="hudMode">Scored game</b></span>
+    <span>Move: <b id="hudMove">1</b></span>
+  </div>
+
+  <div class="practice-banner" id="practiceBanner" hidden>
+    <span style="font-size:22px;line-height:1" aria-hidden="true">🎯</span>
+    <div>
+      <b>Practice round — no score, no pressure</b>
+      <p>This game won't count toward your record. It's untimed, hints are on, and you can undo and try a different line anytime — even after checkmate.</p>
+    </div>
+  </div>
+
+  <div class="result" id="resultPanel" hidden>
+    <h3 id="resultTitle">Checkmate!</h3>
+    <p class="win-line" id="resultLine"></p>
+    <p id="resultSub"></p>
+    <button class="btn primary" id="rematchBtn" type="button">↻ Rematch</button>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="board-frame">
+        <div class="board" id="board" role="grid" aria-label="Chess board"></div>
+      </div>
+      <details class="info">
+        <summary>♟️ Piece guide — how each piece moves</summary>
+        <ul class="piece-list">
+          <li><span class="glyph">♟</span><b>Pawn</b><span>One square forward (two from its start), captures diagonally. Reaching the far end promotes it.</span></li>
+          <li><span class="glyph">♜</span><b>Rook</b><span>Any number of squares along ranks and files.</span></li>
+          <li><span class="glyph">♞</span><b>Knight</b><span>An L-shape: two squares one way, one to the side. The only piece that jumps.</span></li>
+          <li><span class="glyph">♝</span><b>Bishop</b><span>Any number of squares diagonally.</span></li>
+          <li><span class="glyph">♛</span><b>Queen</b><span>Rook + bishop combined — the strongest piece on the board.</span></li>
+          <li><span class="glyph">♚</span><b>King</b><span>One square in any direction. Keep him safe: if he can't escape attack, that's checkmate.</span></li>
+        </ul>
+      </details>
+    </div>
+
+    <div class="panel">
+      <section class="status-card" aria-label="Game status">
+        <div class="who">
+          <span class="avatar" id="aiAvatar" aria-hidden="true">🦊</span>
+          <div>
+            <h2 id="aiName">Nova</h2>
+            <p class="sub" id="aiTag">Steady and sensible — a fair fight.</p>
+          </div>
+        </div>
+        <p class="status-line" id="statusLine"><span class="pulse" aria-hidden="true"></span><span id="statusText">Your move</span></p>
+        <div class="hint-box" id="hintBox" hidden>
+          <b>💡 Hint</b>
+          <p id="hintText">Tap Hint on your turn for a suggested move.</p>
+        </div>
+        <div style="margin-top:12px">
+          <div class="captured" id="capByYou" aria-label="Pieces you captured"></div>
+          <div class="captured" id="capByAi" aria-label="Pieces the AI captured"></div>
+          <div class="matdiff" id="matDiff"></div>
+        </div>
+      </section>
+
+      <div class="ctrl-row">
+        <button class="btn primary" id="newBtn" type="button">＋ New game</button>
+        <button class="btn" id="hintBtn" type="button" hidden>💡 Hint</button>
+        <button class="btn" id="undoBtn" type="button">↩ Undo</button>
+        <button class="btn" id="flipBtn" type="button">⇅ Flip</button>
+        <button class="btn" id="resignBtn" type="button">🏳 Resign</button>
+      </div>
+      <p id="practiceCtrlNote" hidden style="margin:0;font-size:13px;color:var(--muted);line-height:1.45">Practice: Hint suggests a strong move and highlights it on the board. Undo works anytime — use it to rewind and try another idea.</p>
+
+      <section class="moves-card" aria-label="Move list">
+        <h3>Moves</h3>
+        <div class="moves" id="moveList"><span class="empty">No moves yet — White (you) opens.</span></div>
+      </section>
+
+      <section class="stats-card" aria-label="Your record on this device">
+        <h3>Your record</h3>
+        <div class="stats-grid">
+          <div class="stat"><b id="stPlayed">0</b><span>Played</span></div>
+          <div class="stat"><b id="stWon">0</b><span>Won</span></div>
+          <div class="stat"><b id="stDrawn">0</b><span>Drawn</span></div>
+          <div class="stat"><b id="stLost">0</b><span>Lost</span></div>
+          <div class="stat"><b id="stStreak">0</b><span>Best streak</span></div>
+          <div class="stat"><b id="stFastest">—</b><span>Fastest win</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <p class="pane-footer">More ridiculous health &amp; fitness fun: <a href="https://www.instagram.com/ridiculouslyfitandfed/" target="_blank" rel="noopener">Ridiculously Fit and Fed</a></p>
+</main>
+
+<!-- Tutorial / first-run walkthrough -->
+<div class="overlay" id="tutOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+  <div class="tut-card">
+    <div class="tut-head">
+      <span class="tut-icon" aria-hidden="true">♞</span>
+      <div>
+        <h3 id="tutTitle">How to play — Chess</h3>
+        <p>The classic, explained in under a minute</p>
+      </div>
+      <button class="tut-x" id="tutX" type="button" aria-label="Close tutorial">✕</button>
+    </div>
+    <ol class="tut-steps">
+      <li><span class="tut-num">1</span><div><b>You are White — you move first</b><span>Tap one of your pieces to see its legal moves (the dots), then tap a highlighted square to move. A ring means that move captures.</span></div></li>
+      <li><span class="tut-num">2</span><div><b>The goal is checkmate</b><span>Attack the enemy king so it has no escape — no legal move, block, or capture can save it. If your king is attacked, that's "check" and you must answer it.</span></div></li>
+      <li><span class="tut-num">3</span><div><b>Special moves are all in</b><span>Castling (king + rook swap for safety), en passant (a sneaky pawn capture), and promotion — a pawn reaching the last rank becomes a queen, rook, bishop, or knight. Pick your piece when it happens.</span></div></li>
+      <li><span class="tut-num">4</span><div><b>Pick your opponent</b><span>Pip (Easy) daydreams and blunders. Nova (Normal) plays a solid game. Vex (Hard) calculates three moves deep and shows no mercy. Changing level starts a fresh game.</span></div></li>
+      <li><span class="tut-num">5</span><div><b>Draws happen too</b><span>Stalemate, both sides down to bare kings, the same position three times, or 50 quiet moves — all end the game level. Undo takes back your last move (and the reply); Resign ends it now.</span></div></li>
+      <li><span class="tut-num">6</span><div><b>Want a no-pressure round? Try Practice</b><span>Tap 🎯 Practice round at the top for a game that doesn't count toward your record. It's untimed, the 💡 Hint button suggests a strong move and highlights it on the board, and you can undo and try a different line anytime. Tap Practice again to go back to a scored game.</span></div></li>
+    </ol>
+    <div class="tut-ranks">
+      <h4>Quick tips</h4>
+      <ul class="piece-list">
+        <li><span class="glyph">💡</span><b>Develop first</b><span>Knights and bishops out early, castle your king to safety, then fight for the centre.</span></li>
+        <li><span class="glyph">💡</span><b>Check before you move</b><span>Ask: what did their last move threaten? Most games at this level are lost to pieces left hanging for free.</span></li>
+      </ul>
+    </div>
+    <div class="tut-foot">
+      <button class="tut-go" id="tutGo" type="button">Let's play ♟️</button>
+    </div>
+  </div>
+</div>
+
+<!-- Full rules (separate from the short tutorial) -->
+<div class="overlay" id="rulesOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="tut-card">
+    <div class="tut-head">
+      <span class="tut-icon" aria-hidden="true">📜</span>
+      <div>
+        <h3 id="rulesTitle">Rules — Chess</h3>
+        <p>The full rulebook: endings, special moves, scoring</p>
+      </div>
+      <button class="tut-x" id="rulesX" type="button" aria-label="Close rules">✕</button>
+    </div>
+    <div class="rules-body">
+      <h4>The goal</h4>
+      <p>Checkmate the enemy king: attack it so that no legal move — moving the king, capturing the attacker, or blocking the attack — can save it. The side that delivers checkmate wins. You play White and always move first.</p>
+
+      <h4>How a game can end</h4>
+      <ul>
+        <li><b>Checkmate</b> — a king in check with no escape loses.</li>
+        <li><b>Resignation</b> — either side may resign at any time and loses.</li>
+        <li><b>Stalemate (draw)</b> — the side to move is not in check but has no legal move.</li>
+        <li><b>Threefold repetition (draw)</b> — the exact same position, with the same side to move, occurs three times.</li>
+        <li><b>Fifty-move rule (draw)</b> — 50 moves by each side pass with no pawn move and no capture.</li>
+        <li><b>Insufficient material (draw)</b> — neither side can possibly checkmate: king vs king, king + bishop or knight vs king, or king + bishop vs king + bishop with bishops on the same colour.</li>
+      </ul>
+
+      <h4>Check</h4>
+      <p>A king under attack is in check and must be gotten out of it on that move. You may never make a move that leaves your own king in check — the board simply won't offer it. A move that gives check is written with a "+", checkmate with a "#".</p>
+
+      <h4>Special moves</h4>
+      <ul>
+        <li><b>Castling</b> — once per game per side, the king moves two squares toward a rook and the rook hops over it. Legal only if neither piece has moved, the squares between them are empty, the king is not in check, and the king does not pass through or land on an attacked square.</li>
+        <li><b>En passant</b> — if an enemy pawn advances two squares and lands beside your pawn, you may capture it as if it had moved only one square. Only on the very next move — after that the chance is gone.</li>
+        <li><b>Promotion</b> — a pawn reaching the far rank must become a queen, rook, bishop, or knight of the same colour (your choice, and yes, you can end up with two queens).</li>
+      </ul>
+
+      <h4>Scoring — piece values</h4>
+      <p>Chess itself has no points, but players judge who is ahead by material. These are the values this game uses for the "up in material" counter, and roughly how strong each piece is:</p>
+      <table class="val-table">
+        <tr><td class="glyph">♟</td><td>Pawn</td><td>1</td></tr>
+        <tr><td class="glyph">♞</td><td>Knight</td><td>3</td></tr>
+        <tr><td class="glyph">♝</td><td>Bishop</td><td>3</td></tr>
+        <tr><td class="glyph">♜</td><td>Rook</td><td>5</td></tr>
+        <tr><td class="glyph">♛</td><td>Queen</td><td>9</td></tr>
+        <tr><td class="glyph">♚</td><td>King</td><td>— (priceless: lose him and the game is over)</td></tr>
+      </table>
+      <p>Your record (played / won / drawn / lost, best win streak, fastest win) is kept on this device only.</p>
+
+      <h4>House notes for this version</h4>
+      <ul>
+        <li>Tap a piece, then tap a highlighted square — dots are quiet moves, rings are captures. No touch-move rule: nothing counts until you tap the destination.</li>
+        <li>Undo takes back your last move and the AI's reply. Changing difficulty starts a fresh game and doesn't count the abandoned one.</li>
+        <li><b>Practice round</b> — tap 🎯 Practice round for an untimed, unscored game: hints are available, undo works anytime, and the result never touches your record.</li>
+        <li>Pip (Easy) thinks one move ahead and daydreams; Nova (Normal) thinks two; Vex (Hard) thinks three, with extra time spent checking captures.</li>
+      </ul>
+    </div>
+    <div class="tut-foot">
+      <button class="tut-go" id="rulesGo" type="button">Got it ♟️</button>
+    </div>
+  </div>
+</div>
+
+<!-- Feedback -->
+<div class="overlay" id="feedbackOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="feedbackTitle">
+  <div class="tut-card">
+    <div class="tut-head">
+      <span class="tut-icon" aria-hidden="true">💬</span>
+      <div>
+        <h3 id="feedbackTitle">Feedback — Chess</h3>
+        <p>Tell us what worked, what didn't, or what you'd love next</p>
+      </div>
+      <button class="tut-x" id="feedbackX" type="button" aria-label="Close feedback">✕</button>
+    </div>
+    <div class="fb-body" id="fbForm">
+      <p class="fb-label" id="fbRatingLabel">How would you rate this game?</p>
+      <div class="fb-stars" role="radiogroup" aria-labelledby="fbRatingLabel">
+        <button class="fb-star" type="button" role="radio" aria-checked="false" data-rating="1" aria-label="1 star">★</button>
+        <button class="fb-star" type="button" role="radio" aria-checked="false" data-rating="2" aria-label="2 stars">★</button>
+        <button class="fb-star" type="button" role="radio" aria-checked="false" data-rating="3" aria-label="3 stars">★</button>
+        <button class="fb-star" type="button" role="radio" aria-checked="false" data-rating="4" aria-label="4 stars">★</button>
+        <button class="fb-star" type="button" role="radio" aria-checked="false" data-rating="5" aria-label="5 stars">★</button>
+      </div>
+      <p class="fb-label" id="fbTagLabel">What is this about? <span style="font-weight:600;color:var(--muted)">(optional)</span></p>
+      <div class="fb-tags" role="radiogroup" aria-labelledby="fbTagLabel">
+        <button class="fb-tag" type="button" role="radio" aria-checked="false" data-tag="Bug">Bug</button>
+        <button class="fb-tag" type="button" role="radio" aria-checked="false" data-tag="Suggestion">Suggestion</button>
+        <button class="fb-tag" type="button" role="radio" aria-checked="false" data-tag="Other">Other</button>
+      </div>
+      <label class="fb-label" for="fbText">Your comment</label>
+      <textarea class="fb-textarea" id="fbText" placeholder="What should we know?" maxlength="1000"></textarea>
+      <p class="fb-error" id="fbError" aria-live="polite"></p>
+      <p class="fb-note">Saved on this device only — no email, no account, nothing is sent anywhere. Feedback follows the same Terms &amp; Conditions: please don't include personal information, keep it clean, and feedback may be used to improve the games.</p>
+    </div>
+    <div class="fb-body fb-thanks" id="fbThanks" hidden>
+      <div class="big" aria-hidden="true">💙</div>
+      <p style="font-weight:800;color:var(--ink);font-size:17px">Thanks!</p>
+      <p>Your feedback has been saved on this device.</p>
+    </div>
+    <div class="tut-foot">
+      <button class="tut-go" id="fbSave" type="button">Save feedback</button>
+      <button class="tut-go" id="fbDone" type="button" hidden>Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Promotion picker -->
+<div class="overlay" id="promoOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="promoTitle">
+  <div class="promo-card">
+    <h3 id="promoTitle">Promote your pawn</h3>
+    <p>Choose the piece it becomes.</p>
+    <div class="promo-row">
+      <button class="promo-btn" type="button" data-promo="q" aria-label="Promote to queen">♕</button>
+      <button class="promo-btn" type="button" data-promo="r" aria-label="Promote to rook">♖</button>
+      <button class="promo-btn" type="button" data-promo="b" aria-label="Promote to bishop">♗</button>
+      <button class="promo-btn" type="button" data-promo="n" aria-label="Promote to knight">♘</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================= Chess engine =================
+   Board: array of 64, index = rank*8 + file. Rank 0 = rank 1 (White home),
+   file 0 = a-file. Pieces: uppercase = White, lowercase = Black. */
+var VAL = { p:100, n:320, b:330, r:500, q:900, k:0 };
+var GLYPH = { k:"♚", q:"♛", r:"♜", b:"♝", n:"♞", p:"♟" };
+var PST = {
+  p:[0,0,0,0,0,0,0,0, 50,50,50,50,50,50,50,50, 10,10,20,30,30,20,10,10, 5,5,10,25,25,10,5,5, 0,0,0,20,20,0,0,0, 5,-5,-10,0,0,-10,-5,5, 5,10,10,-20,-20,10,10,5, 0,0,0,0,0,0,0,0],
+  n:[-50,-40,-30,-30,-30,-30,-40,-50, -40,-20,0,0,0,0,-20,-40, -30,0,10,15,15,10,0,-30, -30,5,15,20,20,15,5,-30, -30,0,15,20,20,15,0,-30, -30,5,10,15,15,10,5,-30, -40,-20,0,5,5,0,-20,-40, -50,-40,-30,-30,-30,-30,-40,-50],
+  b:[-20,-10,-10,-10,-10,-10,-10,-20, -10,0,0,0,0,0,0,-10, -10,0,5,10,10,5,0,-10, -10,5,5,10,10,5,5,-10, -10,0,10,10,10,10,0,-10, -10,10,10,10,10,10,10,-10, -10,5,0,0,0,0,5,-10, -20,-10,-10,-10,-10,-10,-10,-20],
+  r:[0,0,0,0,0,0,0,0, 5,10,10,10,10,10,10,5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, -5,0,0,0,0,0,0,-5, 0,0,0,5,5,0,0,0],
+  q:[-20,-10,-10,-5,-5,-10,-10,-20, -10,0,0,0,0,0,0,-10, -10,0,5,5,5,5,0,-10, -5,0,5,5,5,5,0,-5, 0,0,5,5,5,5,0,-5, -10,5,5,5,5,5,0,-10, -10,0,5,0,0,0,0,-10, -20,-10,-10,-5,-5,-10,-10,-20],
+  k:[-30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -30,-40,-40,-50,-50,-40,-40,-30, -20,-30,-30,-40,-40,-30,-30,-20, -10,-20,-20,-20,-20,-20,-20,-10, 20,20,0,0,0,0,20,20, 20,30,10,0,0,10,30,20]
+};
+function isWhite(p){ return p && p === p.toUpperCase(); }
+function other(c){ return c === "w" ? "b" : "w"; }
+function sqName(sq){ return "abcdefgh"[sq & 7] + ((sq >> 3) + 1); }
+
+function startState(){
+  var b = new Array(64).fill(null);
+  var back = ["r","n","b","q","k","b","n","r"];
+  for(var f=0; f<8; f++){
+    b[f] = back[f].toUpperCase(); b[8+f] = "P";
+    b[48+f] = "p"; b[56+f] = back[f];
+  }
+  return { b:b, turn:"w", castling:{K:1,Q:1,k:1,q:1}, ep:-1, half:0, full:1 };
+}
+function cloneState(st){
+  return { b: st.b.slice(), turn: st.turn, castling:{K:st.castling.K,Q:st.castling.Q,k:st.castling.k,q:st.castling.q}, ep: st.ep, half: st.half, full: st.full };
+}
+function kingSq(b, white){
+  var k = white ? "K" : "k";
+  for(var i=0;i<64;i++) if(b[i]===k) return i;
+  return -1;
+}
+var KN = [[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]];
+var KDIR = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+var BDIR = [[1,1],[1,-1],[-1,1],[-1,-1]];
+var RDIR = [[1,0],[-1,0],[0,1],[0,-1]];
+
+function attacked(b, sq, byWhite){
+  var r = sq >> 3, f = sq & 7, i, nr, nf, p;
+  // Pawns
+  var pr = byWhite ? r - 1 : r + 1;
+  if(pr >= 0 && pr < 8){
+    var pawn = byWhite ? "P" : "p";
+    if(f > 0 && b[pr*8 + f - 1] === pawn) return true;
+    if(f < 7 && b[pr*8 + f + 1] === pawn) return true;
+  }
+  // Knights
+  var knight = byWhite ? "N" : "n";
+  for(i=0;i<8;i++){ nr = r + KN[i][1]; nf = f + KN[i][0];
+    if(nr>=0&&nr<8&&nf>=0&&nf<8 && b[nr*8+nf] === knight) return true; }
+  // King
+  var king = byWhite ? "K" : "k";
+  for(i=0;i<8;i++){ nr = r + KDIR[i][1]; nf = f + KDIR[i][0];
+    if(nr>=0&&nr<8&&nf>=0&&nf<8 && b[nr*8+nf] === king) return true; }
+  // Sliders
+  function ray(dirs, types){
+    for(var d=0; d<dirs.length; d++){
+      nr = r; nf = f;
+      while(true){
+        nr += dirs[d][1]; nf += dirs[d][0];
+        if(nr<0||nr>7||nf<0||nf>7) break;
+        p = b[nr*8+nf];
+        if(p){
+          if(isWhite(p) === byWhite && types.indexOf(p.toLowerCase()) >= 0) return true;
+          break;
+        }
+      }
+    }
+    return false;
+  }
+  if(ray(BDIR, "bq")) return true;
+  if(ray(RDIR, "rq")) return true;
+  return false;
+}
+function inCheck(st, color){
+  var ks = kingSq(st.b, color === "w");
+  return ks >= 0 && attacked(st.b, ks, color !== "w");
+}
+
+/* Pseudo-legal move generation. Move: {from,to,promo,epCap,castle,double} */
+function genMoves(st, capturesOnly){
+  var moves = [], b = st.b, white = st.turn === "w";
+  for(var sq=0; sq<64; sq++){
+    var p = b[sq];
+    if(!p || isWhite(p) !== white) continue;
+    var r = sq >> 3, f = sq & 7, t = p.toLowerCase(), i, nr, nf, to, tp;
+    if(t === "p"){
+      var dir = white ? 8 : -8, startRank = white ? 1 : 6, promoRank = white ? 7 : 0;
+      // captures
+      for(var df=-1; df<=1; df+=2){
+        nf = f + df; nr = r + (white ? 1 : -1);
+        if(nf<0||nf>7||nr<0||nr>7) continue;
+        to = nr*8+nf; tp = b[to];
+        if(tp && isWhite(tp) !== white){
+          if(nr === promoRank){ ["q","r","b","n"].forEach(function(pr){ moves.push({from:sq,to:to,promo:pr}); }); }
+          else moves.push({from:sq,to:to});
+        } else if(to === st.ep){
+          moves.push({from:sq,to:to,epCap:true});
+        }
+      }
+      if(capturesOnly) continue;
+      to = sq + dir;
+      if(!b[to]){
+        if((to >> 3) === promoRank){ ["q","r","b","n"].forEach(function(pr){ moves.push({from:sq,to:to,promo:pr}); }); }
+        else moves.push({from:sq,to:to});
+        if(r === startRank && !b[sq + 2*dir]) moves.push({from:sq,to:sq + 2*dir,double:true});
+      }
+    } else if(t === "n" || t === "k"){
+      var offs = t === "n" ? KN : KDIR;
+      for(i=0;i<8;i++){ nr = r + offs[i][1]; nf = f + offs[i][0];
+        if(nr<0||nr>7||nf<0||nf>7) continue;
+        to = nr*8+nf; tp = b[to];
+        if(!tp){ if(!capturesOnly) moves.push({from:sq,to:to}); }
+        else if(isWhite(tp) !== white) moves.push({from:sq,to:to});
+      }
+      if(t === "k" && !capturesOnly){
+        var home = white ? 0 : 56, enemy = !white;
+        if(white && st.castling.K && !b[5] && !b[6] && b[7] === "R" &&
+           !attacked(b,4,enemy) && !attacked(b,5,enemy) && !attacked(b,6,enemy))
+          moves.push({from:4,to:6,castle:"K"});
+        if(white && st.castling.Q && !b[3] && !b[2] && !b[1] && b[0] === "R" &&
+           !attacked(b,4,enemy) && !attacked(b,3,enemy) && !attacked(b,2,enemy))
+          moves.push({from:4,to:2,castle:"Q"});
+        if(!white && st.castling.k && !b[61] && !b[62] && b[63] === "r" &&
+           !attacked(b,60,enemy) && !attacked(b,61,enemy) && !attacked(b,62,enemy))
+          moves.push({from:60,to:62,castle:"k"});
+        if(!white && st.castling.q && !b[59] && !b[58] && !b[57] && b[56] === "r" &&
+           !attacked(b,60,enemy) && !attacked(b,59,enemy) && !attacked(b,58,enemy))
+          moves.push({from:60,to:58,castle:"q"});
+      }
+    } else {
+      var dirs = t === "b" ? BDIR : (t === "r" ? RDIR : KDIR);
+      for(var d=0; d<dirs.length; d++){
+        nr = r; nf = f;
+        while(true){
+          nr += dirs[d][1]; nf += dirs[d][0];
+          if(nr<0||nr>7||nf<0||nf>7) break;
+          to = nr*8+nf; tp = b[to];
+          if(!tp){ if(!capturesOnly) moves.push({from:sq,to:to}); }
+          else { if(isWhite(tp) !== white) moves.push({from:sq,to:to}); break; }
+        }
+      }
+    }
+  }
+  return moves;
+}
+function make(st, m){
+  var undo = { cap:null, epCapSq:-1, castling:{K:st.castling.K,Q:st.castling.Q,k:st.castling.k,q:st.castling.q}, ep:st.ep, half:st.half };
+  var p = st.b[m.from], white = isWhite(p);
+  st.b[m.from] = null;
+  if(m.epCap){
+    var csq = (m.from & 56) | (m.to & 7);
+    undo.cap = st.b[csq]; undo.epCapSq = csq; st.b[csq] = null;
+  } else if(st.b[m.to]) undo.cap = st.b[m.to];
+  st.b[m.to] = m.promo ? (white ? m.promo.toUpperCase() : m.promo) : p;
+  if(m.castle === "K"){ st.b[5] = st.b[7]; st.b[7] = null; }
+  if(m.castle === "Q"){ st.b[3] = st.b[0]; st.b[0] = null; }
+  if(m.castle === "k"){ st.b[61] = st.b[63]; st.b[63] = null; }
+  if(m.castle === "q"){ st.b[59] = st.b[56]; st.b[56] = null; }
+  var c = st.castling;
+  if(p === "K"){ c.K = 0; c.Q = 0; }
+  if(p === "k"){ c.k = 0; c.q = 0; }
+  if(m.from === 0 || m.to === 0) c.Q = 0;
+  if(m.from === 7 || m.to === 7) c.K = 0;
+  if(m.from === 56 || m.to === 56) c.q = 0;
+  if(m.from === 63 || m.to === 63) c.k = 0;
+  st.ep = m.double ? (m.from + m.to) / 2 : -1;
+  st.half = (p.toLowerCase() === "p" || undo.cap) ? 0 : st.half + 1;
+  if(st.turn === "b") st.full++;
+  st.turn = other(st.turn);
+  return undo;
+}
+function unmake(st, m, undo){
+  st.turn = other(st.turn);
+  if(st.turn === "b") st.full--;
+  var p = st.b[m.to];
+  if(m.promo) p = st.turn === "w" ? "P" : "p";
+  st.b[m.from] = p;
+  st.b[m.to] = null;
+  if(m.epCap){ st.b[undo.epCapSq] = undo.cap; }
+  else if(undo.cap) st.b[m.to] = undo.cap;
+  if(m.castle === "K"){ st.b[7] = st.b[5]; st.b[5] = null; }
+  if(m.castle === "Q"){ st.b[0] = st.b[3]; st.b[3] = null; }
+  if(m.castle === "k"){ st.b[63] = st.b[61]; st.b[61] = null; }
+  if(m.castle === "q"){ st.b[56] = st.b[59]; st.b[59] = null; }
+  st.castling = undo.castling; st.ep = undo.ep; st.half = undo.half;
+}
+function legalMoves(st){
+  var pseudo = genMoves(st, false), out = [];
+  for(var i=0;i<pseudo.length;i++){
+    var u = make(st, pseudo[i]);
+    if(!inCheck(st, other(st.turn))) out.push(pseudo[i]);
+    unmake(st, pseudo[i], u);
+  }
+  return out;
+}
+function posKey(st){
+  var s = "";
+  for(var i=0;i<64;i++) s += st.b[i] || ".";
+  return s + st.turn + (st.castling.K?"K":"") + (st.castling.Q?"Q":"") + (st.castling.k?"k":"") + (st.castling.q?"q":"") + st.ep;
+}
+function insufficientMaterial(b){
+  var rest = [];
+  for(var i=0;i<64;i++){ var p = b[i]; if(p && p.toLowerCase() !== "k") rest.push({p:p, sq:i}); }
+  if(rest.length === 0) return true;
+  if(rest.length === 1) return "bn".indexOf(rest[0].p.toLowerCase()) >= 0;
+  if(rest.length === 2){
+    var a = rest[0], c = rest[1];
+    if(a.p.toLowerCase() === "b" && c.p.toLowerCase() === "b" && isWhite(a.p) !== isWhite(c.p)){
+      return (((a.sq >> 3) + (a.sq & 7)) % 2) === (((c.sq >> 3) + (c.sq & 7)) % 2);
+    }
+  }
+  return false;
+}
+function toSAN(st, m, legal){
+  if(m.castle) var base = (m.castle === "K" || m.castle === "k") ? "O-O" : "O-O-O";
+  else {
+    var piece = st.b[m.from], t = piece.toLowerCase();
+    var isCap = !!st.b[m.to] || !!m.epCap;
+    if(t === "p"){
+      base = isCap ? ("abcdefgh"[m.from & 7] + "x" + sqName(m.to)) : sqName(m.to);
+      if(m.promo) base += "=" + m.promo.toUpperCase();
+    } else {
+      base = t.toUpperCase();
+      var others = [];
+      for(var i=0;i<legal.length;i++){
+        var o = legal[i];
+        if(o !== m && o.to === m.to && o.from !== m.from && st.b[o.from] === piece) others.push(o);
+      }
+      if(others.length){
+        var sameFile = others.some(function(o){ return (o.from & 7) === (m.from & 7); });
+        var sameRank = others.some(function(o){ return (o.from >> 3) === (m.from >> 3); });
+        if(!sameFile) base += "abcdefgh"[m.from & 7];
+        else if(!sameRank) base += ((m.from >> 3) + 1);
+        else base += sqName(m.from);
+      }
+      if(isCap) base += "x";
+      base += sqName(m.to);
+    }
+  }
+  var u = make(st, m);
+  var oppInCheck = inCheck(st, st.turn);
+  var oppHasMove = legalMoves(st).length > 0;
+  unmake(st, m, u);
+  if(oppInCheck) base += oppHasMove ? "+" : "#";
+  return base;
+}
+
+/* ================= Evaluation + search ================= */
+function evaluate(st){
+  var score = 0;
+  for(var i=0;i<64;i++){
+    var p = st.b[i];
+    if(!p) continue;
+    var t = p.toLowerCase(), r = i >> 3, f = i & 7;
+    var idx = isWhite(p) ? (7 - r) * 8 + f : r * 8 + f;
+    var v = VAL[t] + PST[t][idx];
+    score += isWhite(p) ? v : -v;
+  }
+  return st.turn === "w" ? score : -score;
+}
+var MATE = 100000;
+function orderMoves(st, moves){
+  for(var i=0;i<moves.length;i++){
+    var m = moves[i], s = 0, cap = m.epCap ? "p" : st.b[m.to];
+    if(cap) s = 10 * VAL[cap.toLowerCase()] - VAL[st.b[m.from].toLowerCase()] / 10;
+    if(m.promo) s += VAL[m.promo];
+    m._s = s;
+  }
+  moves.sort(function(a,b){ return b._s - a._s; });
+}
+function quiesce(st, alpha, beta, ply){
+  var stand = evaluate(st);
+  if(stand >= beta) return beta;
+  if(stand > alpha) alpha = stand;
+  if(ply > 6) return alpha;
+  var caps = genMoves(st, true), legal = [];
+  for(var i=0;i<caps.length;i++){
+    var u = make(st, caps[i]);
+    if(!inCheck(st, other(st.turn))) legal.push(caps[i]);
+    unmake(st, caps[i], u);
+  }
+  orderMoves(st, legal);
+  for(i=0;i<legal.length;i++){
+    var u2 = make(st, legal[i]);
+    var sc = -quiesce(st, -beta, -alpha, ply + 1);
+    unmake(st, legal[i], u2);
+    if(sc >= beta) return beta;
+    if(sc > alpha) alpha = sc;
+  }
+  return alpha;
+}
+function search(st, depth, alpha, beta, ply){
+  if(depth === 0) return quiesce(st, alpha, beta, ply);
+  var moves = legalMoves(st);
+  if(moves.length === 0){
+    if(inCheck(st, st.turn)) return -MATE + ply;
+    return 0;
+  }
+  if(st.half >= 100) return 0;
+  orderMoves(st, moves);
+  var best = -Infinity;
+  for(var i=0;i<moves.length;i++){
+    var u = make(st, moves[i]);
+    var sc = -search(st, depth - 1, -beta, -alpha, ply + 1);
+    unmake(st, moves[i], u);
+    if(sc > best) best = sc;
+    if(sc > alpha) alpha = sc;
+    if(alpha >= beta) break;
+  }
+  return best;
+}
+function rootScores(st, depth){
+  var moves = legalMoves(st);
+  orderMoves(st, moves);
+  var scored = [];
+  for(var i=0;i<moves.length;i++){
+    var u = make(st, moves[i]);
+    var sc = -search(st, depth - 1, -Infinity, Infinity, 1);
+    unmake(st, moves[i], u);
+    scored.push({ move: moves[i], score: sc });
+  }
+  scored.sort(function(a,b){ return b.score - a.score; });
+  return scored;
+}
+</script>
+
+<script>
+"use strict";
+/* ================= Game UI ================= */
+var LS_KEY = "chess_v1", LS_TUT = "chess_tutSeen", LS_DIFF = "chess_difficulty_v1";
+var savedDiff = "normal";
+try {
+  var _sd = localStorage.getItem(LS_DIFF);
+  if(_sd === "medium") _sd = "normal"; /* earlier builds saved the middle level as "medium" */
+  if(_sd === "easy" || _sd === "normal" || _sd === "hard") savedDiff = _sd;
+} catch(e){}
+var DIFFS = {
+  easy:   { label:"Easy",   name:"Pip",  avatar:"🐥", tag:"Cheerful and daydreamy — expect the odd gift.", depth:1 },
+  normal: { label:"Normal", name:"Nova", avatar:"🦊", tag:"Steady and sensible — a fair fight.", depth:2 },
+  hard:   { label:"Hard",   name:"Vex",  avatar:"🦉", tag:"Calculates three moves deep. Shows no mercy.", depth:3 }
+};
+var stats = { played:0, won:0, drawn:0, lost:0, curStreak:0, bestStreak:0, fastestWin:null };
+try { var saved = JSON.parse(localStorage.getItem(LS_KEY) || "null"); if(saved) stats = saved; } catch(e){}
+function saveStats(){ try { localStorage.setItem(LS_KEY, JSON.stringify(stats)); } catch(e){} }
+
+var boardEl = document.getElementById("board");
+var statusText = document.getElementById("statusText");
+var statusLine = document.getElementById("statusLine");
+var moveListEl = document.getElementById("moveList");
+var resultPanel = document.getElementById("resultPanel");
+
+var game = null;
+function newGame(){
+  game = {
+    st: startState(),
+    diff: game ? game.diff : savedDiff,
+    flipped: game ? game.flipped : false,
+    practice: game ? !!game.practice : false,
+    selected: -1,
+    legal: [],
+    sans: [],
+    moves: [],
+    keys: {},
+    over: false,
+    resultRecorded: false,
+    thinking: false,
+    lastFrom: -1, lastTo: -1,
+    pendingPromo: null,
+    hintFrom: -1,
+    hintTo: -1,
+    hintSAN: ""
+  };
+  game.legal = legalMoves(game.st);
+  game.keys[posKey(game.st)] = 1;
+  resultPanel.hidden = true;
+  syncDiffUI();
+  syncPracticeUI();
+  render();
+}
+function syncPracticeUI(){
+  if(!game) return;
+  var btn = document.getElementById("practiceBtn");
+  if(btn){
+    btn.setAttribute("aria-pressed", game.practice ? "true" : "false");
+    btn.textContent = game.practice ? "✓ Practice round — on" : "🎯 Practice round";
+  }
+  var banner = document.getElementById("practiceBanner");
+  if(banner) banner.hidden = !game.practice;
+  var hudMode = document.getElementById("hudMode");
+  if(hudMode) hudMode.textContent = game.practice ? "Practice · no score" : "Scored game";
+  var hintBtn = document.getElementById("hintBtn");
+  if(hintBtn) hintBtn.hidden = !game.practice;
+  var hintBox = document.getElementById("hintBox");
+  if(hintBox) hintBox.hidden = !game.practice;
+  var note = document.getElementById("practiceCtrlNote");
+  if(note) note.hidden = !game.practice;
+  var statsTitle = document.querySelector(".stats-card h3");
+  if(statsTitle) statsTitle.textContent = game.practice ? "Your record — practice doesn't count" : "Your record";
+}
+function curDiff(){ return DIFFS[game.diff]; }
+
+function recordResult(kind){
+  if(game.practice) return;
+  if(game.resultRecorded) return;
+  game.resultRecorded = true;
+  stats.played++;
+  if(kind === "win"){
+    stats.won++; stats.curStreak++;
+    if(stats.curStreak > stats.bestStreak) stats.bestStreak = stats.curStreak;
+    var fm = game.st.full;
+    if(stats.fastestWin === null || fm < stats.fastestWin) stats.fastestWin = fm;
+  } else if(kind === "draw"){ stats.drawn++; stats.curStreak = 0; }
+  else { stats.lost++; stats.curStreak = 0; }
+  saveStats(); renderStats();
+}
+function renderStats(){
+  document.getElementById("stPlayed").textContent = stats.played;
+  document.getElementById("stWon").textContent = stats.won;
+  document.getElementById("stDrawn").textContent = stats.drawn;
+  document.getElementById("stLost").textContent = stats.lost;
+  document.getElementById("stStreak").textContent = stats.bestStreak;
+  document.getElementById("stFastest").textContent = stats.fastestWin === null ? "—" : stats.fastestWin + " mv";
+}
+function syncDiffUI(){
+  var d = curDiff();
+  document.querySelectorAll(".diff-btn").forEach(function(b){
+    var on = b.getAttribute("data-diff") === game.diff;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-checked", on ? "true" : "false");
+  });
+  document.getElementById("hudAi").textContent = d.name;
+  document.getElementById("hudDiff").textContent = d.label;
+  document.getElementById("aiName").textContent = d.name;
+  document.getElementById("aiAvatar").textContent = d.avatar;
+  document.getElementById("aiTag").textContent = d.tag;
+}
+
+/* ---------- rendering ---------- */
+var sqEls = [];
+(function buildSquares(){
+  for(var i=0;i<64;i++){
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "sq";
+    btn.setAttribute("role", "gridcell");
+    (function(idx){ btn.addEventListener("click", function(){ onSquare(idx); }); })(i);
+    boardEl.appendChild(btn);
+    sqEls.push(btn);
+  }
+})();
+function render(){
+  var st = game.st;
+  var checkSq = -1;
+  if(inCheck(st, st.turn)) checkSq = kingSq(st.b, st.turn === "w");
+  var targets = {};
+  if(game.selected >= 0){
+    game.legal.forEach(function(m){ if(m.from === game.selected) targets[m.to] = m; });
+  }
+  for(var disp=0; disp<64; disp++){
+    var r = disp >> 3, f = disp & 7;
+    var sq = game.flipped ? (r * 8 + (7 - f)) : ((7 - r) * 8 + f);
+    var el = sqEls[disp];
+    var sr = sq >> 3, sf = sq & 7;
+    var p = st.b[sq];
+    var cls = "sq " + (((sr + sf) % 2 === 0) ? "dark" : "light");
+    if(sq === game.lastFrom || sq === game.lastTo) cls += " last";
+    if(sq === game.selected) cls += " sel";
+    if(sq === checkSq) cls += " incheck";
+    if(game.practice && sq === game.hintFrom) cls += " hint-from";
+    if(game.practice && sq === game.hintTo) cls += " hint-to";
+    el.className = cls;
+    el.setAttribute("data-sq", sq);
+    el.setAttribute("aria-label", sqName(sq) + (p ? " " + (isWhite(p) ? "white " : "black ") + p.toLowerCase() : ""));
+    var html = "";
+    if(f === 0) html += '<span class="coord f">' + (sr + 1) + '</span>';
+    if(r === 7) html += '<span class="coord r">' + "abcdefgh"[sf] + '</span>';
+    if(targets[sq]) html += st.b[sq] || targets[sq].epCap ? '<span class="ring"></span>' : '<span class="dot"></span>';
+    if(p) html += '<span class="pc ' + (isWhite(p) ? "w" : "b") + '">' + GLYPH[p.toLowerCase()] + '</span>';
+    el.innerHTML = html;
+  }
+  boardEl.classList.toggle("flip", game.flipped);
+  document.getElementById("hudMove").textContent = st.full;
+  renderCaptured();
+  renderMoves();
+  renderStatus();
+}
+function renderCaptured(){
+  var st = game.st;
+  var startCount = { p:8, n:2, b:2, r:2, q:1 };
+  var nowW = { p:0,n:0,b:0,r:0,q:0 }, nowB = { p:0,n:0,b:0,r:0,q:0 };
+  st.b.forEach(function(p){
+    if(!p) return;
+    var t = p.toLowerCase();
+    if(t === "k") return;
+    if(isWhite(p)) nowW[t]++; else nowB[t]++;
+  });
+  // Promotions can push a count above the start; clamp missing at 0.
+  function missing(now, t){ return Math.max(0, startCount[t] - now[t]); }
+  var order = ["q","r","b","n","p"];
+  var byYou = "", byAi = "", diff = 0;
+  order.forEach(function(t){
+    var mb = missing(nowB, t), mw = missing(nowW, t);
+    for(var i=0;i<mb;i++){ byYou += GLYPH[t]; }
+    for(var j=0;j<mw;j++){ byAi += GLYPH[t]; }
+    diff += (mb - mw) * VAL[t];
+  });
+  document.getElementById("capByYou").innerHTML = byYou ? '<span class="cap-b">' + byYou + '</span>' : "";
+  document.getElementById("capByAi").innerHTML = byAi ? '<span class="cap-w">' + byAi + '</span>' : "";
+  document.getElementById("matDiff").textContent =
+    diff > 0 ? "You are up " + (diff / 100) + " in material" :
+    diff < 0 ? curDiff().name + " is up " + (-diff / 100) + " in material" : "";
+}
+function renderMoves(){
+  if(game.sans.length === 0){
+    moveListEl.innerHTML = '<span class="empty">No moves yet — White (you) opens.</span>';
+    return;
+  }
+  var html = "<table>";
+  for(var i=0;i<game.sans.length;i+=2){
+    var cur = (i + 2 >= game.sans.length) ? ' class="cur"' : "";
+    html += "<tr" + cur + '><td class="num">' + (i/2 + 1) + '.</td><td class="mv">' + game.sans[i] + "</td><td class=\"mv\">" + (game.sans[i+1] || "") + "</td></tr>";
+  }
+  html += "</table>";
+  moveListEl.innerHTML = html;
+  moveListEl.scrollTop = moveListEl.scrollHeight;
+}
+function renderStatus(){
+  var st = game.st;
+  statusLine.classList.toggle("thinking", !!game.thinking);
+  if(game.over){ statusText.textContent = game.overText || "Game over"; return; }
+  if(game.thinking){ statusText.textContent = curDiff().name + " is thinking…"; return; }
+  if(st.turn === "w") statusText.textContent = inCheck(st, "w") ? "Check! Your move — save your king" : (game.practice ? "Your move — practice, take your time" : "Your move");
+  else statusText.textContent = curDiff().name + " to move";
+}
+
+/* ---------- move flow ---------- */
+function endCheck(){
+  var st = game.st;
+  var legal = game.legal;
+  if(legal.length === 0){
+    if(inCheck(st, st.turn)){
+      var youWin = st.turn === "b";
+      game.over = true;
+      game.overText = youWin ? "Checkmate — you win!" : "Checkmate — " + curDiff().name + " wins";
+      showResult(
+        youWin ? "♔ Checkmate — you win!" : "♚ Checkmate",
+        youWin ? "You mated " + curDiff().name + " in " + st.full + " moves." : curDiff().name + " checkmated you on move " + st.full + ".",
+        youWin ? "Beautifully played. Rematch?" : "Good game — the rematch button is right there."
+      );
+      recordResult(youWin ? "win" : "loss");
+    } else {
+      game.over = true;
+      game.overText = "Draw — stalemate";
+      showResult("½–½ Stalemate", "No legal moves, but the king isn't in check. The game is drawn.", "Nobody blinks, nobody wins.");
+      recordResult("draw");
+    }
+    render();
+    return true;
+  }
+  if(st.half >= 100){
+    game.over = true; game.overText = "Draw — fifty-move rule";
+    showResult("½–½ Draw", "Fifty moves with no pawn move or capture — the game is drawn by rule.", "A long, careful dance.");
+    recordResult("draw"); render(); return true;
+  }
+  if(insufficientMaterial(st.b)){
+    game.over = true; game.overText = "Draw — not enough material";
+    showResult("½–½ Draw", "Neither side has enough pieces left to checkmate. The game is drawn.", "Down to the bare kings' court.");
+    recordResult("draw"); render(); return true;
+  }
+  if((game.keys[posKey(st)] || 0) >= 3){
+    game.over = true; game.overText = "Draw — threefold repetition";
+    showResult("½–½ Draw", "The same position has occurred three times — the game is drawn.", "Déjà vu, officially.");
+    recordResult("draw"); render(); return true;
+  }
+  return false;
+}
+function showResult(title, line, sub){
+  document.getElementById("resultTitle").textContent = (game && game.practice ? "🎯 Practice — " : "") + title;
+  document.getElementById("resultLine").textContent = line;
+  document.getElementById("resultSub").textContent = game && game.practice ? sub + " Practice round — this one doesn't count toward your record. Undo to keep exploring, or Rematch for another practice game." : sub;
+  var rb = document.getElementById("rematchBtn");
+  if(rb) rb.textContent = game && game.practice ? "↻ Practice again" : "↻ Rematch";
+  resultPanel.hidden = false;
+}
+function applyMove(m){
+  var st = game.st;
+  var san = toSAN(st, m, game.legal);
+  make(st, m);
+  game.moves.push(m);
+  game.sans.push(san);
+  game.lastFrom = m.from; game.lastTo = m.to;
+  game.selected = -1;
+  game.hintFrom = -1; game.hintTo = -1; game.hintSAN = "";
+  var ht = document.getElementById("hintText");
+  if(ht && game.practice) ht.textContent = "Tap Hint on your turn for a suggested move.";
+  var key = posKey(st);
+  game.keys[key] = (game.keys[key] || 0) + 1;
+  game.legal = legalMoves(st);
+  if(!endCheck()) render();
+}
+function aiMove(){
+  if(game.over) return;
+  game.thinking = true;
+  render();
+  var delay = game.diff === "easy" ? 350 : 550;
+  setTimeout(function(){
+    if(game.over) { game.thinking = false; render(); return; }
+    var st = game.st;
+    var scored = rootScores(st, curDiff().depth);
+    if(scored.length === 0){ game.thinking = false; return; }
+    var pick = scored[0];
+    if(game.diff === "easy"){
+      if(Math.random() < 0.18){
+        pick = scored[Math.floor(Math.random() * scored.length)];
+      } else {
+        var near = scored.filter(function(s){ return s.score >= scored[0].score - 180; });
+        pick = near[Math.floor(Math.random() * near.length)];
+      }
+    } else if(game.diff === "normal"){
+      var close = scored.filter(function(s){ return s.score >= scored[0].score - 15; });
+      pick = close[Math.floor(Math.random() * close.length)];
+    }
+    game.thinking = false;
+    applyMove(pick.move);
+    render();
+  }, delay);
+}
+function onSquare(displayIdx){
+  if(game.over || game.thinking || game.st.turn !== "w") return;
+  var sq = parseInt(sqEls[displayIdx].getAttribute("data-sq"), 10);
+  var st = game.st;
+  if(game.selected >= 0){
+    var cand = game.legal.filter(function(m){ return m.from === game.selected && m.to === sq; });
+    if(cand.length){
+      if(cand.length > 1 || cand[0].promo){
+        game.pendingPromo = cand;
+        document.getElementById("promoOverlay").hidden = false;
+        return;
+      }
+      applyMove(cand[0]);
+      render();
+      if(!game.over) aiMove();
+      return;
+    }
+  }
+  var p = st.b[sq];
+  game.selected = (p && isWhite(p)) ? sq : -1;
+  render();
+}
+
+/* ---------- controls ---------- */
+document.querySelectorAll(".promo-btn").forEach(function(b){
+  b.addEventListener("click", function(){
+    var pr = b.getAttribute("data-promo");
+    document.getElementById("promoOverlay").hidden = true;
+    if(!game.pendingPromo) return;
+    var m = game.pendingPromo.filter(function(x){ return x.promo === pr; })[0] || game.pendingPromo[0];
+    game.pendingPromo = null;
+    applyMove(m);
+    render();
+    if(!game.over) aiMove();
+  });
+});
+document.getElementById("newBtn").addEventListener("click", function(){
+  var keepDiff = game.diff, keepFlip = game.flipped;
+  newGame(); game.diff = keepDiff; game.flipped = keepFlip; syncDiffUI(); render();
+});
+document.getElementById("rematchBtn").addEventListener("click", function(){
+  var keepDiff = game.diff, keepFlip = game.flipped;
+  newGame(); game.diff = keepDiff; game.flipped = keepFlip; syncDiffUI(); render();
+});
+document.getElementById("flipBtn").addEventListener("click", function(){
+  game.flipped = !game.flipped; render();
+});
+document.getElementById("undoBtn").addEventListener("click", function(){
+  if(game.thinking || game.moves.length === 0) return;
+  // Take back the AI's reply and your last move (or just yours if it's mid-pair).
+  var drop = game.st.turn === "w" ? 2 : 1;
+  var keepMoves = game.moves.slice(0, Math.max(0, game.moves.length - drop));
+  var diff = game.diff, flipped = game.flipped;
+  newGame(); game.diff = diff; game.flipped = flipped; syncDiffUI();
+  keepMoves.forEach(function(m){
+    var legal = game.legal;
+    var match = legal.filter(function(x){
+      return x.from === m.from && x.to === m.to && (x.promo || null) === (m.promo || null);
+    })[0];
+    if(match) applyMove(match);
+  });
+  render();
+});
+document.getElementById("resignBtn").addEventListener("click", function(){
+  if(game.over) return;
+  game.over = true;
+  game.overText = "You resigned";
+  showResult("🏳 You resigned", curDiff().name + " takes this one.", "Sometimes the best move is the rematch button.");
+  recordResult("loss");
+  render();
+});
+document.querySelectorAll(".diff-btn").forEach(function(b){
+  b.addEventListener("click", function(){
+    var d = b.getAttribute("data-diff");
+    if(d === game.diff) return;
+    var flipped = game.flipped;
+    try { localStorage.setItem(LS_DIFF, d); } catch(e){}
+    newGame(); game.diff = d; game.flipped = flipped; syncDiffUI(); syncPracticeUI(); render();
+  });
+});
+document.getElementById("practiceBtn").addEventListener("click", function(){
+  var wasPractice = game.practice;
+  var keepDiff = game.diff, keepFlip = game.flipped;
+  newGame();
+  game.diff = keepDiff; game.flipped = keepFlip;
+  game.practice = !wasPractice;
+  syncDiffUI(); syncPracticeUI(); render();
+});
+document.getElementById("hintBtn").addEventListener("click", function(){
+  if(!game.practice || game.over || game.thinking || game.st.turn !== "w") return;
+  var hintText = document.getElementById("hintText");
+  hintText.textContent = "Thinking of a good move…";
+  // Small delay so the label paints before the search runs.
+  setTimeout(function(){
+    if(game.over || game.st.turn !== "w"){ hintText.textContent = "Hints are for your turn — wait for " + curDiff().name + " to move first."; return; }
+    var scored = rootScores(game.st, 2);
+    if(!scored.length){ hintText.textContent = "No legal moves left in this position."; return; }
+    var best = scored[0].move;
+    var san = toSAN(game.st, best, game.legal);
+    game.hintFrom = best.from; game.hintTo = best.to; game.hintSAN = san;
+    var piece = game.st.b[best.from];
+    var pieceNames = { p:"pawn", n:"knight", b:"bishop", r:"rook", q:"queen", k:"king" };
+    var pieceName = piece ? (pieceNames[piece.toLowerCase()] || "piece") : "piece";
+    var isCap = !!game.st.b[best.to] || !!best.epCap;
+    hintText.textContent = "Try " + san + " — move your " + pieceName + " from " + sqName(best.from) + " to " + sqName(best.to) + (isCap ? " and capture." : ".") + " The starting square is ringed in teal, the destination in gold. No rush — take your time.";
+    render();
+  }, 30);
+});
+
+/* ---------- Tutorial (opt-in only) + Rules ---------- */
+var tutOverlay = document.getElementById("tutOverlay");
+var rulesOverlay = document.getElementById("rulesOverlay");
+var hintBar = document.getElementById("hintBar");
+function markTutSeen(){
+  try { localStorage.setItem(LS_TUT, "1"); } catch(e){}
+  hintBar.hidden = true;
+}
+function openTut(){ tutOverlay.hidden = false; markTutSeen(); }
+function closeTut(){ tutOverlay.hidden = true; }
+document.getElementById("howBtn").addEventListener("click", openTut);
+document.getElementById("tutX").addEventListener("click", closeTut);
+document.getElementById("tutGo").addEventListener("click", closeTut);
+tutOverlay.addEventListener("click", function(e){ if(e.target === tutOverlay) closeTut(); });
+document.getElementById("rulesBtn").addEventListener("click", function(){ rulesOverlay.hidden = false; markTutSeen(); });
+document.getElementById("rulesX").addEventListener("click", function(){ rulesOverlay.hidden = true; });
+document.getElementById("rulesGo").addEventListener("click", function(){ rulesOverlay.hidden = true; });
+rulesOverlay.addEventListener("click", function(e){ if(e.target === rulesOverlay) rulesOverlay.hidden = true; });
+document.getElementById("hintX").addEventListener("click", markTutSeen);
+document.getElementById("hintHow").addEventListener("click", openTut);
+var tutSeen = false;
+try { tutSeen = !!localStorage.getItem(LS_TUT); } catch(e){}
+hintBar.hidden = tutSeen;
+
+/* ---------- Feedback (saved locally, no network) ---------- */
+var feedbackOverlay = document.getElementById("feedbackOverlay");
+var fbRating = 0, fbTag = "";
+var fbForm = document.getElementById("fbForm");
+var fbThanks = document.getElementById("fbThanks");
+var fbSaveBtn = document.getElementById("fbSave");
+var fbDoneBtn = document.getElementById("fbDone");
+var fbError = document.getElementById("fbError");
+var fbTextEl = document.getElementById("fbText");
+function fbPaintStars(){
+  document.querySelectorAll(".fb-star").forEach(function(b){
+    var v = parseInt(b.getAttribute("data-rating"), 10);
+    var on = v <= fbRating;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", v === fbRating ? "true" : "false");
+  });
+}
+function fbPaintTags(){
+  document.querySelectorAll(".fb-tag").forEach(function(b){
+    var on = b.getAttribute("data-tag") === fbTag;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-checked", on ? "true" : "false");
+  });
+}
+function openFeedback(){
+  fbRating = 0; fbTag = ""; fbTextEl.value = ""; fbError.textContent = "";
+  fbForm.hidden = false; fbThanks.hidden = true;
+  fbSaveBtn.hidden = false; fbDoneBtn.hidden = true;
+  fbPaintStars(); fbPaintTags();
+  feedbackOverlay.hidden = false;
+}
+function closeFeedback(){ feedbackOverlay.hidden = true; }
+document.getElementById("feedbackBtn").addEventListener("click", openFeedback);
+document.getElementById("feedbackX").addEventListener("click", closeFeedback);
+fbDoneBtn.addEventListener("click", closeFeedback);
+feedbackOverlay.addEventListener("click", function(e){ if(e.target === feedbackOverlay) closeFeedback(); });
+document.querySelectorAll(".fb-star").forEach(function(b){
+  b.addEventListener("click", function(){ fbRating = parseInt(b.getAttribute("data-rating"), 10); fbError.textContent = ""; fbPaintStars(); });
+});
+document.querySelectorAll(".fb-tag").forEach(function(b){
+  b.addEventListener("click", function(){
+    var t = b.getAttribute("data-tag");
+    fbTag = (fbTag === t) ? "" : t;
+    fbPaintTags();
+  });
+});
+fbSaveBtn.addEventListener("click", function(){
+  var text = fbTextEl.value.trim();
+  if(!fbRating && !text){ fbError.textContent = "Please add a star rating or a comment first."; return; }
+  var record = { game: "chess", rating: fbRating, text: text, tag: fbTag, timestamp: new Date().toISOString() };
+  try {
+    var arr = [];
+    try { arr = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); } catch(e){ arr = []; }
+    if(!Array.isArray(arr)) arr = [];
+    arr.push(record);
+    localStorage.setItem("holos-arcade-feedback", JSON.stringify(arr));
+  } catch(e){}
+  fbForm.hidden = true; fbThanks.hidden = false;
+  fbSaveBtn.hidden = true; fbDoneBtn.hidden = false;
+});
+
+/* ---------- Go ---------- */
+newGame();
+renderStats();
+render();
+</script>
+</body>
+</html>

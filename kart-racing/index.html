@@ -1,0 +1,807 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Kart Racing</title>
+<style>
+  :root{
+    --bg:#f2f0e9; --panel:#ffffff; --panel2:#e9e6dc; --ink:#1a1d21; --muted:#5c6470;
+    --line:#d8d3c4; --red:#d92b20; --red-d:#b01e15; --green:#1f9d55; --gold:#f5b301;
+    --track:#3a3f47; --grass:#3e9e4f;
+    --shadow:0 6px 24px rgba(20,20,20,.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#14161a; --panel:#1e2127; --panel2:#262a31; --ink:#f2f3f5; --muted:#a7aeb9; --line:#343943; --shadow:0 6px 24px rgba(0,0,0,.4); }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:Verdana,Geneva,"Segoe UI",system-ui,sans-serif;line-height:1.45}
+  button,[role="button"],select,input,textarea{font:inherit}
+  button,select{ min-height:44px; }
+  .wrap{max-width:980px;margin:0 auto;padding:14px 14px 28px}
+  /* checker strip */
+  .checker{height:14px;background:repeating-conic-gradient(#111 0% 25%, #fff 0% 50%) 0 0/28px 28px;border:1px solid #111;border-radius:4px;margin-bottom:12px}
+  h1{font-size:clamp(28px,6vw,44px);line-height:.95;margin:4px 0 4px;letter-spacing:-.02em;text-transform:uppercase;font-weight:900}
+  h1 span{color:var(--red)}
+  .sub{color:var(--muted);font-size:15px;margin:0 0 14px;max-width:62ch}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+  .toolbar label{font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.06em}
+  select{padding:8px 10px;border-radius:10px;border:2px solid var(--line);background:var(--panel);color:var(--ink);font-weight:700}
+  .btn{border:2px solid var(--ink);background:var(--panel);color:var(--ink);padding:9px 14px;border-radius:999px;font-weight:800;cursor:pointer;display:inline-flex;align-items:center;gap:7px;justify-content:center}
+  .btn:active{transform:translateY(1px)}
+  .btn.primary{background:var(--red);border-color:var(--red-d);color:#fff}
+  .btn.dark{background:var(--ink);color:var(--bg)}
+  .btn.gold{background:var(--gold);border-color:#c78f00;color:#1a1400}
+  .btn.practice{background:#dff5e6;border-color:#146c3a;color:#0f5132}
+  @media (prefers-color-scheme: dark){ .btn.practice{background:#173d28;color:#b9f5cf;border-color:#2f9e5f} }
+  .btn.practice.on{background:var(--green);color:#fff;border-color:#146c3a}
+  .btn:disabled{opacity:.55;cursor:not-allowed}
+  .practice-banner{display:none;background:#e7f8ee;border:2px solid var(--green);color:#0f5132;border-radius:14px;padding:12px 14px;margin-bottom:12px;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  @media (prefers-color-scheme: dark){ .practice-banner{background:#14291d;color:#c8f7d8} }
+  .practice-banner.show{display:flex}
+  .practice-banner strong{font-size:15px}
+  .practice-banner p{margin:2px 0 0;font-size:13.5px}
+  .hint-bar{display:none;background:#fff7d6;border:2px solid #c78f00;color:#5c4300;border-radius:12px;padding:10px 12px;margin-top:10px;font-weight:700;font-size:15px}
+  @media (prefers-color-scheme: dark){ .hint-bar{background:#2e270f;color:#ffe58a;border-color:#8a6d00} }
+  .hint-bar.show{display:block}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+  @media(max-width:640px){.stats{grid-template-columns:1fr 1fr}}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;box-shadow:var(--shadow)}
+  .stat small{display:block;color:var(--muted);font-size:11px;letter-spacing:.07em;text-transform:uppercase;font-weight:700}
+  .stat strong{font-size:19px}
+  .game-shell{background:#2f7d3e;border:1px solid #1e5c2a;border-radius:18px;padding:8px;box-shadow:var(--shadow);position:relative}
+  canvas{display:block;width:100%;height:auto;background:#3e9e4f;border-radius:12px;touch-action:none}
+  .overlay{position:absolute;inset:8px;display:none;place-items:center;text-align:center;background:rgba(10,12,10,.55);border-radius:12px;color:#fff;padding:20px}
+  .overlay.show{display:grid}
+  .overlay .big{font-size:clamp(42px,10vw,84px);font-weight:900;line-height:1;text-shadow:0 4px 0 rgba(0,0,0,.35)}
+  .overlay p{margin:8px 0 14px;font-weight:700}
+  .hud{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:7px 12px;font-weight:800;font-size:14px}
+  .pill b{color:var(--red)}
+  .grid{display:grid;grid-template-columns:1.4fr .9fr;gap:12px;margin-top:12px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
+  .card h2,.card h3{margin:0 0 8px;line-height:1.1}
+  .card h2{font-size:22px} .card h3{font-size:17px}
+  .card p,.card li{color:var(--muted);font-size:15px}
+  .card ul,.card ol{margin:8px 0 0 20px;padding:0}
+  .card li{margin:6px 0;color:var(--ink)}
+  .card li span{color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{padding:8px 6px;text-align:left;border-bottom:1px solid var(--line)}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  tr.you td{font-weight:900;color:var(--red)}
+  .dot{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-1px;margin-right:6px;border:1.5px solid rgba(0,0,0,.35)}
+  /* touch controls */
+  .touch{display:none;gap:10px;margin-top:12px;user-select:none;-webkit-user-select:none}
+  @media (pointer:coarse){ .touch{display:flex;justify-content:space-between} }
+  .touch .cluster{display:flex;gap:10px}
+  .tbtn{width:64px;height:64px;border-radius:16px;border:2px solid var(--ink);background:var(--panel);font-size:26px;font-weight:900;display:grid;place-items:center;touch-action:none}
+  .tbtn.on{background:var(--gold)}
+  .tbtn.gas{background:var(--green);color:#fff;border-color:#146c3a}
+  .tbtn.brake{background:var(--red);color:#fff;border-color:var(--red-d)}
+  .keys{font-size:13px;color:var(--muted);margin-top:10px}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:3px;border-radius:6px;padding:1px 6px;font-family:inherit;font-weight:700;color:var(--ink);font-size:12px}
+  .view{display:none} .view.active{display:block}
+  .stars{display:flex;gap:6px;margin:10px 0}
+  .star{font-size:34px;background:none;border:none;cursor:pointer;padding:6px;line-height:1;color:#c9c2ae;min-width:48px;min-height:48px}
+  .star.sel{color:var(--gold);text-shadow:0 1px 0 #9a6f00}
+  textarea{width:100%;border:2px solid var(--line);border-radius:12px;padding:10px;background:var(--panel);color:var(--ink);min-height:110px;resize:vertical}
+  .note{font-size:13px;color:var(--muted)}
+  .toast{background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-weight:700;margin-top:10px;display:none}
+  .toast.show{display:block}
+  footer{margin-top:22px;border-top:2px solid var(--line);padding-top:14px;text-align:center;color:var(--muted);font-size:14px}
+  footer strong{color:var(--ink)}
+  .tut-steps{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  @media(max-width:640px){.tut-steps{grid-template-columns:1fr}}
+  .step{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel2)}
+  .step b{display:block;margin-bottom:4px}
+  .step p{margin:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="checker" aria-hidden="true"></div>
+
+  <!-- ============ GAME VIEW ============ -->
+  <section id="view-game" class="view active">
+    <h1>Kart <span>Racing</span></h1>
+    <p class="sub">Top-down circuit racing against 5 rival karts. Three laps, boost pads on the corners, and grass that really slows you down. Beat your best lap — then beat the pack. New to the track? Start with a Practice Round first.</p>
+
+    <div class="toolbar" role="group" aria-label="Game controls">
+      <label for="difficulty">Difficulty</label>
+      <select id="difficulty" aria-label="Difficulty">
+        <option value="easy">Easy</option>
+        <option value="normal" selected>Normal</option>
+        <option value="hard">Hard</option>
+      </select>
+      <button class="btn primary" id="btnStart">🏁 Start Race</button>
+      <button class="btn practice" id="btnPractice">🟢 Practice Round</button>
+      <button class="btn" id="btnPause">⏸ Pause</button>
+      <button class="btn" id="btnReset">↺ Reset</button>
+      <button class="btn" id="btnTutorial">🎓 Tutorial</button>
+      <button class="btn" id="btnRules">📖 Rules</button>
+      <button class="btn gold" id="btnFeedback">★ Feedback</button>
+    </div>
+
+    <div class="practice-banner" id="practiceBanner" role="status">
+      <div>
+        <strong>🟢 PRACTICE ROUND — No score · Untimed · Hints on</strong>
+        <p>Solo laps, no rivals and no countdown. Nothing here counts toward your best lap, best race, wins or races played. Drive as many laps as you like.</p>
+      </div>
+      <button class="btn" id="btnExitPractice">✕ Exit Practice</button>
+    </div>
+
+    <div class="stats" aria-label="Your bests">
+      <div class="stat"><small>Best Lap — <span class="diffName">Normal</span></small><strong id="bestLap">—</strong></div>
+      <div class="stat"><small>Best Race — <span class="diffName">Normal</span></small><strong id="bestRace">—</strong></div>
+      <div class="stat"><small>Races Won</small><strong id="winsStat">0</strong></div>
+      <div class="stat"><small>Races Played</small><strong id="playedStat">0</strong></div>
+    </div>
+
+    <div class="game-shell">
+      <canvas id="game" width="900" height="620" aria-label="Kart Racing track"></canvas>
+      <div class="overlay" id="overlay">
+        <div>
+          <div class="big" id="overlayBig">3</div>
+          <p id="overlayText">Get ready…</p>
+          <button class="btn primary" id="overlayBtn" style="display:none">Race Again</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud" aria-live="polite">
+      <span class="pill" id="hudModePill" style="display:none;background:#dff5e6;border-color:#146c3a">Mode <b style="color:#146c3a">PRACTICE</b></span>
+      <span class="pill">Lap <b id="hudLap">– / 3</b></span>
+      <span class="pill">Position <b id="hudPos">– / 6</b></span>
+      <span class="pill">Lap Time <b id="hudLapTime">0:00.0</b></span>
+      <span class="pill">Race Time <b id="hudRaceTime">0:00.0</b></span>
+      <span class="pill">Speed <b id="hudSpeed">0</b> km/h</span>
+      <span class="pill" id="hudMsg">Press Start Race when you're ready — or try a Practice Round.</span>
+    </div>
+
+    <div class="hint-bar" id="practiceHint" aria-live="polite">💡 Hint: Follow the glowing gold racing line — it shows the smoothest way around.</div>
+
+    <div class="touch" aria-label="Touch controls">
+      <div class="cluster">
+        <button class="tbtn" id="tLeft" aria-label="Steer left">◀</button>
+        <button class="tbtn" id="tRight" aria-label="Steer right">▶</button>
+      </div>
+      <div class="cluster">
+        <button class="tbtn brake" id="tBrake" aria-label="Brake">▼</button>
+        <button class="tbtn gas" id="tGas" aria-label="Accelerate">▲</button>
+      </div>
+    </div>
+    <p class="keys">Keyboard: <kbd>↑</kbd> / <kbd>W</kbd> accelerate &nbsp; <kbd>↓</kbd> / <kbd>S</kbd> brake &amp; reverse &nbsp; <kbd>←</kbd><kbd>→</kbd> / <kbd>A</kbd><kbd>D</kbd> steer &nbsp; <kbd>Space</kbd> boost when charged &nbsp; <kbd>P</kbd> pause &nbsp; <kbd>R</kbd> reset to last checkpoint if stuck &nbsp;·&nbsp; Same keys work in Practice Round.</p>
+
+    <div class="grid">
+      <div class="card" id="standingsCard">
+        <h3 id="standingsTitle">🏆 Live Standings</h3>
+        <div id="practicePanel" style="display:none">
+          <p><strong style="color:var(--ink)">What to practise:</strong></p>
+          <ul>
+            <li>Follow the gold line <span>— brake when you see the red BRAKE markers at a corner</span></li>
+            <li>Lift off early, then accelerate out <span>— don't boost into a bend</span></li>
+            <li>Roll over all 3 gold pads <span>— learn where they sit</span></li>
+            <li>Try a lap staying fully off the grass</li>
+          </ul>
+          <p class="note" style="margin-top:10px">Practice laps completed: <strong id="practiceLaps" style="color:var(--ink)">0</strong> · When you're ready, exit practice and hit Start Race.</p>
+          <button class="btn primary" id="btnPracticeToRace" style="margin-top:8px">🏁 I'm Ready — Start Race</button>
+        </div>
+        <table aria-label="Live standings" id="standingsTable">
+          <thead><tr><th>Pos</th><th>Kart</th><th>Lap</th><th>Gap</th></tr></thead>
+          <tbody id="standings"><tr><td colspan="4" style="color:var(--muted)">No race yet — hit Start Race, or try a Practice Round.</td></tr></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3>⚡ Boost pads &amp; boost meter</h3>
+        <p>Drive over a glowing <strong style="color:#b07d00">gold pad</strong> to charge your boost meter. Press <kbd>Space</kbd> (or tap the ⚡ button on touch screens in a race) to spend it for a burst of speed — best saved for straights, not corners.</p>
+        <div style="background:var(--panel2);border-radius:999px;height:18px;overflow:hidden;border:1px solid var(--line)"><div id="boostBar" style="height:100%;width:0%;background:var(--gold);transition:width .15s"></div></div>
+        <p class="note" id="boostText">Boost: 0%</p>
+        <button class="btn gold" id="btnBoost" style="width:100%;margin-top:6px">⚡ Use Boost (Space)</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TUTORIAL VIEW ============ -->
+  <section id="view-tutorial" class="view">
+    <div class="card">
+      <h2>🎓 Tutorial — How to Play</h2>
+      <p>No forced walkthrough — dip in whenever you like, then jump straight into a race.</p>
+      <div class="tut-steps">
+        <div class="step"><b>0. Try a Practice Round first</b><p>Press <strong>🟢 Practice Round</strong> for solo, untimed laps with no score and no rivals. A glowing racing line, braking hints and live tips are on — nothing is saved to your bests, so experiment freely. Exit any time.</p></div>
+        <div class="step"><b>1. Start the race</b><p>Pick a difficulty, then press <strong>Start Race</strong>. Watch the 3 · 2 · 1 · GO countdown — moving early just wastes revs, there's no penalty.</p></div>
+        <div class="step"><b>2. Steer &amp; speed</b><p>Hold accelerate to build speed. Ease off before tight corners — karts understeer at full speed, so a short lift (or tap of brake) keeps you on the racing line.</p></div>
+        <div class="step"><b>3. Stay off the grass</b><p>Grass cuts your top speed roughly in half and makes steering sluggish. The red-and-white kerbs are safe; the green is not.</p></div>
+        <div class="step"><b>4. Use the gold pads</b><p>Three boost pads sit on the track. Rolling over one fills your boost meter. Spend it with Space on a straight for an easy overtake.</p></div>
+        <div class="step"><b>5. Watch your position</b><p>Live Standings update as you race. Your lap only counts when you cross the start/finish line going the right way — no shortcuts.</p></div>
+        <div class="step"><b>6. Stuck or spun?</b><p>Press <strong>R</strong> to pop back onto the track at the last point you passed, facing the right way. It costs a couple of seconds, but beats reversing out of a fence.</p></div>
+      </div>
+      <p style="margin-top:14px"><button class="btn primary" data-back>← Back to Race</button> <button class="btn" id="tutStart">🏁 Start a Race Now</button></p>
+    </div>
+  </section>
+
+  <!-- ============ RULES VIEW ============ -->
+  <section id="view-rules" class="view">
+    <div class="card">
+      <h2>📖 Rules</h2>
+      <ul>
+        <li><strong>Practice Round:</strong> <span>Solo, untimed free driving with hints on — a glowing racing line, braking markers and live tips. No rivals, no countdown, no laps limit, and no score: practice never changes your best lap, best race, wins or races played.</span></li>
+        <li><strong>The race:</strong> <span>3 laps of the circuit against 5 AI karts. First kart to finish 3 laps wins; everyone else is placed by distance covered when the winner finishes.</span></li>
+        <li><strong>Difficulty:</strong> <span>Easy — rivals are slower and make more mistakes. Normal — a fair fight. Hard — rivals are faster, hold tighter lines, and get a small top-speed edge. Your kart never changes; only the rivals do.</span></li>
+        <li><strong>Lap counting:</strong> <span>A lap counts only when you cross the start/finish line in the correct direction after passing the mid-track checkpoint. Cutting across the infield does not count.</span></li>
+        <li><strong>Off-track:</strong> <span>On grass your speed is heavily limited. Kerbs count as track.</span></li>
+        <li><strong>Boost:</strong> <span>Gold pads charge your meter (max 100%). Boost can be used any time the meter is above 25% and drains while active.</span></li>
+        <li><strong>Contact:</strong> <span>Karts bump and push each other — light contact is part of racing. There's no damage and no elimination.</span></li>
+        <li><strong>Bests:</strong> <span>Your best lap and best full-race time are saved separately for each difficulty on this device, along with races played and won.</span></li>
+        <li><strong>Fair play:</strong> <span>All karts, names, and colours are original and generic — no real teams, drivers, or brands.</span></li>
+      </ul>
+      <p style="margin-top:14px"><button class="btn primary" data-back>← Back to Race</button></p>
+    </div>
+  </section>
+
+  <!-- ============ FEEDBACK VIEW ============ -->
+  <section id="view-feedback" class="view">
+    <div class="card">
+      <h2>★ Feedback</h2>
+      <p>Tell us how the racing feels. Your rating and comment are saved on this device only.</p>
+      <label style="font-weight:800">Your rating</label>
+      <div class="stars" id="stars" role="radiogroup" aria-label="Star rating">
+        <button class="star" data-v="1" aria-label="1 star">★</button>
+        <button class="star" data-v="2" aria-label="2 stars">★</button>
+        <button class="star" data-v="3" aria-label="3 stars">★</button>
+        <button class="star" data-v="4" aria-label="4 stars">★</button>
+        <button class="star" data-v="5" aria-label="5 stars">★</button>
+      </div>
+      <label for="fbText" style="font-weight:800">Comment</label>
+      <textarea id="fbText" placeholder="What worked? What was too hard, too easy, or confusing?"></textarea>
+      <p class="note" style="margin-top:10px">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+      <p style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <button class="btn primary" id="fbSave">Save Feedback</button>
+        <button class="btn" data-back>← Back to Race</button>
+      </p>
+      <div class="toast" id="fbToast">✅ Thanks! Your feedback has been saved on this device.</div>
+      <p class="note" id="fbSavedNote"></p>
+    </div>
+  </section>
+
+  <footer>
+    <p>More ridiculous health &amp; fitness fun: <strong>Ridiculously Fit and Fed</strong></p>
+  </footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id);};
+var canvas=$("game"), ctx=canvas.getContext("2d");
+var W=900,H=620;
+
+/* ---------- storage ---------- */
+function load(k,d){ try{var v=localStorage.getItem(k); return v?JSON.parse(v):d;}catch(e){return d;} }
+function save(k,v){ try{localStorage.setItem(k,JSON.stringify(v));}catch(e){} }
+var difficulty = load("kartRacingDifficulty","normal");
+if(["easy","normal","hard"].indexOf(difficulty)<0) difficulty="normal";
+$("difficulty").value=difficulty;
+var bests = load("kartRacingBests",{});
+var career = load("kartRacingCareer",{played:0,wins:0});
+
+/* ---------- track ---------- */
+var rawPts=[[450,70],[640,82],[772,150],[806,282],[716,368],[738,492],[628,568],[438,586],[248,556],[128,446],[104,292],[168,158],[292,84]];
+function catmull(points){
+  var out=[],n=points.length;
+  for(var i=0;i<n;i++){
+    var p0=points[(i-1+n)%n],p1=points[i],p2=points[(i+1)%n],p3=points[(i+2)%n];
+    for(var t=0;t<1;t+=0.04){
+      var t2=t*t,t3=t2*t;
+      out.push({
+        x:0.5*((2*p1[0])+(-p0[0]+p2[0])*t+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+        y:0.5*((2*p1[1])+(-p0[1]+p2[1])*t+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3)
+      });
+    }
+  }
+  return out;
+}
+var line=catmull(rawPts); // dense centreline
+var N=line.length;
+var TRACK_HALF=56;
+// cumulative lengths
+var segLen=[], totalLen=0;
+for(var i=0;i<N;i++){ var a=line[i],b=line[(i+1)%N]; var d=Math.hypot(b.x-a.x,b.y-a.y); segLen.push(totalLen); totalLen+=d; }
+function nearestIdx(x,y){
+  var best=1e18,bi=0;
+  for(var i=0;i<N;i+=2){ var dx=line[i].x-x,dy=line[i].y-y,dd=dx*dx+dy*dy; if(dd<best){best=dd;bi=i;} }
+  // refine
+  for(var j=-3;j<=3;j++){ var k=(bi+j+N)%N; var dx2=line[k].x-x,dy2=line[k].y-y,dd2=dx2*dx2+dy2*dy2; if(dd2<best){best=dd2;bi=k;} }
+  return {idx:bi,dist:Math.sqrt(best)};
+}
+function trackAngle(idx){ var a=line[idx%N],b=line[(idx+8)%N]; return Math.atan2(b.y-a.y,b.x-a.x); }
+var boostPads=[Math.floor(N*0.22),Math.floor(N*0.52),Math.floor(N*0.80)];
+
+/* ---------- karts ---------- */
+var COLORS=["#e8e8e8","#ffcf3f","#3fa7ff","#ff7ab6","#7be382","#b18cff"];
+var NAMES=["You","Sunny","Bolt","Pip","Juno","Vex"];
+var DIFF={
+  easy:  {aiTop:148, aiAccel:95,  err:26, label:"Easy"},
+  normal:{aiTop:172, aiAccel:115, err:14, label:"Normal"},
+  hard:  {aiTop:196, aiAccel:135, err:7,  label:"Hard"}
+};
+function makeKart(i,isPlayer){
+  var startIdx=Math.floor(N*0.02);
+  // grid: stagger behind start line
+  var back=Math.floor(i/2)*3+2, side=(i%2===0?-1:1)*26;
+  var idx=((startIdx-back)%N+N)%N;
+  var p=line[idx], ang=trackAngle(idx);
+  var px=p.x+Math.cos(ang+Math.PI/2)*side, py=p.y+Math.sin(ang+Math.PI/2)*side;
+  return {i:i,player:!!isPlayer,name:NAMES[i],color:COLORS[i],x:px,y:py,angle:ang,speed:0,
+    lastIdx:idx,prog:0,lap:1,finished:false,finishTime:0,lapStart:0,curLapTime:0,bestLap:0,
+    passedMid:false,lastSafe:{x:px,y:py,angle:ang,idx:idx},safeTimer:0,
+    aiSeed:Math.random()*1000, wobble:(Math.random()-0.5), boost:0, boosting:false};
+}
+var karts=[], player=null;
+var state="idle"; // idle | count | race | practice | paused | done
+var pausedFrom="race";
+var raceTime=0, countT=0, lastTs=0, keys={};
+var camShake=0;
+var isPractice=false, practiceLapCount=0, hintTimer=0;
+
+function setPracticeUI(){
+  $("practiceBanner").classList.toggle("show",isPractice);
+  $("practiceHint").classList.toggle("show",isPractice);
+  $("hudModePill").style.display=isPractice?"":"none";
+  $("btnPractice").classList.toggle("on",isPractice);
+  $("btnPractice").textContent=isPractice?"🟢 Practising…":"🟢 Practice Round";
+  $("practicePanel").style.display=isPractice?"block":"none";
+  $("standingsTable").style.display=isPractice?"none":"";
+  $("standingsTitle").textContent=isPractice?"🟢 Practice — Hints & Goals":"🏆 Live Standings";
+  $("practiceLaps").textContent=practiceLapCount;
+  $("difficulty").disabled=isPractice;
+}
+function resetRace(){
+  isPractice=false; practiceLapCount=0;
+  karts=[]; for(var i=0;i<6;i++) karts.push(makeKart(i,i===0));
+  player=karts[0];
+  raceTime=0; state="idle";
+  $("overlay").classList.remove("show");
+  setPracticeUI();
+  $("hudMsg").textContent="Press Start Race when you're ready — or try a Practice Round.";
+  updateHUD(); draw(0);
+}
+function startRace(){
+  resetRace();
+  state="count"; countT=3.999;
+  $("overlay").classList.add("show");
+  $("overlayBtn").style.display="none";
+  beep(440,0.12);
+}
+function startPractice(){
+  // Solo, untimed, no score — only the player kart, no countdown
+  karts=[]; karts.push(makeKart(0,true));
+  player=karts[0]; player.boost=50;
+  raceTime=0; isPractice=true; practiceLapCount=0;
+  state="practice";
+  $("overlay").classList.remove("show");
+  setPracticeUI();
+  $("hudMsg").textContent="Practice — drive as many laps as you like. No timer, no score.";
+  $("practiceHint").textContent="💡 Hint: Follow the glowing gold racing line — it shows the smoothest way around.";
+  beep(660,0.12);
+  updateHUD(); draw(0);
+}
+function exitPractice(){
+  resetRace();
+}
+function fmt(t){
+  if(!isFinite(t)||t==null) return "—";
+  var m=Math.floor(t/60), s=t-m*60;
+  return m+":"+(s<10?"0":"")+s.toFixed(1);
+}
+function fmtGap(t){ return t<=0?"—":"+"+t.toFixed(1)+"s"; }
+
+/* ---------- audio (tiny beeps) ---------- */
+var AC=null;
+function beep(f,dur,type){
+  try{
+    if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)();
+    if(AC.state==="suspended") AC.resume();
+    var o=AC.createOscillator(),g=AC.createGain();
+    o.type=type||"square"; o.frequency.value=f; g.gain.value=0.06;
+    o.connect(g); g.connect(AC.destination); o.start();
+    g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+(dur||0.12));
+    o.stop(AC.currentTime+(dur||0.12));
+  }catch(e){}
+}
+
+/* ---------- physics ---------- */
+function stepKart(k,dt,input){
+  var onTrack = nearestIdx(k.x,k.y).dist <= TRACK_HALF+8;
+  var maxF = k.player? 215 : DIFF[difficulty].aiTop;
+  var maxR = -60;
+  var accel = k.player? 150 : DIFF[difficulty].aiAccel;
+  if(k.boosting && k.boost>0){ maxF+=85; accel+=160; k.boost=Math.max(0,k.boost-dt*38); if(k.boost<=0)k.boosting=false; }
+  if(!onTrack){ maxF*=0.48; accel*=0.55; }
+  if(input.up){ k.speed += accel*dt; }
+  else if(input.down){ k.speed -= (k.speed>5? 210:90)*dt; }
+  else { k.speed -= k.speed*0.55*dt; if(Math.abs(k.speed)<2)k.speed*=0.9; }
+  // rolling drag toward max
+  if(k.speed>maxF) k.speed=Math.max(maxF,k.speed-140*dt);
+  if(k.speed<maxR) k.speed=maxR;
+  var steer=input.left?-1:(input.right?1:0);
+  var sf=Math.min(1,Math.abs(k.speed)/70);
+  k.angle += steer * 2.35 * sf * dt * (k.speed<0?-1:1) * (onTrack?1:0.7);
+  k.x += Math.cos(k.angle)*k.speed*dt;
+  k.y += Math.sin(k.angle)*k.speed*dt;
+  k.x=Math.max(18,Math.min(W-18,k.x)); k.y=Math.max(18,Math.min(H-18,k.y));
+  // boost pads
+  var ni=nearestIdx(k.x,k.y);
+  for(var b=0;b<boostPads.length;b++){
+    var bp=line[boostPads[b]];
+    if(Math.hypot(bp.x-k.x,bp.y-k.y)<30 && k.boost<100){ k.boost=Math.min(100,k.boost+55*dt*3); }
+  }
+  // progress tracking
+  var idx=ni.idx;
+  var delta=idx-k.lastIdx;
+  if(delta> N/2) delta-=N; if(delta< -N/2) delta+=N;
+  if(delta>0 || (delta<0 && delta>-N*0.25)) k.prog+=delta;
+  // mid checkpoint: idx near half lap
+  var lapPos=((idx%N)+N)%N;
+  if(lapPos> N*0.42 && lapPos< N*0.62) k.passedMid=true;
+  // lap crossing: wrapped from high idx to low idx
+  if(k.lastIdx> N*0.85 && idx< N*0.15 && k.passedMid && delta!==0 && (idx + (N-k.lastIdx))< N*0.3){
+    if(isPractice && k.player){
+      // Practice: count the lap for feedback only — never record a time or finish
+      k.passedMid=false; k.lapStart=raceTime; practiceLapCount++;
+      $("practiceLaps").textContent=practiceLapCount;
+      $("hudMsg").textContent="Practice lap "+practiceLapCount+" done — keep going, or exit when you're ready.";
+      $("practiceHint").textContent="💡 Nice lap! Try the next one staying fully off the grass — and hit all 3 gold pads.";
+      beep(660,0.1); beep(880,0.14);
+    } else if(state==="race"||k!==player){
+      var lt=raceTime-k.lapStart;
+      if(k.lap>=1 && raceTime>5){ k.curLapTime=lt; if(!k.bestLap||lt<k.bestLap)k.bestLap=lt; }
+      k.lapStart=raceTime; k.passedMid=false; k.lap++;
+      if(k.player){
+        beep(660,0.1); beep(880,0.14);
+        if(k.lap<=3) $("hudMsg").textContent="Lap "+k.lap+" of 3 — keep pushing!";
+        if(k.lap>3 && !k.finished){ finishKart(k); }
+      } else if(k.lap>3 && !k.finished){ finishKart(k); }
+    }
+  }
+  k.lastIdx=idx;
+  // safe spot every 1.2s while on track & moving forward
+  k.safeTimer+=dt;
+  if(onTrack && k.safeTimer>1.2 && Math.abs(k.speed)>20){ k.lastSafe={x:k.x,y:k.y,angle:k.angle,idx:idx}; k.safeTimer=0; }
+}
+function finishKart(k){
+  k.finished=true; k.finishTime=raceTime;
+  if(k.player){ endRace(); }
+  else {
+    // if all AI finished before player, keep racing until player finishes or 20s pass — handled in loop
+    checkAllDone();
+  }
+}
+function aiInput(k,dt){
+  var d=DIFF[difficulty];
+  var look = 10 + Math.floor(Math.abs(k.speed)/14);
+  var ni=nearestIdx(k.x,k.y).idx;
+  var target=line[(ni+look)%N];
+  // personal line offset + wobble
+  var ang=trackAngle(ni);
+  var off = Math.sin((raceTime*0.35)+k.aiSeed)*d.err*0.5 + k.wobble*d.err;
+  var tx=target.x+Math.cos(ang+Math.PI/2)*off*0.4, ty=target.y+Math.sin(ang+Math.PI/2)*off*0.4;
+  var want=Math.atan2(ty-k.y,tx-k.x);
+  var diff=want-k.angle;
+  while(diff>Math.PI)diff-=Math.PI*2; while(diff<-Math.PI)diff+=Math.PI*2;
+  // upcoming curvature: sample further point
+  var far=line[(ni+look+16)%N];
+  var want2=Math.atan2(far.y-k.y,far.x-k.x);
+  var diff2=want2-k.angle; while(diff2>Math.PI)diff2-=Math.PI*2; while(diff2<-Math.PI)diff2+=Math.PI*2;
+  var input={up:true,down:false,left:diff<-0.06,right:diff>0.06};
+  if(Math.abs(diff2)>0.85 && k.speed> d.aiTop*0.72){ input.up=false; }
+  if(Math.abs(diff2)>1.25 && k.speed> d.aiTop*0.55){ input.up=false; input.down=true; }
+  // occasional boost on straights
+  if(Math.abs(diff2)<0.25 && k.boost>60 && Math.random()<0.01) k.boosting=true;
+  return input;
+}
+function totalProg(k){ return (k.lap-1)*N + k.prog; }
+function standingsSorted(){ return karts.slice().sort(function(a,b){ if(a.finished&&b.finished)return a.finishTime-b.finishTime; if(a.finished)return -1; if(b.finished)return 1; return totalProg(b)-totalProg(a); }); }
+function checkAllDone(){
+  if(karts.every(function(k){return k.finished;})) endRace();
+}
+function endRace(){
+  if(isPractice) return; // practice never scores, saves bests, or counts as played/won
+  if(state==="done")return;
+  state="done";
+  var sorted=standingsSorted();
+  var pos=sorted.indexOf(player)+1;
+  career.played++; if(pos===1)career.wins++; save("kartRacingCareer",career);
+  var bd=bests[difficulty]||{};
+  var newBest=false;
+  if(player.bestLap && (!bd.bestLap || player.bestLap<bd.bestLap)){ bd.bestLap=player.bestLap; newBest=true; }
+  if(player.finished && (!bd.bestRace || player.finishTime<bd.bestRace)){ bd.bestRace=player.finishTime; newBest=true; }
+  bests[difficulty]=bd; save("kartRacingBests",bests);
+  refreshBests();
+  var titles={1:"🏆 You Win!",2:"🥈 2nd Place!",3:"🥉 3rd Place!"};
+  $("overlayBig").textContent=titles[pos]||("Finished "+pos+"th");
+  $("overlayText").textContent="Race time "+fmt(player.finished?player.finishTime:raceTime)+" · Best lap "+fmt(player.bestLap||null)+(newBest?" · ⭐ New personal best!":"");
+  $("overlayBtn").style.display="inline-flex";
+  $("overlay").classList.add("show");
+  $("hudMsg").textContent="Race over — you finished P"+pos+" of 6.";
+  if(pos===1){ beep(523,0.12); setTimeout(function(){beep(659,0.12);},130); setTimeout(function(){beep(784,0.22);},260); }
+}
+
+/* ---------- collisions ---------- */
+function collide(){
+  for(var i=0;i<karts.length;i++)for(var j=i+1;j<karts.length;j++){
+    var a=karts[i],b=karts[j],dx=b.x-a.x,dy=b.y-a.y,dist=Math.hypot(dx,dy);
+    if(dist>0 && dist<26){
+      var push=(26-dist)/2, nx=dx/dist, ny=dy/dist;
+      a.x-=nx*push; a.y-=ny*push; b.x+=nx*push; b.y+=ny*push;
+      var avg=(a.speed+b.speed)/2; a.speed=avg*0.92; b.speed=avg*0.92;
+    }
+  }
+}
+
+/* ---------- drawing ---------- */
+function drawTrack(){
+  // grass with mow stripes
+  ctx.fillStyle="#3e9e4f"; ctx.fillRect(0,0,W,H);
+  ctx.fillStyle="#379347";
+  for(var s=0;s<W;s+=72){ ctx.fillRect(s,0,36,H); }
+  // track body
+  ctx.lineJoin="round"; ctx.lineCap="round";
+  ctx.strokeStyle="#ffffff"; ctx.lineWidth=TRACK_HALF*2+16;
+  pathLine(); ctx.stroke();
+  ctx.strokeStyle="#d92b20"; ctx.lineWidth=TRACK_HALF*2+16;
+  // kerb dashes effect: overlay white dashes by clipping is complex; draw base red then white segments
+  ctx.save(); ctx.setLineDash([26,26]); ctx.strokeStyle="#f4f4f4"; pathLine(); ctx.stroke(); ctx.restore();
+  ctx.strokeStyle="#3a3f47"; ctx.lineWidth=TRACK_HALF*2;
+  pathLine(); ctx.stroke();
+  // centre dashes
+  ctx.save(); ctx.setLineDash([18,22]); ctx.strokeStyle="rgba(255,255,255,.55)"; ctx.lineWidth=3; pathLine(); ctx.stroke(); ctx.restore();
+  // boost pads
+  for(var b=0;b<boostPads.length;b++){
+    var p=line[boostPads[b]], a=trackAngle(boostPads[b]);
+    ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(a);
+    var pulse=0.75+0.25*Math.sin(Date.now()/220+b);
+    ctx.fillStyle="rgba(245,179,1,"+(0.85*pulse)+")";
+    roundRect(-24,-TRACK_HALF+10,48,TRACK_HALF*2-20,8); ctx.fill();
+    ctx.fillStyle="#1a1400"; ctx.font="900 20px Verdana"; ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("»",0,-8); ctx.fillText("»",0,12);
+    ctx.restore();
+  }
+  // start line
+  var sp=line[Math.floor(N*0.02)], sa=trackAngle(Math.floor(N*0.02));
+  ctx.save(); ctx.translate(sp.x,sp.y); ctx.rotate(sa+Math.PI/2);
+  var sq=11;
+  for(var r=0;r<2;r++)for(var c=0;c<10;c++){
+    ctx.fillStyle=((r+c)%2===0)?"#111":"#fff";
+    ctx.fillRect(-TRACK_HALF + c*((TRACK_HALF*2)/10), -sq + r*sq, (TRACK_HALF*2)/10, sq);
+  }
+  ctx.restore();
+  // infield label
+  ctx.fillStyle="rgba(255,255,255,.28)"; ctx.font="900 30px Verdana"; ctx.textAlign="center";
+  ctx.fillText("KART PARK",450,330);
+}
+function pathLine(){ ctx.beginPath(); for(var i=0;i<N;i++){ if(i===0)ctx.moveTo(line[i].x,line[i].y); else ctx.lineTo(line[i].x,line[i].y);} ctx.closePath(); }
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function drawKart(k){
+  ctx.save(); ctx.translate(k.x,k.y); ctx.rotate(k.angle);
+  // shadow
+  ctx.fillStyle="rgba(0,0,0,.25)"; roundRect(-13,-8,28,18,6); ctx.fill();
+  // body
+  ctx.fillStyle=k.color; roundRect(-15,-10,30,20,7); ctx.fill();
+  ctx.strokeStyle="rgba(0,0,0,.45)"; ctx.lineWidth=1.5; roundRect(-15,-10,30,20,7); ctx.stroke();
+  // nose
+  ctx.fillStyle="rgba(255,255,255,.85)"; roundRect(6,-6,9,12,3); ctx.fill();
+  // seat/driver
+  ctx.fillStyle="#22252a"; ctx.beginPath(); ctx.arc(-4,0,6,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(-4,0,3.4,0,Math.PI*2); ctx.fill();
+  // wheels
+  ctx.fillStyle="#14161a";
+  ctx.fillRect(-13,-14,9,5); ctx.fillRect(-13,9,9,5); ctx.fillRect(5,-14,9,5); ctx.fillRect(5,9,9,5);
+  ctx.restore();
+  // name tag for player + nearby
+  if(k.player){
+    ctx.fillStyle="#fff"; ctx.font="900 11px Verdana"; ctx.textAlign="center";
+    ctx.strokeStyle="rgba(0,0,0,.6)"; ctx.lineWidth=3;
+    ctx.strokeText("▼ YOU",k.x,k.y-20); ctx.fillText("▼ YOU",k.x,k.y-20);
+    if(k.boosting){ ctx.fillStyle="#f5b301"; ctx.font="900 12px Verdana"; ctx.fillText("⚡BOOST",k.x,k.y+30); }
+  }
+}
+function drawPracticeGuides(){
+  // Glowing racing line along the centreline
+  ctx.save(); ctx.lineJoin="round"; ctx.lineCap="round";
+  ctx.setLineDash([16,14]); ctx.strokeStyle="rgba(245,179,1,.92)"; ctx.lineWidth=6; pathLine(); ctx.stroke();
+  ctx.setLineDash([]); ctx.strokeStyle="rgba(255,255,255,.85)"; ctx.lineWidth=2; pathLine(); ctx.stroke();
+  ctx.restore();
+  // Direction arrows + braking markers where the track bends sharply
+  ctx.save(); ctx.textAlign="center"; ctx.textBaseline="middle";
+  for(var i=0;i<N;i+=10){
+    var a1=trackAngle(i), a2=trackAngle((i+18)%N);
+    var bend=a2-a1; while(bend>Math.PI)bend-=Math.PI*2; while(bend<-Math.PI)bend+=Math.PI*2;
+    var p=line[i];
+    if(Math.abs(bend)>0.55){
+      ctx.fillStyle="#d92b20"; ctx.font="900 20px Verdana";
+      ctx.fillText("!",p.x,p.y-2);
+      ctx.fillStyle="#fff"; ctx.font="900 9px Verdana"; ctx.fillText("BRAKE",p.x,p.y+13);
+    } else if(i%40===0){
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(a1);
+      ctx.fillStyle="rgba(255,255,255,.9)"; ctx.font="900 16px Verdana"; ctx.fillText("›",0,0);
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+  // Label in infield
+  ctx.save(); ctx.fillStyle="rgba(255,255,255,.9)"; ctx.font="900 15px Verdana"; ctx.textAlign="center";
+  ctx.fillText("PRACTICE — FOLLOW THE GOLD LINE",450,306); ctx.restore();
+}
+function currentHint(){
+  if(!player) return "";
+  var ni=nearestIdx(player.x,player.y);
+  if(ni.dist>TRACK_HALF+8) return "💡 Hint: You're on the grass — it halves your speed. Steer back to the dark track.";
+  var far=line[(ni.idx+26)%N];
+  var want=Math.atan2(far.y-player.y,far.x-player.x);
+  var diff=want-player.angle; while(diff>Math.PI)diff-=Math.PI*2; while(diff<-Math.PI)diff+=Math.PI*2;
+  if(Math.abs(diff)>0.85 && player.speed>120) return "💡 Hint: Brake now — tight corner ahead. Lift off, turn, then accelerate out.";
+  if(Math.abs(diff)>0.45) return "💡 Hint: Corner coming — ease off a little and aim for the gold line.";
+  for(var b=0;b<boostPads.length;b++){ var bp=line[boostPads[b]]; if(Math.hypot(bp.x-player.x,bp.y-player.y)<95) return "💡 Hint: Gold boost pad just ahead — drive straight over it to charge boost."; }
+  if(player.boost>25 && Math.abs(diff)<0.25) return "💡 Hint: Straight ahead and boost is ready — press Space / ⚡ now, not in a corner.";
+  if(player.speed<40) return "💡 Hint: Hold ▲ / W to build speed. Steering only bites once you're moving.";
+  return "💡 Hint: Good line! Stay smooth — small steering taps beat big swings at speed.";
+}
+function draw(dt){
+  ctx.clearRect(0,0,W,H);
+  drawTrack();
+  if(isPractice) drawPracticeGuides();
+  var sorted=karts.slice().sort(function(a,b){return a.y-b.y;});
+  for(var i=0;i<sorted.length;i++) drawKart(sorted[i]);
+}
+
+/* ---------- HUD ---------- */
+function updateHUD(){
+  if(!player)return;
+  if(isPractice){
+    $("hudLap").textContent="Practice ∞";
+    $("hudPos").textContent="Solo";
+    $("hudLapTime").textContent="—";
+    $("hudRaceTime").textContent="Untimed";
+    $("hudSpeed").textContent=Math.round(Math.abs(player.speed)*0.9);
+    $("boostBar").style.width=player.boost+"%";
+    $("boostText").textContent="Boost: "+Math.round(player.boost)+"%"+(player.boost>25?" — ready!":"");
+    return;
+  }
+  var sorted=standingsSorted();
+  $("hudLap").textContent=Math.min(player.lap,3)+" / 3";
+  $("hudPos").textContent=(sorted.indexOf(player)+1)+" / 6";
+  $("hudLapTime").textContent=fmt(state==="race"||state==="paused"? raceTime-player.lapStart : 0);
+  $("hudRaceTime").textContent=fmt(raceTime);
+  $("hudSpeed").textContent=Math.round(Math.abs(player.speed)*0.9);
+  $("boostBar").style.width=player.boost+"%";
+  $("boostText").textContent="Boost: "+Math.round(player.boost)+"%"+(player.boost>25?" — ready!":"");
+  var tb=$("standings"); var html="";
+  var leader=sorted[0];
+  sorted.forEach(function(k,ix){
+    var gap = k===leader? "Leader" : (k.finished? fmt(k.finishTime) : fmtGap((totalProg(leader)-totalProg(k))/Math.max(60,Math.abs(leader.speed||120))*1.0 ));
+    if(k!==leader && !k.finished){ var dProg=totalProg(leader)-totalProg(k); gap="+"+(dProg/38).toFixed(1)+" kart-len"; }
+    html+="<tr class='"+(k.player?"you":"")+"'><td>"+(ix+1)+"</td><td><span class='dot' style='background:"+k.color+"'></span>"+k.name+(k.finished?" 🏁":"")+"</td><td>"+Math.min(k.lap,3)+"</td><td>"+gap+"</td></tr>";
+  });
+  tb.innerHTML=html;
+}
+function refreshBests(){
+  var bd=bests[difficulty]||{};
+  document.querySelectorAll(".diffName").forEach(function(e){e.textContent=DIFF[difficulty].label;});
+  $("bestLap").textContent=fmt(bd.bestLap||null);
+  $("bestRace").textContent=fmt(bd.bestRace||null);
+  $("winsStat").textContent=career.wins;
+  $("playedStat").textContent=career.played;
+}
+
+/* ---------- main loop ---------- */
+function loop(ts){
+  var dt=Math.min(0.033,(ts-lastTs)/1000||0.016); lastTs=ts;
+  if(state==="count"){
+    countT-=dt;
+    var n=Math.ceil(countT);
+    if(countT>0){ $("overlayBig").textContent=n; $("overlayText").textContent="Get ready…"; if(Math.abs(countT-Math.floor(countT))<dt) beep(440,0.1); }
+    else { state="race"; raceTime=0; karts.forEach(function(k){k.lapStart=0;}); $("overlay").classList.remove("show"); beep(880,0.3); $("hudMsg").textContent="GO! 🏁 Lap 1 of 3"; }
+    draw(dt);
+  } else if(state==="practice"){
+    // Untimed: raceTime is not used for any score in practice
+    var pInput={up:!!(keys.up),down:!!(keys.down),left:!!(keys.left),right:!!(keys.right)};
+    if(keys.boost && player.boost>25 && !player.boosting){ player.boosting=true; }
+    stepKart(player,dt,pInput);
+    draw(dt); updateHUD();
+    hintTimer+=dt;
+    if(hintTimer>0.35){ hintTimer=0; var h=currentHint(); if(h) $("practiceHint").textContent=h; }
+  } else if(state==="race"){
+    raceTime+=dt;
+    var input={up:!!(keys.up),down:!!(keys.down),left:!!(keys.left),right:!!(keys.right)};
+    if(keys.boost && player.boost>25 && !player.boosting){ player.boosting=true; }
+    stepKart(player,dt,input);
+    for(var i=1;i<karts.length;i++) stepKart(karts[i],dt,aiInput(karts[i],dt));
+    collide();
+    draw(dt); updateHUD();
+    // end if player finished handled in finishKart; also end 25s after first finisher if player still out
+    var anyFin=karts.some(function(k){return k.finished;});
+    if(anyFin && !player.finished){
+      var firstFin=Math.min.apply(null,karts.filter(function(k){return k.finished;}).map(function(k){return k.finishTime;}));
+      if(raceTime-firstFin>25){ player.finished=false; endRace(); }
+    }
+  } else {
+    draw(dt);
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ---------- input ---------- */
+var KEYMAP={ArrowUp:"up",KeyW:"up",ArrowDown:"down",KeyS:"down",ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",Space:"boost"};
+document.addEventListener("keydown",function(e){
+  if(e.target.tagName==="TEXTAREA"||e.target.tagName==="INPUT"||e.target.tagName==="SELECT")return;
+  if(KEYMAP[e.code]){ keys[KEYMAP[e.code]]=true; e.preventDefault(); }
+  if(e.code==="KeyP") togglePause();
+  if(e.code==="KeyR" && (state==="race"||state==="practice") && player){ player.x=player.lastSafe.x; player.y=player.lastSafe.y; player.angle=player.lastSafe.angle; player.speed=30; player.lastIdx=player.lastSafe.idx; $("hudMsg").textContent=isPractice?"Reset to track — keep practising!":"Reset to track — go!"; }
+});
+document.addEventListener("keyup",function(e){ if(KEYMAP[e.code]){ keys[KEYMAP[e.code]]=false; e.preventDefault(); } });
+function bindTouch(id,key){
+  var el=$(id);
+  var on=function(e){e.preventDefault(); keys[key]=true; el.classList.add("on");};
+  var off=function(e){e.preventDefault(); keys[key]=false; el.classList.remove("on");};
+  el.addEventListener("pointerdown",on); el.addEventListener("pointerup",off); el.addEventListener("pointerleave",off); el.addEventListener("pointercancel",off);
+}
+bindTouch("tLeft","left"); bindTouch("tRight","right"); bindTouch("tGas","up"); bindTouch("tBrake","down");
+// swipe steering on canvas: drag left/right half steers, hold = gas
+canvas.addEventListener("pointerdown",function(e){ if(state!=="race"&&state!=="practice")return; var r=canvas.getBoundingClientRect(); var x=(e.clientX-r.left)/r.width; keys.up=true; if(x<0.4)keys.left=true; else if(x>0.6)keys.right=true; });
+canvas.addEventListener("pointerup",function(){ keys.up=false; keys.left=false; keys.right=false; });
+canvas.addEventListener("pointerleave",function(){ keys.up=false; keys.left=false; keys.right=false; });
+
+function togglePause(){
+  if(state==="race"||state==="practice"){ pausedFrom=state; state="paused"; $("overlayBig").textContent="⏸ Paused"; $("overlayText").textContent=(pausedFrom==="practice"?"Practice paused. ":"")+"Press Pause again or P to resume."; $("overlayBtn").style.display="none"; $("overlay").classList.add("show"); }
+  else if(state==="paused"){ state=pausedFrom; $("overlay").classList.remove("show"); }
+}
+$("btnPractice").addEventListener("click",function(){ if(isPractice){ exitPractice(); } else { startPractice(); } });
+$("btnExitPractice").addEventListener("click",exitPractice);
+$("btnPracticeToRace").addEventListener("click",startRace);
+$("btnStart").addEventListener("click",startRace);
+$("overlayBtn").addEventListener("click",startRace);
+$("tutStart").addEventListener("click",function(){ showView("game"); startRace(); });
+$("btnPause").addEventListener("click",togglePause);
+$("btnReset").addEventListener("click",function(){ if(isPractice){ startPractice(); } else { resetRace(); } });
+$("btnBoost").addEventListener("click",function(){ if(player && player.boost>25) player.boosting=true; });
+$("difficulty").addEventListener("change",function(){ difficulty=this.value; save("kartRacingDifficulty",difficulty); refreshBests(); $("hudMsg").textContent="Difficulty set to "+DIFF[difficulty].label+" — start a race to apply it to rivals."; });
+
+/* ---------- views ---------- */
+function showView(name){
+  ["game","tutorial","rules","feedback"].forEach(function(v){ $("view-"+v).classList.toggle("active",v===name); });
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+$("btnTutorial").addEventListener("click",function(){showView("tutorial");});
+$("btnRules").addEventListener("click",function(){showView("rules");});
+$("btnFeedback").addEventListener("click",function(){showView("feedback");});
+document.querySelectorAll("[data-back]").forEach(function(b){ b.addEventListener("click",function(){showView("game");}); });
+
+/* ---------- feedback ---------- */
+var fb=load("kartRacingFeedback",{rating:0,comment:""});
+var rating=fb.rating||0;
+function paintStars(){ document.querySelectorAll(".star").forEach(function(s){ s.classList.toggle("sel", +s.dataset.v<=rating); }); }
+document.querySelectorAll(".star").forEach(function(s){ s.addEventListener("click",function(){ rating=+s.dataset.v; paintStars(); }); });
+if(fb.comment) $("fbText").value=fb.comment;
+if(rating||fb.comment) $("fbSavedNote").textContent="You previously saved feedback on this device"+(rating?(" — "+rating+"★"):"")+". Saving again replaces it.";
+paintStars();
+$("fbSave").addEventListener("click",function(){
+  save("kartRacingFeedback",{rating:rating,comment:$("fbText").value.trim(),at:new Date().toISOString()});
+  /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+  try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "kart-racing", rating: rating||0, text: $("fbText").value.trim(), tag: "", mode: "real", level: "", difficulty: "", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+  $("fbToast").classList.add("show");
+  $("fbSavedNote").textContent="Saved just now on this device"+(rating?(" — "+rating+"★"):"")+".";
+});
+
+/* ---------- init ---------- */
+refreshBests();
+resetRace();
+requestAnimationFrame(function(ts){ lastTs=ts; requestAnimationFrame(loop); });
+})();
+</script>
+</body>
+</html>
