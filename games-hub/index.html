@@ -11539,6 +11539,12 @@ function renderTesterAuth(){
      reports to RTDB /feedback with the auth token (rules require
      auth != null), marks fbSent/fbKey. Offline/unauthenticated
      reports stay queued and retry.
+   - Play logger (added 2026-11-22): when a signed-in tester opens
+     a game ([data-game] click), queues {game, uid, ts, device} in
+     localStorage 'holos-arcade-plays-queue' and POSTs to RTDB
+     /plays. NOTE: /plays needs a rules publish in Firebase Console
+     (signed-in read/write); until then POSTs get 401 and records
+     stay queued on-device, flushing automatically once allowed.
    ============================================================ */
 (function(){
   var FB_API_KEY = 'AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak';
@@ -11657,6 +11663,72 @@ function renderTesterAuth(){
   window.betaPushFeedback = pushFeedback;
   setTimeout(pushFeedback, 3000);
   setInterval(pushFeedback, 8000);
+  /* Play logger (beta only, added 2026-11-22): counts game opens by
+     signed-in testers. Records queue in localStorage and flush to
+     RTDB /plays; if rules deny (401) they stay queued and retry.
+     Failure-proof, never blocks opening a game. Practice buttons do
+     not use [data-game], so practice opens are not counted. */
+  var PLAYS_KEY = 'holos-arcade-plays-queue';
+  function loadPlays(){
+    try { var v = JSON.parse(localStorage.getItem(PLAYS_KEY)); if(Array.isArray(v)) return v; } catch(e){}
+    return [];
+  }
+  function savePlays(arr){
+    try { localStorage.setItem(PLAYS_KEY, JSON.stringify(arr.slice(-500))); } catch(e){}
+  }
+  function flushPlays(){
+    if(typeof fetch !== 'function') return;
+    var arr = loadPlays();
+    if(!arr.length) return;
+    freshToken().then(function(token){
+      if(!token) return; /* not signed in: stays queued */
+      var sent = [];
+      var chain = Promise.resolve();
+      arr.forEach(function(r){
+        chain = chain.then(function(){
+          return fetch(FB_RTDB + '/plays.json?auth=' + encodeURIComponent(token), { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(r) })
+            .then(function(res){ if(res.ok) sent.push(r.id); })
+            .catch(function(){});
+        });
+      });
+      chain.then(function(){
+        if(sent.length){
+          var cur = loadPlays().filter(function(x){ return sent.indexOf(x.id) < 0; });
+          savePlays(cur);
+        }
+      }).catch(function(){});
+    }).catch(function(){});
+  }
+  function logPlay(slug){
+    try {
+      if(!slug) return;
+      var a = loadAuth();
+      if(!a || !a.uid) return; /* signed-in testers only */
+      var arr = loadPlays();
+      arr.push({
+        id: String(Date.now()) + '-' + Math.random().toString(36).slice(2,9),
+        game: String(slug),
+        uid: a.uid,
+        ts: Date.now(),
+        tsIso: new Date().toISOString(),
+        device: (navigator.userAgent || '')
+      });
+      savePlays(arr);
+      flushPlays();
+    } catch(e){}
+  }
+  window.betaLogPlay = logPlay;
+  try {
+    document.addEventListener('click', function(ev){
+      try {
+        var t = ev.target;
+        var b = (t && t.closest) ? t.closest('[data-game]') : null;
+        if(b) logPlay(b.getAttribute('data-game'));
+      } catch(e){}
+    }, true);
+  } catch(e){}
+  setTimeout(flushPlays, 4000);
+  setInterval(flushPlays, 30000);
   /* Crash/error reporting (beta only, added 2026-11-22): POSTs JS errors
      to RTDB /feedback with tag "error" (rules deny /errors writes for
      signed-in users — verified by probe 2026-11-22 — so /feedback is
