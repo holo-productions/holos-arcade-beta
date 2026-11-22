@@ -11174,6 +11174,9 @@ function renderTesterAuth(){
    - After sign-up, sends the verification email (sendOobCode
      VERIFY_EMAIL) and exposes window.holoBetaAuth for the hub's
      sendBetaEmailVerification() stub.
+   - Device capture: after successful register/sign-in, PATCHes
+     {device, platform, screen, lastSeen, event} to the user's
+     own /users/$uid (failure-proof, never blocks auth).
    - Feedback pusher: polls 'holos-arcade-feedback', POSTs unsent
      reports to RTDB /feedback with the auth token (rules require
      auth != null), marks fbSent/fbKey. Offline/unauthenticated
@@ -11197,6 +11200,21 @@ function renderTesterAuth(){
     try { var v = JSON.parse(localStorage.getItem(AUTH_KEY)); if(v && v.idToken) return v; } catch(e){}
     return null;
   }
+  function writeDevice(rec, event){
+    try {
+      if(!rec || !rec.uid || !rec.idToken || typeof fetch !== 'function') return;
+      var platform = '';
+      try { platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || ''; } catch(e){}
+      var payload = {
+        device: (navigator.userAgent || ''),
+        platform: platform,
+        screen: ((window.screen && screen.width) || 0) + 'x' + ((window.screen && screen.height) || 0),
+        lastSeen: new Date().toISOString(),
+        event: event || ''
+      };
+      fetch(FB_RTDB + '/users/' + encodeURIComponent(rec.uid) + '.json?auth=' + encodeURIComponent(rec.idToken), { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) }).catch(function(){});
+    } catch(e){}
+  }
   function postJSON(url, body){
     return fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) })
       .then(function(res){ return res.json().then(function(j){ return { ok:res.ok, status:res.status, json:j }; }); });
@@ -11214,7 +11232,7 @@ function renderTesterAuth(){
   window.betaSignUp = function(email, password){
     if(!email || !password || typeof fetch !== 'function') return;
     doSignUp(email, password).then(function(r){
-      if(r.ok && r.json && r.json.idToken){ var rec = saveAuth(r.json, email); if(rec) sendVerify(rec.idToken); return; }
+      if(r.ok && r.json && r.json.idToken){ var rec = saveAuth(r.json, email); if(rec){ sendVerify(rec.idToken); writeDevice(rec, 'register'); } return; }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
       if(msg.indexOf('EMAIL_EXISTS') >= 0){ window.betaSignIn(email, password); }
       /* WEAK_PASSWORD etc: local account still works; stays queued. */
@@ -11223,12 +11241,12 @@ function renderTesterAuth(){
   window.betaSignIn = function(email, password){
     if(!email || !password || typeof fetch !== 'function') return;
     doSignIn(email, password).then(function(r){
-      if(r.ok && r.json && r.json.idToken){ saveAuth(r.json, email); pushFeedback(); return; }
+      if(r.ok && r.json && r.json.idToken){ var rec2 = saveAuth(r.json, email); if(rec2) writeDevice(rec2, 'sign-in'); pushFeedback(); return; }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
       if(msg.indexOf('EMAIL_NOT_FOUND') >= 0 || msg.indexOf('INVALID_LOGIN_CREDENTIALS') >= 0 || msg.indexOf('INVALID_PASSWORD') >= 0){
         /* Existing local tester with no Firebase user yet: provision. */
         doSignUp(email, password).then(function(r2){
-          if(r2.ok && r2.json && r2.json.idToken){ var rec = saveAuth(r2.json, email); if(rec) sendVerify(rec.idToken); pushFeedback(); }
+          if(r2.ok && r2.json && r2.json.idToken){ var rec = saveAuth(r2.json, email); if(rec){ sendVerify(rec.idToken); writeDevice(rec, 'register'); } pushFeedback(); }
         }).catch(function(){});
       }
     }).catch(function(){});
