@@ -1025,6 +1025,16 @@ setTimeout(function(){
       <p class="login-error" id="loginError" role="alert" hidden></p>
       <button class="btn btn-dark login-btn" id="loginSubmit" type="submit">▶ Press start to play ◀</button>
     </form>
+    <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="forgotPwBtn">Forgot password?</button></p>
+    <div id="forgotPwPanel" hidden>
+      <div class="login-field">
+        <label for="forgotPwEmail">Your account email</label>
+        <input id="forgotPwEmail" type="email" autocomplete="email" placeholder="you@example.com" />
+        <p class="login-helper">Pop in the email you registered with and we will send a password reset link.</p>
+      </div>
+      <p class="login-error" id="forgotPwMsg" role="status" hidden></p>
+      <button class="btn btn-light login-switch" id="forgotPwSend" type="button">Send reset link</button>
+    </div>
     </div>
     <div id="ownerMount"></div>
     <p class="login-coin-line" aria-hidden="true">Insert coin · 1 credit · Holo's Arcade</p>
@@ -9675,6 +9685,30 @@ function renderTesterAuth(){
       fail(res.error);
     });
   });
+  /* Forgot password: asks for the account email and (on beta,
+     where the Firebase layer is present) sends a reset link.
+     The message is always the same, so it never reveals
+     whether an account exists for that email. */
+  var fpBtn = document.getElementById('forgotPwBtn');
+  var fpPanel = document.getElementById('forgotPwPanel');
+  if(fpBtn && fpPanel) fpBtn.addEventListener('click', function(){
+    fpPanel.hidden = !fpPanel.hidden;
+    if(!fpPanel.hidden){ var fe = document.getElementById('forgotPwEmail'); if(fe) fe.focus(); }
+  });
+  var fpSend = document.getElementById('forgotPwSend');
+  if(fpSend) fpSend.addEventListener('click', function(){
+    var fe = document.getElementById('forgotPwEmail');
+    var msg = document.getElementById('forgotPwMsg');
+    var email = fe ? String(fe.value || '').trim() : '';
+    function show(t){ if(msg){ msg.textContent = t; msg.hidden = false; } }
+    if(!email || email.indexOf('@') < 1){ show('Pop your account email in first.'); return; }
+    if(typeof window.betaResetPassword === 'function'){
+      window.betaResetPassword(email);
+      show('If an account exists for that email, a password reset link is on its way. Check your inbox (and spam folder) in a few minutes.');
+    } else {
+      show('Password reset works on the beta site. Ask Holo for the beta link and use Forgot password there.');
+    }
+  });
   var so = document.getElementById('signOutBtn');
   if(so) so.addEventListener('click', signOutTester);
   var cb = document.getElementById('continueBtn');
@@ -11174,6 +11208,9 @@ function renderTesterAuth(){
    - After sign-up, sends the verification email (sendOobCode
      VERIFY_EMAIL) and exposes window.holoBetaAuth for the hub's
      sendBetaEmailVerification() stub.
+   - betaResetPassword(email): sendOobCode PASSWORD_RESET for
+     the Forgot password control; always resolves generically
+     so it never reveals whether an account exists.
    - Device capture: after successful register/sign-in, PATCHes
      {device, platform, screen, lastSeen, event} to the user's
      own /users/$uid (failure-proof, never blocks auth).
@@ -11288,9 +11325,86 @@ function renderTesterAuth(){
       });
     });
   }
+  window.betaResetPassword = function(email){
+    if(!email || typeof fetch !== 'function') return Promise.resolve({ sent:true });
+    /* Always resolves the same way: never reveals whether an
+       account exists for the email (EMAIL_NOT_FOUND etc. are
+       swallowed on purpose). */
+    return postJSON('https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=' + FB_API_KEY, { requestType:'PASSWORD_RESET', email:email })
+      .then(function(){ return { sent:true }; }).catch(function(){ return { sent:true }; });
+  };
   window.betaPushFeedback = pushFeedback;
   setTimeout(pushFeedback, 3000);
   setInterval(pushFeedback, 8000);
+  /* Crash/error reporting (beta only, added 2026-11-22): POSTs JS errors
+     to RTDB /feedback with tag "error" (rules deny /errors writes for
+     signed-in users — verified by probe 2026-11-22 — so /feedback is
+     the allowed path). Failure-proof, capped, never blocks the page. */
+  var errCount = 0;
+  function reportError(message, source, line){
+    try {
+      if(errCount >= 5 || typeof fetch !== 'function') return;
+      errCount++;
+      var payload = {
+        tag: 'error',
+        game: 'Beta error report',
+        comment: String(message || 'Unknown error').slice(0, 500),
+        source: String(source || '').slice(0, 300),
+        line: line || 0,
+        device: (navigator.userAgent || ''),
+        page: (location.pathname || ''),
+        ts: new Date().toISOString(),
+        timestamp: Date.now()
+      };
+      freshToken().then(function(token){
+        if(!token) return; /* not signed in: drop quietly */
+        fetch(FB_RTDB + '/feedback.json?auth=' + encodeURIComponent(token), { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) }).catch(function(){});
+      }).catch(function(){});
+    } catch(e){}
+  }
+  try {
+    window.addEventListener('error', function(ev){
+      try { reportError(ev.message, ev.filename, ev.lineno); } catch(e){}
+    });
+    window.addEventListener('unhandledrejection', function(ev){
+      try { reportError(ev.reason && (ev.reason.message || String(ev.reason)), '', 0); } catch(e){}
+    });
+  } catch(e){}
+})();
+</script>
+
+<script>
+/* Error hook: on an uncaught error, offer "Tell us what broke" linking
+   to the fun error page with the message prefilled. Once per session,
+   dismissible, never blocks the game. */
+(function(){
+  var shown = false;
+  function offer(msg){
+    try {
+      if(shown) return;
+      if(sessionStorage.getItem('holo-error-offered')) return;
+      sessionStorage.setItem('holo-error-offered','1');
+      shown = true;
+      var base = (location.hostname.indexOf('holosarcade.ca') >= 0) ? '/404.html' : '404.html';
+      var href = base + '?err=' + encodeURIComponent(String(msg || 'Unknown glitch').slice(0,300)) + '&page=' + encodeURIComponent(location.href);
+      var bar = document.createElement('div');
+      bar.setAttribute('style','position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;background:#241a3d;color:#f5efff;border:1px solid #453070;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;font-family:system-ui,sans-serif;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.5)');
+      var txt = document.createElement('span');
+      txt.textContent = 'Something glitched. ';
+      var a = document.createElement('a');
+      a.href = href; a.textContent = 'Tell us what broke';
+      a.setAttribute('style','color:#38e1ff;font-weight:700');
+      txt.appendChild(a);
+      var x = document.createElement('button');
+      x.type = 'button'; x.textContent = '✕';
+      x.setAttribute('style','background:#33255a;color:#f5efff;border:1px solid #453070;border-radius:10px;min-width:40px;min-height:40px;cursor:pointer');
+      x.addEventListener('click', function(){ bar.remove(); });
+      bar.appendChild(txt); bar.appendChild(x);
+      document.body.appendChild(bar);
+    } catch(e){}
+  }
+  window.addEventListener('error', function(e){ offer((e && e.message) || 'Unknown glitch'); });
+  window.addEventListener('unhandledrejection', function(e){ offer((e && e.reason && e.reason.message) || 'Unknown glitch'); });
 })();
 </script>
 </body>
