@@ -519,6 +519,16 @@ body.auth-locked #reviewFab{display:none!important}
 .rv-badges .rbadge small{font-weight:600;color:var(--muted)}
 .signout-btn{appearance:none;border:1.5px solid var(--line);background:var(--card);color:var(--ink);font-weight:800;font-size:12.5px;padding:7px 11px;border-radius:999px;cursor:pointer;font-family:inherit;min-height:36px}
 .signout-btn:hover{border-color:var(--ink)}
+.danger-btn{appearance:none;border:1.5px solid #e03131;background:#fff5f5;color:#c92a2a;font-weight:800;font-size:13.5px;padding:9px 15px;border-radius:999px;cursor:pointer;font-family:inherit;min-height:44px}
+.danger-btn:hover{background:#ffe3e3}
+.danger-btn:disabled{opacity:.45;cursor:not-allowed}
+.danger-btn-solid{background:#c92a2a;color:#fff;border-color:#c92a2a}
+.danger-btn-solid:hover{background:#a61e1e}
+.delete-confirm{margin-top:12px;border:1.5px solid #e03131;border-radius:14px;padding:14px;background:#fff5f5}
+.delete-confirm p{color:#7a1f1f}
+.delete-confirm label{display:block;font-weight:700;font-size:13.5px;margin:10px 0 4px;color:var(--ink)}
+.delete-confirm input{width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font-family:inherit;font-size:15px;background:#fff;color:var(--ink)}
+.delete-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 @media(max-width:820px){ .topbar-inner{flex-wrap:wrap} .login-card{padding:24px 20px} }
 
 /* ================= Continue where you left off ================= */
@@ -1469,6 +1479,24 @@ setTimeout(function(){
           <button class="tgl" id="bigToggle" type="button" aria-pressed="false">Off</button>
         </div>
         <p style="margin-top:10px">Settings are saved in this browser and apply to the hub only — games keep their own look.</p>
+      </div>
+      <div class="hub-box" id="accountBox" hidden>
+        <h3>👤 Your account</h3>
+        <p id="accountWho">Signed in.</p>
+        <p>Deleting your account removes your sign-in for good. There is no undo.</p>
+        <button class="danger-btn" id="deleteAccountBtn" type="button">Delete my account</button>
+        <div class="delete-confirm" id="deleteAccountPanel" hidden>
+          <p><strong>Are you sure?</strong> This permanently deletes your account and signs you out on this device. This cannot be undone.</p>
+          <label for="deleteAccountPw">Your password</label>
+          <input id="deleteAccountPw" type="password" autocomplete="current-password" placeholder="Your password" />
+          <label for="deleteAccountType">Type DELETE to confirm</label>
+          <input id="deleteAccountType" type="text" autocomplete="off" autocapitalize="characters" placeholder="DELETE" />
+          <p id="deleteAccountMsg" role="alert" hidden></p>
+          <div class="delete-actions">
+            <button class="tgl" id="deleteAccountCancel" type="button">Cancel</button>
+            <button class="danger-btn danger-btn-solid" id="deleteAccountConfirm" type="button" disabled>Delete forever</button>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -10105,6 +10133,49 @@ function getTester(){
   } catch(e){}
   return null;
 }
+function clearLocalAccountData(session){
+  /* Account deletion (added 2026-11-22): remove this account's
+     local record from this device. Matches by email, then uid,
+     then name. Other accounts on the device are untouched. */
+  try {
+    var all = getAccounts();
+    var em = String((session && session.email) || '').trim().toLowerCase();
+    var uid = String((session && session.uid) || '');
+    var nm = String((session && session.name) || '').trim().toLowerCase();
+    for(var k in all){
+      var a = all[k] || {};
+      if((em && String(a.email || '').trim().toLowerCase() === em) || (uid && String(a.uid || '') === uid) || (nm && String(a.name || '').trim().toLowerCase() === nm)){
+        delete all[k];
+      }
+    }
+    saveAccounts(all);
+  } catch(e){}
+  try { localStorage.removeItem('holos-firebase-auth'); } catch(e){}
+  try {
+    var pend = JSON.parse(localStorage.getItem('holos-arcade-pending-reverify'));
+    if(pend && session && String(pend.email || '') === String(session.email || '').trim().toLowerCase()) localStorage.removeItem('holos-arcade-pending-reverify');
+  } catch(e){}
+}
+function deleteMyAccount(password){
+  /* Delete account flow (added 2026-11-22): on beta the Firebase
+     layer deletes the cloud record and the Firebase user first.
+     Only when that succeeds (or there is no cloud account) do we
+     clear the local record and session, then sign out. */
+  var session = getTester();
+  if(!session) return Promise.resolve({ ok:false, error:'You are not signed in.' });
+  function localOnly(){
+    clearLocalAccountData(session);
+    signOutTester();
+    return { ok:true };
+  }
+  if(typeof window.betaDeleteAccount === 'function'){
+    return window.betaDeleteAccount(password, session.email || '').then(function(res){
+      if(res && res.ok) return localOnly();
+      return { ok:false, error:(res && res.error) || 'Could not delete your account just now. Check your internet and try again.' };
+    }).catch(function(){ return { ok:false, error:'Could not delete your account just now. Check your internet and try again.' }; });
+  }
+  return Promise.resolve(localOnly());
+}
 function signOutTester(){
   /* Sign-out clears the session from BOTH storages, whichever
      kind it was (remembered or session-only). */
@@ -10750,7 +10821,11 @@ function renderTesterAuth(){
   var t = getTester();
   var lv = document.getElementById('loginView');
   var chip = document.getElementById('testerChip');
+  var acctBox = document.getElementById('accountBox');
+  if(acctBox) acctBox.hidden = !t;
   if(t){
+    var who = document.getElementById('accountWho');
+    if(who) who.textContent = 'Signed in as ' + (t.email || t.name || 'tester') + '.';
     if(lv) lv.hidden = true;
     if(chip){
       chip.hidden = false;
@@ -10899,6 +10974,53 @@ function renderTesterAuth(){
   });
   var so = document.getElementById('signOutBtn');
   if(so) so.addEventListener('click', signOutTester);
+  /* Delete account wiring (added 2026-11-22): the confirm panel
+     needs the password plus the word DELETE typed before the
+     Delete forever button turns on. Cancel changes nothing. */
+  var delBtn = document.getElementById('deleteAccountBtn');
+  var delPanel = document.getElementById('deleteAccountPanel');
+  var delPw = document.getElementById('deleteAccountPw');
+  var delType = document.getElementById('deleteAccountType');
+  var delMsg = document.getElementById('deleteAccountMsg');
+  var delCancel = document.getElementById('deleteAccountCancel');
+  var delConfirm = document.getElementById('deleteAccountConfirm');
+  function delShowMsg(t){ if(delMsg){ delMsg.textContent = t; delMsg.hidden = !t; } }
+  function delSync(){
+    if(delConfirm) delConfirm.disabled = !(delType && String(delType.value || '').trim().toUpperCase() === 'DELETE' && delPw && String(delPw.value || '').length > 0);
+  }
+  if(delBtn && delPanel) delBtn.addEventListener('click', function(){
+    delPanel.hidden = !delPanel.hidden;
+    delShowMsg('');
+    if(!delPanel.hidden && delPw) delPw.focus();
+  });
+  if(delPw) delPw.addEventListener('input', delSync);
+  if(delType) delType.addEventListener('input', delSync);
+  if(delCancel) delCancel.addEventListener('click', function(){
+    if(delPanel) delPanel.hidden = true;
+    if(delPw) delPw.value = '';
+    if(delType) delType.value = '';
+    delShowMsg('');
+    delSync();
+  });
+  if(delConfirm) delConfirm.addEventListener('click', function(){
+    var pw = delPw ? String(delPw.value || '') : '';
+    if(!pw){ delShowMsg('Pop your password in first.'); return; }
+    if(!delType || String(delType.value || '').trim().toUpperCase() !== 'DELETE'){ delShowMsg('Type DELETE to confirm.'); return; }
+    delConfirm.disabled = true;
+    delShowMsg('Deleting your account...');
+    deleteMyAccount(pw).then(function(res){
+      if(res && res.ok){
+        if(delPanel) delPanel.hidden = true;
+        showBadgeToast('Account deleted. Thanks for playing.');
+        return;
+      }
+      delShowMsg((res && res.error) || 'Could not delete your account just now. Try again in a minute.');
+      delSync();
+    }).catch(function(){
+      delShowMsg('Could not delete your account just now. Try again in a minute.');
+      delSync();
+    });
+  });
   var cb = document.getElementById('continueBtn');
   if(cb) cb.addEventListener('click', function(){
     var s = loadAccountState(); if(!s.lastGame) return;
@@ -13485,6 +13607,62 @@ function renderTesterAuth(){
         return { verified:false };
       });
     }).catch(function(){ return { verified:false }; });
+  };
+  window.betaDeleteAccount = function(password, emailHint){
+    /* Delete account (added 2026-11-22): delete the cloud record
+       at /users/$uid, then the Firebase Auth user itself
+       (accounts:delete). Firebase wants a recent sign-in for
+       this, so on CREDENTIAL_TOO_OLD_LOGIN_AGAIN we sign in again
+       with the password just typed and retry once. Local auth
+       tokens are cleared either way on success. */
+    if(typeof fetch !== 'function') return Promise.resolve({ ok:false, error:'Could not reach the sign in service. Check your internet and try again.' });
+    var auth = loadAuth();
+    if(!auth || !auth.uid){
+      return Promise.resolve({ ok:true, cloud:false });
+    }
+    var email = String(emailHint || auth.email || '').trim();
+    function deleteRecord(tok){
+      return fetch(FB_RTDB + '/users/' + encodeURIComponent(auth.uid) + '.json?auth=' + encodeURIComponent(tok), { method:'DELETE' })
+        .then(function(r){ return !!r.ok; }).catch(function(){ return false; });
+    }
+    function deleteUser(tok){
+      return postJSON('https://identitytoolkit.googleapis.com/v1/accounts:delete?key=' + FB_API_KEY, { idToken:tok });
+    }
+    function finishOk(){
+      try { localStorage.removeItem(AUTH_KEY); } catch(e){}
+      try { if(window.holoBetaAuth) delete window.holoBetaAuth; } catch(e){}
+      return { ok:true, cloud:true };
+    }
+    function attempt(tok){
+      return deleteRecord(tok).then(function(){
+        return deleteUser(tok);
+      }).then(function(r){
+        if(r.ok) return finishOk();
+        var msg = (r.json && r.json.error && r.json.error.message) || '';
+        if(msg.indexOf('USER_NOT_FOUND') >= 0) return finishOk();
+        return { ok:false, code:msg, error:betaFriendlyError(msg) };
+      });
+    }
+    return freshToken().then(function(tok){
+      if(!tok) return { ok:false, error:'Your sign in has expired. Sign out, sign in again, then delete your account.' };
+      return attempt(tok).then(function(res){
+        if(res.ok) return res;
+        var code = String(res.code || '');
+        var needsFresh = code.indexOf('CREDENTIAL_TOO_OLD') >= 0 || code.indexOf('TOKEN_EXPIRED') >= 0 || code.indexOf('INVALID_ID_TOKEN') >= 0;
+        if(needsFresh && email && password){
+          return doSignIn(email, password).then(function(r2){
+            if(r2.ok && r2.json && r2.json.idToken){
+              var rec2 = saveAuth(r2.json, email);
+              if(rec2) return attempt(rec2.idToken);
+            }
+            var m2 = (r2.json && r2.json.error && r2.json.error.message) || '';
+            return { ok:false, code:m2, error:betaFriendlyError(m2) };
+          }).catch(function(){ return { ok:false, error:betaFriendlyError('') }; });
+        }
+        if(needsFresh) return { ok:false, error:'For safety, sign out and sign in again, then delete your account.' };
+        return res;
+      });
+    }).catch(function(){ return { ok:false, error:betaFriendlyError('') }; });
   };
   window.betaPushFeedback = pushFeedback;
   setTimeout(pushFeedback, 3000);
