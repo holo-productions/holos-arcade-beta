@@ -9698,7 +9698,7 @@ function createAccount(name, email, password, confirmPassword, inviteCode, terms
   if(!validAccountEmail(email)) return Promise.resolve({ ok:false, error:'Pop a valid email in — on the beta site, Firebase sends your verification link there.' });
   if(!termsAccepted) return Promise.resolve({ ok:false, error:'Please tick the box to agree to the Terms & Policies first.' });
   if(!String(inviteCode || '').trim()) return Promise.resolve({ ok:false, error:'Your invite / tester code is required — it comes with your invite link. No code? Ask Holo for one, agent.' });
-  if(!password || String(password).length < 4) return Promise.resolve({ ok:false, error:'Your password needs at least 4 characters — pick something a touch longer, agent.' });
+  if(!password || String(password).length < 6) return Promise.resolve({ ok:false, error:'Your password needs at least 6 characters — pick something a touch longer, agent.' });
   if(String(password) !== String(confirmPassword || '')) return Promise.resolve({ ok:false, error:'Those passwords don\u2019t match — have another try, agent.' });
   var accounts = getAccounts();
   var key = name.toLowerCase();
@@ -10209,13 +10209,14 @@ function renderTesterAuth(){
       '<form id="createForm">' +
       '<div class="login-field"><label for="createName">Your username</label><input id="createName" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
       '<div class="login-field"><label for="createEmail">Your email</label><input id="createEmail" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">When you register on the beta site (beta.holosarcade.ca), Firebase sends a verification link to this email — tap it to verify your account.</p></div>' +
-      '<div class="login-field"><label for="createPw">Choose a password</label><input id="createPw" type="password" autocomplete="new-password" placeholder="At least 4 characters" /></div>' +
+      '<div class="login-field"><label for="createPw">Choose a password</label><input id="createPw" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
       '<div class="login-field"><label for="createPw2">Confirm password</label><input id="createPw2" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
       '<div class="login-field"><label for="createInvite">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInvite" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Required — it comes with your invite link. No code? Ask Holo for one.</p></div>' +
       '<div class="login-terms"><input type="checkbox" id="createTerms" required aria-required="true" /><label for="createTerms">I agree to the <a href="#legal" id="createLegalLink">Terms &amp; Policies</a></label></div>' +
       '<p class="login-error" id="createError" role="alert" hidden></p>' +
       '<button class="btn btn-dark login-btn" id="createSubmit" type="submit">Create my account \uD83C\uDF89</button>' +
       '</form>' +
+      '<p class="login-helper" style="margin:12px 0 0"><strong>Having trouble registering?</strong> Check your invite code spelling. Use a password with 6 or more characters. Check your spam folder for the verification email. Still stuck? Email <a href="mailto:topsecret@holosarcade.ca">topsecret@holosarcade.ca</a> for help.</p>' +
       '<p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="showSignInBtn">Already have an account? Sign in</button></p>';
     mount.appendChild(createPane);
     /* Registration success panel — hidden until an account is
@@ -10400,13 +10401,14 @@ function renderTesterAuth(){
       '<form id="createForm">' +
       '<div class="login-field"><label for="createName">Your username</label><input id="createName" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
       '<div class="login-field"><label for="createEmail">Your email</label><input id="createEmail" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">When you register on the beta site (beta.holosarcade.ca), Firebase sends a verification link to this email — tap it to verify your account.</p></div>' +
-      '<div class="login-field"><label for="createPw">Choose a password</label><input id="createPw" type="password" autocomplete="new-password" placeholder="At least 4 characters" /></div>' +
+      '<div class="login-field"><label for="createPw">Choose a password</label><input id="createPw" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
       '<div class="login-field"><label for="createPw2">Confirm password</label><input id="createPw2" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
       '<div class="login-field"><label for="createInvite">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInvite" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Required — it comes with your invite link. No code? Ask Holo for one.</p></div>' +
       '<div class="login-terms"><input type="checkbox" id="createTerms" required aria-required="true" /><label for="createTerms">I agree to the <a href="#legal" id="createLegalLink">Terms &amp; Policies</a></label></div>' +
       '<p class="login-error" id="createError" role="alert" hidden></p>' +
       '<button class="btn btn-dark login-btn" id="createSubmit" type="submit">Create my account \uD83C\uDF89</button>' +
       '</form>' +
+      '<p class="login-helper" style="margin:12px 0 0"><strong>Having trouble registering?</strong> Check your invite code spelling. Use a password with 6 or more characters. Check your spam folder for the verification email. Still stuck? Email <a href="mailto:topsecret@holosarcade.ca">topsecret@holosarcade.ca</a> for help.</p>' +
       '<p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="showSignInBtn">Already have an account? Sign in</button></p>';
     mount.appendChild(createPane);
     /* Registration success panel — same as the invite flow:
@@ -11668,14 +11670,51 @@ function renderTesterAuth(){
   function doSignUp(email, password){
     return postJSON('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + FB_API_KEY, { email:email, password:password, returnSecureToken:true });
   }
+  function betaAuthErrorText(code){
+    code = String(code || '');
+    if(code.indexOf('WEAK_PASSWORD') >= 0) return 'Your account on this device is ready, but the email verification step needs a password with 6 or more characters. Use Forgot password on the login page to set a longer password, or email topsecret@holosarcade.ca for help.';
+    if(code.indexOf('INVALID_EMAIL') >= 0) return 'Your account on this device is ready, but that email address was not accepted for verification. Double-check the email spelling, or email topsecret@holosarcade.ca for help.';
+    if(code.indexOf('EMAIL_EXISTS') >= 0) return 'Your account on this device is ready, but that email is already registered with a different password. Use Forgot password on the login page, or email topsecret@holosarcade.ca for help.';
+    return 'Your account on this device is ready, but the verification email step did not finish. Check your spam folder in a few minutes. Still nothing? Email topsecret@holosarcade.ca for help.';
+  }
+  function betaAuthNotice(msg){
+    /* Cloud-step registration failures used to vanish silently:
+       the local account worked, so the tester saw success while
+       no verification email was ever sent. Show a clear note in
+       the register success panel instead. */
+    try {
+      window.holoBetaAuthError = msg;
+      var pane = document.getElementById('registerSuccess');
+      if(!pane) return;
+      var note = document.getElementById('registerBetaNote');
+      if(!note){
+        note = document.createElement('p');
+        note.id = 'registerBetaNote';
+        note.className = 'login-error';
+        note.setAttribute('role', 'alert');
+        var btn = document.getElementById('registerToLoginBtn');
+        if(btn && btn.parentNode === pane) pane.insertBefore(note, btn); else pane.appendChild(note);
+      }
+      note.textContent = msg;
+    } catch(e){}
+  }
   window.betaSignUp = function(email, password){
     if(!email || !password || typeof fetch !== 'function') return;
     doSignUp(email, password).then(function(r){
-      if(r.ok && r.json && r.json.idToken){ var rec = saveAuth(r.json, email); if(rec){ sendVerify(rec.idToken); writeDevice(rec, 'register'); } return; }
+      if(r.ok && r.json && r.json.idToken){ var rec = saveAuth(r.json, email); if(rec){ sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); }); writeDevice(rec, 'register'); } return; }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
-      if(msg.indexOf('EMAIL_EXISTS') >= 0){ window.betaSignIn(email, password); }
-      /* WEAK_PASSWORD etc: local account still works; stays queued. */
-    }).catch(function(){});
+      if(msg.indexOf('EMAIL_EXISTS') >= 0){
+        /* Same email registered before: sign in with the password
+           just typed. If that fails too, say so plainly instead of
+           leaving the tester waiting for an email that never comes. */
+        doSignIn(email, password).then(function(r2){
+          if(r2.ok && r2.json && r2.json.idToken){ var rec2 = saveAuth(r2.json, email); if(rec2) writeDevice(rec2, 'sign-in'); pushFeedback(); return; }
+          betaAuthNotice(betaAuthErrorText('EMAIL_EXISTS'));
+        }).catch(function(){ betaAuthNotice(betaAuthErrorText('')); });
+        return;
+      }
+      betaAuthNotice(betaAuthErrorText(msg));
+    }).catch(function(){ betaAuthNotice(betaAuthErrorText('')); });
   };
   window.betaSignIn = function(email, password){
     if(!email || !password || typeof fetch !== 'function') return;
@@ -11685,8 +11724,10 @@ function renderTesterAuth(){
       if(msg.indexOf('EMAIL_NOT_FOUND') >= 0 || msg.indexOf('INVALID_LOGIN_CREDENTIALS') >= 0 || msg.indexOf('INVALID_PASSWORD') >= 0){
         /* Existing local tester with no Firebase user yet: provision. */
         doSignUp(email, password).then(function(r2){
-          if(r2.ok && r2.json && r2.json.idToken){ var rec = saveAuth(r2.json, email); if(rec){ sendVerify(rec.idToken); writeDevice(rec, 'register'); } pushFeedback(); }
-        }).catch(function(){});
+          if(r2.ok && r2.json && r2.json.idToken){ var rec = saveAuth(r2.json, email); if(rec){ sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); }); writeDevice(rec, 'register'); } pushFeedback(); return; }
+          var msg2 = (r2.json && r2.json.error && r2.json.error.message) || '';
+          betaAuthNotice(betaAuthErrorText(msg2));
+        }).catch(function(){ betaAuthNotice(betaAuthErrorText('')); });
       }
     }).catch(function(){});
   };
