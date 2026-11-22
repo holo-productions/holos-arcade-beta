@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Dice Duel - Holo's Arcade</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; background:#171021; color:#f2e9ff; font-family:ui-monospace, Menlo, Consolas, monospace; }
+  .wrap { max-width:430px; margin:0 auto; padding:14px 14px 30px; }
+  a.back { color:#4cc9f0; text-decoration:none; font-size:14px; }
+  h1 { font-size:26px; margin:8px 0 4px; color:#ff6ec7; text-shadow:2px 2px 0 #9b5de5; letter-spacing:1px; text-align:center; }
+  .sub { text-align:center; color:#c9b8ff; font-size:13px; margin-bottom:12px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:10px 0; }
+  button { font-family:inherit; background:#241533; color:#f2e9ff; border:2px solid #9b5de5; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:14px; }
+  button:active { transform:scale(0.97); }
+  button.active { background:#9b5de5; border-color:#ff6ec7; color:#fff; }
+  button.primary { background:#ff6ec7; border-color:#ff6ec7; color:#171021; font-weight:bold; }
+  button.blue { border-color:#4cc9f0; }
+  button:disabled { opacity:0.45; }
+  .card { background:#20132e; border:2px solid #3a2554; border-radius:12px; padding:14px; margin:12px 0; }
+  .turn { text-align:center; font-size:17px; color:#4cc9f0; min-height:26px; font-weight:bold; }
+  .dice { display:flex; gap:8px; justify-content:center; margin:14px 0; }
+  .die { width:58px; height:58px; font-size:34px; background:#f2e9ff; color:#171021; border:3px solid #4cc9f0; border-radius:10px; display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none; }
+  .die.held { border-color:#ff6ec7; background:#ffd6ef; transform:translateY(6px); }
+  .die.empty { background:#2a1a42; color:#9b5de5; }
+  @keyframes roll { 0%{transform:rotate(0deg) scale(1)} 50%{transform:rotate(18deg) scale(1.12)} 100%{transform:rotate(0deg) scale(1)} }
+  .rolling { animation:roll 0.35s ease; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th, td { border:1px solid #3a2554; padding:6px 5px; text-align:center; }
+  th { background:#2a1a42; }
+  td.cat { text-align:left; }
+  td.pickable { background:#3a2554; cursor:pointer; color:#4cc9f0; font-weight:bold; }
+  td.pickable:hover { background:#4a2f6e; }
+  tr.hl th, th.hl { background:#9b5de5; color:#fff; }
+  .tot { font-weight:bold; color:#ff6ec7; }
+  .overlay { display:none; position:fixed; inset:0; background:rgba(10,5,20,0.92); z-index:50; overflow:auto; padding:20px; }
+  .overlay.open { display:block; }
+  .sheet { max-width:400px; margin:30px auto; background:#241533; border:2px solid #9b5de5; border-radius:12px; padding:18px; line-height:1.55; font-size:14px; }
+  .sheet h2 { color:#ff6ec7; margin-top:0; }
+  textarea { width:100%; min-height:80px; background:#171021; color:#f2e9ff; border:2px solid #4cc9f0; border-radius:8px; padding:10px; font-family:inherit; }
+  .fb { display:none; }
+  .fb.open { display:block; }
+  .small { font-size:12px; color:#c9b8ff; text-align:center; }
+  .msg { text-align:center; font-size:15px; min-height:24px; margin:8px 0; }
+  .pass { text-align:center; padding:20px 10px; }
+/* vtut visual steps */
+.vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
+@media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
+.vtut-card{position:relative;border-radius:14px;padding:12px 10px 10px;text-align:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18)}
+.vtut-num{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;background:#ff5fa2;color:#fff;font-size:12px;font-weight:800;line-height:20px}
+.vtut-pic{height:52px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.vtut-pic svg{width:44px;height:44px}
+.vtut-card b{display:block;font-size:.92rem;margin-bottom:2px}
+.vtut-card p{margin:0;font-size:.85rem;line-height:1.35;opacity:.92}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../games-hub/">&lt; Back to Games Hub</a>
+  <h1>DICE DUEL</h1>
+  <div class="sub">Yahtzee-style score chase - Holo's Arcade</div>
+
+  <div class="bar">
+    <button id="mode2p" class="active">2 Players</button>
+    <button id="modeCpu">vs Computer</button>
+  </div>
+  <div class="bar">
+    <button id="btnTutorial" class="blue">How to play</button>
+    <button id="btnRules" class="blue">Rules</button>
+    <button id="btnFeedback" class="blue">Feedback</button>
+    <button id="btnRestart">Restart</button>
+  </div>
+
+  <div class="card fb" id="fbCard">
+    <div style="margin-bottom:8px;">Send feedback</div>
+    <textarea id="fbText" placeholder="What did you think?"></textarea>
+    <div class="bar"><button id="fbSend" class="primary">Send Feedback</button></div>
+    <div class="small" id="fbMsg"></div>
+  </div>
+
+  <div class="card">
+    <div class="turn" id="turnText">Player 1 turn - Round 1 of 13</div>
+    <div class="small" id="allTimeLine">Matches won all time: Player 1: 0 - Player 2: 0</div>
+
+    <div id="playArea">
+      <div class="dice" id="diceRow"></div>
+      <div class="small" id="holdHint">Tap a die to hold it. Held dice stay put on the next roll.</div>
+      <div class="bar">
+        <button id="btnRoll" class="primary">Roll Dice (3 left)</button>
+      </div>
+      <div class="msg" id="turnMsg">Roll to start your turn.</div>
+    </div>
+
+    <div id="passArea" class="pass" style="display:none;">
+      <div style="font-size:40px;">&#128241;</div>
+      <p id="passText">Pass the phone to Player 2</p>
+      <button id="btnPassReady" class="primary">I am Player 2 - Ready</button>
+    </div>
+
+    <div id="endArea" style="display:none;text-align:center;">
+      <div class="msg" id="endMsg" style="font-size:18px;color:#ff6ec7;"></div>
+      <div class="bar"><button id="btnRematch" class="primary">Rematch</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <table id="scoreTable"></table>
+    <div class="small" style="margin-top:8px;">Blue cells show what you would score now. Tap one to lock it in.</div>
+  </div>
+</div>
+
+<div class="overlay" id="tutorialOverlay">
+  <div class="sheet">
+    <h2>How to play</h2>
+<div class="vtut-grid">
+<div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#f472b6" stroke-width="3"><rect x="8" y="8" width="32" height="32" rx="7"/><circle cx="17" cy="17" r="2.6" fill="#f472b6"/><circle cx="31" cy="17" r="2.6" fill="#f472b6"/><circle cx="24" cy="24" r="2.6" fill="#f472b6"/><circle cx="17" cy="31" r="2.6" fill="#f472b6"/><circle cx="31" cy="31" r="2.6" fill="#f472b6"/></svg></div><b>Your turn</b><p>Take turns. Up to 3 rolls of 5 dice.</p></div>
+<div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#7dd3fc" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="18" r="7"/><path d="M24 25v13M14 38h20"/></svg></div><b>Roll dice</b><p>Tap Roll Dice to roll.</p></div>
+<div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M14 22V10a3 3 0 0 1 6 0v8V7a3 3 0 0 1 6 0v11V9a3 3 0 0 1 6 0v13V12a3 3 0 0 1 6 0v14a14 14 0 0 1-14 14h-2a14 14 0 0 1-12-8l-4-9a3 3 0 0 1 5-3l3 3z"/></svg></div><b>Hold dice</b><p>Tap dice to hold. Tap again to unhold.</p></div>
+<div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#fbbf24" stroke="#f59e0b" stroke-width="2" stroke-linejoin="round"><path d="M24 6l5.5 11.5L42 19l-9.5 8.5L35 40 24 33.5 13 40l2.5-12.5L6 19l12.5-1.5z"/></svg></div><b>Pick score</b><p>After 1 roll, tap a blue score cell.</p></div>
+<div class="vtut-card"><span class="vtut-num">5</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#34d399" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="17"/><path d="M16 24l6 6 10-12"/></svg></div><b>One use each</b><p>Each category once. 13 rounds each.</p></div>
+<div class="vtut-card"><span class="vtut-num">6</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#a78bfa" stroke-width="3" stroke-linecap="round"><rect x="15" y="5" width="18" height="38" rx="4"/><path d="M21 37h6"/></svg></div><b>Pass phone</b><p>2 Players pass phone. Computer plays auto.</p></div>
+<div class="vtut-card"><span class="vtut-num">7</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"><path d="M14 8h20v10a10 10 0 0 1-20 0zM14 12H8a6 6 0 0 0 6 6M34 12h6a6 6 0 0 1-6 6M24 28v6M16 40h16M20 34h8v6h-8z"/></svg></div><b>Highest wins</b><p>Highest total wins. Scorecard stays visible.</p></div>
+</div>
+    <div class="bar"><button class="primary" data-close="tutorialOverlay">Got it</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="rulesOverlay">
+  <div class="sheet">
+    <h2>Rules</h2>
+    <p><b>Upper section</b></p>
+    <p>Ones to Sixes: score the sum of dice showing that face. If your upper total reaches 63 or more, you earn a 35 point bonus.</p>
+    <p><b>Lower section</b></p>
+    <p>Three of a Kind: at least 3 dice the same. Score the sum of all dice, else 0.</p>
+    <p>Four of a Kind: at least 4 dice the same. Score the sum of all dice, else 0.</p>
+    <p>Full House: 3 of one face and 2 of another. Score 25, else 0.</p>
+    <p>Small Straight: 4 dice in a row (for example 1-2-3-4). Score 30, else 0.</p>
+    <p>Large Straight: 5 dice in a row (1-2-3-4-5 or 2-3-4-5-6). Score 40, else 0.</p>
+    <p>Yahtzee: all 5 dice the same. Score 50, else 0.</p>
+    <p>Chance: score the sum of all dice, always counts.</p>
+    <p>Scoring 0 in a category is allowed and sometimes smart. Each category is used once. After 13 rounds each, highest grand total wins. Match wins are saved on this device.</p>
+    <div class="bar"><button class="primary" data-close="rulesOverlay">Close</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+var CATEGORIES = [
+  { id:"ones", label:"Ones", section:"upper", face:1 },
+  { id:"twos", label:"Twos", section:"upper", face:2 },
+  { id:"threes", label:"Threes", section:"upper", face:3 },
+  { id:"fours", label:"Fours", section:"upper", face:4 },
+  { id:"fives", label:"Fives", section:"upper", face:5 },
+  { id:"sixes", label:"Sixes", section:"upper", face:6 },
+  { id:"threeKind", label:"Three of a Kind", section:"lower" },
+  { id:"fourKind", label:"Four of a Kind", section:"lower" },
+  { id:"fullHouse", label:"Full House (25)", section:"lower" },
+  { id:"smallStraight", label:"Small Straight (30)", section:"lower" },
+  { id:"largeStraight", label:"Large Straight (40)", section:"lower" },
+  { id:"yahtzee", label:"Yahtzee (50)", section:"lower" },
+  { id:"chance", label:"Chance", section:"lower" }
+];
+var UPPER_IDS = ["ones","twos","threes","fours","fives","sixes"];
+
+function counts(dice) {
+  var c = [0,0,0,0,0,0,0];
+  dice.forEach(function(d){ c[d]++; });
+  return c;
+}
+function sumDice(dice) { return dice.reduce(function(a,b){ return a+b; }, 0); }
+function hasStraight(dice, len) {
+  var set = {};
+  dice.forEach(function(d){ set[d]=true; });
+  var uniq = Object.keys(set).map(Number).sort(function(a,b){return a-b;});
+  var run = 1, best = 1;
+  for (var i=1;i<uniq.length;i++) {
+    if (uniq[i] === uniq[i-1]+1) { run++; if (run>best) best=run; } else run=1;
+  }
+  return best >= len;
+}
+function scoreCategory(catId, dice) {
+  var c = counts(dice);
+  var total = sumDice(dice);
+  var i;
+  for (i=0;i<CATEGORIES.length;i++) {
+    if (CATEGORIES[i].id === catId && CATEGORIES[i].section === "upper") {
+      return c[CATEGORIES[i].face] * CATEGORIES[i].face;
+    }
+  }
+  var maxCount = Math.max.apply(null, c.slice(1));
+  var hasThree = c.indexOf(3) !== -1;
+  var hasTwo = c.indexOf(2) !== -1;
+  switch (catId) {
+    case "threeKind": return maxCount >= 3 ? total : 0;
+    case "fourKind": return maxCount >= 4 ? total : 0;
+    case "fullHouse": return (hasThree && hasTwo) ? 25 : 0;
+    case "smallStraight": return hasStraight(dice,4) ? 30 : 0;
+    case "largeStraight": return hasStraight(dice,5) ? 40 : 0;
+    case "yahtzee": return maxCount === 5 ? 50 : 0;
+    case "chance": return total;
+    default: return 0;
+  }
+}
+function emptyCard() {
+  var card = {};
+  CATEGORIES.forEach(function(cat){ card[cat.id]=null; });
+  return card;
+}
+function computeTotals(card) {
+  var upper = 0, lower = 0;
+  CATEGORIES.forEach(function(cat){
+    var v = card[cat.id];
+    if (v === null || v === undefined) return;
+    if (cat.section === "upper") upper += v; else lower += v;
+  });
+  var bonus = upper >= 63 ? 35 : 0;
+  return { upper:upper, bonus:bonus, lower:lower, total:upper+bonus+lower };
+}
+function isCardFull(card) {
+  return CATEGORIES.every(function(cat){ return card[cat.id] !== null && card[cat.id] !== undefined; });
+}
+function computerChooseHolds(dice) {
+  var c = counts(dice);
+  var bestFace = 1, bestCount = -1;
+  for (var f=1; f<=6; f++) { if (c[f] > bestCount) { bestCount=c[f]; bestFace=f; } }
+  if (bestCount >= 2) {
+    return dice.map(function(d){ return d === bestFace; });
+  }
+  if (hasStraight(dice,4) || hasStraight(dice,3)) {
+    var seen = {};
+    return dice.map(function(d){ if (seen[d]) return false; seen[d]=true; return true; });
+  }
+  return dice.map(function(d){ return d >= 5; });
+}
+function computerChooseCategory(dice, card) {
+  var bestId = null, bestScore = -1;
+  CATEGORIES.forEach(function(cat){
+    if (card[cat.id] !== null && card[cat.id] !== undefined) return;
+    var s = scoreCategory(cat.id, dice);
+    if (s > bestScore) { bestScore=s; bestId=cat.id; }
+  });
+  return bestId;
+}
+function rollDie() { return 1 + Math.floor(Math.random()*6); }
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { CATEGORIES:CATEGORIES, UPPER_IDS:UPPER_IDS, counts:counts, sumDice:sumDice, hasStraight:hasStraight, scoreCategory:scoreCategory, emptyCard:emptyCard, computeTotals:computeTotals, isCardFull:isCardFull, computerChooseHolds:computerChooseHolds, computerChooseCategory:computerChooseCategory };
+}
+
+if (typeof document !== "undefined" && document.getElementById && document.getElementById("diceRow")) {
+  var FACES = ["","\u2680","\u2681","\u2682","\u2683","\u2684","\u2685"];
+  var state = {
+    mode:"2p",
+    current:0,
+    round:1,
+    cards:[emptyCard(), emptyCard()],
+    dice:[0,0,0,0,0],
+    held:[false,false,false,false,false],
+    rollsLeft:3,
+    rolled:false,
+    phase:"play",
+    cpuBusy:false
+  };
+  var allTime = { p1:0, p2:0 };
+  try {
+    var saved = JSON.parse(localStorage.getItem("dice-duel-match-score") || "null");
+    if (saved && typeof saved.p1 === "number") allTime = saved;
+  } catch(e){}
+  function $(id){ return document.getElementById(id); }
+  function pname(i){ return i===1 && state.mode==="cpu" ? "Computer" : "Player " + (i+1); }
+  function saveAllTime(){ try { localStorage.setItem("dice-duel-match-score", JSON.stringify(allTime)); } catch(e){} }
+
+  function renderDice() {
+    var row = $("diceRow");
+    row.innerHTML = "";
+    state.dice.forEach(function(d, idx){
+      var el = document.createElement("div");
+      el.className = "die" + (d===0 ? " empty" : "") + (state.held[idx] ? " held" : "");
+      el.textContent = d===0 ? "?" : FACES[d];
+      el.addEventListener("click", function(){
+        if (!state.rolled || state.phase!=="play" || state.cpuBusy) return;
+        if (state.mode==="cpu" && state.current===1) return;
+        state.held[idx] = !state.held[idx];
+        renderDice();
+      });
+      row.appendChild(el);
+    });
+    $("btnRoll").textContent = "Roll Dice (" + state.rollsLeft + " left)";
+    $("btnRoll").disabled = state.rollsLeft<=0 || state.phase!=="play" || state.cpuBusy || (state.mode==="cpu" && state.current===1);
+  }
+
+  function renderTable() {
+    var t = $("scoreTable");
+    var html = "<tr><th>Category</th><th class='" + (state.current===0?"hl":"") + "'>" + pname(0) + "</th><th class='" + (state.current===1?"hl":"") + "'>" + pname(1) + "</th></tr>";
+    CATEGORIES.forEach(function(cat){
+      html += "<tr><td class='cat'>" + cat.label + "</td>";
+      [0,1].forEach(function(p){
+        var v = state.cards[p][cat.id];
+        if (v !== null && v !== undefined) {
+          html += "<td>" + v + "</td>";
+        } else if (p===state.current && state.rolled && state.phase==="play" && !state.cpuBusy && !(state.mode==="cpu" && state.current===1)) {
+          html += "<td class='pickable' data-cat='" + cat.id + "'>" + scoreCategory(cat.id, state.dice) + "</td>";
+        } else {
+          html += "<td>-</td>";
+        }
+      });
+      html += "</tr>";
+    });
+    var t0 = computeTotals(state.cards[0]), t1 = computeTotals(state.cards[1]);
+    html += "<tr><td class='cat'>Upper Subtotal</td><td>" + t0.upper + "</td><td>" + t1.upper + "</td></tr>";
+    html += "<tr><td class='cat'>Upper Bonus (35 at 63+)</td><td>" + t0.bonus + "</td><td>" + t1.bonus + "</td></tr>";
+    html += "<tr><td class='cat'>Lower Subtotal</td><td>" + t0.lower + "</td><td>" + t1.lower + "</td></tr>";
+    html += "<tr class='tot'><td class='cat'>GRAND TOTAL</td><td>" + t0.total + "</td><td>" + t1.total + "</td></tr>";
+    t.innerHTML = html;
+    Array.prototype.forEach.call(t.querySelectorAll(".pickable"), function(td){
+      td.addEventListener("click", function(){ scoreCurrent(td.getAttribute("data-cat")); });
+    });
+    $("allTimeLine").textContent = "Matches won all time: " + pname(0) + ": " + allTime.p1 + " - " + pname(1) + ": " + allTime.p2;
+  }
+
+  function render() {
+    $("turnText").textContent = state.phase==="end" ? "Game over" : (pname(state.current) + " turn - Round " + state.round + " of 13");
+    $("playArea").style.display = state.phase==="play" ? "block" : "none";
+    $("passArea").style.display = state.phase==="pass" ? "block" : "none";
+    $("endArea").style.display = state.phase==="end" ? "block" : "none";
+    renderDice();
+    renderTable();
+  }
+
+  function doRoll() {
+    if (state.rollsLeft<=0) return;
+    for (var i=0;i<5;i++) { if (!state.held[i]) state.dice[i]=rollDie(); }
+    state.rollsLeft--;
+    state.rolled = true;
+    render();
+    Array.prototype.forEach.call(document.querySelectorAll(".die"), function(el, idx){
+      if (!state.held[idx]) { el.className += " rolling"; }
+    });
+    $("turnMsg").textContent = state.rollsLeft>0 ? "Hold dice, roll again, or tap a blue cell to score." : "No rolls left. Tap a blue cell to score.";
+  }
+
+  function scoreCurrent(catId) {
+    if (!state.rolled) return;
+    var s = scoreCategory(catId, state.dice);
+    state.cards[state.current][catId] = s;
+    var label = catId;
+    CATEGORIES.forEach(function(c){ if (c.id===catId) label=c.label; });
+    advanceTurn(pname(state.current) + " scored " + s + " in " + label + ".");
+  }
+
+  function advanceTurn(msg) {
+    if (isCardFull(state.cards[0]) && isCardFull(state.cards[1])) {
+      state.phase = "end";
+      var t0 = computeTotals(state.cards[0]), t1 = computeTotals(state.cards[1]);
+      if (t0.total > t1.total) { allTime.p1++; $("endMsg").textContent = pname(0) + " wins " + t0.total + " to " + t1.total + "!"; }
+      else if (t1.total > t0.total) { allTime.p2++; $("endMsg").textContent = pname(1) + " wins " + t1.total + " to " + t0.total + "!"; }
+      else { $("endMsg").textContent = "It is a tie at " + t0.total + " each!"; }
+      saveAllTime();
+      render();
+      return;
+    }
+    var next = 1 - state.current;
+    if (next === 0) state.round++;
+    state.current = next;
+    state.dice = [0,0,0,0,0];
+    state.held = [false,false,false,false,false];
+    state.rollsLeft = 3;
+    state.rolled = false;
+    if (state.mode==="cpu" && state.current===1) {
+      state.phase = "play";
+      render();
+      $("turnMsg").textContent = msg + " Computer is playing...";
+      setTimeout(cpuTurn, 700);
+    } else if (state.mode==="2p") {
+      state.phase = "pass";
+      $("passText").textContent = msg + " Pass the phone to " + pname(state.current) + ".";
+      $("btnPassReady").textContent = "I am " + pname(state.current) + " - Ready";
+      render();
+    } else {
+      state.phase = "play";
+      render();
+      $("turnMsg").textContent = msg + " Your turn. Roll to start.";
+    }
+  }
+
+  function cpuTurn() {
+    if (state.phase==="end") return;
+    state.cpuBusy = true;
+    render();
+    var step = 0;
+    function cpuRoll() {
+      doRoll();
+      state.cpuBusy = true;
+      render();
+      var c = counts(state.dice);
+      var maxCount = Math.max.apply(null, c.slice(1));
+      step++;
+      if (maxCount===5 || state.rollsLeft<=0 || step>=3) {
+        setTimeout(function(){
+          var cat = computerChooseCategory(state.dice, state.cards[1]);
+          state.cpuBusy = false;
+          if (cat) scoreCurrent(cat);
+        }, 700);
+        return;
+      }
+      state.held = computerChooseHolds(state.dice);
+      render();
+      setTimeout(cpuRoll, 800);
+    }
+    cpuRoll();
+  }
+
+  function restart() {
+    state.current=0; state.round=1;
+    state.cards=[emptyCard(), emptyCard()];
+    state.dice=[0,0,0,0,0];
+    state.held=[false,false,false,false,false];
+    state.rollsLeft=3; state.rolled=false; state.phase="play"; state.cpuBusy=false;
+    $("turnMsg").textContent = "Roll to start your turn.";
+    render();
+  }
+
+  $("btnRoll").addEventListener("click", function(){ if (!state.cpuBusy) doRoll(); });
+  $("btnPassReady").addEventListener("click", function(){ state.phase="play"; render(); $("turnMsg").textContent = "Roll to start your turn."; });
+  $("btnRematch").addEventListener("click", restart);
+  $("btnRestart").addEventListener("click", restart);
+  $("mode2p").addEventListener("click", function(){ state.mode="2p"; $("mode2p").className="active"; $("modeCpu").className=""; restart(); });
+  $("modeCpu").addEventListener("click", function(){ state.mode="cpu"; $("modeCpu").className="active"; $("mode2p").className=""; restart(); });
+  $("btnTutorial").addEventListener("click", function(){ $("tutorialOverlay").className="overlay open"; });
+  $("btnRules").addEventListener("click", function(){ $("rulesOverlay").className="overlay open"; });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-close]"), function(b){
+    b.addEventListener("click", function(){ $(b.getAttribute("data-close")).className="overlay"; });
+  });
+  $("btnFeedback").addEventListener("click", function(){ var c=$("fbCard"); c.className = c.className.indexOf("open")!==-1 ? "card fb" : "card fb open"; });
+  $("fbSend").addEventListener("click", function(){
+    var comment = $("fbText").value.trim();
+    if (!comment) { $("fbMsg").textContent="Write something first."; return; }
+    var arr=[];
+    try { arr=JSON.parse(localStorage.getItem("holos-arcade-feedback")||"[]"); } catch(e){}
+    arr.push({ game:"dice-duel", tag:"feedback", comment:comment, ts:Date.now() });
+    try { localStorage.setItem("holos-arcade-feedback", JSON.stringify(arr)); } catch(e){}
+    $("fbText").value="";
+    $("fbMsg").textContent="Thanks. Feedback saved on this device.";
+  });
+
+  render();
+}
+</script>
+</body>
+</html>
