@@ -8577,7 +8577,7 @@ var LOCATIONS = [
       <summary>How do I leave feedback or a review?</summary>
       <div class="legal-content">
         <p>Tap <strong>🦆 Report back</strong> — the button at the bottom right, and also in the game bar while you're playing. Give stars, tap the quick picks (Was it fun? Did anything go wonky? How was the difficulty?), tag it <strong>🐞 Bug</strong>, <strong>💡 Suggestion</strong> or <strong>💬 Other</strong>, and write whatever you like. No essays needed — honest and specific beats long.</p>
-        <p>Reports autosave as you type and live in this browser on this device. Your <strong>Trophy Case</strong> page (top nav — 🏆 Trophy Case) keeps your stamps, fun challenges and all your reports in one place, with buttons to copy them all and paste them to Holo. Found a bug? Report it there — Holo watches tester reports and fixes bugs as they come in.</p>
+        <p>Reports autosave as you type and live in this browser on this device. Your <strong>Trophy Case</strong> page (top nav — 🏆 Trophy Case) keeps your stamps, fun challenges and all your reports in one place, with buttons to copy them all and paste them to Holo. Found a bug? Report it there — Holo watches tester reports and fixes bugs as they come in. Most fixes land within 24 hours. Check back tomorrow.</p>
       </div>
     </details>
 
@@ -12007,7 +12007,7 @@ function renderTesterAuth(){
   var state = null;
 
   function freshState(){
-    return { flow:null, step:0, tried:[], skipped:[], shown:0, fixed:false, filed:false };
+    return { flow:null, step:0, tried:[], skipped:[], shown:0, fixed:false, filed:false, source:"hub" };
   }
   function addBubble(text, who){
     var d = document.createElement("div");
@@ -12028,12 +12028,22 @@ function renderTesterAuth(){
       actionsEl.appendChild(btn);
     });
   }
-  function renderChoices(){
+  var LOGIN_ORDER = ["register", "signin", "forgot", "sound", "load", "other"];
+  var HUB_ORDER = ["sound", "load", "other", "register", "signin", "forgot"];
+  function orderedFlows(source){
+    var order = (source === "login") ? LOGIN_ORDER : HUB_ORDER;
+    var byId = {};
+    HELP_FLOWS.forEach(function(f){ byId[f.id] = f; });
+    return order.map(function(id){ return byId[id]; }).filter(Boolean);
+  }
+  function renderChoices(source){
+    var keep = source || (state && state.source) || "hub";
     state = freshState();
+    state.source = keep;
     logEl.innerHTML = "";
     addBubble("Hi there. What is giving you trouble?", "bot");
     addBubble("Pick one and I will walk you through a few quick checks.", "bot");
-    setActions(HELP_FLOWS.map(function(f){
+    setActions(orderedFlows(state.source).map(function(f){
       return { label:f.label, onClick:function(){ pickFlow(f); } };
     }), false);
   }
@@ -12087,6 +12097,7 @@ function renderTesterAuth(){
       addBubble("Sorry that did not sort it. Thanks for trying the checks.", "bot");
     }
     addBubble("A report was filed for you just now, with your problem, the checks you tried, and your device details. Nothing else to tap.", "bot");
+    addBubble("Thanks, agent. Your report is in. Most fixes land within 24 hours. Check back tomorrow.", "bot");
     fileReport();
     setActions([
       { label:"Start over", onClick:function(){ renderChoices(); } },
@@ -12113,6 +12124,7 @@ function renderTesterAuth(){
         helpChat: true,
         problem: problem,
         problemId: state.flow ? state.flow.id : "",
+        source: state.source || "hub",
         stepsTried: state.tried.slice(),
         stepsSkipped: state.skipped.slice(),
         stepsShown: state.shown,
@@ -12139,8 +12151,8 @@ function renderTesterAuth(){
       try { if(typeof window.betaPushFeedback === "function") window.betaPushFeedback(); } catch(e){}
     } catch(e){}
   }
-  function openHelp(){
-    renderChoices();
+  function openHelp(source){
+    renderChoices(source === "login" ? "login" : "hub");
     overlay.hidden = false;
     try { document.body.style.overflow = "hidden"; } catch(e){}
     var c = $("helpChatClose");
@@ -12155,16 +12167,16 @@ function renderTesterAuth(){
     } catch(e){}
   }
   var loginBtn = $("helpChatLoginBtn");
-  if(loginBtn) loginBtn.addEventListener("click", openHelp);
+  if(loginBtn) loginBtn.addEventListener("click", function(){ openHelp("login"); });
   var hubBtn = $("helpChatHubBtn");
-  if(hubBtn) hubBtn.addEventListener("click", openHelp);
+  if(hubBtn) hubBtn.addEventListener("click", function(){ openHelp("hub"); });
   var closeBtn = $("helpChatClose");
   if(closeBtn) closeBtn.addEventListener("click", closeHelp);
   overlay.addEventListener("click", function(e){ if(e.target === overlay) closeHelp(); });
   document.addEventListener("keydown", function(e){
     if(e.key === "Escape" && !overlay.hidden) closeHelp();
   });
-  window.openHelpChat = openHelp;
+  window.openHelpChat = function(source){ openHelp(source === "login" ? "login" : "hub"); };
 })();
 </script>
 </body>
