@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Rock Paper Scissors - Holo's Arcade</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; background:#171021; color:#f2e9ff; font-family:ui-monospace, Menlo, Consolas, monospace; }
+  .wrap { max-width:430px; margin:0 auto; padding:14px 14px 30px; }
+  a.back { color:#4cc9f0; text-decoration:none; font-size:14px; }
+  h1 { font-size:26px; margin:8px 0 4px; color:#ff6ec7; text-shadow:2px 2px 0 #9b5de5; letter-spacing:1px; text-align:center; }
+  .sub { text-align:center; color:#c9b8ff; font-size:13px; margin-bottom:12px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:10px 0; }
+  button { font-family:inherit; background:#241533; color:#f2e9ff; border:2px solid #9b5de5; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:14px; }
+  button:active { transform:scale(0.97); }
+  button.active { background:#9b5de5; border-color:#ff6ec7; color:#fff; }
+  button.primary { background:#ff6ec7; border-color:#ff6ec7; color:#171021; font-weight:bold; }
+  button.blue { border-color:#4cc9f0; }
+  .card { background:#20132e; border:2px solid #3a2554; border-radius:12px; padding:14px; margin:12px 0; }
+  .turn { text-align:center; font-size:18px; color:#4cc9f0; min-height:28px; font-weight:bold; }
+  .score { display:flex; justify-content:space-between; text-align:center; gap:8px; }
+  .score div { flex:1; background:#2a1a42; border-radius:8px; padding:8px 4px; border:2px solid #3a2554; }
+  .score div.hl { border-color:#ff6ec7; }
+  .score b { font-size:22px; display:block; color:#ff6ec7; }
+  .choices { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin:14px 0; }
+  .choices.five { grid-template-columns:1fr 1fr 1fr; }
+  .choice { font-size:15px; padding:16px 6px; text-align:center; }
+  .choice .ico { font-size:30px; display:block; margin-bottom:6px; }
+  .reveal { display:flex; justify-content:space-around; align-items:center; text-align:center; margin:16px 0; }
+  .reveal .side { flex:1; }
+  .reveal .big { font-size:52px; display:block; }
+  .reveal .lbl { font-size:12px; color:#c9b8ff; }
+  @keyframes pop { 0%{transform:scale(0.4);opacity:0} 60%{transform:scale(1.2)} 100%{transform:scale(1);opacity:1} }
+  @keyframes shake { 0%,100%{transform:translateY(0)} 25%{transform:translateY(-8px)} 75%{transform:translateY(8px)} }
+  .pop { animation:pop 0.45s ease both; }
+  .shake { animation:shake 0.5s ease 2; }
+  .msg { text-align:center; font-size:17px; min-height:26px; margin:8px 0; }
+  .pass { text-align:center; padding:26px 10px; }
+  .pass .big { font-size:44px; }
+  .overlay { display:none; position:fixed; inset:0; background:rgba(10,5,20,0.92); z-index:50; overflow:auto; padding:20px; }
+  .overlay.open { display:block; }
+  .sheet { max-width:400px; margin:30px auto; background:#241533; border:2px solid #9b5de5; border-radius:12px; padding:18px; line-height:1.55; font-size:14px; }
+  .sheet h2 { color:#ff6ec7; margin-top:0; }
+  textarea { width:100%; min-height:80px; background:#171021; color:#f2e9ff; border:2px solid #4cc9f0; border-radius:8px; padding:10px; font-family:inherit; }
+  .fb { display:none; }
+  .fb.open { display:block; }
+  .small { font-size:12px; color:#c9b8ff; text-align:center; }
+  select { font-family:inherit; background:#241533; color:#f2e9ff; border:2px solid #9b5de5; padding:9px; border-radius:8px; }
+  label { font-size:13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../games-hub/">&lt; Back to Games Hub</a>
+  <h1>ROCK PAPER SCISSORS</h1>
+  <div class="sub">Best Of Showdown - Holo's Arcade</div>
+
+  <div class="bar">
+    <button id="mode2p" class="active">2 Players</button>
+    <button id="modeCpu">vs Computer</button>
+  </div>
+  <div class="bar">
+    <label>Best of
+      <select id="bestOfSel">
+        <option value="3">3</option>
+        <option value="5" selected>5</option>
+        <option value="7">7</option>
+      </select>
+    </label>
+    <button id="lsToggle">Lizard-Spock: OFF</button>
+  </div>
+  <div class="bar">
+    <button id="btnTutorial" class="blue">How to play</button>
+    <button id="btnRules" class="blue">Rules</button>
+    <button id="btnFeedback" class="blue">Feedback</button>
+    <button id="btnRestart">Restart</button>
+  </div>
+
+  <div class="card fb" id="fbCard">
+    <div style="margin-bottom:8px;">Send feedback</div>
+    <textarea id="fbText" placeholder="What did you think?"></textarea>
+    <div class="bar"><button id="fbSend" class="primary">Send Feedback</button></div>
+    <div class="small" id="fbMsg"></div>
+  </div>
+
+  <div class="card">
+    <div class="score">
+      <div id="scP1"><span id="nameP1">Player 1</span><b id="winsP1">0</b><span class="small">round wins</span></div>
+      <div><span>Draws</span><b id="draws">0</b><span class="small">this match</span></div>
+      <div id="scP2"><span id="nameP2">Player 2</span><b id="winsP2">0</b><span class="small">round wins</span></div>
+    </div>
+    <div class="small" style="margin-top:8px;" id="matchLine">First to 3 wins the match (Best of 5)</div>
+    <div class="small" id="allTimeLine">Matches won all time: Player 1: 0 - Player 2: 0</div>
+  </div>
+
+  <div class="card" id="gameCard">
+    <div class="turn" id="turnText">Player 1, pick in secret</div>
+
+    <div id="pickArea">
+      <div class="choices" id="choices"></div>
+      <div class="small">Your pick stays hidden until the reveal.</div>
+    </div>
+
+    <div id="passArea" class="pass" style="display:none;">
+      <div class="big">&#128241;</div>
+      <p id="passText">Pass the phone to Player 2</p>
+      <p class="small">Player 1 pick is locked and hidden.</p>
+      <button id="btnPassReady" class="primary">I am Player 2 - Ready</button>
+    </div>
+
+    <div id="revealArea" style="display:none;">
+      <div class="reveal">
+        <div class="side"><span class="lbl" id="revName1">Player 1</span><span class="big" id="revIco1">?</span><span id="revTxt1"></span></div>
+        <div style="font-size:20px;color:#ff6ec7;">VS</div>
+        <div class="side"><span class="lbl" id="revName2">Player 2</span><span class="big" id="revIco2">?</span><span id="revTxt2"></span></div>
+      </div>
+      <div class="msg" id="roundMsg"></div>
+      <div class="bar"><button id="btnNext" class="primary">Next Round</button></div>
+    </div>
+
+    <div id="endArea" style="display:none;text-align:center;">
+      <div class="msg" id="endMsg" style="font-size:20px;color:#ff6ec7;"></div>
+      <div class="bar"><button id="btnRematch" class="primary">Rematch</button></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="tutorialOverlay">
+  <div class="sheet">
+    <h2>How to play</h2>
+    <p>1. Pick a mode: 2 Players on one phone, or vs Computer.</p>
+    <p>2. Choose Best of 3, 5 or 7. First to win the majority wins the match.</p>
+    <p>3. Player 1 taps a choice in secret. The pick stays hidden.</p>
+    <p>4. In 2 Player mode, pass the phone to Player 2. Player 2 taps Ready, then picks.</p>
+    <p>5. Both picks reveal with an animation. The winner of the round scores a point.</p>
+    <p>6. Draws replay with no point. Tap Next Round to keep going.</p>
+    <p>7. Turn on Lizard-Spock for 5 choices and extra matchups.</p>
+    <p>8. In vs Computer mode, you pick and the computer picks at random right away.</p>
+    <div class="bar"><button class="primary" data-close="tutorialOverlay">Got it</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="rulesOverlay">
+  <div class="sheet">
+    <h2>Rules</h2>
+    <p><b>Classic (3 choices)</b></p>
+    <p>Rock beats Scissors. Scissors beats Paper. Paper beats Rock. Same pick is a draw.</p>
+    <p><b>Lizard-Spock (5 choices)</b></p>
+    <p>Rock beats Scissors and Lizard.</p>
+    <p>Paper beats Rock and Spock.</p>
+    <p>Scissors beats Paper and Lizard.</p>
+    <p>Lizard beats Spock and Paper.</p>
+    <p>Spock beats Scissors and Rock.</p>
+    <p><b>Match</b></p>
+    <p>Best of 3 means first to 2. Best of 5 means first to 3. Best of 7 means first to 4. Draws do not count toward the target. Match wins are saved on this device.</p>
+    <div class="bar"><button class="primary" data-close="rulesOverlay">Close</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+var CLASSIC = ["rock","paper","scissors"];
+var EXTENDED = ["rock","paper","scissors","lizard","spock"];
+var BEATS = {
+  rock: ["scissors","lizard"],
+  paper: ["rock","spock"],
+  scissors: ["paper","lizard"],
+  lizard: ["spock","paper"],
+  spock: ["scissors","rock"]
+};
+var ICONS = { rock:"\u270A", paper:"\u270B", scissors:"\u270C\uFE0F", lizard:"\uD83E\uDD8E", spock:"\uD83D\uDD96" };
+var LABELS = { rock:"Rock", paper:"Paper", scissors:"Scissors", lizard:"Lizard", spock:"Spock" };
+
+function determineWinner(a, b) {
+  if (a === b) return 0;
+  if (BEATS[a] && BEATS[a].indexOf(b) !== -1) return 1;
+  return 2;
+}
+function winsNeeded(bestOf) { return Math.floor(bestOf / 2) + 1; }
+function randomChoice(choices) { return choices[Math.floor(Math.random() * choices.length)]; }
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { CLASSIC:CLASSIC, EXTENDED:EXTENDED, BEATS:BEATS, determineWinner:determineWinner, winsNeeded:winsNeeded, randomChoice:randomChoice };
+}
+
+if (typeof document !== "undefined" && document.getElementById && document.getElementById("choices")) {
+  var state = {
+    mode: "2p",
+    bestOf: 5,
+    lizardSpock: false,
+    wins1: 0, wins2: 0, draws: 0,
+    pick1: null, pick2: null,
+    phase: "p1"
+  };
+  var allTime = { p1:0, p2:0 };
+  try {
+    var saved = JSON.parse(localStorage.getItem("rps-match-score") || "null");
+    if (saved && typeof saved.p1 === "number") allTime = saved;
+  } catch (e) {}
+
+  function $(id){ return document.getElementById(id); }
+  function choicesList(){ return state.lizardSpock ? EXTENDED : CLASSIC; }
+  function name1(){ return "Player 1"; }
+  function name2(){ return state.mode === "cpu" ? "Computer" : "Player 2"; }
+  function saveAllTime(){ try { localStorage.setItem("rps-match-score", JSON.stringify(allTime)); } catch(e){} }
+
+  function renderScore() {
+    $("winsP1").textContent = state.wins1;
+    $("winsP2").textContent = state.wins2;
+    $("draws").textContent = state.draws;
+    $("nameP1").textContent = name1();
+    $("nameP2").textContent = name2();
+    $("matchLine").textContent = "First to " + winsNeeded(state.bestOf) + " wins the match (Best of " + state.bestOf + ")";
+    $("allTimeLine").textContent = "Matches won all time: " + name1() + ": " + allTime.p1 + " - " + name2() + ": " + allTime.p2;
+    $("scP1").className = state.phase === "p1" ? "hl" : "";
+    $("scP2").className = state.phase === "p2" ? "hl" : "";
+  }
+
+  function renderChoices() {
+    var box = $("choices");
+    box.innerHTML = "";
+    box.className = "choices" + (state.lizardSpock ? " five" : "");
+    choicesList().forEach(function(c){
+      var b = document.createElement("button");
+      b.className = "choice";
+      b.innerHTML = "<span class='ico'>" + ICONS[c] + "</span>" + LABELS[c];
+      b.addEventListener("click", function(){ onPick(c); });
+      box.appendChild(b);
+    });
+  }
+
+  function showPhase() {
+    $("pickArea").style.display = (state.phase === "p1" || state.phase === "p2") ? "block" : "none";
+    $("passArea").style.display = state.phase === "pass" ? "block" : "none";
+    $("revealArea").style.display = state.phase === "reveal" ? "block" : "none";
+    $("endArea").style.display = state.phase === "end" ? "block" : "none";
+    if (state.phase === "p1") $("turnText").textContent = name1() + ", pick in secret";
+    else if (state.phase === "p2") $("turnText").textContent = name2() + ", pick in secret";
+    else if (state.phase === "pass") $("turnText").textContent = "Pass the phone";
+    else if (state.phase === "reveal") $("turnText").textContent = "Reveal";
+    else if (state.phase === "end") $("turnText").textContent = "Match over";
+    renderScore();
+    renderChoices();
+  }
+
+  function onPick(c) {
+    if (state.phase === "p1") {
+      state.pick1 = c;
+      if (state.mode === "cpu") {
+        state.pick2 = randomChoice(choicesList());
+        doReveal();
+      } else {
+        state.phase = "pass";
+        $("passText").textContent = "Pass the phone to " + name2();
+        $("btnPassReady").textContent = "I am " + name2() + " - Ready";
+        showPhase();
+      }
+    } else if (state.phase === "p2") {
+      state.pick2 = c;
+      doReveal();
+    }
+  }
+
+  function doReveal() {
+    state.phase = "reveal";
+    var w = determineWinner(state.pick1, state.pick2);
+    if (w === 1) state.wins1++;
+    else if (w === 2) state.wins2++;
+    else state.draws++;
+    $("revName1").textContent = name1();
+    $("revName2").textContent = name2();
+    $("revIco1").textContent = ICONS[state.pick1];
+    $("revIco2").textContent = ICONS[state.pick2];
+    $("revTxt1").textContent = LABELS[state.pick1];
+    $("revTxt2").textContent = LABELS[state.pick2];
+    $("revIco1").className = "big pop shake";
+    $("revIco2").className = "big pop shake";
+    if (w === 0) $("roundMsg").textContent = "Draw. No point. Go again.";
+    else if (w === 1) $("roundMsg").textContent = LABELS[state.pick1] + " beats " + LABELS[state.pick2] + ". " + name1() + " wins the round.";
+    else $("roundMsg").textContent = LABELS[state.pick2] + " beats " + LABELS[state.pick1] + ". " + name2() + " wins the round.";
+    showPhase();
+  }
+
+  function nextRound() {
+    var need = winsNeeded(state.bestOf);
+    if (state.wins1 >= need || state.wins2 >= need) {
+      state.phase = "end";
+      if (state.wins1 >= need) { allTime.p1++; $("endMsg").textContent = name1() + " wins the match " + state.wins1 + " to " + state.wins2 + "!"; }
+      else { allTime.p2++; $("endMsg").textContent = name2() + " wins the match " + state.wins2 + " to " + state.wins1 + "!"; }
+      saveAllTime();
+    } else {
+      state.pick1 = null; state.pick2 = null; state.phase = "p1";
+    }
+    showPhase();
+  }
+
+  function restart() {
+    state.wins1 = 0; state.wins2 = 0; state.draws = 0;
+    state.pick1 = null; state.pick2 = null; state.phase = "p1";
+    showPhase();
+  }
+
+  $("mode2p").addEventListener("click", function(){ state.mode="2p"; $("mode2p").className="active"; $("modeCpu").className=""; restart(); });
+  $("modeCpu").addEventListener("click", function(){ state.mode="cpu"; $("modeCpu").className="active"; $("mode2p").className=""; restart(); });
+  $("bestOfSel").addEventListener("change", function(){ state.bestOf = parseInt(this.value,10); restart(); });
+  $("lsToggle").addEventListener("click", function(){ state.lizardSpock = !state.lizardSpock; this.textContent = "Lizard-Spock: " + (state.lizardSpock ? "ON" : "OFF"); this.className = state.lizardSpock ? "active" : ""; restart(); });
+  $("btnPassReady").addEventListener("click", function(){ state.phase = "p2"; showPhase(); });
+  $("btnNext").addEventListener("click", nextRound);
+  $("btnRematch").addEventListener("click", restart);
+  $("btnRestart").addEventListener("click", restart);
+  $("btnTutorial").addEventListener("click", function(){ $("tutorialOverlay").className = "overlay open"; });
+  $("btnRules").addEventListener("click", function(){ $("rulesOverlay").className = "overlay open"; });
+  Array.prototype.forEach.call(document.querySelectorAll("[data-close]"), function(b){
+    b.addEventListener("click", function(){ $(b.getAttribute("data-close")).className = "overlay"; });
+  });
+  $("btnFeedback").addEventListener("click", function(){ var c=$("fbCard"); c.className = c.className.indexOf("open")!==-1 ? "card fb" : "card fb open"; });
+  $("fbSend").addEventListener("click", function(){
+    var comment = $("fbText").value.trim();
+    if (!comment) { $("fbMsg").textContent = "Write something first."; return; }
+    var arr = [];
+    try { arr = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); } catch(e){}
+    arr.push({ game:"rock-paper-scissors", tag:"feedback", comment:comment, ts:Date.now() });
+    try { localStorage.setItem("holos-arcade-feedback", JSON.stringify(arr)); } catch(e){}
+    $("fbText").value = "";
+    $("fbMsg").textContent = "Thanks. Feedback saved on this device.";
+  });
+
+  showPhase();
+}
+</script>
+</body>
+</html>

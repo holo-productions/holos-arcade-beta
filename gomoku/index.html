@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Gomoku - Five in a Row | Holo's Arcade</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; padding:0; background:#171021; color:#f3eaff; font-family:"Courier New", Courier, monospace; }
+  body { min-height:100vh; }
+  .wrap { max-width:430px; margin:0 auto; padding:12px 12px 32px 12px; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px; }
+  .back { color:#4cc9f0; text-decoration:none; font-weight:bold; font-size:15px; border:2px solid #4cc9f0; padding:10px 12px; border-radius:10px; background:#241533; min-height:44px; display:inline-flex; align-items:center; }
+  .back:active { background:#2e1d45; }
+  h1 { font-size:24px; margin:0; letter-spacing:1px; text-transform:uppercase; color:#ff6ec7; text-shadow:2px 2px 0 #9b5de5; text-align:center; }
+  .subtitle { text-align:center; color:#cdb8ff; font-size:13px; margin:4px 0 12px 0; }
+  .panel { background:#241533; border:2px solid #9b5de5; border-radius:14px; padding:12px; margin-bottom:12px; box-shadow:0 0 0 2px #171021, 0 4px 0 #9b5de5; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  .row > * { flex:1 1 auto; }
+  button { font-family:"Courier New", Courier, monospace; cursor:pointer; }
+  .btn { min-height:48px; padding:12px 10px; border-radius:10px; border:2px solid #4cc9f0; background:#171021; color:#f3eaff; font-size:15px; font-weight:bold; letter-spacing:0.5px; }
+  .btn:active { transform:translateY(1px); }
+  .btn-pink { border-color:#ff6ec7; background:#ff6ec7; color:#171021; }
+  .btn-purple { border-color:#9b5de5; background:#9b5de5; color:#ffffff; }
+  .btn-blue { border-color:#4cc9f0; background:#4cc9f0; color:#171021; }
+  .btn-ghost { background:#241533; }
+  .btn[aria-pressed="true"] { background:#ff6ec7; border-color:#ff6ec7; color:#171021; box-shadow:0 0 12px #ff6ec7; }
+  .btn[aria-pressed="false"] { background:#171021; }
+  .label { font-size:12px; text-transform:uppercase; letter-spacing:1px; color:#4cc9f0; margin:0 0 6px 0; font-weight:bold; }
+  .scoregrid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; text-align:center; }
+  .scorebox { background:#171021; border:2px solid #4cc9f0; border-radius:10px; padding:10px 4px; }
+  .scorebox.p2 { border-color:#ff6ec7; }
+  .scorebox.draw { border-color:#9b5de5; }
+  .scorename { font-size:12px; color:#cdb8ff; text-transform:uppercase; letter-spacing:0.5px; }
+  .scorenum { font-size:28px; font-weight:bold; line-height:1.1; }
+  .turnbar { text-align:center; font-size:17px; font-weight:bold; padding:12px; border-radius:10px; border:2px dashed #ff6ec7; background:#171021; margin-bottom:12px; min-height:52px; display:flex; align-items:center; justify-content:center; }
+  .turnbar .dot { display:inline-block; width:20px; height:20px; border-radius:50%; margin-right:8px; vertical-align:middle; border:2px solid #f3eaff; flex:0 0 auto; }
+  .dot-black { background:#111111; }
+  .dot-white { background:#ffffff; }
+  .board-outer { background:#2b1a3f; border:3px solid #9b5de5; border-radius:14px; padding:8px; margin-bottom:12px; }
+  .board { display:grid; grid-template-columns:repeat(13, 1fr); gap:2px; width:100%; }
+  .cell { aspect-ratio:1/1; background:#3a2358; border:1px solid #5b3a8a; border-radius:4px; padding:0; position:relative; display:flex; align-items:center; justify-content:center; min-width:0; min-height:0; }
+  .cell:disabled { opacity:1; cursor:default; }
+  .stone { width:82%; height:82%; border-radius:50%; pointer-events:none; }
+  .stone-black { background:radial-gradient(circle at 35% 35%, #555555, #000000 70%); border:2px solid #000000; box-shadow:0 2px 4px rgba(0,0,0,0.6); }
+  .stone-white { background:radial-gradient(circle at 35% 35%, #ffffff, #d9d9d9 75%); border:2px solid #bbbbbb; box-shadow:0 2px 4px rgba(0,0,0,0.4); }
+  .cell.win { background:#ff6ec7; border-color:#ff6ec7; box-shadow:0 0 10px #ff6ec7; }
+  .cell.last { outline:2px solid #4cc9f0; outline-offset:-2px; }
+  .status { text-align:center; font-size:15px; min-height:24px; margin:8px 0 0 0; color:#4cc9f0; font-weight:bold; }
+  .overlay { position:fixed; inset:0; background:rgba(10,5,20,0.88); display:none; align-items:center; justify-content:center; padding:16px; z-index:50; }
+  .overlay.show { display:flex; }
+  .card { background:#241533; border:3px solid #ff6ec7; border-radius:16px; max-width:400px; width:100%; max-height:88vh; overflow:auto; padding:18px; box-shadow:0 8px 0 #9b5de5; }
+  .card h2 { margin:0 0 10px 0; color:#ff6ec7; font-size:20px; text-transform:uppercase; letter-spacing:1px; }
+  .card p, .card li { font-size:15px; line-height:1.5; color:#f3eaff; }
+  .card ul, .card ol { padding-left:20px; }
+  .card textarea { width:100%; min-height:90px; border-radius:10px; border:2px solid #4cc9f0; background:#171021; color:#f3eaff; font-family:"Courier New", Courier, monospace; font-size:15px; padding:10px; margin:8px 0; }
+  .pass-big { font-size:22px; font-weight:bold; text-align:center; line-height:1.4; margin:12px 0; }
+  .pass-sub { text-align:center; color:#cdb8ff; font-size:14px; }
+  .footer-note { text-align:center; color:#9b8ec4; font-size:12px; margin-top:16px; line-height:1.5; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="../games-hub/">&#8592; Hub</a>
+    <div style="flex:1; text-align:right; font-size:12px; color:#9b8ec4;">HOLO'S ARCADE</div>
+  </div>
+  <h1>Gomoku</h1>
+  <p class="subtitle">Five in a Row - Pass and Play</p>
+
+  <div class="panel" aria-label="Game mode">
+    <p class="label">Mode</p>
+    <div class="row" role="group" aria-label="Choose mode">
+      <button type="button" class="btn" id="mode2p" aria-pressed="true">2 Players</button>
+      <button type="button" class="btn" id="modeCpu" aria-pressed="false">vs Computer</button>
+    </div>
+    <p id="modeNote" style="margin:8px 0 0 0; font-size:13px; color:#cdb8ff;">Pass the phone after each move. Player 1 is Black, Player 2 is White.</p>
+  </div>
+
+  <div class="panel" aria-label="Scores">
+    <p class="label">Score - saved on this device</p>
+    <div class="scoregrid">
+      <div class="scorebox">
+        <div class="scorename" id="nameP1">Player 1 Black</div>
+        <div class="scorenum" id="scoreP1">0</div>
+      </div>
+      <div class="scorebox p2">
+        <div class="scorename" id="nameP2">Player 2 White</div>
+        <div class="scorenum" id="scoreP2">0</div>
+      </div>
+      <div class="scorebox draw">
+        <div class="scorename">Draws</div>
+        <div class="scorenum" id="scoreDraw">0</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="turnbar" id="turnBar" role="status" aria-live="polite">
+    <span class="dot dot-black" id="turnDot"></span><span id="turnText">Player 1 to play</span>
+  </div>
+
+  <div class="board-outer">
+    <div class="board" id="board" role="grid" aria-label="Gomoku board 13 by 13"></div>
+    <p class="status" id="statusText">Tap a square to place your stone. First to 5 in a row wins.</p>
+  </div>
+
+  <div class="row" style="margin-bottom:8px;">
+    <button type="button" class="btn btn-pink" id="btnNewRound">New Round</button>
+    <button type="button" class="btn btn-ghost" id="btnRestart">Restart Scores</button>
+  </div>
+  <div class="row">
+    <button type="button" class="btn btn-purple" id="btnHow">How to play</button>
+    <button type="button" class="btn btn-blue" id="btnRules">Rules</button>
+    <button type="button" class="btn btn-ghost" id="btnFeedback">Feedback</button>
+  </div>
+
+  <p class="footer-note">Tip: five in a row can be across, down, or diagonal. The winning five will glow pink.</p>
+</div>
+
+<div class="overlay" id="passOverlay" role="dialog" aria-modal="true" aria-labelledby="passTitle">
+  <div class="card">
+    <h2 id="passTitle" style="text-align:center;">Pass and Play</h2>
+    <p class="pass-big" id="passText">Pass the phone to Player 2</p>
+    <p class="pass-sub" id="passSub">White to play. Tap below when ready.</p>
+    <button type="button" class="btn btn-pink" id="btnPassReady" style="width:100%; margin-top:14px;">I am ready - show board</button>
+  </div>
+</div>
+
+<div class="overlay" id="winOverlay" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+  <div class="card">
+    <h2 id="winTitle" style="text-align:center;">Round over</h2>
+    <p class="pass-big" id="winText">Player 1 wins</p>
+    <p class="pass-sub" id="winSub">Five in a row. Nice work.</p>
+    <button type="button" class="btn btn-pink" id="btnWinNext" style="width:100%; margin-top:14px;">Play next round</button>
+    <button type="button" class="btn btn-ghost" id="btnWinClose" style="width:100%; margin-top:8px;">Look at board</button>
+  </div>
+</div>
+
+<div class="overlay" id="howOverlay" role="dialog" aria-modal="true" aria-labelledby="howTitle">
+  <div class="card">
+    <h2 id="howTitle">How to play</h2>
+    <ol>
+      <li>Pick a mode at the top: 2 Players to share one phone, or vs Computer to play solo.</li>
+      <li>Player 1 uses black stones. Player 2 or the Computer uses white stones.</li>
+      <li>On your turn, tap any empty square to place your stone.</li>
+      <li>In 2 Players mode, hand the phone over when the pass screen appears, then tap I am ready.</li>
+      <li>Try to make a line of 5 of your stones in a row. Lines can go across, down, or diagonal.</li>
+      <li>Block your opponent when they have 4 in a row. That stops them from winning next turn.</li>
+      <li>When someone gets 5, those stones glow pink and the score updates. Tap New Round to play again.</li>
+    </ol>
+    <p>New to the game? Start near the middle of the board. It gives you more directions to build a line.</p>
+    <button type="button" class="btn btn-pink" data-close="howOverlay" style="width:100%;">Got it</button>
+  </div>
+</div>
+
+<div class="overlay" id="rulesOverlay" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
+  <div class="card">
+    <h2 id="rulesTitle">Rules</h2>
+    <ul>
+      <li>Board size is 13 by 13 squares.</li>
+      <li>Black always plays first in round 1. After that, the starting player swaps each round.</li>
+      <li>Players take turns placing one stone on an empty square.</li>
+      <li>First player to get 5 stones in a row wins the round. Rows can be horizontal, vertical, or diagonal.</li>
+      <li>A line of 6 or more also counts as a win.</li>
+      <li>If the board fills up with no winner, the round is a draw.</li>
+      <li>Scores are saved on this device across rounds. Restart Scores clears them back to zero.</li>
+      <li>In vs Computer mode, you are Black and the Computer is White.</li>
+    </ul>
+    <button type="button" class="btn btn-pink" data-close="rulesOverlay" style="width:100%;">Close</button>
+  </div>
+</div>
+
+<div class="overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+  <div class="card">
+    <h2 id="fbTitle">Feedback</h2>
+    <p>Tell us what you think about Gomoku. Your note is saved on this device for the Arcade team to review.</p>
+    <label for="fbText" style="font-size:14px; font-weight:bold;">Your feedback</label>
+    <textarea id="fbText" placeholder="Type your feedback here..."></textarea>
+    <p id="fbDone" class="hidden" style="color:#4cc9f0; font-weight:bold;">Thanks. Feedback saved.</p>
+    <button type="button" class="btn btn-pink" id="btnFbSend" style="width:100%;">Save feedback</button>
+    <button type="button" class="btn btn-ghost" data-close="feedbackOverlay" style="width:100%; margin-top:8px;">Close</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var SIZE = 13;
+  var EMPTY = 0;
+  var BLACK = 1;
+  var WHITE = 2;
+  var SCORE_KEY = "gomoku-scores-v1";
+  var FEEDBACK_KEY = "holos-arcade-feedback";
+  var GAME_NAME = "Gomoku";
+
+  var state = {
+    mode: "2p",
+    board: [],
+    turn: BLACK,
+    starter: BLACK,
+    round: 1,
+    over: false,
+    scores: { p1: 0, p2: 0, draws: 0 },
+    lastMove: null,
+    winLine: null,
+    passPending: false,
+    cpuThinking: false
+  };
+
+  function $(id) { return document.getElementById(id); }
+  var boardEl = $("board");
+  var turnText = $("turnText");
+  var turnDot = $("turnDot");
+  var statusText = $("statusText");
+
+  function emptyBoard() {
+    var b = [];
+    for (var r = 0; r < SIZE; r++) {
+      var row = [];
+      for (var c = 0; c < SIZE; c++) { row.push(EMPTY); }
+      b.push(row);
+    }
+    return b;
+  }
+
+  function inBounds(r, c) { return r >= 0 && r < SIZE && c >= 0 && c < SIZE; }
+
+  function getWinningLine(board, r, c, player) {
+    var dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    for (var d = 0; d < dirs.length; d++) {
+      var dr = dirs[d][0];
+      var dc = dirs[d][1];
+      var line = [[r, c]];
+      var rr = r + dr;
+      var cc = c + dc;
+      while (inBounds(rr, cc) && board[rr][cc] === player) {
+        line.push([rr, cc]);
+        rr += dr;
+        cc += dc;
+      }
+      rr = r - dr;
+      cc = c - dc;
+      while (inBounds(rr, cc) && board[rr][cc] === player) {
+        line.unshift([rr, cc]);
+        rr -= dr;
+        cc -= dc;
+      }
+      if (line.length >= 5) { return line; }
+    }
+    return null;
+  }
+
+  function checkWin(board, r, c, player) {
+    return getWinningLine(board, r, c, player) !== null;
+  }
+
+  function boardFull(board) {
+    for (var r = 0; r < SIZE; r++) {
+      for (var c = 0; c < SIZE; c++) {
+        if (board[r][c] === EMPTY) { return false; }
+      }
+    }
+    return true;
+  }
+
+  function findWinningMove(board, player) {
+    for (var r = 0; r < SIZE; r++) {
+      for (var c = 0; c < SIZE; c++) {
+        if (board[r][c] !== EMPTY) { continue; }
+        board[r][c] = player;
+        var wins = checkWin(board, r, c, player);
+        board[r][c] = EMPTY;
+        if (wins) { return { r: r, c: c }; }
+      }
+    }
+    return null;
+  }
+
+  function scoreCell(board, r, c, player) {
+    var dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    var total = 0;
+    var opponent = player === BLACK ? WHITE : BLACK;
+    for (var d = 0; d < dirs.length; d++) {
+      var dr = dirs[d][0];
+      var dc = dirs[d][1];
+      var count = 1;
+      var openEnds = 0;
+      var rr = r + dr;
+      var cc = c + dc;
+      while (inBounds(rr, cc) && board[rr][cc] === player) { count++; rr += dr; cc += dc; }
+      if (inBounds(rr, cc) && board[rr][cc] === EMPTY) { openEnds++; }
+      rr = r - dr;
+      cc = c - dc;
+      while (inBounds(rr, cc) && board[rr][cc] === player) { count++; rr -= dr; cc -= dc; }
+      if (inBounds(rr, cc) && board[rr][cc] === EMPTY) { openEnds++; }
+      var lineScore = 0;
+      if (count >= 5) { lineScore = 100000; }
+      else if (count === 4 && openEnds === 2) { lineScore = 10000; }
+      else if (count === 4 && openEnds === 1) { lineScore = 5000; }
+      else if (count === 3 && openEnds === 2) { lineScore = 1000; }
+      else if (count === 3 && openEnds === 1) { lineScore = 200; }
+      else if (count === 2 && openEnds === 2) { lineScore = 100; }
+      else if (count === 2 && openEnds === 1) { lineScore = 20; }
+      else if (count === 1 && openEnds === 2) { lineScore = 5; }
+      else { lineScore = 1; }
+      total += lineScore;
+      var oppCount = 1;
+      rr = r + dr;
+      cc = c + dc;
+      while (inBounds(rr, cc) && board[rr][cc] === opponent) { oppCount++; rr += dr; cc += dc; }
+      rr = r - dr;
+      cc = c - dc;
+      while (inBounds(rr, cc) && board[rr][cc] === opponent) { oppCount++; rr -= dr; cc -= dc; }
+      if (oppCount >= 4) { total += 4000; }
+      else if (oppCount === 3) { total += 300; }
+    }
+    var centerDist = Math.abs(r - 6) + Math.abs(c - 6);
+    total += Math.max(0, 12 - centerDist);
+    return total;
+  }
+
+  function computerChooseMove(board, cpuPlayer) {
+    var humanPlayer = cpuPlayer === BLACK ? WHITE : BLACK;
+    var winMove = findWinningMove(board, cpuPlayer);
+    if (winMove) { return winMove; }
+    var blockMove = findWinningMove(board, humanPlayer);
+    if (blockMove) { return blockMove; }
+    var hasStone = false;
+    var r;
+    var c;
+    for (r = 0; r < SIZE; r++) {
+      for (c = 0; c < SIZE; c++) {
+        if (board[r][c] !== EMPTY) { hasStone = true; }
+      }
+    }
+    if (!hasStone) { return { r: 6, c: 6 }; }
+    var bestScore = -1;
+    var bestMoves = [];
+    for (r = 0; r < SIZE; r++) {
+      for (c = 0; c < SIZE; c++) {
+        if (board[r][c] !== EMPTY) { continue; }
+        var near = false;
+        for (var dr = -2; dr <= 2; dr++) {
+          for (var dc = -2; dc <= 2; dc++) {
+            var nr = r + dr;
+            var nc = c + dc;
+            if (inBounds(nr, nc) && board[nr][nc] !== EMPTY) { near = true; }
+          }
+        }
+        if (!near) { continue; }
+        board[r][c] = cpuPlayer;
+        var s = scoreCell(board, r, c, cpuPlayer);
+        board[r][c] = EMPTY;
+        if (s > bestScore) { bestScore = s; bestMoves = [{ r: r, c: c }]; }
+        else if (s === bestScore) { bestMoves.push({ r: r, c: c }); }
+      }
+    }
+    if (bestMoves.length === 0) {
+      for (r = 0; r < SIZE; r++) {
+        for (c = 0; c < SIZE; c++) {
+          if (board[r][c] === EMPTY) { return { r: r, c: c }; }
+        }
+      }
+      return null;
+    }
+    var idx = Math.floor(Math.random() * bestMoves.length);
+    return bestMoves[idx];
+  }
+
+  function loadScores() {
+    try {
+      var raw = localStorage.getItem(SCORE_KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed.p1 === "number" && typeof parsed.p2 === "number" && typeof parsed.draws === "number") {
+          state.scores = parsed;
+        }
+      }
+    } catch (e) { }
+  }
+
+  function saveScores() {
+    try { localStorage.setItem(SCORE_KEY, JSON.stringify(state.scores)); } catch (e) { }
+  }
+
+  function playerLabel(player) {
+    if (state.mode === "cpu") {
+      return player === BLACK ? "You (Black)" : "Computer (White)";
+    }
+    return player === BLACK ? "Player 1 (Black)" : "Player 2 (White)";
+  }
+
+  function playerShort(player) {
+    if (state.mode === "cpu") {
+      return player === BLACK ? "You" : "Computer";
+    }
+    return player === BLACK ? "Player 1" : "Player 2";
+  }
+
+  function renderScores() {
+    $("scoreP1").textContent = String(state.scores.p1);
+    $("scoreP2").textContent = String(state.scores.p2);
+    $("scoreDraw").textContent = String(state.scores.draws);
+    if (state.mode === "cpu") {
+      $("nameP1").textContent = "You Black";
+      $("nameP2").textContent = "Computer White";
+    } else {
+      $("nameP1").textContent = "Player 1 Black";
+      $("nameP2").textContent = "Player 2 White";
+    }
+  }
+
+  function renderTurn() {
+    if (state.over) {
+      turnText.textContent = "Round over";
+      turnDot.className = "dot " + (state.turn === BLACK ? "dot-black" : "dot-white");
+      return;
+    }
+    if (state.mode === "cpu" && state.turn === WHITE) {
+      turnText.textContent = "Computer is thinking...";
+    } else {
+      turnText.textContent = playerLabel(state.turn) + " to play";
+    }
+    turnDot.className = "dot " + (state.turn === BLACK ? "dot-black" : "dot-white");
+  }
+
+  function isWinCell(r, c) {
+    if (!state.winLine) { return false; }
+    for (var i = 0; i < state.winLine.length; i++) {
+      if (state.winLine[i][0] === r && state.winLine[i][1] === c) { return true; }
+    }
+    return false;
+  }
+
+  function renderBoard() {
+    boardEl.innerHTML = "";
+    var locked = state.over || state.passPending || state.cpuThinking;
+    var cpuTurn = state.mode === "cpu" && state.turn === WHITE;
+    for (var r = 0; r < SIZE; r++) {
+      for (var c = 0; c < SIZE; c++) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "cell";
+        btn.setAttribute("role", "gridcell");
+        btn.setAttribute("aria-label", "Row " + (r + 1) + " column " + (c + 1));
+        btn.dataset.r = String(r);
+        btn.dataset.c = String(c);
+        if (isWinCell(r, c)) { btn.classList.add("win"); }
+        if (state.lastMove && state.lastMove.r === r && state.lastMove.c === c) { btn.classList.add("last"); }
+        var v = state.board[r][c];
+        if (v !== EMPTY) {
+          var stone = document.createElement("span");
+          stone.className = "stone " + (v === BLACK ? "stone-black" : "stone-white");
+          btn.appendChild(stone);
+          btn.disabled = true;
+        } else {
+          btn.disabled = locked || cpuTurn;
+        }
+        btn.addEventListener("click", onCellClick);
+        boardEl.appendChild(btn);
+      }
+    }
+    renderTurn();
+    renderScores();
+  }
+
+  function showOverlay(id) { $(id).classList.add("show"); }
+  function hideOverlay(id) { $(id).classList.remove("show"); }
+
+  function setMode(mode) {
+    state.mode = mode;
+    $("mode2p").setAttribute("aria-pressed", mode === "2p" ? "true" : "false");
+    $("modeCpu").setAttribute("aria-pressed", mode === "cpu" ? "true" : "false");
+    if (mode === "cpu") {
+      $("modeNote").textContent = "You are Black. The Computer is White and moves after you.";
+    } else {
+      $("modeNote").textContent = "Pass the phone after each move. Player 1 is Black, Player 2 is White.";
+    }
+    startRound(true);
+  }
+
+  function startRound(keepStarter) {
+    state.board = emptyBoard();
+    state.over = false;
+    state.winLine = null;
+    state.lastMove = null;
+    state.passPending = false;
+    state.cpuThinking = false;
+    if (!keepStarter) {
+      state.starter = state.starter === BLACK ? WHITE : BLACK;
+      state.round += 1;
+    }
+    state.turn = state.starter;
+    statusText.textContent = "Round " + state.round + ". " + playerLabel(state.turn) + " starts. Tap a square to play.";
+    hideOverlay("winOverlay");
+    hideOverlay("passOverlay");
+    renderBoard();
+    maybeCpuMove();
+  }
+
+  function endRound(winner) {
+    state.over = true;
+    if (winner === BLACK) { state.scores.p1 += 1; }
+    else if (winner === WHITE) { state.scores.p2 += 1; }
+    else { state.scores.draws += 1; }
+    saveScores();
+    renderBoard();
+    if (winner === null) {
+      $("winText").textContent = "It is a draw";
+      $("winSub").textContent = "The board is full with no five in a row.";
+      statusText.textContent = "Draw. The board is full.";
+    } else {
+      $("winText").textContent = playerShort(winner) + " wins";
+      $("winSub").textContent = "Five in a row. The winning stones glow pink.";
+      statusText.textContent = playerLabel(winner) + " wins with five in a row.";
+    }
+    showOverlay("winOverlay");
+  }
+
+  function placeStone(r, c) {
+    if (state.over || state.passPending || state.cpuThinking) { return; }
+    if (!inBounds(r, c)) { return; }
+    if (state.board[r][c] !== EMPTY) { return; }
+    var player = state.turn;
+    state.board[r][c] = player;
+    state.lastMove = { r: r, c: c };
+    var line = getWinningLine(state.board, r, c, player);
+    if (line) {
+      state.winLine = line;
+      endRound(player);
+      return;
+    }
+    if (boardFull(state.board)) {
+      endRound(null);
+      return;
+    }
+    state.turn = player === BLACK ? WHITE : BLACK;
+    if (state.mode === "2p") {
+      state.passPending = true;
+      renderBoard();
+      $("passText").textContent = "Pass the phone to " + playerShort(state.turn);
+      $("passSub").textContent = (state.turn === BLACK ? "Black" : "White") + " to play. Tap below when ready.";
+      statusText.textContent = "Pass the phone to " + playerShort(state.turn) + ".";
+      showOverlay("passOverlay");
+    } else {
+      renderBoard();
+      if (state.turn === WHITE) {
+        statusText.textContent = "Computer is thinking...";
+      } else {
+        statusText.textContent = "Your turn. Tap a square to place your stone.";
+      }
+      maybeCpuMove();
+    }
+  }
+
+  function maybeCpuMove() {
+    if (state.mode !== "cpu" || state.over || state.turn !== WHITE) { return; }
+    state.cpuThinking = true;
+    renderBoard();
+    setTimeout(function () {
+      var move = computerChooseMove(state.board, WHITE);
+      state.cpuThinking = false;
+      if (!move) { renderBoard(); return; }
+      state.board[move.r][move.c] = WHITE;
+      state.lastMove = { r: move.r, c: move.c };
+      var line = getWinningLine(state.board, move.r, move.c, WHITE);
+      if (line) {
+        state.winLine = line;
+        endRound(WHITE);
+        return;
+      }
+      if (boardFull(state.board)) {
+        endRound(null);
+        return;
+      }
+      state.turn = BLACK;
+      statusText.textContent = "Your turn. Tap a square to place your stone.";
+      renderBoard();
+    }, 550);
+  }
+
+  function onCellClick(ev) {
+    var r = parseInt(ev.currentTarget.dataset.r, 10);
+    var c = parseInt(ev.currentTarget.dataset.c, 10);
+    if (state.mode === "cpu" && state.turn === WHITE) { return; }
+    placeStone(r, c);
+  }
+
+  function queueFeedback(comment) {
+    var entry = { game: GAME_NAME, tag: "feedback", comment: comment, ts: Date.now() };
+    var list = [];
+    try {
+      var raw = localStorage.getItem(FEEDBACK_KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) { list = parsed; }
+      }
+    } catch (e) { list = []; }
+    list.push(entry);
+    try { localStorage.setItem(FEEDBACK_KEY, JSON.stringify(list)); } catch (e) { }
+    return entry;
+  }
+
+  $("mode2p").addEventListener("click", function () { setMode("2p"); });
+  $("modeCpu").addEventListener("click", function () { setMode("cpu"); });
+  $("btnNewRound").addEventListener("click", function () { startRound(false); });
+  $("btnRestart").addEventListener("click", function () {
+    state.scores = { p1: 0, p2: 0, draws: 0 };
+    saveScores();
+    state.round = 1;
+    state.starter = BLACK;
+    startRound(true);
+    statusText.textContent = "Scores cleared. Round 1. " + playerLabel(state.turn) + " starts.";
+  });
+  $("btnPassReady").addEventListener("click", function () {
+    state.passPending = false;
+    hideOverlay("passOverlay");
+    statusText.textContent = playerLabel(state.turn) + " to play. Tap a square.";
+    renderBoard();
+  });
+  $("btnWinNext").addEventListener("click", function () { startRound(false); });
+  $("btnWinClose").addEventListener("click", function () { hideOverlay("winOverlay"); });
+  $("btnHow").addEventListener("click", function () { showOverlay("howOverlay"); });
+  $("btnRules").addEventListener("click", function () { showOverlay("rulesOverlay"); });
+  $("btnFeedback").addEventListener("click", function () {
+    $("fbDone").classList.add("hidden");
+    showOverlay("feedbackOverlay");
+  });
+  $("btnFbSend").addEventListener("click", function () {
+    var text = $("fbText").value.trim();
+    if (!text) {
+      $("fbDone").textContent = "Please type some feedback first.";
+      $("fbDone").classList.remove("hidden");
+      return;
+    }
+    queueFeedback(text);
+    $("fbText").value = "";
+    $("fbDone").textContent = "Thanks. Feedback saved.";
+    $("fbDone").classList.remove("hidden");
+  });
+  var closers = document.querySelectorAll("[data-close]");
+  for (var i = 0; i < closers.length; i++) {
+    closers[i].addEventListener("click", function (ev) {
+      hideOverlay(ev.currentTarget.getAttribute("data-close"));
+    });
+  }
+
+  loadScores();
+  state.board = emptyBoard();
+  renderBoard();
+  statusText.textContent = "Tap a square to place your stone. First to 5 in a row wins.";
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Word Chain Duel - Holo's Arcade</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #171021; color: #f5f0ff; font-family: monospace; }
+.wrap { max-width: 390px; margin: 0 auto; padding: 16px 14px 40px; }
+a.back { color: #4cc9f0; text-decoration: none; font-size: 14px; }
+a.back:hover { text-decoration: underline; }
+h1 { color: #ff6ec7; font-size: 26px; letter-spacing: 1px; margin: 12px 0 4px; text-shadow: 3px 3px 0 #000; }
+.sub { color: #cdbcf5; font-size: 13px; margin: 0 0 14px; }
+.panel { background: #241638; border: 3px solid #9b5de5; box-shadow: 5px 5px 0 #000; padding: 12px; margin-bottom: 12px; }
+.panel.blue { border-color: #4cc9f0; }
+.panel.pink { border-color: #ff6ec7; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.row > * { flex: 1; }
+button { font-family: monospace; font-size: 14px; font-weight: bold; padding: 10px 8px; border: 3px solid #000; box-shadow: 3px 3px 0 #000; cursor: pointer; background: #9b5de5; color: #fff; }
+button:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #000; }
+button.pink { background: #ff6ec7; color: #171021; }
+button.blue { background: #4cc9f0; color: #171021; }
+button.dark { background: #171021; color: #f5f0ff; border-color: #9b5de5; }
+button.active { outline: 3px solid #fff; outline-offset: 1px; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+label { font-size: 13px; color: #cdbcf5; }
+input[type="text"], textarea { width: 100%; font-family: monospace; font-size: 18px; padding: 10px; border: 3px solid #4cc9f0; background: #171021; color: #fff; margin: 6px 0; }
+textarea { font-size: 14px; min-height: 70px; }
+.score { display: flex; justify-content: space-between; text-align: center; }
+.score div { flex: 1; }
+.score .num { font-size: 28px; color: #ff6ec7; }
+.score .num.blue { color: #4cc9f0; }
+.turn { font-size: 17px; font-weight: bold; color: #4cc9f0; margin: 4px 0; }
+.bigletter { font-size: 44px; color: #ff6ec7; text-align: center; margin: 4px 0; }
+.timer { font-size: 20px; text-align: center; color: #fff; }
+.timer.low { color: #ff6ec7; }
+.chain { min-height: 64px; line-height: 1.7; word-break: break-word; font-size: 15px; }
+.chain .w { background: #171021; border: 2px solid #9b5de5; padding: 2px 6px; margin: 2px; display: inline-block; }
+.chain .w.last { border-color: #ff6ec7; color: #ff6ec7; }
+.msg { min-height: 22px; font-size: 14px; margin: 8px 0; }
+.msg.err { color: #ff6ec7; }
+.msg.ok { color: #4cc9f0; }
+.small { font-size: 12px; color: #cdbcf5; }
+.hidden { display: none !important; }
+.overlay { position: fixed; inset: 0; background: rgba(23,16,33,0.96); z-index: 50; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.overlay .card { max-width: 390px; width: 100%; max-height: 88vh; overflow: auto; background: #241638; border: 3px solid #ff6ec7; box-shadow: 6px 6px 0 #000; padding: 16px; }
+.overlay h2 { color: #ff6ec7; margin-top: 0; font-size: 20px; }
+.overlay ul, .overlay ol { padding-left: 20px; line-height: 1.6; font-size: 14px; }
+.passbig { font-size: 22px; text-align: center; line-height: 1.5; margin: 12px 0; }
+.checkrow { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 14px; }
+.checkrow input { width: 20px; height: 20px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="../games-hub/">Back to Games Hub</a>
+<h1>WORD CHAIN DUEL</h1>
+<p class="sub">Pass and play word battle. Chain words by last letter.</p>
+
+<div class="panel">
+<div class="score">
+<div><div id="p1Name">PLAYER 1</div><div class="num" id="p1Score">0</div><div class="small">rounds won</div></div>
+<div><div>DRAWS</div><div class="num blue" id="drawScore">0</div><div class="small">rounds tied</div></div>
+<div><div id="p2Name">PLAYER 2</div><div class="num" id="p2Score">0</div><div class="small">rounds won</div></div>
+</div>
+</div>
+
+<div class="panel blue">
+<label>Mode</label>
+<div class="row" style="margin-top:6px;">
+<button id="mode2p" class="blue active" type="button">2 Players</button>
+<button id="modeCpu" class="dark" type="button">vs Computer</button>
+</div>
+<div class="checkrow">
+<input type="checkbox" id="timerToggle" checked>
+<label for="timerToggle">30 second turn timer on</label>
+</div>
+<div class="row">
+<button id="restartBtn" class="pink" type="button">Restart Round</button>
+<button id="resetScoresBtn" class="dark" type="button">Reset Scores</button>
+</div>
+</div>
+
+<div class="panel pink">
+<div class="turn" id="turnLabel">Player 1 to play</div>
+<div id="strikesLabel" class="small">Strikes - Player 1: 0 / 3 - Player 2: 0 / 3</div>
+<div class="timer" id="timerLabel">Time: 30</div>
+<div class="small" style="text-align:center;">Next word must start with</div>
+<div class="bigletter" id="requiredLetter">ANY</div>
+<div class="small">Word chain:</div>
+<div class="chain" id="chainBox">No words yet. First player can play any word.</div>
+<label for="wordInput">Your word (letters only, 3 or more letters)</label>
+<input type="text" id="wordInput" autocomplete="off" autocapitalize="none" placeholder="Type a word">
+<div class="row">
+<button id="submitBtn" class="pink" type="button">Play Word</button>
+<button id="giveUpBtn" class="dark" type="button">Give Up Round</button>
+</div>
+<div class="msg" id="msgBox" aria-live="polite"></div>
+<button id="nextRoundBtn" class="blue hidden" type="button" style="width:100%;">Next Round</button>
+</div>
+
+<div class="row">
+<button id="howBtn" class="blue" type="button">How to play</button>
+<button id="rulesBtn" class="dark" type="button">Rules</button>
+<button id="feedbackBtn" class="pink" type="button">Feedback</button>
+</div>
+
+<div class="panel hidden" id="feedbackPanel" style="margin-top:12px;">
+<label for="feedbackText">Tell us what you think about Word Chain Duel</label>
+<textarea id="feedbackText" placeholder="Your feedback"></textarea>
+<div class="row">
+<button id="feedbackSend" class="pink" type="button">Send Feedback</button>
+<button id="feedbackCancel" class="dark" type="button">Cancel</button>
+</div>
+<div class="msg" id="feedbackMsg"></div>
+</div>
+
+<p class="small" style="margin-top:16px;">Scores save on this device. Two players share one phone and pass it each turn.</p>
+</div>
+
+<div class="overlay hidden" id="passOverlay">
+<div class="card">
+<h2 style="text-align:center;">Pass the phone</h2>
+<div class="passbig" id="passText">Pass the phone to Player 2</div>
+<p class="small" style="text-align:center;">Tap Ready when the next player is holding the phone. The timer starts after Ready.</p>
+<button id="passReadyBtn" class="pink" type="button" style="width:100%;">Ready</button>
+</div>
+</div>
+
+<div class="overlay hidden" id="howOverlay">
+<div class="card">
+<h2>How to play</h2>
+<ol>
+<li>Pick 2 Players to share the phone, or vs Computer to play solo.</li>
+<li>Player 1 plays any word with 3 or more letters.</li>
+<li>The next word must start with the last letter of the word before it. Example: apple then elephant then tiger.</li>
+<li>Pass the phone after each good word when the prompt shows.</li>
+<li>Watch the timer. You have 30 seconds per turn if the timer is on.</li>
+<li>Three bad words in a round means you lose the round. Running out of time also loses the round.</li>
+<li>Tap Next Round to play again. Scores are saved on this device.</li>
+</ol>
+<button class="pink closeHow" type="button" style="width:100%;">Close</button>
+</div>
+</div>
+
+<div class="overlay hidden" id="rulesOverlay">
+<div class="card">
+<h2>Rules</h2>
+<ul>
+<li>Words must be 3 or more letters long.</li>
+<li>Letters only. No numbers, spaces, or symbols.</li>
+<li>No repeats. A word already used in the round cannot be played again.</li>
+<li>Each new word must start with the last letter of the previous word.</li>
+<li>First word of a round can start with any letter.</li>
+<li>Invalid word: you get 1 strike and keep your turn. 3 strikes loses the round.</li>
+<li>Timer: 30 seconds per turn when on. Time out loses the round. You can turn the timer off.</li>
+<li>vs Computer: the computer picks a valid word from its built-in list. If it has no valid word, it loses the round.</li>
+<li>Give Up Round ends the round and gives the win to the other player.</li>
+</ul>
+<button class="pink closeRules" type="button" style="width:100%;">Close</button>
+</div>
+</div>
+
+<script>
+var WORD_LIST = ["xray","xylophone","xenon","apple","apricot","avocado","banana","berry","cherry","grape","lemon","lime","mango","melon","orange","peach","pear","plum","kiwi","olive","almond","walnut","peanut","carrot","potato","tomato","onion","garlic","pepper","cucumber","lettuce","cabbage","broccoli","spinach","corn","bean","rice","wheat","bread","cake","cookie","candy","chocolate","cheese","milk","butter","bacon","chicken","turkey","beef","pork","fish","shrimp","crab","lobster","soup","salad","pizza","pasta","burger","sandwich","taco","sushi","noodle","sauce","sugar","salt","honey","coffee","tea","juice","water","soda","wine","beer","table","chair","sofa","desk","lamp","clock","mirror","door","window","wall","floor","roof","stairs","kitchen","bathroom","bedroom","garden","garage","house","apartment","castle","tower","bridge","tunnel","road","street","park","beach","forest","mountain","river","lake","ocean","island","valley","desert","cave","cliff","volcano","rainbow","cloud","rain","snow","wind","storm","thunder","lightning","sun","moon","star","planet","comet","rocket","airplane","train","car","bus","truck","bike","boat","ship","helicopter","balloon","kite","umbrella","hat","coat","shirt","pants","dress","skirt","shoe","boot","glove","scarf","sock","jacket","sweater","ring","watch","glasses","bag","wallet","key","lock","box","bottle","cup","plate","bowl","spoon","fork","knife","pan","pot","oven","fridge","freezer","microwave","toaster","blender","vacuum","broom","towel","soap","shampoo","toothbrush","comb","brush","scissors","hammer","screwdriver","wrench","drill","ladder","rope","chain","wheel","engine","battery","camera","phone","computer","keyboard","screen","printer","radio","television","speaker","guitar","piano","violin","drum","trumpet","flute","song","music","dance","party","game","toy","doll","ball","helmet","horse","cow","pig","sheep","goat","duck","dog","cat","bird","bear","wolf","fox","deer","rabbit","mouse","snake","frog","turtle","lion","tiger","zebra","monkey","elephant","giraffe","penguin","owl","eagle","shark","whale","dolphin","butterfly","bee","ant","spider","book","pen","pencil","paper","flower","tree","grass","rose","tulip","daisy","sunflower","leaf","branch","root","seed","stone","rock","sand","shell","wave","tide","shore","harbor","lighthouse","anchor","sail","oar","canoe","kayak","tent","campfire","backpack","map","compass","trail","summit","canyon","glacier","meadow","prairie","jungle","savanna","tundra","oasis","reef","lagoon","waterfall","stream","pond","marsh","swamp","hill","peak","ridge","slope","plain","plateau","dune","oasis","winter","spring","summer","autumn","morning","evening","night","dawn","dusk","today","tomorrow","yesterday","week","month","year","season","weather","breeze","frost","hail","fog","mist","dew","ice","fire","flame","smoke","ash","ember","spark","candle","lantern","torch","match","stove","heater","fan","blanket","pillow","mattress","curtain","carpet","rug","tile","brick","wood","metal","glass","plastic","leather","cotton","wool","silk","gold","silver","copper","iron","steel","diamond","ruby","emerald","sapphire","pearl","crystal","amber","jade","opal","topaz","quartz","marble","granite","clay","mud","dust","dirt","soil","gravel","pebble","boulder","cavern","grotto","abyss","chasm","gorge","ravine","bluff","mesa","butte","dune","atoll","fjord","inlet","bay","gulf","strait","channel","canal","dam","reservoir","aqueduct","well","spring","geyser","hotspot","magma","lava","crater","caldera","ashfall","mudflow","avalanche","blizzard","hurricane","tornado","cyclone","typhoon","monsoon","drought","flood","tidepool","seashell","starfish","jellyfish","octopus","squid","clam","oyster","mussel","snail","slug","worm","caterpillar","cocoon","moth","beetle","grasshopper","cricket","ladybug","dragonfly","firefly","mosquito","housefly","wasp","hornet","termite","centipede","millipede","scorpion","tarantula","mantis","cicada","aphid","earwig","silverfish","bookworm","silkworm","earthworm","tapeworm","hookworm","roundworm","flatworm","leech","hydra","coral","anemone","sponge","urchin","barnacle","limpet","whelk","conch","cowrie","scallop","cockle","periwinkle","abalone","nautilus","cuttlefish","seahorse","pipefish","angelfish","clownfish","goldfish","guppy","betta","tetra","cichlid","catfish","carp","trout","salmon","bass","perch","pike","muskie","walleye","sturgeon","paddlefish","gar","bowfin","herring","sardine","anchovy","mackerel","tuna","marlin","swordfish","sailfish","barracuda","grouper","snapper","flounder","halibut","sole","turbot","plaice","dab","skate","ray","stingray","manta","eagle","falcon","hawk","kite","osprey","harrier","buzzard","vulture","condor","albatross","petrel","shearwater","fulmar","prion","divingpetrel","stormpetrel","gull","tern","skua","jaeger","auk","murre","guillemot","puffin","penguin","ostrich","emu","cassowary","kiwi","moa","tinamou","rhea","seriema","bustard","crane","rail","coot","moorhen","gallinule","sungrebe","limpkin","trumpeter","kagu","mesite","buttonquail","plains","wanderer","sandgrouse","pigeon","dove","parrot","macaw","cockatoo","lorikeet","budgie","conure","amazon","eclectus","kakapo","kea","kaka","rosella","lovebird","parakeet","cockatiel","quaker","caique","senegal","meyers","jardine","pionus","poicephalus","african","grey","timneh","congo","cape","brownneck","redbellied","yellowfaced","senegal","meyers","ruppells","nanday","sun","jenday","golden","dusky","bluethroated","greencheek","maroonbellied","crimsonbellied","painted","pearly","blackcapped","rosefronted","whiteneed","green","blue","yellow","red","pink","purple","orange","brown","black","white","grey","golden","silver","bronze","copper","ivory","beige","tan","khaki","olive","maroon","navy","teal","turquoise","aqua","cyan","magenta","violet","indigo","lavender","lilac","mauve","plum","orchid","fuchsia","coral","salmon","peach","apricot","amber","honey","mustard","chartreuse","lime","mint","sage","forest","emerald","jade","malachite","turquoise","azure","cerulean","cobalt","ultramarine","periwinkle","cornflower","sky","steel","slate","charcoal","graphite","onyx","jet","ebony","obsidian","basalt","granite","marble","quartz","agate","jasper","carnelian","sardonyx","onyx","chalcedony","chrysoprase","bloodstone","heliotrope","mossagate","dendritic","agate","jasper","picture","jasper","ocean","jasper","leopardskin","jasper","zebra","jasper","dalmatian","jasper","rainforest","jasper","brecciated","jasper","poppy","jasper","kabamba","jasper","bumblebee","jasper","polychrome","jasper","desert","jasper","autumn","jasper","wood","jasper","tiger","eye","hawk","eye","falcon","eye","bull","eye","cat","eye","moonstone","labradorite","spectrolite","sunstone","amazonite","aventurine","citrine","amethyst","smoky","quartz","rose","quartz","clear","quartz","milky","quartz","rutilated","quartz","tourmalinated","quartz","phantom","quartz","garden","quartz","lodolite","quartz","shaman","quartz","dream","quartz","spirit","quartz","cactus","quartz","pineapple","quartz","elestial","quartz","skeletal","quartz","faden","quartz","tabular","quartz","laser","quartz","recordkeeper","quartz","generator","quartz","cluster","quartz","geode","quartz","druzy","quartz","botryoidal","quartz","chalcedony","rose","agate","blue","lace","agate","fire","agate","crazy","lace","agate","botswana","agate","carnelian","agate","moss","agate","tree","agate","dendritic","agate","plume","agate","iris","agate","condor","agate","laguna","agate","mozarkite","agate","fairburn","agate","lake","superior","agate","botswana","agate","blue","agate","holly","blue","agate","ellensburg","blue","agate","montana","agate","iris","agate","sweetwater","agate","dryhead","agate","crazy","lace","agate","fire","agate","mexican","lace","agate","botswana","agate","carnelian","sard","sardonyx","onyx","chalcedony","chrysocolla","malachite","azurite","lapis","lazuli","sodalite","dumortierite","kyanite","iolite","tanzanite","sapphire","ruby","emerald","beryl","aquamarine","morganite","heliodor","goshenite","bixbite","maxixe","tourmaline","rubellite","indicolite","paraiba","watermelon","tourmaline","schorl","elbaite","liddicoatite","rossmanite","fluorite","apatite","topaz","zircon","spinel","garnet","almandine","pyrope","spessartine","grossular","andradite","uvarovite","hydrogrossular","tsavorite","demantoid","hessonite","rhodolite","malaia","colorchange","garnet","star","garnet","peridot","olivine","fayalite","forsterite","monticellite","glaucochroite","kirschsteinite","liebermannite","chondrodite","humite","clinohumite","norbergite","chondrodite","humite","clinohumite","norbergite"];
+var SCORE_KEY = "word-chain-duel-scores";
+var GAME_ID = "word-chain-duel";
+var mode = "2p";
+var scores = loadScores();
+var chain = [];
+var usedWords = {};
+var currentPlayer = 1;
+var strikes = {1: 0, 2: 0};
+var timerEnabled = true;
+var timeLeft = 30;
+var timerId = null;
+var roundOver = false;
+var roundStarter = 1;
+var pendingNext = null;
+function loadScores() {
+  try {
+    var raw = localStorage.getItem(SCORE_KEY);
+    if (raw) { var p = JSON.parse(raw); return {p1: p.p1 || 0, p2: p.p2 || 0, draws: p.draws || 0}; }
+  } catch (e) {}
+  return {p1: 0, p2: 0, draws: 0};
+}
+function saveScores() { try { localStorage.setItem(SCORE_KEY, JSON.stringify(scores)); } catch (e) {} }
+function playerName(p) {
+  if (mode === "cpu") { return p === 1 ? "Player 1" : "Computer"; }
+  return p === 1 ? "Player 1" : "Player 2";
+}
+function requiredLetter() {
+  if (chain.length === 0) { return null; }
+  var last = chain[chain.length - 1];
+  return last.charAt(last.length - 1);
+}
+function validateWord(raw, chainArr, usedObj) {
+  var w = (raw || "").trim().toLowerCase();
+  if (!w) { return {ok: false, reason: "Type a word first."}; }
+  if (!/^[a-z]+$/.test(w)) { return {ok: false, reason: "Letters only. No numbers, spaces, or symbols."}; }
+  if (w.length < 3) { return {ok: false, reason: "Word must be 3 or more letters."}; }
+  if (usedObj[w]) { return {ok: false, reason: "That word was already used. No repeats."}; }
+  if (chainArr.length > 0) {
+    var last = chainArr[chainArr.length - 1];
+    var need = last.charAt(last.length - 1);
+    if (w.charAt(0) !== need) { return {ok: false, reason: "Word must start with " + need.toUpperCase() + "."}; }
+  }
+  return {ok: true, word: w};
+}
+function updateScoreboard() {
+  document.getElementById("p1Score").textContent = scores.p1;
+  document.getElementById("p2Score").textContent = scores.p2;
+  document.getElementById("drawScore").textContent = scores.draws;
+  document.getElementById("p1Name").textContent = mode === "cpu" ? "YOU (P1)" : "PLAYER 1";
+  document.getElementById("p2Name").textContent = mode === "cpu" ? "COMPUTER" : "PLAYER 2";
+}
+function renderChain() {
+  var box = document.getElementById("chainBox");
+  if (chain.length === 0) { box.textContent = "No words yet. First player can play any word."; }
+  else {
+    var html = "";
+    for (var i = 0; i < chain.length; i++) {
+      var cls = i === chain.length - 1 ? "w last" : "w";
+      html += '<span class="' + cls + '">' + chain[i] + "</span>";
+      if (i < chain.length - 1) { html += " - "; }
+    }
+    box.innerHTML = html;
+  }
+  var need = requiredLetter();
+  document.getElementById("requiredLetter").textContent = need ? need.toUpperCase() : "ANY";
+  document.getElementById("turnLabel").textContent = roundOver ? "Round over" : playerName(currentPlayer) + " to play";
+  document.getElementById("strikesLabel").textContent = "Strikes - " + playerName(1) + ": " + strikes[1] + " / 3 - " + playerName(2) + ": " + strikes[2] + " / 3";
+}
+function setMsg(text, kind) {
+  var m = document.getElementById("msgBox");
+  m.textContent = text;
+  m.className = "msg" + (kind ? " " + kind : "");
+}
+function stopTimer() { if (timerId) { clearInterval(timerId); timerId = null; } }
+function updateTimerLabel() {
+  var el = document.getElementById("timerLabel");
+  if (!timerEnabled) { el.textContent = "Timer off"; el.className = "timer"; return; }
+  el.textContent = "Time: " + timeLeft;
+  el.className = timeLeft <= 5 ? "timer low" : "timer";
+}
+function startTimer() {
+  stopTimer();
+  timeLeft = 30;
+  updateTimerLabel();
+  if (!timerEnabled || roundOver) { return; }
+  timerId = setInterval(function() {
+    timeLeft = timeLeft - 1;
+    updateTimerLabel();
+    if (timeLeft <= 0) {
+      stopTimer();
+      loseRound(currentPlayer, playerName(currentPlayer) + " ran out of time.");
+    }
+  }, 1000);
+}
+function showPass(nextPlayer, after) {
+  pendingNext = after;
+  document.getElementById("passText").textContent = "Pass the phone to " + playerName(nextPlayer);
+  document.getElementById("passOverlay").classList.remove("hidden");
+  stopTimer();
+}
+function hidePass() {
+  document.getElementById("passOverlay").classList.add("hidden");
+  if (pendingNext) { var f = pendingNext; pendingNext = null; f(); }
+}
+function beginTurn() {
+  renderChain();
+  var input = document.getElementById("wordInput");
+  var btn = document.getElementById("submitBtn");
+  if (roundOver) { input.disabled = true; btn.disabled = true; return; }
+  if (mode === "cpu" && currentPlayer === 2) {
+    input.disabled = true; btn.disabled = true;
+    document.getElementById("turnLabel").textContent = "Computer is thinking";
+    setTimeout(cpuMove, 900);
+    return;
+  }
+  input.disabled = false; btn.disabled = false;
+  input.value = "";
+  input.focus();
+  startTimer();
+}
+function applyValidWord(w) {
+  chain.push(w);
+  usedWords[w] = true;
+  renderChain();
+}
+function loseRound(loser, reason) {
+  if (roundOver) { return; }
+  roundOver = true;
+  stopTimer();
+  var winner = loser === 1 ? 2 : 1;
+  if (winner === 1) { scores.p1 = scores.p1 + 1; } else { scores.p2 = scores.p2 + 1; }
+  saveScores();
+  updateScoreboard();
+  renderChain();
+  document.getElementById("turnLabel").textContent = playerName(winner) + " wins the round";
+  setMsg(reason + " " + playerName(winner) + " wins the round.", "ok");
+  document.getElementById("wordInput").disabled = true;
+  document.getElementById("submitBtn").disabled = true;
+  document.getElementById("nextRoundBtn").classList.remove("hidden");
+  roundStarter = winner;
+}
+function submitWord() {
+  if (roundOver) { return; }
+  if (mode === "cpu" && currentPlayer === 2) { return; }
+  var raw = document.getElementById("wordInput").value;
+  var res = validateWord(raw, chain, usedWords);
+  if (!res.ok) {
+    strikes[currentPlayer] = strikes[currentPlayer] + 1;
+    renderChain();
+    if (strikes[currentPlayer] >= 3) {
+      loseRound(currentPlayer, playerName(currentPlayer) + " got 3 strikes. " + res.reason);
+    } else {
+      setMsg(res.reason + " Strike " + strikes[currentPlayer] + " of 3 for " + playerName(currentPlayer) + ". Try again.", "err");
+      document.getElementById("wordInput").value = "";
+      document.getElementById("wordInput").focus();
+    }
+    return;
+  }
+  stopTimer();
+  applyValidWord(res.word);
+  setMsg(playerName(currentPlayer) + " played " + res.word + ".", "ok");
+  var next = currentPlayer === 1 ? 2 : 1;
+  currentPlayer = next;
+  renderChain();
+  if (mode === "2p") {
+    showPass(next, function() { beginTurn(); });
+  } else {
+    beginTurn();
+  }
+}
+function cpuMove() {
+  if (roundOver || mode !== "cpu" || currentPlayer !== 2) { return; }
+  var need = requiredLetter();
+  var candidates = [];
+  var i;
+  for (i = 0; i < WORD_LIST.length; i++) {
+    var w = WORD_LIST[i];
+    if (usedWords[w]) { continue; }
+    if (need && w.charAt(0) !== need) { continue; }
+    candidates.push(w);
+  }
+  if (candidates.length === 0) {
+    loseRound(2, "Computer has no valid word" + (need ? " starting with " + need.toUpperCase() : "") + ".");
+    return;
+  }
+  var pick = candidates[Math.floor(Math.random() * candidates.length)];
+  applyValidWord(pick);
+  setMsg("Computer played " + pick + ".", "ok");
+  currentPlayer = 1;
+  renderChain();
+  beginTurn();
+}
+function restartRound(withPass) {
+  stopTimer();
+  chain = [];
+  usedWords = {};
+  strikes = {1: 0, 2: 0};
+  roundOver = false;
+  currentPlayer = roundStarter;
+  document.getElementById("nextRoundBtn").classList.add("hidden");
+  setMsg("", "");
+  renderChain();
+  updateTimerLabel();
+  if (mode === "2p" && withPass) {
+    showPass(currentPlayer, function() { beginTurn(); });
+  } else {
+    beginTurn();
+  }
+}
+function setMode(newMode) {
+  mode = newMode;
+  document.getElementById("mode2p").className = mode === "2p" ? "blue active" : "dark";
+  document.getElementById("modeCpu").className = mode === "cpu" ? "blue active" : "dark";
+  updateScoreboard();
+  roundStarter = 1;
+  restartRound(mode === "2p");
+}
+function queueFeedback(comment) {
+  var key = "holos-arcade-feedback";
+  var arr = [];
+  try { var raw = localStorage.getItem(key); if (raw) { arr = JSON.parse(raw); } } catch (e) {}
+  if (!Array.isArray(arr)) { arr = []; }
+  arr.push({game: GAME_ID, tag: "feedback", comment: comment, ts: Date.now()});
+  try { localStorage.setItem(key, JSON.stringify(arr)); } catch (e) {}
+}
+document.getElementById("submitBtn").addEventListener("click", submitWord);
+document.getElementById("wordInput").addEventListener("keydown", function(ev) { if (ev.key === "Enter") { submitWord(); } });
+document.getElementById("giveUpBtn").addEventListener("click", function() {
+  if (roundOver) { return; }
+  if (mode === "cpu" && currentPlayer === 2) { return; }
+  loseRound(currentPlayer, playerName(currentPlayer) + " gave up.");
+});
+document.getElementById("restartBtn").addEventListener("click", function() { restartRound(mode === "2p"); });
+document.getElementById("nextRoundBtn").addEventListener("click", function() { restartRound(mode === "2p"); });
+document.getElementById("resetScoresBtn").addEventListener("click", function() {
+  scores = {p1: 0, p2: 0, draws: 0};
+  saveScores();
+  updateScoreboard();
+  setMsg("Scores reset.", "ok");
+});
+document.getElementById("mode2p").addEventListener("click", function() { setMode("2p"); });
+document.getElementById("modeCpu").addEventListener("click", function() { setMode("cpu"); });
+document.getElementById("timerToggle").addEventListener("change", function() {
+  timerEnabled = document.getElementById("timerToggle").checked;
+  if (!timerEnabled) { stopTimer(); updateTimerLabel(); }
+  else if (!roundOver && !(mode === "cpu" && currentPlayer === 2)) { startTimer(); }
+});
+document.getElementById("passReadyBtn").addEventListener("click", hidePass);
+document.getElementById("howBtn").addEventListener("click", function() { document.getElementById("howOverlay").classList.remove("hidden"); });
+document.getElementById("rulesBtn").addEventListener("click", function() { document.getElementById("rulesOverlay").classList.remove("hidden"); });
+var closeHow = document.querySelectorAll(".closeHow");
+for (var ci = 0; ci < closeHow.length; ci++) { closeHow[ci].addEventListener("click", function() { document.getElementById("howOverlay").classList.add("hidden"); }); }
+var closeRules = document.querySelectorAll(".closeRules");
+for (var cj = 0; cj < closeRules.length; cj++) { closeRules[cj].addEventListener("click", function() { document.getElementById("rulesOverlay").classList.add("hidden"); }); }
+document.getElementById("feedbackBtn").addEventListener("click", function() { document.getElementById("feedbackPanel").classList.toggle("hidden"); });
+document.getElementById("feedbackCancel").addEventListener("click", function() { document.getElementById("feedbackPanel").classList.add("hidden"); });
+document.getElementById("feedbackSend").addEventListener("click", function() {
+  var text = document.getElementById("feedbackText").value.trim();
+  var fm = document.getElementById("feedbackMsg");
+  if (!text) { fm.textContent = "Write a comment first."; fm.className = "msg err"; return; }
+  queueFeedback(text);
+  document.getElementById("feedbackText").value = "";
+  fm.textContent = "Thanks. Feedback saved on this device.";
+  fm.className = "msg ok";
+});
+updateScoreboard();
+restartRound(true);
+</script>
+</body>
+</html>
