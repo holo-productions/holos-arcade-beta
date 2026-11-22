@@ -9581,6 +9581,27 @@ function hashPassword(pw){
   }
   return Promise.resolve(fallbackPasswordHash(pw));
 }
+function fnvPasswordHash(pw){
+  /* DUAL-HASH (2026-11-22): the FNV fallback hash of a password,
+     computed the same way hashPassword() computes it when
+     crypto.subtle is unavailable. Sign-in accepts EITHER hash so
+     accounts created over HTTP (fnv:) keep working once HTTPS is
+     enforced (sha256:), and vice versa. */
+  return fallbackPasswordHash('holos-arcade::' + String(pw == null ? '' : pw));
+}
+function sha256PasswordHash(pw){
+  /* DUAL-HASH (2026-11-22): the SHA-256 hash of a password, or
+     null when crypto.subtle is unavailable (non-secure context). */
+  var prefixed = 'holos-arcade::' + String(pw == null ? '' : pw);
+  if(window.crypto && crypto.subtle && crypto.subtle.digest && window.TextEncoder){
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(prefixed)).then(function(buf){
+      var bytes = new Uint8Array(buf), hex = '';
+      for(var i = 0; i < bytes.length; i++) hex += ('0' + bytes[i].toString(16)).slice(-2);
+      return 'sha256:' + hex;
+    }).catch(function(){ return null; });
+  }
+  return Promise.resolve(null);
+}
 function saveTesterSession(rec, rememberMe){
   /* Remember me ticked: persist in localStorage (returning
      visits skip the login screen). Unticked (default): keep
@@ -9610,8 +9631,22 @@ function signInAccount(name, password, termsAccepted, rememberMe){
   if(!termsAccepted) return Promise.resolve({ ok:false, error:'Please tick the box to agree to the Terms & Policies first.' });
   var acct = getAccounts()[name.toLowerCase()];
   if(!acct) return Promise.resolve({ ok:false, error:'No account under that username yet — double-check the username and try again, agent.' });
-  return hashPassword(password).then(function(pwHash){
-    if(pwHash !== acct.pwHash) return { ok:false, error:'Hmm, that password didn\u2019t match — have another try, agent.' };
+  return Promise.all([sha256PasswordHash(password), hashPassword(password)]).then(function(hashes){
+    var shaHash = hashes[0], primaryHash = hashes[1];
+    var fnvHash = fnvPasswordHash(password);
+    var matched = (acct.pwHash === primaryHash) || (shaHash && acct.pwHash === shaHash) || (acct.pwHash === fnvHash);
+    if(!matched) return { ok:false, error:'Hmm, that password didn\u2019t match — have another try, agent.' };
+    /* DUAL-HASH UPGRADE (2026-11-22): an account created over HTTP
+       stored the fnv: fallback hash. Now that this sign-in matched
+       it, upgrade the stored hash to sha256: whenever crypto.subtle
+       is available, so the account is on the strong hash from here. */
+    if(shaHash && acct.pwHash === fnvHash){
+      try {
+        var allAccts = getAccounts();
+        var acctKey = name.toLowerCase();
+        if(allAccts[acctKey]){ allAccts[acctKey].pwHash = shaHash; saveAccounts(allAccts); }
+      } catch(e){}
+    }
     try { if(window.betaSignIn && acct.email) window.betaSignIn(acct.email, password); } catch(e){}
     var rec = saveTesterSession({ name:acct.name, code:acct.code, comp:!!acct.comp, termsAcceptedAt:acct.termsAcceptedAt, signedInAt:new Date().toISOString() }, !!rememberMe);
     return { ok:true, tester:rec };
