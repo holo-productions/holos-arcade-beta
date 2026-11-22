@@ -10029,13 +10029,21 @@ function localPasswordMatches(acct, password){
     return { matched: (acct.pwHash === primaryHash) || (shaHash && acct.pwHash === shaHash) || (acct.pwHash === fnvHash), shaHash:shaHash, fnvHash:fnvHash };
   });
 }
-function cacheLocalAccount(name, email, password, uid, existing){
+function normalizeInviteCode(code){
+  /* Invite code as noted on the account (added 2026-11-22):
+     trimmed, uppercase, max 40 chars. This is a record for
+     future reference only — codes are still NOT validated
+     against a list and do not grant comp status. Never shown
+     in public UI; owner dash (owner-only) may display it. */
+  try { return String(code == null ? '' : code).trim().toUpperCase().slice(0, 40); } catch(e){ return ''; }
+}
+function cacheLocalAccount(name, email, password, uid, existing, inviteCode){
   return hashPassword(password).then(function(pwHash){
     var now = new Date().toISOString();
     var key = String(name || '').trim().toLowerCase();
     var all = getAccounts();
     var prev = existing || all[key] || {};
-    var rec = { name:String(name || prev.name || '').trim(), email:String(email || prev.email || '').trim(), emailVerified: !!prev.emailVerified, emailVerification: prev.emailVerification || { provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp: !!prev.comp, code: prev.code || ('ACCT-' + key), termsAcceptedAt: prev.termsAcceptedAt || now, createdAt: prev.createdAt || now };
+    var rec = { name:String(name || prev.name || '').trim(), email:String(email || prev.email || '').trim(), emailVerified: !!prev.emailVerified, emailVerification: prev.emailVerification || { provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp: !!prev.comp, code: prev.code || ('ACCT-' + key), inviteCode: normalizeInviteCode(inviteCode || prev.inviteCode || ''), termsAcceptedAt: prev.termsAcceptedAt || now, createdAt: prev.createdAt || now };
     if(uid) rec.uid = uid; else if(prev.uid) rec.uid = prev.uid;
     all[key] = rec;
     saveAccounts(all);
@@ -10064,7 +10072,7 @@ function signInAccount(email, password, termsAccepted, rememberMe){
         return localPasswordMatches(local2.acct, password).then(function(m){
           if(!m.matched) return { ok:false, error:(res && res.error) || 'That email and password did not match an account, agent. Check the spelling, or use Forgot password below.' };
           if(typeof window.betaSignUpAsync === 'function'){
-            return window.betaSignUpAsync(email, password, local2.acct.name).then(function(up){
+            return window.betaSignUpAsync(email, password, local2.acct.name, local2.acct.inviteCode || '').then(function(up){
               if(up && up.ok){
                 return cacheLocalAccount(local2.acct.name, email, password, up.uid, local2.acct).then(function(rec){ return finishSignIn(rec, rememberMe); });
               }
@@ -10144,29 +10152,30 @@ function createAccount(name, email, password, confirmPassword, inviteCode, terms
   if(!validAccountEmail(email)) return Promise.resolve({ ok:false, error:'Pop a valid email in, agent. Firebase sends your verification link there.' });
   if(!termsAccepted) return Promise.resolve({ ok:false, error:'Please tick the box to agree to the Terms & Policies first.' });
   if(!String(inviteCode || '').trim()) return Promise.resolve({ ok:false, error:'Your invite code is required, agent. It comes with your invite link. No code? Ask Holo for one.' });
+  var inviteCodeNorm = normalizeInviteCode(inviteCode);
   if(!password || String(password).length < 6) return Promise.resolve({ ok:false, error:'Your password needs at least 6 characters, agent.' });
   if(String(password) !== String(confirmPassword || '')) return Promise.resolve({ ok:false, error:'Those passwords do not match, agent. Have another try.' });
   var accounts = getAccounts();
   var key = name.toLowerCase();
   if(accounts[key]) return Promise.resolve({ ok:false, error:'That username is already taken, agent. Try a different username.' });
   if(typeof window.betaSignUpAsync === 'function'){
-    return window.betaSignUpAsync(email, password, name).then(function(res){
+    return window.betaSignUpAsync(email, password, name, inviteCodeNorm).then(function(res){
       if(!res || !res.ok) return { ok:false, error:(res && res.error) || 'Could not finish registration, agent. Check your internet and try again in a minute.' };
-      return cacheLocalAccount(name, email, password, res.uid, null).then(function(rec){
+      return cacheLocalAccount(name, email, password, res.uid, null, inviteCodeNorm).then(function(rec){
         return { ok:true, account:{ name:rec.name, code:rec.code, email:rec.email, emailVerified:false } };
       });
     }).catch(function(){ return { ok:false, error:'Could not reach the sign in service, agent. Check your internet and try again in a minute.' }; });
   }
   return hashPassword(password).then(function(pwHash){
     var now = new Date().toISOString();
-    var rec = { name:name, email:email, emailVerified:false, emailVerification:{ provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp:false, code:'ACCT-' + key, termsAcceptedAt:now, createdAt:now };
+    var rec = { name:name, email:email, emailVerified:false, emailVerification:{ provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp:false, code:'ACCT-' + key, inviteCode:inviteCodeNorm, termsAcceptedAt:now, createdAt:now };
     accounts[key] = rec;
     saveAccounts(accounts);
     /* Firebase Auth email verification (beta build): ask the
        beta Firebase layer to send the verification email. On
        this preview build it stays pending — see the note in
        the ACCOUNTS header above. */
-    try { if(window.betaSignUp) window.betaSignUp(email, password); } catch(e){}
+    try { if(window.betaSignUp) window.betaSignUp(email, password, name, inviteCodeNorm); } catch(e){}
     try { sendBetaEmailVerification(); } catch(e){}
     /* Registration does NOT sign the tester in: the create
        forms show a success panel with a "Go to login" button,
@@ -11504,6 +11513,26 @@ function renderTesterAuth(){
       }
     } catch(e){}
   });
+  function escO(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); }
+  function renderOwnerAccounts(){
+    /* Owner-only (this dash is emptied the moment owner access
+       goes away): accounts saved on THIS device, with the invite
+       code noted at register (from 2026-11-22 onward). Older
+       accounts honestly show "not recorded". Never rendered
+       anywhere testers or signed-out visitors can see. */
+    var box = document.getElementById('ownerAccountsList');
+    if(!box || !canSeeOwnerDash()) return;
+    var all = {};
+    try { all = (typeof getAccounts === 'function') ? getAccounts() : {}; } catch(e){ all = {}; }
+    var keys = Object.keys(all || {});
+    if(!keys.length){ box.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">No accounts saved on this device yet.</p>'; return; }
+    var rows = keys.sort().map(function(k){
+      var a = all[k] || {};
+      var code = a.inviteCode ? escO(a.inviteCode) : 'not recorded';
+      return '<li>' + escO(a.name || k) + ' \u2014 invite code: <strong>' + code + '</strong></li>';
+    }).join('');
+    box.innerHTML = '<p style="margin:0 0 6px;font-weight:800">Accounts on this device (owner only)</p><ul style="margin:0;padding-left:18px;color:var(--muted);font-size:13.5px;line-height:1.7">' + rows + '</ul><p style="margin:6px 0 0;color:var(--muted);font-size:12.5px">Invite codes are noted at register from Nov 22, 2026 onward, and also saved to Firebase under the tester\u2019s own account record. Codes are not checked against a list yet.</p>';
+  }
   function buildDash(){
     if(!canSeeOwnerDash()) return;
     var mount = document.getElementById('ownerDashMount');
@@ -11519,11 +11548,13 @@ function renderTesterAuth(){
         '<div class="owner-dash-launcher"><div class="owner-dash-launcher-copy">' +
         '<p style="margin:0;color:var(--muted);max-width:680px">The Tester Live View is its own page now \u2014 a full-screen dash showing exactly what testers see, with the wording controls on that page. Open it here whenever you want to check or tweak the tester view.</p>' +
         '<p class="owner-dash-launcher-summary" id="launcherLiveSummary"></p>' +
-        '</div><button type="button" class="btn btn-dark owner-dash-open-btn" id="openTesterLiveBtn">\uD83D\uDC40 Open Tester Live View \u2192</button></div>';
+        '</div><button type="button" class="btn btn-dark owner-dash-open-btn" id="openTesterLiveBtn">\uD83D\uDC40 Open Tester Live View \u2192</button></div>' +
+        '<div id="ownerAccountsList" style="margin-top:14px"></div>';
       var openBtn = document.getElementById('openTesterLiveBtn');
       if(openBtn) openBtn.addEventListener('click', openTesterLiveView);
     }
     mount.hidden = false;
+    renderOwnerAccounts();
     if(liveMount.firstChild) { applySettings(); return; }
     liveMount.innerHTML =
       '<nav class="dash-jumpbar" aria-label="Jump to a dash section">' +
@@ -12644,6 +12675,14 @@ function renderTesterAuth(){
    - Device capture: after successful register/sign-in, PATCHes
      {device, platform, screen, lastSeen, event} to the user's
      own /users/$uid (failure-proof, never blocks auth).
+   - Invite code note (added 2026-11-22): register also PATCHes
+     inviteCode (trimmed, uppercase, max 40) to /users/$uid and
+     saves it on the local account record, so Holo can see which
+     code each tester used if ever needed. Record only — codes
+     are still not validated and grant nothing. Auto-provision
+     migration carries a locally stored code when present;
+     sign-in backfills Firebase from the local record when the
+     cloud record has none. Never shown in public UI.
    - Feedback pusher: polls 'holos-arcade-feedback', POSTs unsent
      reports to RTDB /feedback with the auth token (rules require
      auth != null), marks fbSent/fbKey. Offline reports stay
@@ -12801,7 +12840,24 @@ function renderTesterAuth(){
     if(code.indexOf('INVALID_PASSWORD') >= 0 || code.indexOf('INVALID_LOGIN_CREDENTIALS') >= 0) return 'That email and password did not match an account, agent. Check the spelling, or use Forgot password below.';
     return 'Could not reach the sign in service, agent. Check your internet and try again in a minute.';
   }
-  window.betaSignUpAsync = function(email, password, username){
+  function cleanInviteCode(code){
+    /* Invite code noted on /users/$uid at register (2026-11-22):
+       record only, not validated, never public UI. */
+    return cleanText(String(code == null ? '' : code).trim().toUpperCase(), 40);
+  }
+  function localInviteCodeFor(email){
+    /* Migration helper: the invite code stored on this device's
+       local account record for the same email, if any. Older
+       records (before 2026-11-22) have no inviteCode field, so
+       this honestly returns '' for them. */
+    try {
+      var em = String(email || '').trim().toLowerCase();
+      var all = JSON.parse(localStorage.getItem('holos-arcade-accounts') || '{}');
+      for(var k in all){ if(all[k] && String(all[k].email || '').trim().toLowerCase() === em) return cleanInviteCode(all[k].inviteCode || ''); }
+    } catch(e){}
+    return '';
+  }
+  window.betaSignUpAsync = function(email, password, username, inviteCode){
     if(!email || !password || typeof fetch !== 'function') return Promise.resolve({ ok:false, code:'NETWORK', error:betaFriendlyError('') });
     return doSignUp(email, password).then(function(r){
       if(r.ok && r.json && r.json.idToken){
@@ -12809,11 +12865,13 @@ function renderTesterAuth(){
         if(!rec) return { ok:false, code:'NETWORK', error:betaFriendlyError('') };
         var patch = { email:email };
         if(username) patch.username = String(username);
+        var notedCode = cleanInviteCode(inviteCode || localInviteCodeFor(email));
+        if(notedCode) patch.inviteCode = notedCode;
         return patchUser(rec, patch).then(function(){
           writeDevice(rec, 'register');
           sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); });
           pushFeedback();
-          return { ok:true, uid:rec.uid, email:email, username:String(username || '') };
+          return { ok:true, uid:rec.uid, email:email, username:String(username || ''), inviteCode:notedCode };
         });
       }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
@@ -12829,7 +12887,12 @@ function renderTesterAuth(){
         return fetchUser(rec).then(function(u){
           writeDevice(rec, 'sign-in');
           pushFeedback();
-          return { ok:true, uid:rec.uid, email:email, username:(u && u.username) ? String(u.username) : '' };
+          var notedCode = (u && u.inviteCode) ? cleanInviteCode(u.inviteCode) : '';
+          if(!notedCode){
+            var localCode = localInviteCodeFor(email);
+            if(localCode){ notedCode = localCode; patchUser(rec, { inviteCode: localCode }); }
+          }
+          return { ok:true, uid:rec.uid, email:email, username:(u && u.username) ? String(u.username) : '', inviteCode:notedCode };
         });
       }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
@@ -12878,10 +12941,10 @@ function renderTesterAuth(){
       note.textContent = msg;
     } catch(e){}
   }
-  window.betaSignUp = function(email, password, username){
+  window.betaSignUp = function(email, password, username, inviteCode){
     if(!email || !password || typeof fetch !== 'function') return;
     doSignUp(email, password).then(function(r){
-      if(r.ok && r.json && r.json.idToken){ var rec = saveAuth(r.json, email); if(rec){ if(username) patchUser(rec, { username:String(username), email:email }); sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); }); writeDevice(rec, 'register'); } return; }
+      if(r.ok && r.json && r.json.idToken){ var rec = saveAuth(r.json, email); if(rec){ var legacyPatch = { email:email }; if(username) legacyPatch.username = String(username); var legacyCode = cleanInviteCode(inviteCode || localInviteCodeFor(email)); if(legacyCode) legacyPatch.inviteCode = legacyCode; patchUser(rec, legacyPatch); sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); }); writeDevice(rec, 'register'); } return; }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
       if(msg.indexOf('EMAIL_EXISTS') >= 0){
         /* Same email registered before: sign in with the password
@@ -12904,7 +12967,7 @@ function renderTesterAuth(){
       if(msg.indexOf('EMAIL_NOT_FOUND') >= 0 || msg.indexOf('INVALID_LOGIN_CREDENTIALS') >= 0 || msg.indexOf('INVALID_PASSWORD') >= 0){
         /* Existing local tester with no Firebase user yet: provision. */
         doSignUp(email, password).then(function(r2){
-          if(r2.ok && r2.json && r2.json.idToken){ var rec = saveAuth(r2.json, email); if(rec){ sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); }); writeDevice(rec, 'register'); } pushFeedback(); return; }
+          if(r2.ok && r2.json && r2.json.idToken){ var rec = saveAuth(r2.json, email); if(rec){ var migCode = localInviteCodeFor(email); if(migCode) patchUser(rec, { inviteCode: migCode }); sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); }); writeDevice(rec, 'register'); } pushFeedback(); return; }
           var msg2 = (r2.json && r2.json.error && r2.json.error.message) || '';
           betaAuthNotice(betaAuthErrorText(msg2));
         }).catch(function(){ betaAuthNotice(betaAuthErrorText('')); });
