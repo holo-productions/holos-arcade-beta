@@ -10037,13 +10037,13 @@ function normalizeInviteCode(code){
      in public UI; owner dash (owner-only) may display it. */
   try { return String(code == null ? '' : code).trim().toUpperCase().slice(0, 40); } catch(e){ return ''; }
 }
-function cacheLocalAccount(name, email, password, uid, existing, inviteCode){
+function cacheLocalAccount(name, email, password, uid, existing, inviteCode, role){
   return hashPassword(password).then(function(pwHash){
     var now = new Date().toISOString();
     var key = String(name || '').trim().toLowerCase();
     var all = getAccounts();
     var prev = existing || all[key] || {};
-    var rec = { name:String(name || prev.name || '').trim(), email:String(email || prev.email || '').trim(), emailVerified: !!prev.emailVerified, emailVerification: prev.emailVerification || { provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp: !!prev.comp, code: prev.code || ('ACCT-' + key), inviteCode: normalizeInviteCode(inviteCode || prev.inviteCode || ''), termsAcceptedAt: prev.termsAcceptedAt || now, createdAt: prev.createdAt || now };
+    var rec = { name:String(name || prev.name || '').trim(), email:String(email || prev.email || '').trim(), emailVerified: !!prev.emailVerified, emailVerification: prev.emailVerification || { provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp: !!prev.comp, code: prev.code || ('ACCT-' + key), inviteCode: normalizeInviteCode(inviteCode || prev.inviteCode || ''), role: String(role || prev.role || ((typeof isOwnerMode === 'function' && isOwnerMode()) || isBossName(name) ? 'owner' : '')), termsAcceptedAt: prev.termsAcceptedAt || now, createdAt: prev.createdAt || now };
     if(uid) rec.uid = uid; else if(prev.uid) rec.uid = prev.uid;
     all[key] = rec;
     saveAccounts(all);
@@ -10051,7 +10051,7 @@ function cacheLocalAccount(name, email, password, uid, existing, inviteCode){
   });
 }
 function finishSignIn(rec, rememberMe){
-  var session = saveTesterSession({ name:rec.name, code:rec.code, comp:!!rec.comp, termsAcceptedAt:rec.termsAcceptedAt, signedInAt:new Date().toISOString(), email:rec.email || '', uid:rec.uid || '' }, !!rememberMe);
+  var session = saveTesterSession({ name:rec.name, code:rec.code, role:rec.role || (isBossName(rec.name) ? 'owner' : ''), comp:!!rec.comp, termsAcceptedAt:rec.termsAcceptedAt, signedInAt:new Date().toISOString(), email:rec.email || '', uid:rec.uid || '' }, !!rememberMe);
   return { ok:true, tester:session };
 }
 function signInAccount(email, password, termsAccepted, rememberMe){
@@ -10065,7 +10065,7 @@ function signInAccount(email, password, termsAccepted, rememberMe){
         var local = findLocalAccountByEmail(email);
         var displayName = String(res.username || (local && local.acct && local.acct.name) || '').trim();
         if(!displayName) displayName = email.split('@')[0];
-        return cacheLocalAccount(displayName, email, password, res.uid, local && local.acct).then(function(rec){ return finishSignIn(rec, rememberMe); });
+        return cacheLocalAccount(displayName, email, password, res.uid, local && local.acct, '', res.role || '').then(function(rec){ return finishSignIn(rec, rememberMe); });
       }
       var local2 = findLocalAccountByEmail(email);
       if(local2 && local2.acct){
@@ -10074,7 +10074,7 @@ function signInAccount(email, password, termsAccepted, rememberMe){
           if(typeof window.betaSignUpAsync === 'function'){
             return window.betaSignUpAsync(email, password, local2.acct.name, local2.acct.inviteCode || '').then(function(up){
               if(up && up.ok){
-                return cacheLocalAccount(local2.acct.name, email, password, up.uid, local2.acct).then(function(rec){ return finishSignIn(rec, rememberMe); });
+                return cacheLocalAccount(local2.acct.name, email, password, up.uid, local2.acct, '', up.role || '').then(function(rec){ return finishSignIn(rec, rememberMe); });
               }
               var code = String((up && up.code) || '');
               if(code.indexOf('EMAIL_EXISTS') >= 0) return { ok:false, error:'That email already has an account with a different password, agent. Use Forgot password below to set a new one.' };
@@ -10161,14 +10161,14 @@ function createAccount(name, email, password, confirmPassword, inviteCode, terms
   if(typeof window.betaSignUpAsync === 'function'){
     return window.betaSignUpAsync(email, password, name, inviteCodeNorm).then(function(res){
       if(!res || !res.ok) return { ok:false, error:(res && res.error) || 'Could not finish registration, agent. Check your internet and try again in a minute.' };
-      return cacheLocalAccount(name, email, password, res.uid, null, inviteCodeNorm).then(function(rec){
+      return cacheLocalAccount(name, email, password, res.uid, null, inviteCodeNorm, res.role || '').then(function(rec){
         return { ok:true, account:{ name:rec.name, code:rec.code, email:rec.email, emailVerified:false } };
       });
     }).catch(function(){ return { ok:false, error:'Could not reach the sign in service, agent. Check your internet and try again in a minute.' }; });
   }
   return hashPassword(password).then(function(pwHash){
     var now = new Date().toISOString();
-    var rec = { name:name, email:email, emailVerified:false, emailVerification:{ provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp:false, code:'ACCT-' + key, inviteCode:inviteCodeNorm, termsAcceptedAt:now, createdAt:now };
+    var rec = { name:name, email:email, emailVerified:false, emailVerification:{ provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp:false, code:'ACCT-' + key, inviteCode:inviteCodeNorm, role:((typeof isOwnerMode === 'function' && isOwnerMode()) || isBossName(name) ? 'owner' : ''), termsAcceptedAt:now, createdAt:now };
     accounts[key] = rec;
     saveAccounts(accounts);
     /* Firebase Auth email verification (beta build): ask the
@@ -10341,7 +10341,7 @@ var REVIEWER_BADGES = [
 ];
 /* Owner account: Holo (HoloElizabeth) is Boss Level, not Tester. */
 function isBossName(name){ return String(name || '').trim().toLowerCase() === 'holoelizabeth'; }
-function isBossTester(t){ return !!(t && isBossName(t.name)); }
+function isBossTester(t){ return !!(t && (t.role === 'owner' || isBossName(t.name))); }
 var REVIEWER_FB_KEY = 'holos-arcade-feedback';
 function reviewerBadgeDef(id){ for(var i = 0; i < REVIEWER_BADGES.length; i++){ if(REVIEWER_BADGES[i].id === id) return REVIEWER_BADGES[i]; } return null; }
 function computeEarnedBadgeIds(){
@@ -12867,11 +12867,14 @@ function renderTesterAuth(){
         if(username) patch.username = String(username);
         var notedCode = cleanInviteCode(inviteCode || localInviteCodeFor(email));
         if(notedCode) patch.inviteCode = notedCode;
+        var ownerRole = '';
+        try { if((typeof isOwnerMode === 'function' && isOwnerMode()) || String(username || '').trim().toLowerCase() === 'holoelizabeth') ownerRole = 'owner'; } catch(e){}
+        if(ownerRole) patch.role = ownerRole;
         return patchUser(rec, patch).then(function(){
           writeDevice(rec, 'register');
           sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); });
           pushFeedback();
-          return { ok:true, uid:rec.uid, email:email, username:String(username || ''), inviteCode:notedCode };
+          return { ok:true, uid:rec.uid, email:email, username:String(username || ''), inviteCode:notedCode, role:ownerRole };
         });
       }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
@@ -12888,11 +12891,13 @@ function renderTesterAuth(){
           writeDevice(rec, 'sign-in');
           pushFeedback();
           var notedCode = (u && u.inviteCode) ? cleanInviteCode(u.inviteCode) : '';
+          var userRole = (u && u.role) ? String(u.role) : '';
+          if(!userRole && u && String(u.username || '').trim().toLowerCase() === 'holoelizabeth'){ userRole = 'owner'; patchUser(rec, { role: 'owner' }); }
           if(!notedCode){
             var localCode = localInviteCodeFor(email);
             if(localCode){ notedCode = localCode; patchUser(rec, { inviteCode: localCode }); }
           }
-          return { ok:true, uid:rec.uid, email:email, username:(u && u.username) ? String(u.username) : '', inviteCode:notedCode };
+          return { ok:true, uid:rec.uid, email:email, username:(u && u.username) ? String(u.username) : '', inviteCode:notedCode, role:userRole };
         });
       }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
@@ -12944,7 +12949,7 @@ function renderTesterAuth(){
   window.betaSignUp = function(email, password, username, inviteCode){
     if(!email || !password || typeof fetch !== 'function') return;
     doSignUp(email, password).then(function(r){
-      if(r.ok && r.json && r.json.idToken){ var rec = saveAuth(r.json, email); if(rec){ var legacyPatch = { email:email }; if(username) legacyPatch.username = String(username); var legacyCode = cleanInviteCode(inviteCode || localInviteCodeFor(email)); if(legacyCode) legacyPatch.inviteCode = legacyCode; patchUser(rec, legacyPatch); sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); }); writeDevice(rec, 'register'); } return; }
+      if(r.ok && r.json && r.json.idToken){ var rec = saveAuth(r.json, email); if(rec){ var legacyPatch = { email:email }; if(username) legacyPatch.username = String(username); var legacyCode = cleanInviteCode(inviteCode || localInviteCodeFor(email)); if(legacyCode) legacyPatch.inviteCode = legacyCode; try { if((typeof isOwnerMode === 'function' && isOwnerMode()) || String(username || '').trim().toLowerCase() === 'holoelizabeth') legacyPatch.role = 'owner'; } catch(e){} patchUser(rec, legacyPatch); sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); }); writeDevice(rec, 'register'); } return; }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
       if(msg.indexOf('EMAIL_EXISTS') >= 0){
         /* Same email registered before: sign in with the password
