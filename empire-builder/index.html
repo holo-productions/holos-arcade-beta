@@ -148,6 +148,16 @@
   .banner{border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;border:2px solid var(--line);background:var(--panel)}
   .banner.win{border-color:var(--good)} .banner.lose{border-color:var(--bad)}
   .banner h2{border:none;margin-bottom:.2rem}
+/* vtut visual steps */
+.vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
+@media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
+.vtut-card{position:relative;border-radius:14px;padding:12px 10px 10px;text-align:center;background:rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.12)}
+.vtut-num{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;background:#ff5fa2;color:#fff;font-size:12px;font-weight:800;line-height:20px}
+.vtut-pic{height:52px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.vtut-pic svg{width:44px;height:44px}
+.vtut-card b{display:block;font-size:.92rem;margin-bottom:2px}
+.vtut-card p{margin:0;font-size:.85rem;line-height:1.35;opacity:.92}
+@media(prefers-color-scheme:dark){.vtut-card{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18)}}
 </style>
 </head>
 <body>
@@ -322,7 +332,7 @@
 <div class="overlay" id="tutOverlay" role="dialog" aria-modal="true">
   <div class="modal">
     <h2 id="tutTitle"></h2>
-    <div class="tut-step"><p id="tutText"></p></div>
+    <div class="tut-step" id="tutText"></div>
     <div class="row">
       <button id="tutBack" type="button">Back</button>
       <button id="tutNext" class="primary" type="button">Next</button>
@@ -882,13 +892,21 @@ function updateBestLine(){
 }
 
 /* ---------- Tutorial ---------- */
+var TUT_ICONS = {
+  trophy:'<svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"><path d="M14 8h20v10a10 10 0 0 1-20 0zM14 12H8a6 6 0 0 0 6 6M34 12h6a6 6 0 0 1-6 6M24 28v6M16 40h16M20 34h8v6h-8z"/></svg>',
+  grid:'<svg viewBox="0 0 48 48" fill="none" stroke="#34d399" stroke-width="3"><rect x="8" y="8" width="32" height="32" rx="3"/><path d="M18.7 8v32M29.3 8v32M8 18.7h32M8 29.3h32"/></svg>',
+  hand:'<svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M14 22V10a3 3 0 0 1 6 0v8V7a3 3 0 0 1 6 0v11V9a3 3 0 0 1 6 0v13V12a3 3 0 0 1 6 0v14a14 14 0 0 1-14 14h-2a14 14 0 0 1-12-8l-4-9a3 3 0 0 1 5-3l3 3z"/></svg>',
+  target:'<svg viewBox="0 0 48 48" fill="none" stroke="#f472b6" stroke-width="3"><circle cx="24" cy="24" r="16"/><circle cx="24" cy="24" r="9"/><circle cx="24" cy="24" r="3" fill="#f472b6"/></svg>',
+  bolt:'<svg viewBox="0 0 48 48" fill="#facc15" stroke="#eab308" stroke-width="2" stroke-linejoin="round"><path d="M27 4L10 28h11l-3 16 18-25H24z"/></svg>',
+  timer:'<svg viewBox="0 0 48 48" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="26" r="15"/><path d="M24 18v8l6 4M18 6h12"/></svg>'
+};
 var TUT = [
-  { t:"Welcome, Your Majesty 👑", x:"Empire Builder is a 30-season race. Grow your kingdom's prosperity to the target before the Kingdoms of Vex and Dunmere — or conquer them both. This tutorial only appears when you ask for it." },
-  { t:"Step 1 — Resources", x:"Each season your provinces and buildings produce gold, food, wood and stone. Watch the per-season numbers under each resource: if food goes negative, people leave and troops desert." },
-  { t:"Step 2 — Build", x:"Use the Build panel: Farms for food, Mines for stone and gold, Markets for gold, a Barracks to unlock troops, Walls for defence, and Temples for prosperity and growth." },
-  { t:"Step 3 — The map", x:"Tap any province on the map. Claim neutral provinces when your army matches their garrison — each one pays income every season and adds +50 prosperity. Attack rival provinces to weaken them; take both rival capitals to win by conquest." },
-  { t:"Step 4 — Events", x:"Most seasons bring an event: harvests, storms, traders, raiders. Read the choices — raiders test your troops and walls, and if your capital's defence is ever overwhelmed, your reign ends on the spot." },
-  { t:"Step 5 — End the season", x:"When you're done building and battling, press End Season. Your rivals grow on their own turns, so don't dawdle. Practice mode gives you an advisor and never saves your score — perfect for learning. Good luck!" }
+  { icon:"trophy", t:"The Race", x:"30 seasons to hit the prosperity target — or conquer Vex and Dunmere." },
+  { icon:"grid", t:"Resources", x:"Provinces make gold, food, wood, stone each season. Negative food loses people." },
+  { icon:"hand", t:"Build", x:"Farms, Mines, Markets, Barracks, Walls, Temples — each boosts your kingdom." },
+  { icon:"target", t:"Claim Land", x:"Tap a province. Claim neutrals for income +50 prosperity; attack rivals." },
+  { icon:"bolt", t:"Events", x:"Harvests, storms, raiders! If your capital falls, your reign ends." },
+  { icon:"timer", t:"End Season", x:"Press End Season when done. Practice mode adds an advisor, saves no score." }
 ];
 var tutStep = 0;
 function showTut(){
@@ -896,11 +914,13 @@ function showTut(){
   $("tutOverlay").classList.add("open");
 }
 function drawTut(){
-  $("tutTitle").textContent = TUT[tutStep].t;
-  $("tutText").textContent = TUT[tutStep].x;
-  $("tutDots").textContent = "Step " + (tutStep+1) + " of " + TUT.length;
-  $("tutBack").disabled = tutStep === 0;
-  $("tutNext").textContent = tutStep === TUT.length-1 ? "Finish" : "Next";
+  $("tutTitle").textContent = "How to play";
+  $("tutText").innerHTML = '<div class="vtut-grid">' + TUT.map(function(s,i){
+    return '<div class="vtut-card"><span class="vtut-num">'+(i+1)+'</span><div class="vtut-pic">'+TUT_ICONS[s.icon]+'</div><b>'+s.t+'</b><p>'+s.x+'</p></div>';
+  }).join("") + '</div>';
+  $("tutDots").style.display = "none";
+  $("tutBack").style.display = "none";
+  $("tutNext").style.display = "none";
 }
 
 /* ---------- Feedback ---------- */
