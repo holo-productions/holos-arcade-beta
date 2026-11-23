@@ -3,6 +3,70 @@
 <head>
 <meta charset="utf-8"/>
 <script>
+/* AGE18-DIRECT-URL-2026-11-23 (Holo 2026-11-23 17:04 CST): direct-URL guard.
+   This is an 18+ party game. The hub hides 18+ games by date of birth + the
+   Hide 18+ toggle, but this standalone URL stayed directly reachable. This
+   guard runs first, before anything renders, and reads the SAME stored state
+   the hub uses (holos-arcade-accounts + holos-arcade-dob-<code> +
+   holos-arcade-hide18-<code>, same fail-open rule: no DOB on file = adult).
+   If the viewer is under 18 or 18+ is hidden on this device, it bounces
+   straight to the hub — the parent PIN lives in the hub, so turning games
+   back on happens there, not here. Skipped only when framed by the
+   same-origin hub (hub play is already guarded by openGame). Static site:
+   a real barrier for casual direct links, not a security boundary against
+   someone reading source. */
+(function () {
+  'use strict';
+  try {
+    var framedByHub = false;
+    try { framedByHub = window.top !== window.self && String(window.top.location.pathname || '').indexOf('games-hub') !== -1; } catch (e) {}
+    if (framedByHub) return;
+    function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+    function ssGet(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } }
+    function sess() {
+      try { var v = JSON.parse(lsGet('holos-arcade-tester-login') || ssGet('holos-arcade-tester-login') || 'null'); return (v && v.name && v.code) ? v : null; } catch (e) { return null; }
+    }
+    var s = sess();
+    var code = s ? s.code : 'guest';
+    var acct = null;
+    try { var all = JSON.parse(lsGet('holos-arcade-accounts') || '{}'); acct = s ? (all[String(s.name || '').toLowerCase()] || null) : null; } catch (e) {}
+    function cleanDob(v) {
+      v = String(v || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return '';
+      var d = new Date(v + 'T00:00:00');
+      if (isNaN(d.getTime())) return '';
+      if (d.toISOString().slice(0, 10) !== v) return '';
+      return v;
+    }
+    function dob() {
+      if (acct && acct.dob) return cleanDob(acct.dob);
+      return cleanDob(lsGet('holos-arcade-dob-' + code));
+    }
+    function isAdultByDob() {
+      var d = dob();
+      if (!d) return true;
+      var p = d.split('-'), y = +p[0], m = +p[1] - 1, day = +p[2];
+      var eighteenth = new Date(y + 18, m, day);
+      if (eighteenth.getMonth() !== m) eighteenth = new Date(y + 18, m + 1, 0);
+      var today = new Date(); today.setHours(0, 0, 0, 0);
+      return today >= eighteenth;
+    }
+    function hide18() {
+      if (!isAdultByDob()) return true;
+      try { var v = lsGet('holos-arcade-hide18-' + code); if (v !== null) return v === '1'; } catch (e) {}
+      if (acct && acct.hide18 !== undefined) return !!acct.hide18;
+      return false;
+    }
+    if (isAdultByDob() && !hide18()) return;
+    var parts = String(location.pathname || '').split('/');
+    var base = parts.slice(0, -2).join('/');
+    var origin = location.origin || (location.protocol + '//' + location.host);
+    var hub = origin + base + '/games-hub/';
+    try { location.replace(hub); } catch (e) { location.href = hub; }
+  } catch (e) {}
+})();
+</script>
+<script>
 /* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
    The hub stores the switches in localStorage (same origin) and
    broadcasts changes by postMessage. This gate mutes WebAudio
