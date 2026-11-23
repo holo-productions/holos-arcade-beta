@@ -15007,6 +15007,23 @@ function renderTesterAuth(){
     }
     return null;
   }
+  /* TOUR-FIX3-2026-11-23 (Holo 00:13): tight highlight box — some
+     targets are full-width flex rows (the XP line in the bubble,
+     the friend search form), so the gold box spanned the whole
+     row and read as sitting beside the thing it meant. For steps
+     flagged tightBox, measure the element's contents (Range)
+     instead of the element box, so the spotlight hugs the actual
+     content. Falls back to the element rect when the Range has
+     no layout (e.g. jsdom). */
+  function tightRect(el){
+    try {
+      var range = document.createRange();
+      range.selectNodeContents(el);
+      var rr = range.getBoundingClientRect();
+      if(rr && rr.width > 0 && rr.height > 0) return rr;
+    } catch(e){}
+    return el.getBoundingClientRect();
+  }
   /* TOUR-TARGET-FIX-2026-11-22 (Holo 23:49): bubbles must point at
      what the step talks about. Helpers: real sticky-header height
      for scroll offsets, and phone nav-panel open/close so steps
@@ -15107,15 +15124,15 @@ function renderTesterAuth(){
       prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#gotdNavLink'); },
       target:function(){ return firstShown(['#gotdNavLink']); } },
     { title:'The Library',
-      text:'Tap Library in the menu to browse every game. Tap a game to open its Game Menu \u2014 Practice, Rules and How to play are there before you play.',
-      prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#libraryNavLink'); },
-      target:function(){ return firstShown(['#libraryNavLink']); } },
+      text:'At the top of the Library you\u2019ll find today\u2019s Game of the Day and Challenge of the Day tiles. Below them is every game \u2014 tap one to open its Game Menu, with Practice, Rules and How to play before you play.',
+      prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true, skipHash:true }); },
+      target:function(){ return firstShown(['#libraryDailyTiles', '#libGotdTile']); } },
     { title:'Duck a favourite',
       text:'Tap the duck on a game and it\u2019ll paddle over to your pond under Favourites, saved for next time.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true, skipHash:true }); },
       target:function(){ return findFavDuck() || firstShown(['.fav-btn']); } },
-    { title:'Glitch XP lives in your bubble',
-      text:'Line two of your bubble shows your Glitch XP and Level \u2014 exclusive for testers only. You earn XP by playing; it\u2019s never spent, and it stays with you.',
+    { title:'Glitch XP lives in your bubble', tightBox:true,
+      text:'Line two of your bubble shows your Glitch XP and Level. Glitch XP is exclusive to testers. You earn XP by playing; it\u2019s never spent, and it stays with you.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); },
       target:function(){ return firstShown(['#chipCoins', '#testerChip']); } },
     { title:'Inbox \u2709\uFE0F \u2014 replies and drafts',
@@ -15126,10 +15143,10 @@ function renderTesterAuth(){
       text:'Stuck on something? The FAQ up top answers the common stuff \u2014 playing, XP, friends, your account.',
       prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#loginFaqLink'); },
       target:function(){ return firstShown(['#loginFaqLink']); } },
-    { title:'Friends',
+    { title:'Friends', tightBox:true,
       text:'Search a Code Name and send a friend request. It lands in their Inbox \u2709\uFE0F \u2014 when they accept, you\u2019re friends on every device.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('friends', { keepScroll:true, skipHash:true }); },
-      target:function(){ return firstShown(['#friendAddForm', '#friends']); } },
+      target:function(){ return firstShown(['#friendAddForm']); } },
     { title:'Trophy Case stamps',
       text:'Stamps are earned by reporting on a game \u2014 playing alone doesn\u2019t earn one. File a report, get the stamp.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('account', { keepScroll:true, skipHash:true }); if(typeof window.renderReviews === 'function'){ try { window.renderReviews(); } catch(e){} } },
@@ -15138,8 +15155,8 @@ function renderTesterAuth(){
       text:'New games and features land here all the time — Prize Wheel is coming soon. Keep an eye on News for what\u2019s next!',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('news', { keepScroll:true, skipHash:true }); },
       target:function(){ return firstShown(['#news .news-headline', '#news .news-subhead', '#news']); } },
-    { title:'Report back, pixel style', opensReview:true,
-      text:'Tap the pixel chips \u2014 happy face for fun, ladybug for bugs \u2014 add stars if you like, write a line, then tap Send my report \uD83D\uDE80. Not ready? Finish later saves your draft to your Inbox \u2709\uFE0F.',
+    { title:'Report back', opensReview:true, plainTitle:true, noHighlight:true,
+      text:'Tap the chips \u2014 happy face for fun, ladybug for bugs \u2014 add stars if you like, write a line, then tap Send my report. Not ready? Finish later saves your draft to your Inbox.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); if(typeof window.openFeedbackForm === 'function') window.openFeedbackForm(); },
       target:function(){ return document.querySelector('#fbOverlay .fb-card') || byId('fbOverlay'); } },
     { title:'Back works everywhere',
@@ -15186,7 +15203,17 @@ function renderTesterAuth(){
       }
     }
     missingSince = 0;
-    var r = currentTarget.getBoundingClientRect();
+    /* TOUR-FIX3-2026-11-23: steps flagged noHighlight (Report back)
+       show no gold box at all — the form is already a centred
+       popup, so the spotlight only doubled its frame. Dock the
+       tour card at the bottom instead. */
+    if(steps[idx].noHighlight){
+      highlight.style.opacity = '0';
+      highlight.style.width = '0px'; highlight.style.height = '0px';
+      card.style.left = '12px'; card.style.top = 'auto'; card.style.bottom = '12px';
+      return;
+    }
+    var r = steps[idx].tightBox ? tightRect(currentTarget) : currentTarget.getBoundingClientRect();
     lastRect = r;
     var pad = 7;
     highlight.style.left = Math.max(2, r.left - pad) + 'px';
@@ -15216,6 +15243,7 @@ function renderTesterAuth(){
   function renderStep(){
     countEl.textContent = 'Step ' + (idx + 1) + ' of ' + steps.length;
     titleEl.textContent = steps[idx].title;
+    titleEl.classList.toggle('tour-plain-title', !!steps[idx].plainTitle);
     textEl.textContent = steps[idx].text;
     nextBtn.textContent = (idx === steps.length - 1) ? 'Finish' : 'Next';
     if(backBtn) backBtn.disabled = (idx === 0);
@@ -15282,7 +15310,7 @@ function renderTesterAuth(){
     showStep(0);
     tick();
   }
-  function endTour(){
+  function endTour(finished){
     if(!active) return;
     active = false;
     lastRect = null; missingSince = 0;
@@ -15299,6 +15327,10 @@ function renderTesterAuth(){
     if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true });
     if(lastFocus && lastFocus.focus){ try { lastFocus.focus({ preventScroll: true }); } catch(e){} }
     lastFocus = null;
+    /* TOUR-FIX3-2026-11-23 (Holo 00:13): confetti when the tour is
+       finished (last step's Finish) — not on Skip / x / Escape.
+       celebrateConfetti already skips itself for reduced motion. */
+    if(finished){ try { if(typeof celebrateConfetti === 'function') celebrateConfetti(160); } catch(e){} }
   }
   function onKey(e){
     if(!active) return;
@@ -15307,7 +15339,7 @@ function renderTesterAuth(){
     else if(e.key === 'ArrowLeft' && idx > 0){ e.preventDefault(); showStep(idx - 1); }
   }
   function advance(){
-    if(idx >= steps.length - 1) endTour();
+    if(idx >= steps.length - 1) endTour(true);
     else showStep(idx + 1);
   }
   nextBtn.addEventListener('click', advance);
@@ -18157,6 +18189,11 @@ body.in-game .nav-top-row{padding-top:4px}
 .gm-card{max-height:88dvh;overflow-y:auto}
 .fb-card{max-height:90dvh}
 .tour-card{max-height:70dvh;overflow-y:auto}
+/* TOUR-FIX3-2026-11-23 (Holo 00:13): plain title option — steps
+   flagged plainTitle drop the pixel font/gradient on the tour
+   card title (used by the Report back step). */
+.tour-card h2.tour-plain-title{font-family:"Bricolage Grotesque",sans-serif;font-size:22px;line-height:1.15;letter-spacing:-.01em;background:none;-webkit-background-clip:initial;background-clip:initial;color:var(--ink);filter:none}
+@media(max-width:640px){.tour-card h2.tour-plain-title{font-size:20px}}
 #reviewFab{bottom:calc(16px + env(safe-area-inset-bottom));right:calc(16px + env(safe-area-inset-right))}
 .topbar{padding-top:env(safe-area-inset-top)}
 body{overflow-x:clip}
@@ -18348,7 +18385,7 @@ footer .egg-row{justify-content:center}
    Escape end it as always) and never forced again once seen or
    dismissed. "Take the tour" still works any time. */
 (function(){
-  var TOUR_VERSION = '3';
+  var TOUR_VERSION = '4';
   function flagKey(){
     try { var t = (typeof getTester === 'function') ? getTester() : null; return 'holos-arcade-tour-seen-' + (t ? t.code : 'guest'); }
     catch(e){ return 'holos-arcade-tour-seen-guest'; }
