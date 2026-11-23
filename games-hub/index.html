@@ -17465,6 +17465,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 /* INBOX-CLEAR-FILTER-2026-11-23 (Holo 00:09): Clear notifications (mark all
    read, never delete) + unread-only filter toggle. */
 #inboxUnreadToggle[aria-pressed="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
+/* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:13): All / Unread / Drafts */
+#inboxDraftToggle[aria-pressed="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
 #inbox .inbox-item.unread h3{color:#ffd7f2}
 </style>
 <script>
@@ -17493,6 +17495,14 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   }
   var items = [];
   var unreadOnly = false; /* INBOX-CLEAR-FILTER-2026-11-23 */
+  var draftsOnly = false; /* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:13): All / Unread / Drafts */
+  function inboxFilter(){ return draftsOnly ? 'drafts' : (unreadOnly ? 'unread' : 'all'); }
+  window.__inboxFilter = inboxFilter;
+  function applyInboxFilter(){
+    renderList();
+    var fr = document.getElementById('friendReqInbox'); if(fr) fr.hidden = draftsOnly;
+    if(typeof window.__renderInboxDrafts === 'function'){ try { window.__renderInboxDrafts(); } catch(e){} }
+  }
   function unreadCount(){ return items.filter(function(n){ return !n.read; }).length; }
   function renderBadge(){
     var b = document.getElementById('inboxBadge'); if(!b) return;
@@ -17506,14 +17516,22 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   }
   function renderList(){
     var list = document.getElementById('inboxList'); if(!list) return;
+    if(draftsOnly){ list.innerHTML = ''; return; }
     var shown = unreadOnly ? items.filter(function(n){ return !n.read; }) : items;
     if(!items.length){ list.innerHTML = '<p class="inbox-empty">No messages yet, agent. When we reply to a report or have news for you, it lands here.</p>'; return; }
     if(!shown.length){ list.innerHTML = '<p class="inbox-empty">No unread messages, agent. Tap "Show all" to see everything.</p>'; return; }
     list.innerHTML = shown.map(function(n){
       var icon = TYPES[n.type] || '🔔';
-      var linkBtn = n.link ? '<div class="inbox-actions"><button type="button" class="btn btn-light inbox-open" data-link="' + esc(n.link) + '">Open</button></div>' : '';
+      /* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:14): per-item Mark read on unread items */
+      var actions = '';
+      if(n.link) actions += '<button type="button" class="btn btn-light inbox-open" data-link="' + esc(n.link) + '">Open</button>';
+      if(!n.read) actions += '<button type="button" class="btn btn-light inbox-markread">Mark read</button>';
+      var linkBtn = actions ? '<div class="inbox-actions">' + actions + '</div>' : '';
       return '<article class="inbox-item' + (n.read ? '' : ' unread') + '" data-id="' + esc(n.id) + '"><h3>' + icon + ' ' + esc(n.title) + '</h3><p>' + esc(n.body) + '</p><div class="inbox-meta">' + esc(when(n.createdAt)) + (n.read ? '' : ' · New') + '</div>' + linkBtn + '</article>';
     }).join('');
+    list.querySelectorAll('.inbox-markread').forEach(function(btn){
+      btn.addEventListener('click', function(){ markRead(btn.closest('.inbox-item').getAttribute('data-id')); });
+    });
     list.querySelectorAll('.inbox-open').forEach(function(btn){
       btn.addEventListener('click', function(){
         var link = btn.getAttribute('data-link') || '';
@@ -17583,14 +17601,20 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(main && !document.getElementById('inbox')){
       var sec = document.createElement('section');
       sec.className = 'hub-panel'; sec.id = 'inbox'; sec.setAttribute('aria-label', 'Inbox');
-      sec.innerHTML = '<h2>📥 Inbox</h2><p class="g-note">Replies and news from the Arcade team land here.</p><div class="inbox-actions"><button type="button" class="btn btn-light" id="inboxMarkAll">Mark all read</button><button type="button" class="btn btn-light" id="inboxClear" title="Marks everything as read — messages stay">Clear notifications</button><button type="button" class="btn btn-light" id="inboxUnreadToggle" aria-pressed="false">Show unread only</button></div><div class="inbox-list" id="inboxList"></div>';
+      sec.innerHTML = '<h2>📥 Inbox</h2><p class="g-note">Replies and news from the Arcade team land here.</p><div class="inbox-actions"><button type="button" class="btn btn-light" id="inboxMarkAll">Mark all read</button><button type="button" class="btn btn-light" id="inboxClear" title="Marks everything as read — messages stay">Clear notifications</button><button type="button" class="btn btn-light" id="inboxUnreadToggle" aria-pressed="false">Show unread only</button><button type="button" class="btn btn-light" id="inboxDraftToggle" aria-pressed="false">Show drafts only</button></div><div class="inbox-list" id="inboxList"></div>';
       main.appendChild(sec);
       var ma = sec.querySelector('#inboxMarkAll');
       if(ma) ma.addEventListener('click', markAllRead);
       var cl = sec.querySelector('#inboxClear');
       if(cl) cl.addEventListener('click', markAllRead);
       var ut = sec.querySelector('#inboxUnreadToggle');
-      if(ut) ut.addEventListener('click', function(){ unreadOnly = !unreadOnly; ut.setAttribute('aria-pressed', unreadOnly ? 'true' : 'false'); ut.textContent = unreadOnly ? 'Show all' : 'Show unread only'; renderList(); });
+      var dt = sec.querySelector('#inboxDraftToggle');
+      function syncFilterBtns(){
+        if(ut){ ut.setAttribute('aria-pressed', unreadOnly ? 'true' : 'false'); ut.textContent = unreadOnly ? 'Show all' : 'Show unread only'; }
+        if(dt){ dt.setAttribute('aria-pressed', draftsOnly ? 'true' : 'false'); dt.textContent = draftsOnly ? 'Show all' : 'Show drafts only'; }
+      }
+      if(ut) ut.addEventListener('click', function(){ unreadOnly = !unreadOnly; if(unreadOnly) draftsOnly = false; syncFilterBtns(); applyInboxFilter(); });
+      if(dt) dt.addEventListener('click', function(){ draftsOnly = !draftsOnly; if(draftsOnly) unreadOnly = false; syncFilterBtns(); applyInboxFilter(); });
     }
   }
   function signedIn(){ var chip = document.getElementById('testerChip'); return !!(chip && !chip.hidden); }
@@ -17599,7 +17623,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   try { new MutationObserver(function(){ if(document.body.getAttribute('data-view') === 'inbox') refresh(); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] }); } catch(e){}
   setInterval(tick, 60000);
   setTimeout(tick, 2500);
-  window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, unreadCount:unreadCount, items:function(){ return items.slice(); } };
+  window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, filter:inboxFilter, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, unreadCount:unreadCount, items:function(){ return items.slice(); } };
 })();
 </script>
 <!-- FRIEND-REQUESTS-2026-11-22 (Holo 23:32): cross-device friend
@@ -18186,7 +18210,13 @@ footer .egg-row{justify-content:center}
     var slugs = Object.keys(all).sort(function(a, b){
       return String((all[b] || {}).updatedAt || '').localeCompare(String((all[a] || {}).updatedAt || ''));
     });
-    if(!slugs.length){ box.innerHTML = ''; box.hidden = true; return; }
+    /* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:13): respect All/Unread/Drafts */
+    var f = (typeof window.__inboxFilter === 'function') ? window.__inboxFilter() : 'all';
+    if(f === 'unread'){ box.hidden = true; return; }
+    if(!slugs.length){
+      if(f === 'drafts'){ box.hidden = false; box.innerHTML = '<p class="inbox-empty">No draft reports yet, agent. Tap "Show all" to see everything.</p>'; return; }
+      box.innerHTML = ''; box.hidden = true; return;
+    }
     box.hidden = false;
     var html = '<div class="drafts-head"><h3>📝 Draft reports</h3><p class="drafts-note">Drafts clear after 30 days.</p></div>';
     slugs.forEach(function(slug){
@@ -18223,6 +18253,7 @@ footer .egg-row{justify-content:center}
       });
     });
   }
+  window.__renderInboxDrafts = renderDrafts; /* INBOX-DRAFT-FILTER-2026-11-23 */
   /* Re-render whenever drafts change anywhere. */
   ['saveDraft', 'clearDraft'].forEach(function(fn){
     var orig = window[fn];
