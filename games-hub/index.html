@@ -2565,6 +2565,21 @@ setTimeout(function(){
           </div>
           <p id="emailPrefsMsg" role="status" hidden></p>
         </div>
+        <!-- SIGN-OUT-EVERYWHERE-2026-11-23 (Holo 2026-11-23 07:58 CST): sign out on this device + every other device. Writes sessionsRevokedAt to /users/$uid (fail-soft); other devices sign out next time they load or refresh their sign-in. -->
+        <div class="signout-everywhere" id="signOutEverywhereBox">
+          <h4>Sign out everywhere</h4>
+          <p class="contact-note">Signs you out on this device right away, and on every other device signed in to your account the next time it opens the Arcade or refreshes its sign-in. Handy if you signed in on a shared or borrowed device.</p>
+          <p><button type="button" class="btn" id="signOutEverywhereBtn">Sign out everywhere</button></p>
+          <div class="delete-confirm" id="signOutEverywherePanel" hidden>
+            <button class="pop-x" id="soeCloseX" type="button" aria-label="Close">&times;</button>
+            <p><strong>Sign out everywhere?</strong> This signs you out here right away, and on every other device next time it checks in. You will need your email and password to sign back in.</p>
+            <p id="signOutEverywhereMsg" role="alert" hidden></p>
+            <div class="delete-actions">
+              <button class="tgl" id="signOutEverywhereCancel" type="button">Cancel</button>
+              <button class="danger-btn danger-btn-solid" id="signOutEverywhereConfirm" type="button">Sign out everywhere</button>
+            </div>
+          </div>
+        </div>
         <p>Deleting your account removes your sign-in for good. There is no undo.</p>
         <button class="danger-btn" id="deleteAccountBtn" type="button">Delete my account</button>
         <div class="delete-confirm" id="deleteAccountPanel" hidden>
@@ -10735,6 +10750,14 @@ var LOCATIONS = [
     </details>
 
     <details class="legal-section">
+      <summary>Can I sign out on all my devices at once?</summary>
+      <div class="legal-content">
+        <p>Yes. In Your account, tap Sign out everywhere. That signs you out on this device right away, and on every other device signed in to your account the next time it opens the Arcade or refreshes its sign-in. You will need your email and password to sign back in.</p>
+      <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="account">Go to Your account &#8594;</button></p>
+        </div>
+    </details>
+
+    <details class="legal-section">
       <summary>Can't remember a game you played?</summary>
       <div class="legal-content">
         <p>Open the Library and tap the Recently Played pill. Your last 20 games show up there, newest first, so you can find the one you mean and tap its duck to favourite it. The list lives on this device.</p>
@@ -12943,6 +12966,39 @@ function renderTesterAuth(){
       delShowMsg('Could not delete your account just now. Try again in a minute.');
       delSync();
     });
+  });
+  /* SIGN-OUT-EVERYWHERE-2026-11-23 (Holo 2026-11-23 07:58 CST):
+     confirm panel first, then window.betaSignOutEverywhere stamps
+     sessionsRevokedAt on /users/$uid (fail-soft) and clears this
+     device's Firebase sign-in; the hub session signs out right
+     away either way. */
+  var soeBtn = document.getElementById('signOutEverywhereBtn');
+  var soePanel = document.getElementById('signOutEverywherePanel');
+  var soeMsg = document.getElementById('signOutEverywhereMsg');
+  var soeCancel = document.getElementById('signOutEverywhereCancel');
+  var soeConfirm = document.getElementById('signOutEverywhereConfirm');
+  var soeX = document.getElementById('soeCloseX');
+  function soeShowMsg(t){ if(soeMsg){ soeMsg.textContent = t; soeMsg.hidden = !t; } }
+  function soeClose(){ if(soePanel) soePanel.hidden = true; soeShowMsg(''); if(soeConfirm) soeConfirm.disabled = false; }
+  if(soeBtn && soePanel) soeBtn.addEventListener('click', function(){
+    soePanel.hidden = !soePanel.hidden;
+    soeShowMsg('');
+  });
+  if(soeCancel) soeCancel.addEventListener('click', soeClose);
+  if(soeX) soeX.addEventListener('click', soeClose);
+  if(soeConfirm) soeConfirm.addEventListener('click', function(){
+    soeConfirm.disabled = true;
+    soeShowMsg('Signing out everywhere...');
+    function soeDone(serverOk){
+      soeClose();
+      try { if(typeof signOutTester === 'function') signOutTester(); } catch(e){}
+      try { if(typeof showBadgeToast === 'function') showBadgeToast(serverOk ? 'Signed out everywhere. Other devices sign out next time they check in.' : 'Signed out here. We could not reach the server, so try again online to sign out other devices.'); } catch(e){}
+    }
+    if(typeof window.betaSignOutEverywhere === 'function'){
+      window.betaSignOutEverywhere().then(function(ok){ soeDone(!!ok); }).catch(function(){ soeDone(false); });
+    } else {
+      soeDone(false);
+    }
   });
   var cb = document.getElementById('continueBtn');
   if(cb) cb.addEventListener('click', function(){
@@ -15448,7 +15504,7 @@ function renderTesterAuth(){
 
   function saveAuth(j, email){
     try {
-      var rec = { idToken:j.idToken, refreshToken:j.refreshToken, uid:j.localId, email:email || j.email || '', exp: Date.now() + ((parseInt(j.expiresIn,10)||3600)*1000) };
+      var rec = { idToken:j.idToken, refreshToken:j.refreshToken, uid:j.localId, email:email || j.email || '', exp: Date.now() + ((parseInt(j.expiresIn,10)||3600)*1000), sessionCreatedAt: Date.now() }; /* SIGN-OUT-EVERYWHERE-2026-11-23: session birth time, compared against sessionsRevokedAt */
       localStorage.setItem(AUTH_KEY, JSON.stringify(rec));
       window.holoBetaAuth = { user:{ email:rec.email, uid:rec.uid, sendEmailVerification:function(){ return sendVerify(rec.idToken); } }, sendEmailVerification:function(u, s){ return sendVerify(rec.idToken); } };
       return rec;
@@ -15632,6 +15688,60 @@ function renderTesterAuth(){
     if(!rec) return Promise.resolve(null);
     return fetchUser(rec).then(function(u){ return (u && u.emailPrefs) ? u.emailPrefs : null; });
   };
+  /* SIGN-OUT-EVERYWHERE-2026-11-23 (Holo 2026-11-23 07:58 CST):
+     "Sign out everywhere" stamps sessionsRevokedAt (ms) on
+     /users/$uid, then clears this device's Firebase sign-in.
+     Every device stores sessionCreatedAt at sign-in (saveAuth)
+     and, on load + token refresh, compares it against
+     sessionsRevokedAt: older sessions sign themselves out.
+     Sessions from before this feature have no sessionCreatedAt
+     and count as oldest, so they sign out too. Fail-soft: any
+     network failure leaves the device signed in (fail open),
+     same as the reverify gate. */
+  function clearLocalAuth(){
+    try { localStorage.removeItem(AUTH_KEY); } catch(e){}
+    try { if(window.holoBetaAuth) delete window.holoBetaAuth; } catch(e){}
+  }
+  window.betaSignOutEverywhere = function(){
+    var stamp = Date.now();
+    return freshToken().then(function(token){
+      var rec = loadAuth();
+      var write = (token && rec && rec.uid) ? patchUser({ uid: rec.uid, idToken: token }, { sessionsRevokedAt: stamp }) : Promise.resolve(false);
+      return write.then(function(ok){ clearLocalAuth(); return !!ok; });
+    }).catch(function(){ clearLocalAuth(); return false; });
+  };
+  var lastRevokeCheckAt = 0;
+  function checkSessionRevoked(){
+    try {
+      var a = loadAuth();
+      if(!a || !a.uid || typeof fetch !== 'function') return;
+      var now = Date.now();
+      if(now - lastRevokeCheckAt < 300000) return;
+      lastRevokeCheckAt = now;
+      freshToken().then(function(token){
+        if(!token) return;
+        var cur = loadAuth();
+        if(!cur || !cur.uid) return;
+        fetchUser({ uid: cur.uid, idToken: token }).then(function(u){
+          if(!u) return;
+          var revokedAt = (typeof u.sessionsRevokedAt === 'number') ? u.sessionsRevokedAt : 0;
+          if(!revokedAt) return;
+          var created = (typeof cur.sessionCreatedAt === 'number') ? cur.sessionCreatedAt : 0;
+          if(created < revokedAt){
+            clearLocalAuth();
+            try {
+              if(typeof signOutTester === 'function'){ signOutTester(); }
+              else {
+                try { localStorage.removeItem('holos-arcade-tester-login'); } catch(e){}
+                try { sessionStorage.removeItem('holos-arcade-tester-login'); } catch(e){}
+                if(typeof renderTesterAuth === 'function') renderTesterAuth();
+              }
+            } catch(e){}
+          }
+        }).catch(function(){});
+      }).catch(function(){});
+    } catch(e){}
+  }
   /* USERNAMES-INDEX-2026-11-22: /usernames/<lowercase Code Name>
      = uid, written on register + sign-in (fail-soft; needs RTDB
      rules for /usernames — see manual). Powers the Code Name
@@ -15803,7 +15913,7 @@ function renderTesterAuth(){
     return fetch('https://securetoken.googleapis.com/v1/token?key=' + FB_API_KEY, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:'grant_type=refresh_token&refresh_token=' + encodeURIComponent(a.refreshToken) })
       .then(function(res){ return res.json(); })
       .then(function(j){
-        if(j && j.id_token){ a.idToken = j.id_token; a.refreshToken = j.refresh_token || a.refreshToken; a.exp = Date.now() + ((parseInt(j.expires_in,10)||3600)*1000); try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e){} return a.idToken; }
+        if(j && j.id_token){ a.idToken = j.id_token; a.refreshToken = j.refresh_token || a.refreshToken; a.exp = Date.now() + ((parseInt(j.expires_in,10)||3600)*1000); try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e){} try { checkSessionRevoked(); } catch(e){} return a.idToken; }
         return null;
       }).catch(function(){ return null; });
   }
@@ -15959,6 +16069,7 @@ function renderTesterAuth(){
   window.betaPushFeedback = pushFeedback;
   setTimeout(pushFeedback, 3000);
   setInterval(pushFeedback, 8000);
+  setTimeout(checkSessionRevoked, 2500); /* SIGN-OUT-EVERYWHERE-2026-11-23: load-time revoke check */
   /* Play logger (beta only, added 2026-11-22): counts game opens by
      signed-in testers. Records queue in localStorage and flush to
      RTDB /plays; if rules deny (401) they stay queued and retry.
