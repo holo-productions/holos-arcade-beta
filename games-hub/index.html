@@ -10965,7 +10965,7 @@ var LOCATIONS = [
     <details class="legal-section">
       <summary>Where do replies to my reports go?</summary>
       <div class="legal-content">
-        <p>Tap the envelope at the top to open your Inbox. When we reply to a report or have news for you, it lands there. The pink number means something new is waiting.</p>
+        <p>Tap the envelope at the top to open your Inbox. Replies to your reports, friend requests, saved drafts and news land there — new testers also get a mission briefing message. Tap a message to read it; archive it when you're done. The pink number means something new is waiting.</p>
       <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="inbox">Go to Inbox &#8594;</button></p>
         </div>
     </details>
@@ -15889,10 +15889,10 @@ function renderTesterAuth(){
       text:'Your browser or phone Back button works all over the Arcade now \u2014 every game and page has its own place in history. That\u2019s the tour! Retake it any time with Take the tour up top.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true }); },
       target:function(){ return firstShown(['#holoBackBtn']); } },
-    { title:'Your mission briefing', noHighlight:true,
-      text:'Play whatever you like \u2014 no deadlines, no homework. Review = your opinion: stars, tags, comments on any game you try. Fun? Boring? Too hard? Bug = something broken: game will not load, button does nothing, sound missing, score wrong \u2014 use the help chat in the Arcade for bugs. Phone tip: use Share or your browser menu to Add to Home Screen, and the Arcade gets its own icon, just like an app.',
-      prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true }); },
-      target:function(){ return null; } }
+    { title:'How to use your Inbox',
+      text:'Your Inbox holds replies to your reports, friend requests, saved drafts and notifications. Tap the envelope, tap a message to read it, and archive it when you\u2019re done. Your mission briefing is waiting there too.',
+      prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#inboxBellBtn'); },
+      target:function(){ return firstShown(['#inboxBellBtn']); } }
   ];
   function reducedMotion(){
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -19788,7 +19788,7 @@ footer .egg-row .egg{width:32px;height:32px}
    Escape end it as always) and never forced again once seen or
    dismissed. "Take the tour" still works any time. */
 (function(){
-  var TOUR_VERSION = '5';
+  var TOUR_VERSION = '6';
   function flagKey(){
     try { var t = (typeof getTester === 'function') ? getTester() : null; return 'holos-arcade-tour-seen-' + (t ? t.code : 'guest'); }
     catch(e){ return 'holos-arcade-tour-seen-guest'; }
@@ -19829,6 +19829,59 @@ footer .egg-row .egg{width:32px;height:32px}
   setTimeout(function(){ clearInterval(iv); }, 30000);
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', maybeShow);
   else maybeShow();
+})();
+</script>
+
+<script>
+/* MISSION-BRIEFING-INBOX-2026-11-23 (Holo 16:35): the mission briefing
+   moved out of the tour (too long as a panel) into the Inbox. Delivered
+   ONCE per account on first sign-in via the existing Inbox mechanism
+   (holoInbox.notifySelf -> POST /users/$uid/notifications, the same one
+   that delivered the test notification). A true on-register hook isn't
+   feasible: registration does NOT sign the tester in, so there is no
+   auth token at register time to write the notice with. Deduped
+   server-side by notification type 'mission-briefing' (so it lands once
+   per account across devices) plus a per-account localStorage flag so
+   we don't re-check on every load. Local-only accounts (no Firebase
+   auth) can't receive it — notifySelf resolves null and we retry on a
+   later load in case the account gains Firebase auth. */
+(function(){
+  var BODY = 'Welcome to Glitch Squad, agent! Your mission: play whatever you like \u2014 no deadlines, no homework.\n\nReview = your opinion: stars, tags and comments on any game you try. Fun? Boring? Too hard?\n\nBug = something broken: a game won\u2019t load, a button does nothing, sound is missing, a score looks wrong. Use the help chat in the Arcade for bugs.\n\nPhone tip: tap Share or your browser menu and choose Add to Home Screen \u2014 the Arcade gets its own icon, just like an app.';
+  function flagKey(){
+    try { var t = (typeof getTester === 'function') ? getTester() : null; return 'holos-arcade-briefing-sent-' + (t ? t.code : 'guest'); }
+    catch(e){ return 'holos-arcade-briefing-sent-guest'; }
+  }
+  function done(){ try { return localStorage.getItem(flagKey()) === '1'; } catch(e){ return true; } }
+  function markDone(){ try { localStorage.setItem(flagKey(), '1'); } catch(e){} }
+  function signedIn(){
+    try { return !!(typeof getTester === 'function' && getTester()); } catch(e){ return false; }
+  }
+  function hubVisible(){
+    var lv = document.getElementById('loginView');
+    if(lv && !lv.hidden) return false;
+    return true;
+  }
+  var tried = false;
+  function maybeSend(){
+    if(tried || done() || !signedIn() || !hubVisible()) return;
+    if(!window.holoInbox || typeof window.holoInbox.notifySelf !== 'function') return;
+    tried = true;
+    var check = (typeof window.holoInbox.refresh === 'function') ? window.holoInbox.refresh() : Promise.resolve();
+    Promise.resolve(check).then(function(){
+      var existing = [];
+      try { existing = window.holoInbox.items() || []; } catch(e){}
+      var has = existing.some(function(n){ return n && n.type === 'mission-briefing'; });
+      if(has){ markDone(); return null; }
+      return window.holoInbox.notifySelf('mission-briefing', 'Your mission briefing', BODY).then(function(r){
+        if(r) markDone(); else tried = false; /* no Firebase auth yet — retry next load */
+        return r;
+      });
+    }).catch(function(){ tried = false; });
+  }
+  var iv = setInterval(function(){ maybeSend(); }, 2000);
+  setTimeout(function(){ clearInterval(iv); }, 60000);
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', maybeSend);
+  else maybeSend();
 })();
 </script>
 </body>
