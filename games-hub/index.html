@@ -18348,6 +18348,13 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 #inboxDraftToggle[aria-pressed="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
 /* INBOX-EMAIL-2026-11-23 (Holo 08:33): Archived filter toggle */
 #inboxArchiveToggle[aria-pressed="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
+/* INBOX-MENU-2026-11-23 (Holo 08:39): section tabs — Notifications / Messages / Archive */
+#inbox .inbox-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+#inbox .inbox-tab{display:inline-flex;align-items:center;gap:6px}
+#inbox .inbox-tab[aria-selected="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
+#inbox .tab-count{min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#ff2e9a;color:#fff;font-size:11px;font-weight:800;line-height:18px;text-align:center}
+#inbox .inbox-tab[aria-selected="true"] .tab-count{background:#fff;color:#ff2e9a}
+#inbox.inbox-reading .inbox-tabs{display:none!important}
 #inbox .inbox-item.unread h3{color:#ffd7f2}
 /* INBOX-EMAIL-2026-11-23 (Holo 08:31): email/chat-style rows + reading view */
 #inbox .inbox-list{gap:8px}
@@ -18403,15 +18410,45 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   var unreadOnly = false; /* INBOX-CLEAR-FILTER-2026-11-23 */
   var draftsOnly = false; /* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:13): All / Unread / Drafts */
   var archivedOnly = false; /* INBOX-EMAIL-2026-11-23 (Holo 08:33): Archived filter — archive only, no delete */
+  /* INBOX-MENU-2026-11-23 (Holo 08:39): Inbox sections — Notifications / Messages / Archive */
+  var section = 'notifications';
+  var MSG_TYPES = { 'friend-request':1, 'friend-accepted':1, 'support-reply':1, 'dm':1, 'message':1 };
+  function sectionOf(n){
+    if(n.archived) return 'archive';
+    return MSG_TYPES[n.type] ? 'messages' : 'notifications';
+  }
+  function setSection(s){
+    section = (s === 'messages' || s === 'archive') ? s : 'notifications';
+    archivedOnly = (section === 'archive');
+    applyInboxFilter();
+  }
+  function renderTabs(){
+    var tabs = document.querySelectorAll('#inbox .inbox-tab');
+    if(!tabs.length) return;
+    var counts = { notifications:0, messages:0, archive:0 };
+    items.forEach(function(n){
+      var s = sectionOf(n);
+      if(s === 'archive') counts.archive++;
+      else if(!n.read) counts[s]++;
+    });
+    tabs.forEach(function(t){
+      var s = t.getAttribute('data-section');
+      t.setAttribute('aria-selected', s === section ? 'true' : 'false');
+      var c = t.querySelector('.tab-count');
+      if(c){ c.textContent = counts[s] > 9 ? '9+' : String(counts[s]); c.hidden = counts[s] === 0; }
+    });
+  }
   function inboxFilter(){ return draftsOnly ? 'drafts' : (archivedOnly ? 'archived' : (unreadOnly ? 'unread' : 'all')); }
   window.__inboxFilter = inboxFilter;
   function applyInboxFilter(){
     renderList();
-    var fr = document.getElementById('friendReqInbox'); if(fr) fr.hidden = draftsOnly || archivedOnly;
+    /* INBOX-MENU-2026-11-23: friend-request box lives in the Messages section */
+    var fr = document.getElementById('friendReqInbox'); if(fr) fr.hidden = draftsOnly || section !== 'messages';
     if(typeof window.__renderInboxDrafts === 'function'){ try { window.__renderInboxDrafts(); } catch(e){} }
   }
   function unreadCount(){ return items.filter(function(n){ return !n.read && !n.archived; }).length; } /* INBOX-EMAIL-2026-11-23: archived unread does not badge */
   function renderBadge(){
+    renderTabs(); /* INBOX-MENU-2026-11-23: tab counts track the badge */
     var b = document.getElementById('inboxBadge'); if(!b) return;
     var n = unreadCount();
     b.textContent = n > 9 ? '9+' : String(n);
@@ -18442,15 +18479,18 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   }
   function renderList(){
     var list = document.getElementById('inboxList'); if(!list) return;
+    renderTabs(); /* INBOX-MENU-2026-11-23 */
     if(draftsOnly){ list.innerHTML = ''; return; }
-    /* INBOX-EMAIL-2026-11-23 (Holo 08:33): archived messages hide from the main list, kept in storage */
-    var pool = items.filter(function(n){ return archivedOnly ? !!n.archived : !n.archived; });
+    /* INBOX-MENU-2026-11-23 (Holo 08:39): show only the active section;
+       archived messages live in the Archive section, kept in storage */
+    var pool = items.filter(function(n){ return sectionOf(n) === section; });
     var shown = unreadOnly ? pool.filter(function(n){ return !n.read; }) : pool;
     if(!items.length){ list.innerHTML = '<p class="inbox-empty">No messages yet, agent. When we reply to a report or have news for you, it lands here.</p>'; return; }
     if(!shown.length){
-      var emptyMsg = archivedOnly ? 'No archived messages yet, agent. Tap "Show all" to see everything.'
-        : (unreadOnly ? 'No unread messages, agent. Tap "Show all" to see everything.'
-        : 'No messages here, agent. Archived ones live under "Show archived only".');
+      var emptyMsg = section === 'archive' ? 'No archived messages yet, agent. Archived ones land here.'
+        : (unreadOnly ? 'No unread messages here, agent. Tap "Show all" to see everything in this section.'
+        : (section === 'messages' ? 'No messages yet, agent. Friend requests and replies land here.'
+        : 'No notifications yet, agent. News and report updates land here.'));
       list.innerHTML = '<p class="inbox-empty">' + emptyMsg + '</p>'; return;
     }
     list.innerHTML = shown.map(function(n){
@@ -18607,7 +18647,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(main && !document.getElementById('inbox')){
       var sec = document.createElement('section');
       sec.className = 'hub-panel'; sec.id = 'inbox'; sec.setAttribute('aria-label', 'Inbox');
-      sec.innerHTML = '<h2>Inbox</h2><p class="g-note">Replies and news from the Arcade team land here.</p><div class="inbox-actions"><button type="button" class="btn btn-light" id="inboxMarkAll">Mark all read</button><button type="button" class="btn btn-light" id="inboxClear" title="Marks everything as read — messages stay">Clear notifications</button><button type="button" class="btn btn-light" id="inboxUnreadToggle" aria-pressed="false">Show unread only</button><button type="button" class="btn btn-light" id="inboxDraftToggle" aria-pressed="false">Show drafts only</button><button type="button" class="btn btn-light" id="inboxArchiveToggle" aria-pressed="false">Show archived only</button></div><div class="inbox-list" id="inboxList"></div>';
+      sec.innerHTML = '<h2>Inbox</h2><p class="g-note">Replies and news from the Arcade team land here.</p><div class="inbox-tabs" role="tablist" aria-label="Inbox sections"><button type="button" class="btn btn-light inbox-tab" role="tab" data-section="notifications" aria-selected="true">Notifications <span class="tab-count" hidden>0</span></button><button type="button" class="btn btn-light inbox-tab" role="tab" data-section="messages" aria-selected="false">Messages <span class="tab-count" hidden>0</span></button><button type="button" class="btn btn-light inbox-tab" role="tab" data-section="archive" aria-selected="false">Archive <span class="tab-count" hidden>0</span></button></div><div class="inbox-actions"><button type="button" class="btn btn-light" id="inboxMarkAll">Mark all read</button><button type="button" class="btn btn-light" id="inboxClear" title="Marks everything as read — messages stay">Clear notifications</button><button type="button" class="btn btn-light" id="inboxUnreadToggle" aria-pressed="false">Show unread only</button><button type="button" class="btn btn-light" id="inboxDraftToggle" aria-pressed="false">Show drafts only</button><button type="button" class="btn btn-light" id="inboxArchiveToggle" aria-pressed="false">Show archived only</button></div><div class="inbox-list" id="inboxList"></div>';
       main.appendChild(sec);
       /* INBOX-EMAIL-2026-11-23: reading-view panel (hidden until a message opens) */
       var rd = document.createElement('div'); rd.id = 'inboxRead'; rd.hidden = true;
@@ -18626,9 +18666,13 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         if(dt){ dt.setAttribute('aria-pressed', draftsOnly ? 'true' : 'false'); dt.textContent = draftsOnly ? 'Show all' : 'Show drafts only'; }
         if(at){ at.setAttribute('aria-pressed', archivedOnly ? 'true' : 'false'); at.textContent = archivedOnly ? 'Show all' : 'Show archived only'; }
       }
-      if(ut) ut.addEventListener('click', function(){ unreadOnly = !unreadOnly; if(unreadOnly){ draftsOnly = false; archivedOnly = false; } syncFilterBtns(); applyInboxFilter(); });
-      if(dt) dt.addEventListener('click', function(){ draftsOnly = !draftsOnly; if(draftsOnly){ unreadOnly = false; archivedOnly = false; } syncFilterBtns(); applyInboxFilter(); });
-      if(at) at.addEventListener('click', function(){ archivedOnly = !archivedOnly; if(archivedOnly){ unreadOnly = false; draftsOnly = false; } syncFilterBtns(); applyInboxFilter(); });
+      if(ut) ut.addEventListener('click', function(){ unreadOnly = !unreadOnly; if(unreadOnly){ draftsOnly = false; if(section === 'archive') section = 'notifications'; archivedOnly = false; } syncFilterBtns(); applyInboxFilter(); });
+      if(dt) dt.addEventListener('click', function(){ draftsOnly = !draftsOnly; if(draftsOnly){ unreadOnly = false; if(section === 'archive') section = 'notifications'; archivedOnly = false; } syncFilterBtns(); applyInboxFilter(); });
+      /* INBOX-MENU-2026-11-23: "Show archived only" and the Archive tab are the same state */
+      if(at) at.addEventListener('click', function(){ var on = section !== 'archive'; if(on){ unreadOnly = false; draftsOnly = false; } section = on ? 'archive' : 'notifications'; archivedOnly = on; syncFilterBtns(); applyInboxFilter(); });
+      sec.querySelectorAll('.inbox-tab').forEach(function(t){
+        t.addEventListener('click', function(){ setSection(t.getAttribute('data-section')); syncFilterBtns(); });
+      });
     }
   }
   function signedIn(){ var chip = document.getElementById('testerChip'); return !!(chip && !chip.hidden); }
@@ -18637,7 +18681,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   try { new MutationObserver(function(){ var v = document.body.getAttribute('data-view'); if(v === 'inbox') refresh(); else if(readingId) closeMessage(false); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] }); } catch(e){}
   setInterval(tick, 60000);
   setTimeout(tick, 2500);
-  window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, archiveItem:archiveItem, openMessage:openMessage, closeMessage:closeMessage, filter:inboxFilter, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, unreadCount:unreadCount, items:function(){ return items.slice(); } };
+  window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, archiveItem:archiveItem, openMessage:openMessage, closeMessage:closeMessage, section:function(){ return section; }, setSection:setSection, filter:inboxFilter, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, unreadCount:unreadCount, items:function(){ return items.slice(); } };
 })();
 </script>
 <!-- FRIEND-REQUESTS-2026-11-22 (Holo 23:32): cross-device friend
