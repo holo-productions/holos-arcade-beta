@@ -2571,6 +2571,28 @@ setTimeout(function(){
           <span>Tester newsletter<br><small>Get Arcade updates by email. You can turn this off anytime.</small></span>
           <button class="tgl" id="newsletterToggle" type="button" aria-pressed="true">On</button>
         </div>
+        <!-- EMAIL-PREFS-2026-11-23 (Holo 2026-11-23 00:39 CST): per-type email opt-ins. Defaults all ON. Saved to localStorage + account record + Firebase /users/$uid/emailPrefs (fail-soft). -->
+        <div class="email-prefs" id="emailPrefsBox">
+          <h4>Email notifications</h4>
+          <p class="contact-note">Pick which emails you get. Emails come from Holo's Arcade &lt;topsecret@holosarcade.ca&gt;. All four are on by default — turn off anything you don't want.</p>
+          <div class="tgl-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0">
+            <span>Messages<br><small>Direct messages from friends and support.</small></span>
+            <button class="tgl" id="emailPrefMessages" data-email-pref="messages" type="button" aria-pressed="true">On</button>
+          </div>
+          <div class="tgl-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0">
+            <span>Notifications<br><small>Announcements and Arcade updates.</small></span>
+            <button class="tgl" id="emailPrefNotifications" data-email-pref="notifications" type="button" aria-pressed="true">On</button>
+          </div>
+          <div class="tgl-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0">
+            <span>Friend requests<br><small>When someone wants to add you as a friend.</small></span>
+            <button class="tgl" id="emailPrefFriendRequests" data-email-pref="friendRequests" type="button" aria-pressed="true">On</button>
+          </div>
+          <div class="tgl-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0">
+            <span>Report replies<br><small>When we reply to a report you filed.</small></span>
+            <button class="tgl" id="emailPrefReportReplies" data-email-pref="reportReplies" type="button" aria-pressed="true">On</button>
+          </div>
+          <p id="emailPrefsMsg" role="status" hidden></p>
+        </div>
         <p>Deleting your account removes your sign-in for good. There is no undo.</p>
         <button class="danger-btn" id="deleteAccountBtn" type="button">Delete my account</button>
         <div class="delete-confirm" id="deleteAccountPanel" hidden>
@@ -10713,6 +10735,14 @@ var LOCATIONS = [
 
 
     <details class="legal-section">
+      <summary>Can I choose which emails I get?</summary>
+      <div class="legal-content">
+        <p>Yes. In Your account, under Email notifications, you can turn each kind on or off: Messages, Notifications, Friend requests, and Report replies. They all start on. Emails come from Holo's Arcade (topsecret@holosarcade.ca).</p>
+      <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="account">Go to Your account &#8594;</button></p>
+        </div>
+    </details>
+
+    <details class="legal-section">
       <summary>Can't remember a game you played?</summary>
       <div class="legal-content">
         <p>Open the Library and tap the Recently Played pill. Your last 20 games show up there, newest first, so you can find the one you mean and tap its duck to favourite it. The list lives on this device.</p>
@@ -12846,6 +12876,43 @@ function renderTesterAuth(){
     try { showBadgeToast(next ? 'Newsletter on. Welcome back, agent.' : 'Newsletter off. No more update emails.'); } catch(e){}
   });
   nlSync();
+  /* EMAIL-PREFS-2026-11-23: per-type email opt-ins (Messages,
+     Notifications, Friend requests, Report replies). Defaults
+     all ON. Saved to localStorage (per account code), the local
+     account record, and Firebase /users/$uid/emailPrefs via
+     window.betaSetEmailPrefs (fail-soft). On load, cloud prefs
+     win over this device's copy so they travel across devices. */
+  var EP_KEYS = ['messages','notifications','friendRequests','reportReplies'];
+  var epState = null;
+  function epDefaults(){ return { messages:true, notifications:true, friendRequests:true, reportReplies:true }; }
+  function epKey(){ try { var s = nlSession(); return 'holos-arcade-email-prefs-' + (s && s.code ? s.code : 'guest'); } catch(e){ return 'holos-arcade-email-prefs-guest'; } }
+  function epCurrent(){
+    if(epState) return epState;
+    var d = epDefaults();
+    try { var s = nlSession(); if(s){ var all = getAccounts(); var rec = all[String(s.name || '').toLowerCase()]; if(rec && rec.emailPrefs){ EP_KEYS.forEach(function(k){ if(rec.emailPrefs[k] !== undefined) d[k] = !!rec.emailPrefs[k]; }); } } } catch(e){}
+    try { var v = JSON.parse(localStorage.getItem(epKey()) || 'null'); if(v){ EP_KEYS.forEach(function(k){ if(v[k] !== undefined) d[k] = !!v[k]; }); } } catch(e){}
+    return d;
+  }
+  function epSync(){
+    var p = epCurrent();
+    EP_KEYS.forEach(function(k){ var b = document.querySelector('[data-email-pref="' + k + '"]'); if(b){ b.textContent = p[k] ? 'On' : 'Off'; b.setAttribute('aria-pressed', p[k] ? 'true' : 'false'); } });
+  }
+  function epSave(p){
+    epState = p;
+    try { localStorage.setItem(epKey(), JSON.stringify(p)); } catch(e){}
+    try { var s = nlSession(); if(s){ var all = getAccounts(); var k2 = String(s.name || '').toLowerCase(); if(all[k2]){ all[k2].emailPrefs = p; saveAccounts(all); } } } catch(e){}
+    try { if(window.betaSetEmailPrefs) window.betaSetEmailPrefs(p); } catch(e){}
+  }
+  EP_KEYS.forEach(function(k){
+    var b = document.querySelector('[data-email-pref="' + k + '"]');
+    if(b) b.addEventListener('click', function(){
+      var p = epCurrent(); p[k] = !p[k]; epSave(p); epSync();
+      var m = document.getElementById('emailPrefsMsg');
+      if(m){ m.textContent = 'Saved. ' + (p[k] ? 'You will get those emails.' : 'Those emails are off.'); m.hidden = false; }
+    });
+  });
+  epSync();
+  try { if(window.betaGetEmailPrefs) window.betaGetEmailPrefs().then(function(remote){ if(remote){ var p = epCurrent(); var changed = false; EP_KEYS.forEach(function(k){ if(remote[k] !== undefined && !!remote[k] !== p[k]){ p[k] = !!remote[k]; changed = true; } }); if(changed){ epSave(p); epSync(); } } }); } catch(e){}
   try { if(location.hash === '#unsubscribe'){ var ab = document.getElementById('accountBox'); if(ab){ ab.hidden = false; ab.scrollIntoView(); } if(nlCurrent() && nlT) nlT.click(); } } catch(e){}
   /* Delete account wiring (added 2026-11-22): the confirm panel
      needs the password plus the word DELETE typed before the
@@ -15552,7 +15619,7 @@ function renderTesterAuth(){
       if(r.ok && r.json && r.json.idToken){
         var rec = saveAuth(r.json, email);
         if(!rec) return { ok:false, code:'NETWORK', error:betaFriendlyError('') };
-        var patch = { email:email, newsletterOptIn:true };
+        var patch = { email:email, newsletterOptIn:true, emailPrefs:{ messages:true, notifications:true, friendRequests:true, reportReplies:true } }; /* EMAIL-PREFS-2026-11-23 defaults */
         if(username) patch.username = String(username);
         var notedCode = cleanInviteCode(inviteCode || localInviteCodeFor(email));
         if(notedCode) patch.inviteCode = notedCode;
@@ -15575,6 +15642,20 @@ function renderTesterAuth(){
     var rec = loadAuth();
     if(!rec) return Promise.resolve(false);
     return patchUser(rec, { newsletterOptIn: !!val });
+  };
+  /* EMAIL-PREFS-2026-11-23: per-type email opt-ins on
+     /users/$uid/emailPrefs (fail-soft; defaults all ON). */
+  window.betaSetEmailPrefs = function(prefs){
+    var rec = loadAuth();
+    if(!rec) return Promise.resolve(false);
+    var clean = {};
+    ['messages','notifications','friendRequests','reportReplies'].forEach(function(k){ clean[k] = !(prefs && prefs[k] === false); });
+    return patchUser(rec, { emailPrefs: clean });
+  };
+  window.betaGetEmailPrefs = function(){
+    var rec = loadAuth();
+    if(!rec) return Promise.resolve(null);
+    return fetchUser(rec).then(function(u){ return (u && u.emailPrefs) ? u.emailPrefs : null; });
   };
   /* USERNAMES-INDEX-2026-11-22: /usernames/<lowercase Code Name>
      = uid, written on register + sign-in (fail-soft; needs RTDB
