@@ -2700,7 +2700,7 @@ setTimeout(function(){
       <button class="btn btn-dark" id="libGotdPlay" type="button">▶ Play today's game</button>
     </div>
     <div class="daily-tile" id="libChalTile" role="button" tabindex="0" aria-label="Challenge of the Day — open the Daily page">
-      <span class="daily-tile-kicker">Challenge of the Day</span>
+      <div class="daily-tile-head"><span class="daily-tile-icon" aria-hidden="true"></span><div><span class="daily-tile-kicker">Challenge of the Day</span><b id="libChalTitle">Today's challenge</b></div><span class="gotd-played" id="libChalDone" hidden>Done ✓</span></div>
       <p id="libChalText">Loading today's challenge…</p>
       <p id="libChalProg" style="font-weight:800;color:var(--ink)"></p>
       <p class="chal-link-row" style="margin:8px 0 0"><a href="#" id="libChalLink" class="tier3-link" hidden></a></p>
@@ -10361,13 +10361,22 @@ var LOCATIONS = [
   playBtn.textContent = '▶ Play ' + game.name;
   renderGotd();
 
-  /* Opening today's featured game counts toward the streak — from this
-     card's Play button, or from the game's own card elsewhere on the hub. */
-  playBtn.addEventListener('click', markPlayed);
-  document.querySelectorAll('[data-game]').forEach(function(b){
-    if(b === playBtn) return;
-    b.addEventListener('click', function(){ if(b.getAttribute('data-game') === game.id) markPlayed(); });
-  });
+  /* Opening today's featured game counts toward the streak — but only
+     on a REAL start, never for just opening the Game Menu.
+     GOTD-PLAYED-GUARD-2026-11-23 (Holo 00:08: "played today" showed
+     without playing): mirror the play-count logger's rule — count
+     only direct starts (__holoDirectStart, set by the Game Menu's
+     Start re-click and the other real-start paths) and in-player
+     taps. This capture listener is registered before the Game
+     Menu's, so it sees the flag before the menu consumes it.
+     Practice opens never reach here (they don't click [data-game]). */
+  document.addEventListener('click', function(ev){
+    try {
+      var t = ev.target;
+      var b = (t && t.closest) ? t.closest('[data-game]') : null;
+      if(b && b.getAttribute('data-game') === game.id && (window.__holoDirectStart || (b.closest && b.closest('#player')))) markPlayed();
+    } catch(e){}
+  }, true);
 })();
 </script>
 
@@ -11009,6 +11018,10 @@ var LOCATIONS = [
     p.textContent = done ? '✓ Done — challenge complete today!' : 'Progress: ' + pr.label;
     var lt = $('libChalText'), lp2 = $('libChalProg');
     if(lt) lt.textContent = t.textContent;
+    /* LIB-CHAL-MATCH-2026-11-23 (Holo 00:08): Library Challenge tile
+       mirrors the GOTD tile head — bold title + Done badge. */
+    var lct = $('libChalTitle'); if(lct) lct.textContent = chal.text + (chal.type === 'gotd' && gotdId() ? ' — ' + gameName(gotdId()) : '');
+    var lcd = $('libChalDone'); if(lcd) lcd.hidden = !done;
     if(lp2){ lp2.textContent = p.textContent; lp2.style.color = done ? 'var(--good)' : 'var(--ink)'; }
     /* CHALLENGE-LINKS-2026-11-22 (Holo 19:58): shortcut to the
        challenge target — a category opens the Library filtered,
