@@ -1611,6 +1611,20 @@ body[data-view="news"] .view-main,body[data-view="news"] .view-library,body[data
 #settingsGearBtn{order:7}
 body.auth-locked #settingsGearBtn{display:none!important}
 body.login-faq-open #settingsGearBtn{display:none!important}
+
+/* ================= NAV-ORDER-2-2026-11-22 =================
+   Holo 2026-11-22 19:38: signed-in right cluster, left to
+   right: points wallet, Need help, user details bubble
+   (#testerChip), Sign out, Settings gear (gear furthest
+   right, to the right of Sign out). Supersedes the earlier
+   Sign-out-furthest-right order. Orders stay below the nav
+   row order:10; margin-left:auto sits on the first cluster
+   item (points) so the cluster stays right-aligned. */
+#pointsWallet{order:5;margin-left:auto}
+#helpChatHubBtn{order:6;margin-left:0}
+#testerChip{order:7}
+#signOutBtn{order:8}
+#settingsGearBtn{order:9}
 @media (prefers-reduced-motion: reduce){ .gm-start{animation:none} }
 
 /* ================= STATS-PLAIN-2026-11-22 =================
@@ -1667,7 +1681,7 @@ setTimeout(function(){
       <a href="#reviews" id="reviewsNavLink2">Reviews</a>
       <a href="#news" id="newsNavLink">📰 News</a>
       <button type="button" id="loginFaqLink" class="nav-actbtn">❓ FAQ</button>
-      <button type="button" id="takeTourHubBtn" class="nav-actbtn take-tour-btn">🧭 Take the tour</button>
+      <button type="button" id="takeTourHubBtn" class="nav-actbtn take-tour-btn">Take the tour</button>
     </nav>
     <nav class="nav nav-outside" id="navOutside" aria-label="Account">
       <button type="button" id="navSignInBtn" class="nav-actbtn">Sign in</button>
@@ -1756,7 +1770,7 @@ setTimeout(function(){
     <div class="hero-actions">
       <a class="btn btn-dark" href="#all-games">Browse all games ↓</a>
       <a class="btn btn-light" href="#reviews" id="trophyCaseBtn">🏆 Trophy Case</a>
-       <button class="btn btn-light take-tour-btn" type="button">🧭 Take the tour</button>
+       <button class="btn btn-light take-tour-btn" type="button">Take the tour</button>
       <button class="btn btn-light" id="surpriseBtn" type="button">🎲 Surprise me — pick one for me</button>
     </div>
 
@@ -13487,6 +13501,7 @@ function renderTesterAuth(){
     <p id="tourText"></p>
     <div class="tour-dots" id="tourDots" aria-hidden="true"></div>
     <div class="tour-controls">
+      <button class="btn btn-light" id="tourBack" type="button" disabled>Back</button>
       <button class="btn btn-light" id="tourSkip" type="button">Skip tour</button>
       <button class="btn btn-dark" id="tourNext" type="button">Next</button>
     </div>
@@ -13515,9 +13530,11 @@ function renderTesterAuth(){
   var textEl = document.getElementById('tourText');
   var dotsEl = document.getElementById('tourDots');
   var nextBtn = document.getElementById('tourNext');
+  var backBtn = document.getElementById('tourBack');
   var skipBtn = document.getElementById('tourSkip');
   var closeBtn = document.getElementById('tourClose');
   var active = false, idx = 0, raf = 0, stepToken = 0;
+  var lastRect = null, missingSince = 0;
   var currentTarget = null, playBtn = null, snapshot = null, lastFocus = null;
   function byId(id){ return document.getElementById(id); }
   function isShown(el){
@@ -13530,11 +13547,16 @@ function renderTesterAuth(){
   function fieldWrap(el){ return el ? (el.closest ? (el.closest('.login-field') || el) : el) : null; }
   function findPlay(){
     var btns = document.querySelectorAll('.game-card .play[data-game]');
+    var firstShownBtn = null;
     for(var i = 0; i < btns.length; i++){
       var cardEl = btns[i].closest ? btns[i].closest('.game-card') : null;
-      if(cardEl && isShown(cardEl)) return btns[i];
+      if(cardEl && isShown(cardEl)){
+        if(!firstShownBtn) firstShownBtn = btns[i];
+        var r = btns[i].getBoundingClientRect();
+        if(r.width > 0 && r.top >= 0 && r.bottom <= window.innerHeight && r.left >= 0 && r.right <= window.innerWidth) return btns[i];
+      }
     }
-    return btns[0] || null;
+    return firstShownBtn || btns[0] || null;
   }
   function firstShown(selectors){
     for(var i = 0; i < selectors.length; i++){
@@ -13600,8 +13622,8 @@ function renderTesterAuth(){
       text:'Browse the shelves, choose any game you like, and tap its Play button to start.',
       prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true }); },
       target:function(){ playBtn = findPlay(); return playBtn; } },
-    { title:'Heart a favourite',
-      text:'Tap the heart on a game card to save it under Your Favourites, so it is easy to find again.',
+    { title:'Duck a favourite',
+      text:'Tap the duck on a game card to save it under Your Favourites, so it is easy to find again.',
       prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true }); },
       target:function(){
         if(!playBtn || !document.contains(playBtn)) playBtn = findPlay();
@@ -13635,24 +13657,32 @@ function renderTesterAuth(){
   function scrollToTarget(el){
     if(!el) return;
     var lv = byId('loginView');
-    var behavior = reducedMotion() ? 'auto' : 'smooth';
+    var behavior = 'auto'; /* instant during tour: smooth scroll made the highlight chase a moving rect */
     if(lv && !lv.hidden && lv.contains(el)){
       try { el.scrollIntoView({ behavior: behavior, block: 'center', inline: 'nearest' }); } catch(e){ el.scrollIntoView(); }
       return;
     }
     var r = el.getBoundingClientRect();
     if(r.height >= window.innerHeight * 0.9) return;
+    if(r.top >= 76 && r.bottom <= window.innerHeight) return; /* already on screen: no re-scroll */
     var top = window.scrollY + r.top - Math.max(76, window.innerHeight * 0.22);
     window.scrollTo({ top: Math.max(0, top), behavior: behavior });
   }
   function position(){
     if(!active) return;
     if(!currentTarget || !document.contains(currentTarget) || !isShown(currentTarget)){
+      /* Transient hidden (view switch / layout settling): keep the
+         last good highlight instead of flickering off. Only dock
+         if the target stays missing past the settle window. */
+      if(!missingSince) missingSince = Date.now();
+      if(lastRect && (Date.now() - missingSince) < 450) return;
       highlight.style.width = '0px'; highlight.style.height = '0px';
       card.style.left = '12px'; card.style.top = 'auto'; card.style.bottom = '12px';
       return;
     }
+    missingSince = 0;
     var r = currentTarget.getBoundingClientRect();
+    lastRect = r;
     var pad = 7;
     highlight.style.left = Math.max(2, r.left - pad) + 'px';
     highlight.style.top = Math.max(2, r.top - pad) + 'px';
@@ -13679,6 +13709,7 @@ function renderTesterAuth(){
     titleEl.textContent = steps[idx].title;
     textEl.textContent = steps[idx].text;
     nextBtn.textContent = (idx === steps.length - 1) ? 'Finish' : 'Next';
+    if(backBtn) backBtn.disabled = (idx === 0);
     var dots = '';
     for(var i = 0; i < steps.length; i++){
       dots += '<span class="' + (i < idx ? 'done' : (i === idx ? 'now' : '')) + '"></span>';
@@ -13697,9 +13728,9 @@ function renderTesterAuth(){
       try { currentTarget = step.target(); } catch(e){ currentTarget = null; }
       scrollToTarget(currentTarget);
       position();
-      setTimeout(function(){ position(); }, reducedMotion() ? 40 : 380);
+      setTimeout(function(){ position(); }, 60);
       try { nextBtn.focus({ preventScroll: true }); } catch(e){}
-    }, 70);
+    }, 150);
   }
   function startTour(){
     if(active) return;
@@ -13722,6 +13753,7 @@ function renderTesterAuth(){
   function endTour(){
     if(!active) return;
     active = false;
+    lastRect = null; missingSince = 0;
     stepToken++;
     if(raf) cancelAnimationFrame(raf);
     root.hidden = true;
@@ -13744,6 +13776,7 @@ function renderTesterAuth(){
     else showStep(idx + 1);
   }
   nextBtn.addEventListener('click', advance);
+  if(backBtn) backBtn.addEventListener('click', function(){ if(idx > 0) showStep(idx - 1); });
   skipBtn.addEventListener('click', endTour);
   closeBtn.addEventListener('click', endTour);
   document.querySelectorAll('.take-tour-btn').forEach(function(btn){
