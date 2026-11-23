@@ -1,10 +1,11 @@
 /* Holo's Arcade service worker (beta).
    Tiny and safe on purpose:
-   - HTML is always network-first, so the hub never serves a stale page.
+   - HTML is always network-first, so the hub never serves a stale page
+     while online; the last fetched copy is kept only as an offline fallback.
    - Only icons, the manifest and the logo are cached (cache-first).
    - Everything else passes straight through to the network.
    Bump CACHE_VERSION whenever the cached asset list changes. */
-var CACHE_VERSION = "holos-arcade-v1";
+var CACHE_VERSION = "holos-arcade-v2";
 var STATIC_ASSETS = [
   "manifest.json",
   "icons/icon-192.png",
@@ -56,10 +57,18 @@ self.addEventListener("fetch", function (event) {
     (req.headers.get("accept") || "").indexOf("text/html") !== -1;
 
   if (isHtml) {
-    /* Network-first for pages: fresh hub every time, cache only as
-       an offline fallback. */
+    /* Network-first for pages: fresh hub every time. A copy of
+       each successfully fetched page is saved so the offline
+       fallback below can actually hit (fixed 2026-11-23: HTML
+       was never cached, so offline always failed). */
     event.respondWith(
       fetch(req).then(function (res) {
+        if (res && res.ok) {
+          var copy = res.clone();
+          caches.open(CACHE_VERSION).then(function (cache) {
+            cache.put(req, copy);
+          });
+        }
         return res;
       }).catch(function () {
         return caches.match(req);
