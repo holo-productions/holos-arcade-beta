@@ -17379,6 +17379,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 #inbox .inbox-meta{font-size:12px;color:#b8f4ff}
 #inbox .inbox-empty{color:#cfc8ff;font-size:14px;margin-top:12px}
 #inbox .inbox-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+/* INBOX-CLEAR-FILTER-2026-11-23 (Holo 00:09): Clear notifications (mark all
+   read, never delete) + unread-only filter toggle. */
+#inboxUnreadToggle[aria-pressed="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
+#inbox .inbox-item.unread h3{color:#ffd7f2}
 </style>
 <script>
 /* NOTIF-CENTER-2026-11-22 */
@@ -17405,6 +17409,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     }).catch(function(){ return null; });
   }
   var items = [];
+  var unreadOnly = false; /* INBOX-CLEAR-FILTER-2026-11-23 */
   function unreadCount(){ return items.filter(function(n){ return !n.read; }).length; }
   function renderBadge(){
     var b = document.getElementById('inboxBadge'); if(!b) return;
@@ -17418,8 +17423,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   }
   function renderList(){
     var list = document.getElementById('inboxList'); if(!list) return;
+    var shown = unreadOnly ? items.filter(function(n){ return !n.read; }) : items;
     if(!items.length){ list.innerHTML = '<p class="inbox-empty">No messages yet, agent. When we reply to a report or have news for you, it lands here.</p>'; return; }
-    list.innerHTML = items.map(function(n){
+    if(!shown.length){ list.innerHTML = '<p class="inbox-empty">No unread messages, agent. Tap "Show all" to see everything.</p>'; return; }
+    list.innerHTML = shown.map(function(n){
       var icon = TYPES[n.type] || '🔔';
       var linkBtn = n.link ? '<div class="inbox-actions"><button type="button" class="btn btn-light inbox-open" data-link="' + esc(n.link) + '">Open</button></div>' : '';
       return '<article class="inbox-item' + (n.read ? '' : ' unread') + '" data-id="' + esc(n.id) + '"><h3>' + icon + ' ' + esc(n.title) + '</h3><p>' + esc(n.body) + '</p><div class="inbox-meta">' + esc(when(n.createdAt)) + (n.read ? '' : ' · New') + '</div>' + linkBtn + '</article>';
@@ -17493,10 +17500,14 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(main && !document.getElementById('inbox')){
       var sec = document.createElement('section');
       sec.className = 'hub-panel'; sec.id = 'inbox'; sec.setAttribute('aria-label', 'Inbox');
-      sec.innerHTML = '<h2>📥 Inbox</h2><p class="g-note">Replies and news from the Arcade team land here.</p><div class="inbox-actions"><button type="button" class="btn btn-light" id="inboxMarkAll">Mark all read</button></div><div class="inbox-list" id="inboxList"></div>';
+      sec.innerHTML = '<h2>📥 Inbox</h2><p class="g-note">Replies and news from the Arcade team land here.</p><div class="inbox-actions"><button type="button" class="btn btn-light" id="inboxMarkAll">Mark all read</button><button type="button" class="btn btn-light" id="inboxClear" title="Marks everything as read — messages stay">Clear notifications</button><button type="button" class="btn btn-light" id="inboxUnreadToggle" aria-pressed="false">Show unread only</button></div><div class="inbox-list" id="inboxList"></div>';
       main.appendChild(sec);
       var ma = sec.querySelector('#inboxMarkAll');
       if(ma) ma.addEventListener('click', markAllRead);
+      var cl = sec.querySelector('#inboxClear');
+      if(cl) cl.addEventListener('click', markAllRead);
+      var ut = sec.querySelector('#inboxUnreadToggle');
+      if(ut) ut.addEventListener('click', function(){ unreadOnly = !unreadOnly; ut.setAttribute('aria-pressed', unreadOnly ? 'true' : 'false'); ut.textContent = unreadOnly ? 'Show all' : 'Show unread only'; renderList(); });
     }
   }
   function signedIn(){ var chip = document.getElementById('testerChip'); return !!(chip && !chip.hidden); }
