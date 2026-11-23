@@ -2710,6 +2710,7 @@ setTimeout(function(){
   <div class="controls" id="all-games">
     <input id="search" type="search" placeholder="Search games by name — try 'trivia', 'werewolf', 'mad cow'…" aria-label="Search games by name">
     <button class="pill active" data-filter="all" type="button">All games</button>
+    <button class="pill" data-filter="recent" type="button">🕘 Recently Played</button>
     <button class="pill" data-filter="personal" type="button">Holo's games</button>
     <button class="pill" data-filter="puzzle" type="button">Puzzles</button>
     <button class="pill" data-filter="cards" type="button">Card games</button>
@@ -6981,14 +6982,29 @@ setTimeout(function(){
       grid.parentNode.insertBefore(row, grid.nextSibling);
     });
   }
+  /* RECENT-PLAYED-2026-11-23 (Holo 2026-11-23 00:08): the
+     "Recently Played" shelf. Real game starts (never menu opens)
+     are recorded with timestamps in localStorage by the recorder
+     script at the bottom of this file; this pill shows those
+     games newest first so a tester can find a game again and
+     tap its duck to favourite it. Per device, like scores. */
+  var RECENT_KEY = 'holos-arcade-recent-plays';
+  function loadRecents(){
+    try { var v = JSON.parse(localStorage.getItem(RECENT_KEY)); if(Array.isArray(v)) return v.filter(function(r){ return r && r.slug; }); } catch(e){}
+    return [];
+  }
+  function cardSlugOf(c){ var b = c.querySelector('[data-game]'); return b ? (b.getAttribute('data-game') || '') : ''; }
+  var recentSet = {};
+  function refreshRecentSet(){ recentSet = {}; loadRecents().forEach(function(r){ recentSet[r.slug] = r.ts || 0; }); }
   function apply(){
+    if(filter === 'recent') refreshRecentSet();
     var q = (search.value||'').toLowerCase().trim(), visible = 0;
     var paging = !q && filter === 'all';
     var counts = {}, totals = {};
     cards.forEach(function(c){
       var cat = c.getAttribute('data-cat')||'';
       var txt = ((c.textContent||'') + ' ' + (c.getAttribute('data-search')||'') + ' ' + (c.getAttribute('data-cat')||'')).toLowerCase();
-      var show = (filter==='all' || cat.indexOf(filter)!==-1) && (!q || txt.indexOf(q)!==-1);
+      var show = (filter==='all' || (filter==='recent' ? !!recentSet[cardSlugOf(c)] : cat.indexOf(filter)!==-1)) && (!q || txt.indexOf(q)!==-1);
       if(q && isComingSoon(c)) show = false;
       if(show){
         visible++;
@@ -7009,16 +7025,41 @@ setTimeout(function(){
       sec.querySelectorAll('.game-card').forEach(function(c){ if(c.style.display !== 'none') any = true; });
       sec.style.display = any ? '' : 'none';
     });
+    empty.textContent = (filter === 'recent' && !visible)
+      ? 'No recently played games yet \u2014 play a game and it will show up here so you can find it again (and tap the duck to favourite it!).'
+      : 'No game matches that search \u2014 try \u201Ctrivia\u201D or clear the filters.';
     empty.style.display = visible ? 'none' : 'block';
+    /* RECENT-PLAYED-2026-11-23: on the recents shelf, gather the
+       recent cards into the flat grid in newest-first order
+       (leaving the shelf restores homes via setSort). */
+    if(filter === 'recent'){
+      var fg = $('flatGrid');
+      if(fg){
+        loadRecents().forEach(function(r){
+          var card = null;
+          cards.forEach(function(c){ if(cardSlugOf(c) === r.slug) card = c; });
+          if(card) fg.appendChild(card);
+        });
+        fg.hidden = false;
+        document.querySelectorAll('main .section').forEach(function(sec){ sec.style.display = 'none'; });
+      }
+    }
     updateShowMoreButtons(paging, totals);
   }
   buildShowMoreButtons();
   apply();
   pills.forEach(function(p){
     p.addEventListener('click', function(){
+      var prevFilter = filter;
       pills.forEach(function(x){ x.classList.remove('active'); });
       p.classList.add('active');
       filter = p.getAttribute('data-filter');
+      /* RECENT-PLAYED-2026-11-23: leaving the Recently Played shelf
+         puts every card back where the current sort wants it. */
+      if(prevFilter === 'recent' && filter !== 'recent'){
+        var sp = document.querySelector('.pill[data-sort].active');
+        setSort(sp ? sp.getAttribute('data-sort') : 'category');
+      }
       apply();
     });
   });
@@ -10704,6 +10745,14 @@ var LOCATIONS = [
     </details>
 
 
+    <details class="legal-section">
+      <summary>Can't remember a game you played?</summary>
+      <div class="legal-content">
+        <p>Open the Library and tap the Recently Played pill. Your last 20 games show up there, newest first, so you can find the one you mean and tap its duck to favourite it. The list lives on this device.</p>
+      <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="library">Go to Library &#8594;</button></p>
+        </div>
+    </details>
+
     <button class="btn btn-dark legal-back-bottom" id="faqBackBottom" type="button">← Back to games</button>
   </div>
 </div>
@@ -14303,6 +14352,40 @@ function renderTesterAuth(){
     }
   } catch(e){}
   renderFavorites();
+})();
+</script>
+
+<script>
+/* ================= Recently Played recorder (Holo 2026-11-23 00:08) =================
+   Records REAL game starts (same guard as the play logger: a plain
+   card tap only opens the Game Menu, so only direct starts and
+   in-player taps count) with timestamps in localStorage, newest
+   first, one entry per game, capped at 20. The Library
+   "Recently Played" pill reads this list. Per device, like scores. */
+(function(){
+  var RECENT_KEY = 'holos-arcade-recent-plays';
+  var CAP = 20;
+  function record(slug){
+    try {
+      if(!slug) return;
+      var v = [];
+      try { v = JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch(e){ v = []; }
+      if(!Array.isArray(v)) v = [];
+      v = v.filter(function(r){ return r && r.slug && r.slug !== slug; });
+      v.unshift({ slug: String(slug), ts: Date.now() });
+      localStorage.setItem(RECENT_KEY, JSON.stringify(v.slice(0, CAP)));
+    } catch(e){}
+  }
+  window.holoRecordRecentPlay = record;
+  try {
+    document.addEventListener('click', function(ev){
+      try {
+        var t = ev.target;
+        var b = (t && t.closest) ? t.closest('[data-game]') : null;
+        if(b && (window.__holoDirectStart || (b.closest && b.closest('#player')))) record(b.getAttribute('data-game'));
+      } catch(e){}
+    }, true);
+  } catch(e){}
 })();
 </script>
 
