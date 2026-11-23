@@ -526,8 +526,8 @@ html.bigtext main,html.bigtext .topbar,html.bigtext footer{zoom:1.25}
 .login-field input{width:100%;padding:13px 16px;border-radius:14px;border:1.5px solid var(--line);background:var(--bg2);color:var(--ink);font-size:16px;min-height:50px;font-family:inherit}
 .dob-wrap{display:flex;gap:8px;align-items:stretch}
 .dob-wrap input[type="text"]{flex:1;min-width:0}
-.dob-cal-btn{flex:0 0 auto;min-height:50px;padding:0 14px;font-size:20px;line-height:1}
-.login-field input.dob-picker{position:absolute;width:1px;height:1px;min-height:0;padding:0;border:0;opacity:0;pointer-events:none}
+.dob-selects{display:flex;gap:8px;margin-top:8px}
+.dob-selects select{flex:1;min-width:0;padding:13px 8px;border-radius:14px;border:1.5px solid var(--line);background:var(--bg2);color:var(--ink);font-size:16px;min-height:50px;font-family:inherit}
 .login-field input:focus{outline:3px solid var(--gold);outline-offset:1px;border-color:var(--gold)}
 .login-terms{display:flex;gap:10px;align-items:flex-start;margin:4px 0 16px;font-size:14.5px;font-weight:600;line-height:1.45}
 .login-terms input{width:22px;height:22px;flex:0 0 auto;margin:1px 0 0;accent-color:var(--rff);cursor:pointer}
@@ -7140,10 +7140,11 @@ setTimeout(function(){
 
   /* ---------- Date of birth ---------- */
   /* DOB-CALTYPE-2026-11-23: typed dates are accepted too. The DOB
-     field is a text box (type it as DD/MM/YYYY) with a calendar
-     button that opens the native date picker — phones can do
-     either. Everything is normalised to YYYY-MM-DD here, so the
-     validation, storage and 18th-birthday maths are unchanged. */
+     field is a text box (type it as DD/MM/YYYY) plus three
+     dropdowns — Year only, then Month only, then Day only
+     (DOB-DROPDOWNS-2026-11-23). Everything is normalised to
+     YYYY-MM-DD here, so the validation, storage and
+     18th-birthday maths are unchanged. */
   function cleanDob(v){
     v = String(v || '').trim();
     if(!v) return '';
@@ -7167,45 +7168,72 @@ setTimeout(function(){
     if(now.getFullYear() - d.getFullYear() > 120) return 'That date looks too far back, agent — check the year.';
     return null;
   }
-  /* DOB-CALTYPE-2026-11-23: one DOB field, two ways in — type it or
-     tap the calendar. The text box takes DD/MM/YYYY (digits only
-     needed: slashes are added as you type, so the phone number
-     keyboard works); the calendar button opens the native date
-     picker through a visually-hidden <input type="date">. */
+  /* DOB-DROPDOWNS-2026-11-23 (Holo: dropdowns should be year only,
+     then month only, then day only): one DOB field, two ways in —
+     type it, or pick Year / Month / Day from three dropdowns. The
+     text box takes DD/MM/YYYY (digits only needed: slashes are
+     added as you type, so the phone number keyboard works). The Day
+     dropdown follows the chosen month and year (28/29/30/31 days,
+     leap years included). Both ways write the same text box, so
+     validation, storage and 18th-birthday maths are unchanged. */
+  var DOB_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function dobDaysInMonth(y, m){ return new Date(y, m, 0).getDate(); } /* m is 1-12 */
   function dobFieldHTML(id){
-    return '<div class="dob-wrap"><input id="' + id + '" type="text" inputmode="numeric" autocomplete="bday" placeholder="DD/MM/YYYY" maxlength="10" />' +
-      '<button type="button" class="btn btn-light dob-cal-btn" id="' + id + 'Cal" aria-label="Pick date from calendar">\uD83D\uDCC5</button>' +
-      '<input id="' + id + 'Picker" type="date" class="dob-picker" tabindex="-1" aria-hidden="true" /></div>';
+    return '<div class="dob-wrap"><input id="' + id + '" type="text" inputmode="numeric" autocomplete="bday" placeholder="DD/MM/YYYY" maxlength="10" /></div>' +
+      '<div class="dob-selects"><select id="' + id + 'Year" aria-label="Birth year"><option value="">Year</option></select>' +
+      '<select id="' + id + 'Month" aria-label="Birth month"><option value="">Month</option></select>' +
+      '<select id="' + id + 'Day" aria-label="Birth day"><option value="">Day</option></select></div>';
   }
   function bindDobField(id){
     var txt = document.getElementById(id);
-    var cal = document.getElementById(id + 'Cal');
-    var pk = document.getElementById(id + 'Picker');
-    if(!txt || !cal || !pk) return;
-    cal.addEventListener('click', function(e){
-      e.preventDefault();
-      try { if(pk.showPicker) pk.showPicker(); else pk.click(); }
-      catch(err){ try { pk.click(); } catch(err2){} }
-    });
-    pk.addEventListener('change', function(){
-      var c = cleanDob(pk.value);
-      if(c){ var p = c.split('-'); txt.value = p[2] + '/' + p[1] + '/' + p[0]; }
-      txt.focus();
-    });
+    var yr = document.getElementById(id + 'Year');
+    var mo = document.getElementById(id + 'Month');
+    var dy = document.getElementById(id + 'Day');
+    if(!txt || !yr || !mo || !dy) return;
+    var nowY = new Date().getFullYear(), y;
+    for(y = nowY; y >= nowY - 120; y--){ var o = document.createElement('option'); o.value = String(y); o.textContent = String(y); yr.appendChild(o); }
+    for(var m = 1; m <= 12; m++){ var om = document.createElement('option'); om.value = String(m); om.textContent = DOB_MONTHS[m - 1]; mo.appendChild(om); }
+    function fillDays(){
+      var yv = parseInt(yr.value, 10), mv = parseInt(mo.value, 10);
+      var max = (yv && mv) ? dobDaysInMonth(yv, mv) : 31;
+      var prev = parseInt(dy.value, 10);
+      while(dy.options.length > 1) dy.remove(1);
+      for(var d = 1; d <= max; d++){ var od = document.createElement('option'); od.value = String(d); od.textContent = String(d); dy.appendChild(od); }
+      if(prev && prev <= max) dy.value = String(prev);
+    }
+    function syncFromSelects(){
+      fillDays();
+      if(yr.value && mo.value && dy.value){
+        txt.value = ('0' + dy.value).slice(-2) + '/' + ('0' + mo.value).slice(-2) + '/' + yr.value;
+      }
+    }
+    function syncFromText(){
+      var c = cleanDob(txt.value);
+      if(!c) return;
+      var p = c.split('-');
+      yr.value = p[0]; mo.value = String(parseInt(p[1], 10));
+      fillDays();
+      dy.value = String(parseInt(p[2], 10));
+    }
+    yr.addEventListener('change', syncFromSelects);
+    mo.addEventListener('change', syncFromSelects);
+    dy.addEventListener('change', syncFromSelects);
+    fillDays();
     txt.addEventListener('blur', function(){
       var c = cleanDob(txt.value);
-      if(c){ var p = c.split('-'); txt.value = p[2] + '/' + p[1] + '/' + p[0]; pk.value = c; }
+      if(c){ var p = c.split('-'); txt.value = p[2] + '/' + p[1] + '/' + p[0]; }
+      syncFromText();
     });
     txt.addEventListener('input', function(){
-      var raw = txt.value, c;
-      if(/^\d{4}[-/.]/.test(raw)){ c = cleanDob(raw); if(c) pk.value = c; return; }
+      var raw = txt.value;
+      if(/^\d{4}[-/.]/.test(raw)){ syncFromText(); return; }
       var digits = raw.replace(/\D/g, '').slice(0, 8), out = digits;
       if(digits.length > 4) out = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
       else if(digits.length > 2) out = digits.slice(0, 2) + '/' + digits.slice(2);
       if(out !== txt.value) txt.value = out;
-      c = cleanDob(txt.value);
-      if(c) pk.value = c;
+      syncFromText();
     });
+    syncFromText();
   }
   function dob(){
     var a = acct();
@@ -7412,7 +7440,7 @@ setTimeout(function(){
       var box = document.getElementById('age18SetBox');
       if(!box) return;
       if(isDob){
-        box.innerHTML = '<div class="login-field"><label for="age18NewDob">New date of birth</label>' + dobFieldHTML('age18NewDob') + '<p class="login-helper">Type it as DD/MM/YYYY, or tap \uD83D\uDCC5 to pick from a calendar.</p></div>' +
+        box.innerHTML = '<div class="login-field"><label for="age18NewDob">New date of birth</label>' + dobFieldHTML('age18NewDob') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below.</p></div>' +
           '<p class="login-error" id="age18SetErr" role="alert" hidden></p>' +
           '<p><button type="button" class="btn btn-dark" id="age18SetGo">Save date of birth</button></p>';
         box.hidden = false;
@@ -14299,7 +14327,7 @@ function renderTesterAuth(){
       '<form id="createForm" novalidate>' +
       '<div class="login-field"><label for="createName">Code Name</label><input id="createName" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
       '<div class="login-field"><label for="createEmail">Your email</label><input id="createEmail" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
-      '<div class="login-field"><label for="createDob">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDob') : '<input id="createDob" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or tap \uD83D\uDCC5 to pick from a calendar. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
+      '<div class="login-field"><label for="createDob">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDob') : '<input id="createDob" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
       '<div class="login-field"><label for="createPw">Choose a password</label><input id="createPw" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
       '<div class="login-field"><label for="createPw2">Confirm password</label><input id="createPw2" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
       '<div class="login-field"><label for="createInvite">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInvite" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Enter the code from your invite link.</p></div>' +
@@ -14522,7 +14550,7 @@ function renderTesterAuth(){
       '<form id="createFormOwner" novalidate>' +
       '<div class="login-field"><label for="createNameOwner">Code Name</label><input id="createNameOwner" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
       '<div class="login-field"><label for="createEmailOwner">Your email</label><input id="createEmailOwner" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
-      '<div class="login-field"><label for="createDobOwner">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDobOwner') : '<input id="createDobOwner" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or tap \uD83D\uDCC5 to pick from a calendar. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
+      '<div class="login-field"><label for="createDobOwner">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDobOwner') : '<input id="createDobOwner" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
       '<div class="login-field"><label for="createPwOwner">Choose a password</label><input id="createPwOwner" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
       '<div class="login-field"><label for="createPw2Owner">Confirm password</label><input id="createPw2Owner" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
       '<div class="login-field"><label for="createInviteOwner">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInviteOwner" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Enter the code from your invite link.</p></div>' +
