@@ -18251,7 +18251,31 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 #inboxUnreadToggle[aria-pressed="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
 /* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:13): All / Unread / Drafts */
 #inboxDraftToggle[aria-pressed="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
+/* INBOX-EMAIL-2026-11-23 (Holo 08:33): Archived filter toggle */
+#inboxArchiveToggle[aria-pressed="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
 #inbox .inbox-item.unread h3{color:#ffd7f2}
+/* INBOX-EMAIL-2026-11-23 (Holo 08:31): email/chat-style rows + reading view */
+#inbox .inbox-list{gap:8px}
+#inbox .inbox-item{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+#inbox .inbox-ava{flex:0 0 auto;width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#8b5cff,#ff2e9a);color:#fff;font-weight:800;font-size:17px;display:flex;align-items:center;justify-content:center;text-transform:uppercase}
+#inbox .inbox-main{flex:1 1 auto;min-width:0}
+#inbox .inbox-row1{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+#inbox .inbox-from{font-size:14px;color:#cfc8ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#inbox .inbox-time{font-size:11.5px;color:#b8f4ff;white-space:nowrap;flex:0 0 auto}
+#inbox .inbox-subj{font-size:15px;color:#fff;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#inbox .inbox-prev{font-size:13px;color:#a99fe0;margin-top:1px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+#inbox .inbox-item.unread .inbox-from,#inbox .inbox-item.unread .inbox-subj{font-weight:800;color:#fff}
+#inbox .inbox-dot{flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:#ff2e9a;box-shadow:0 0 6px rgba(255,46,154,.8);margin-top:6px}
+#inbox .inbox-item .inbox-actions{margin-top:8px}
+#inboxRead{margin-top:12px}
+#inboxRead[hidden]{display:none!important}
+#inbox.inbox-reading .inbox-list,#inbox.inbox-reading #inboxDrafts,#inbox.inbox-reading #friendReqInbox,#inbox.inbox-reading > .inbox-actions{display:none!important}
+#inboxRead .read-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+#inboxRead .read-subj{font-size:17px;color:#fff;font-weight:800;flex:1 1 auto;min-width:0}
+#inboxRead .thread{display:flex;flex-direction:column;gap:6px}
+#inboxRead .bubble{max-width:88%;background:#171040;border:2px solid #8b5cff;border-radius:16px 16px 16px 4px;padding:10px 14px;color:#e9e4ff;font-size:14.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+#inboxRead .bubble-meta{font-size:11.5px;color:#b8f4ff}
+#inboxRead .read-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 </style>
 <script>
 /* NOTIF-CENTER-2026-11-22 */
@@ -18280,14 +18304,15 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   var items = [];
   var unreadOnly = false; /* INBOX-CLEAR-FILTER-2026-11-23 */
   var draftsOnly = false; /* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:13): All / Unread / Drafts */
-  function inboxFilter(){ return draftsOnly ? 'drafts' : (unreadOnly ? 'unread' : 'all'); }
+  var archivedOnly = false; /* INBOX-EMAIL-2026-11-23 (Holo 08:33): Archived filter — archive only, no delete */
+  function inboxFilter(){ return draftsOnly ? 'drafts' : (archivedOnly ? 'archived' : (unreadOnly ? 'unread' : 'all')); }
   window.__inboxFilter = inboxFilter;
   function applyInboxFilter(){
     renderList();
-    var fr = document.getElementById('friendReqInbox'); if(fr) fr.hidden = draftsOnly;
+    var fr = document.getElementById('friendReqInbox'); if(fr) fr.hidden = draftsOnly || archivedOnly;
     if(typeof window.__renderInboxDrafts === 'function'){ try { window.__renderInboxDrafts(); } catch(e){} }
   }
-  function unreadCount(){ return items.filter(function(n){ return !n.read; }).length; }
+  function unreadCount(){ return items.filter(function(n){ return !n.read && !n.archived; }).length; } /* INBOX-EMAIL-2026-11-23: archived unread does not badge */
   function renderBadge(){
     var b = document.getElementById('inboxBadge'); if(!b) return;
     var n = unreadCount();
@@ -18298,23 +18323,61 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   function when(ts){
     try { var d = new Date(ts); if(isNaN(d)) return ''; return d.toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }); } catch(e){ return ''; }
   }
+  /* INBOX-EMAIL-2026-11-23: sender / preview / short time for email rows */
+  function senderOf(n){
+    if(n.fromName) return String(n.fromName);
+    var b = String(n.body || '');
+    var m = b.match(/^(\S+) wants to be your friend/); if(m) return m[1];
+    m = b.match(/^(\S+) accepted your friend request/); if(m) return m[1];
+    return "Holo's Arcade";
+  }
+  function previewOf(n){ var b = String(n.body || '').replace(/\s+/g, ' ').trim(); return b.length > 90 ? b.slice(0, 90) + '…' : b; }
+  function whenShort(ts){
+    try {
+      var d = new Date(ts); if(isNaN(d)) return '';
+      var now = new Date();
+      if(d.toDateString() === now.toDateString()) return d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+      var y = new Date(now); y.setDate(now.getDate() - 1);
+      if(d.toDateString() === y.toDateString()) return 'Yesterday';
+      return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+    } catch(e){ return ''; }
+  }
   function renderList(){
     var list = document.getElementById('inboxList'); if(!list) return;
     if(draftsOnly){ list.innerHTML = ''; return; }
-    var shown = unreadOnly ? items.filter(function(n){ return !n.read; }) : items;
+    /* INBOX-EMAIL-2026-11-23 (Holo 08:33): archived messages hide from the main list, kept in storage */
+    var pool = items.filter(function(n){ return archivedOnly ? !!n.archived : !n.archived; });
+    var shown = unreadOnly ? pool.filter(function(n){ return !n.read; }) : pool;
     if(!items.length){ list.innerHTML = '<p class="inbox-empty">No messages yet, agent. When we reply to a report or have news for you, it lands here.</p>'; return; }
-    if(!shown.length){ list.innerHTML = '<p class="inbox-empty">No unread messages, agent. Tap "Show all" to see everything.</p>'; return; }
+    if(!shown.length){
+      var emptyMsg = archivedOnly ? 'No archived messages yet, agent. Tap "Show all" to see everything.'
+        : (unreadOnly ? 'No unread messages, agent. Tap "Show all" to see everything.'
+        : 'No messages here, agent. Archived ones live under "Show archived only".');
+      list.innerHTML = '<p class="inbox-empty">' + emptyMsg + '</p>'; return;
+    }
     list.innerHTML = shown.map(function(n){
       var icon = TYPES[n.type] || '🔔';
       /* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:14): per-item Mark read on unread items */
       var actions = '';
       if(n.link) actions += '<button type="button" class="btn btn-light inbox-open" data-link="' + esc(n.link) + '">Open</button>';
       if(!n.read) actions += '<button type="button" class="btn btn-light inbox-markread">Mark read</button>';
+      /* INBOX-EMAIL-2026-11-23 (Holo 08:33): archive only — no delete button */
+      if(n.archived) actions += '<button type="button" class="btn btn-light inbox-unarchive">Unarchive</button>';
+      else actions += '<button type="button" class="btn btn-light inbox-archive">Archive</button>';
       var linkBtn = actions ? '<div class="inbox-actions">' + actions + '</div>' : '';
-      return '<article class="inbox-item' + (n.read ? '' : ' unread') + '" data-id="' + esc(n.id) + '"><h3>' + icon + ' ' + esc(n.title) + '</h3><p>' + esc(n.body) + '</p><div class="inbox-meta">' + esc(when(n.createdAt)) + (n.read ? '' : ' · New') + '</div>' + linkBtn + '</article>';
+      /* INBOX-EMAIL-2026-11-23: email row — avatar, sender, subject, preview, time, unread dot */
+      var from = senderOf(n);
+      var initial = (from.replace(/[^A-Za-z0-9]/g, '').charAt(0) || 'H').toUpperCase();
+      return '<article class="inbox-item' + (n.read ? '' : ' unread') + '" data-id="' + esc(n.id) + '" tabindex="0" role="button" aria-label="Open message: ' + esc(n.title) + '"><div class="inbox-ava" aria-hidden="true">' + esc(initial) + '</div><div class="inbox-main"><div class="inbox-row1"><span class="inbox-from">' + esc(from) + '</span><span class="inbox-time">' + esc(whenShort(n.createdAt)) + '</span></div><div class="inbox-subj">' + icon + ' ' + esc(n.title) + '</div><div class="inbox-prev">' + esc(previewOf(n)) + '</div>' + linkBtn + '</div>' + (n.read ? '' : '<span class="inbox-dot" aria-label="Unread"></span>') + '</article>';
     }).join('');
     list.querySelectorAll('.inbox-markread').forEach(function(btn){
       btn.addEventListener('click', function(){ markRead(btn.closest('.inbox-item').getAttribute('data-id')); });
+    });
+    list.querySelectorAll('.inbox-archive').forEach(function(btn){
+      btn.addEventListener('click', function(){ archiveItem(btn.closest('.inbox-item').getAttribute('data-id'), true); });
+    });
+    list.querySelectorAll('.inbox-unarchive').forEach(function(btn){
+      btn.addEventListener('click', function(){ archiveItem(btn.closest('.inbox-item').getAttribute('data-id'), false); });
     });
     list.querySelectorAll('.inbox-open').forEach(function(btn){
       btn.addEventListener('click', function(){
@@ -18322,6 +18385,16 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         markRead(btn.closest('.inbox-item').getAttribute('data-id'));
         if(link.indexOf('game:') === 0){ try { location.hash = '#game/' + link.slice(5); } catch(e){} }
         else if(window.holoShowView){ window.holoShowView(link || 'main'); }
+      });
+    });
+    /* INBOX-EMAIL-2026-11-23: tap a row to open the chat-style reading view */
+    list.querySelectorAll('.inbox-item').forEach(function(el){
+      el.addEventListener('click', function(ev){
+        if(ev.target.closest('button')) return;
+        openMessage(el.getAttribute('data-id'));
+      });
+      el.addEventListener('keydown', function(ev){
+        if(ev.key === 'Enter' || ev.key === ' '){ ev.preventDefault(); openMessage(el.getAttribute('data-id')); }
       });
     });
   }
@@ -18351,6 +18424,14 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(!Object.keys(patch).length) return Promise.resolve(true);
     return api('PATCH', '/users/' + encodeURIComponent(a.uid) + '/notifications', patch).then(function(r){ return r !== null; });
   }
+  /* INBOX-EMAIL-2026-11-23 (Holo 08:33): archive only — message kept, hidden from main list */
+  function archiveItem(id, archived){
+    var a = loadAuth(); if(!a || !id) return Promise.resolve(false);
+    items.forEach(function(n){ if(n.id === id) n.archived = !!archived; });
+    if(readingId === id && archived) closeMessage(false);
+    renderBadge(); renderList();
+    return api('PATCH', '/users/' + encodeURIComponent(a.uid) + '/notifications/' + encodeURIComponent(id), { archived:!!archived }).then(function(r){ return r !== null; });
+  }
   function sendNotice(toUid, notice){
     /* Cross-user create — needs the rules publish; fails soft (null) until then. */
     if(!toUid || !notice) return Promise.resolve(null);
@@ -18368,6 +18449,47 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     /* Owner flow (plan Phase 1): fixed template, Holo approves wording. */
     return sendNotice(uid, { type:'review-fixed', title:'Fixed — thank you, agent!', body:'We looked into your report about ' + (gameName || 'a game') + '. Fixed. Thank you for helping make the Arcade better!', link: slug ? ('game:' + slug) : '' });
   }
+  /* INBOX-EMAIL-2026-11-23: chat-style reading view */
+  var readingId = null;
+  function openMessage(id){
+    var n = null; items.forEach(function(x){ if(x.id === id) n = x; });
+    if(!n) return;
+    var sec = document.getElementById('inbox'); var rd = document.getElementById('inboxRead');
+    if(!sec || !rd) return;
+    readingId = id;
+    rd.querySelector('.read-subj').textContent = n.title || '';
+    var thread = rd.querySelector('.thread');
+    thread.innerHTML = '';
+    var bub = document.createElement('div'); bub.className = 'bubble'; bub.textContent = n.body || '';
+    var meta = document.createElement('div'); meta.className = 'bubble-meta'; meta.textContent = senderOf(n) + ' · ' + when(n.createdAt);
+    thread.appendChild(bub); thread.appendChild(meta);
+    var acts = rd.querySelector('.read-actions'); acts.innerHTML = '';
+    if(n.link){
+      var ob = document.createElement('button'); ob.type = 'button'; ob.className = 'btn btn-light'; ob.textContent = 'Open';
+      ob.addEventListener('click', function(){
+        var link = n.link || '';
+        if(link.indexOf('game:') === 0){ try { location.hash = '#game/' + link.slice(5); } catch(e){} }
+        else if(window.holoShowView){ window.holoShowView(link || 'main'); }
+      });
+      acts.appendChild(ob);
+    }
+    var ab = document.createElement('button'); ab.type = 'button'; ab.className = 'btn btn-light'; ab.textContent = n.archived ? 'Unarchive' : 'Archive';
+    ab.addEventListener('click', function(){ archiveItem(n.id, !n.archived); });
+    acts.appendChild(ab);
+    sec.classList.add('inbox-reading'); rd.hidden = false;
+    try { history.pushState({ holoInboxRead:id }, '', location.href); } catch(e){}
+    markRead(id);
+    try { sec.scrollIntoView(); } catch(e){}
+  }
+  function closeMessage(fromButton){
+    var sec = document.getElementById('inbox'); var rd = document.getElementById('inboxRead');
+    if(sec) sec.classList.remove('inbox-reading');
+    if(rd) rd.hidden = true;
+    var was = readingId; readingId = null;
+    if(was && fromButton){ try { history.back(); } catch(e){} }
+  }
+  window.addEventListener('popstate', function(){ if(readingId) closeMessage(false); });
+  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape' && readingId) closeMessage(true); });
   function buildUI(){
     var line = document.querySelector('.nav-line-btns');
     if(line && !document.getElementById('inboxBellBtn')){
@@ -18387,29 +18509,37 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(main && !document.getElementById('inbox')){
       var sec = document.createElement('section');
       sec.className = 'hub-panel'; sec.id = 'inbox'; sec.setAttribute('aria-label', 'Inbox');
-      sec.innerHTML = '<h2>Inbox</h2><p class="g-note">Replies and news from the Arcade team land here.</p><div class="inbox-actions"><button type="button" class="btn btn-light" id="inboxMarkAll">Mark all read</button><button type="button" class="btn btn-light" id="inboxClear" title="Marks everything as read — messages stay">Clear notifications</button><button type="button" class="btn btn-light" id="inboxUnreadToggle" aria-pressed="false">Show unread only</button><button type="button" class="btn btn-light" id="inboxDraftToggle" aria-pressed="false">Show drafts only</button></div><div class="inbox-list" id="inboxList"></div>';
+      sec.innerHTML = '<h2>Inbox</h2><p class="g-note">Replies and news from the Arcade team land here.</p><div class="inbox-actions"><button type="button" class="btn btn-light" id="inboxMarkAll">Mark all read</button><button type="button" class="btn btn-light" id="inboxClear" title="Marks everything as read — messages stay">Clear notifications</button><button type="button" class="btn btn-light" id="inboxUnreadToggle" aria-pressed="false">Show unread only</button><button type="button" class="btn btn-light" id="inboxDraftToggle" aria-pressed="false">Show drafts only</button><button type="button" class="btn btn-light" id="inboxArchiveToggle" aria-pressed="false">Show archived only</button></div><div class="inbox-list" id="inboxList"></div>';
       main.appendChild(sec);
+      /* INBOX-EMAIL-2026-11-23: reading-view panel (hidden until a message opens) */
+      var rd = document.createElement('div'); rd.id = 'inboxRead'; rd.hidden = true;
+      rd.innerHTML = '<div class="read-head"><button type="button" class="btn btn-light" id="inboxBack">← Back to Inbox</button><span class="read-subj"></span></div><div class="thread"></div><div class="read-actions"></div>';
+      sec.appendChild(rd);
+      rd.querySelector('#inboxBack').addEventListener('click', function(){ closeMessage(true); });
       var ma = sec.querySelector('#inboxMarkAll');
       if(ma) ma.addEventListener('click', markAllRead);
       var cl = sec.querySelector('#inboxClear');
       if(cl) cl.addEventListener('click', markAllRead);
       var ut = sec.querySelector('#inboxUnreadToggle');
       var dt = sec.querySelector('#inboxDraftToggle');
+      var at = sec.querySelector('#inboxArchiveToggle'); /* INBOX-EMAIL-2026-11-23 (Holo 08:33) */
       function syncFilterBtns(){
         if(ut){ ut.setAttribute('aria-pressed', unreadOnly ? 'true' : 'false'); ut.textContent = unreadOnly ? 'Show all' : 'Show unread only'; }
         if(dt){ dt.setAttribute('aria-pressed', draftsOnly ? 'true' : 'false'); dt.textContent = draftsOnly ? 'Show all' : 'Show drafts only'; }
+        if(at){ at.setAttribute('aria-pressed', archivedOnly ? 'true' : 'false'); at.textContent = archivedOnly ? 'Show all' : 'Show archived only'; }
       }
-      if(ut) ut.addEventListener('click', function(){ unreadOnly = !unreadOnly; if(unreadOnly) draftsOnly = false; syncFilterBtns(); applyInboxFilter(); });
-      if(dt) dt.addEventListener('click', function(){ draftsOnly = !draftsOnly; if(draftsOnly) unreadOnly = false; syncFilterBtns(); applyInboxFilter(); });
+      if(ut) ut.addEventListener('click', function(){ unreadOnly = !unreadOnly; if(unreadOnly){ draftsOnly = false; archivedOnly = false; } syncFilterBtns(); applyInboxFilter(); });
+      if(dt) dt.addEventListener('click', function(){ draftsOnly = !draftsOnly; if(draftsOnly){ unreadOnly = false; archivedOnly = false; } syncFilterBtns(); applyInboxFilter(); });
+      if(at) at.addEventListener('click', function(){ archivedOnly = !archivedOnly; if(archivedOnly){ unreadOnly = false; draftsOnly = false; } syncFilterBtns(); applyInboxFilter(); });
     }
   }
   function signedIn(){ var chip = document.getElementById('testerChip'); return !!(chip && !chip.hidden); }
   function tick(){ if(signedIn()) refresh(); }
   buildUI();
-  try { new MutationObserver(function(){ if(document.body.getAttribute('data-view') === 'inbox') refresh(); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] }); } catch(e){}
+  try { new MutationObserver(function(){ var v = document.body.getAttribute('data-view'); if(v === 'inbox') refresh(); else if(readingId) closeMessage(false); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] }); } catch(e){}
   setInterval(tick, 60000);
   setTimeout(tick, 2500);
-  window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, filter:inboxFilter, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, unreadCount:unreadCount, items:function(){ return items.slice(); } };
+  window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, archiveItem:archiveItem, openMessage:openMessage, closeMessage:closeMessage, filter:inboxFilter, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, unreadCount:unreadCount, items:function(){ return items.slice(); } };
 })();
 </script>
 <!-- FRIEND-REQUESTS-2026-11-22 (Holo 23:32): cross-device friend
@@ -19093,7 +19223,7 @@ footer .egg-row{justify-content:center}
     });
     /* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:13): respect All/Unread/Drafts */
     var f = (typeof window.__inboxFilter === 'function') ? window.__inboxFilter() : 'all';
-    if(f === 'unread'){ box.hidden = true; return; }
+    if(f === 'unread' || f === 'archived'){ box.hidden = true; return; } /* INBOX-EMAIL-2026-11-23: drafts box hidden in Archived view too */
     if(!slugs.length){
       if(f === 'drafts'){ box.hidden = false; box.innerHTML = '<p class="inbox-empty">No draft reports yet, agent. Tap "Show all" to see everything.</p>'; return; }
       box.innerHTML = ''; box.hidden = true; return;
