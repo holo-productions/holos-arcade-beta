@@ -10700,6 +10700,14 @@ var LOCATIONS = [
     </details>
 
     <details class="legal-section">
+      <summary>Can I attach a screenshot to my report?</summary>
+      <div class="legal-content">
+        <p>Yes! In <strong>Report back</strong>, tap <strong>📷 Add a screenshot</strong> and pick a picture. It gets shrunk automatically and travels with your report. Tap the × on the preview to remove it. Drafts keep the screenshot too.</p>
+      <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="feedback">Open Report back &#8594;</button></p>
+        </div>
+    </details>
+
+    <details class="legal-section">
       <summary>What is Glitch XP?</summary>
       <div class="legal-content">
         <p><svg class="coin-ic" aria-hidden="true"><use href="#xpStar"></use></svg> Glitch XP is achievement points you earn by playing — they build your Level and are never spent. Your XP and Level stay with you at launch. Spendable coins come later with the shop: <svg class="coin-ic" aria-hidden="true"><use href="#coinGlitchGold"></use></svg> Glitch Gold for testers and <svg class="coin-ic" aria-hidden="true"><use href="#coinDuckBucks"></use></svg> Duck Bucks for everyone — not active yet. You also earn a stamp for every game you report on, plus badges as you file reports.</p>
@@ -11124,6 +11132,16 @@ var LOCATIONS = [
       <p class="g-note" id="fbBugNote" style="display:none;margin:8px 0 0">We read every report.</p>
     </div>
     <textarea id="fbText" rows="4" placeholder="Spill it! Fun bits, broken bits, wild ideas — Holo reads every word. 🐾"></textarea>
+    <!-- FB-SCREENSHOT-2026-11-23 (Holo 08:36): attach a screenshot to the report -->
+    <div class="fb-shot">
+      <input type="file" id="fbShotFile" accept="image/*" hidden>
+      <button class="g-btn" id="fbShotBtn" type="button">📷 Add a screenshot</button>
+      <div class="fb-shot-prev" id="fbShotPrev" hidden>
+        <img id="fbShotImg" alt="Your screenshot">
+        <button class="pop-x fb-shot-x" id="fbShotRemove" type="button" aria-label="Remove screenshot">×</button>
+      </div>
+      <p class="g-note fb-shot-note" id="fbShotNote" style="margin:6px 0 0">Optional — a picture of the bug helps a lot. It gets shrunk before sending.</p>
+    </div>
     <p class="fb-meta" id="fbMetaLine"></p>
     <p class="fb-thanks" id="fbThanks" hidden>Report saved. Thank you.</p>
     <div class="g-row" style="margin-top:14px">
@@ -11412,6 +11430,7 @@ var LOCATIONS = [
   var TESTED_KEY = 'holoArcade_v1_tested';
   var HUB_BUILD = 'v25 · tester build';
   var fbGame = 'games-hub', fbRating = 0, fbTag = '';
+  var fbShot = ''; /* FB-SCREENSHOT-2026-11-23: data URL of the attached screenshot */
   /* ---------- Play-time capture ---------- */
   var sessionStart = Date.now();
   var gameStartTs = null;
@@ -11521,6 +11540,54 @@ var LOCATIONS = [
       document.querySelectorAll('.fb-tags .pill[data-fb-tag]').forEach(function(x){ x.classList.toggle('active', x.getAttribute('data-fb-tag') === 'Bug'); });
     }
   }
+  /* FB-SCREENSHOT-2026-11-23 (Holo 08:36): screenshot attach.
+     Pick an image -> shrink on a canvas (max 1280px, JPEG) until
+     the data URL is under ~400KB chars (~300KB image) -> preview.
+     Oversize / non-image gets a friendly note, nothing attaches. */
+  var FB_SHOT_MAX = 400000;
+  function fbShotSay(msg){ var n = $('fbShotNote'); if(n) n.textContent = msg; }
+  function fbPaintShot(){
+    var prev = $('fbShotPrev'), img = $('fbShotImg'), btn = $('fbShotBtn');
+    if(prev) prev.hidden = !fbShot;
+    if(img && fbShot) img.src = fbShot;
+    if(btn) btn.textContent = fbShot ? '📷 Change screenshot' : '📷 Add a screenshot';
+  }
+  function fbSetShot(dataUrl){ fbShot = dataUrl || ''; fbPaintShot(); persistDraft(); }
+  function fbProcessShot(file){
+    if(!file) return;
+    if(file.type && file.type.indexOf('image/') !== 0){ fbShotSay('That file is not a picture — pick a screenshot or photo.'); return; }
+    var reader = new FileReader();
+    reader.onerror = function(){ fbShotSay('Hmm, that picture would not load. Try another one.'); };
+    reader.onload = function(){
+      var img = new Image();
+      img.onerror = function(){ fbShotSay('Hmm, that picture would not load. Try another one.'); };
+      img.onload = function(){
+        try {
+          var maxDim = 1280;
+          var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+          if(!w || !h) throw new Error('no size');
+          var scale = Math.min(1, maxDim / Math.max(w, h));
+          var cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+          var canvas = document.createElement('canvas'); canvas.width = cw; canvas.height = ch;
+          var ctx = canvas.getContext('2d');
+          if(!ctx) throw new Error('no canvas');
+          ctx.drawImage(img, 0, 0, cw, ch);
+          var q = 0.82, url = canvas.toDataURL('image/jpeg', q);
+          while(url.length > FB_SHOT_MAX && q > 0.35){ q -= 0.12; url = canvas.toDataURL('image/jpeg', q); }
+          if(url.length > FB_SHOT_MAX){
+            var c2 = document.createElement('canvas'); c2.width = Math.max(1, Math.round(cw / 2)); c2.height = Math.max(1, Math.round(ch / 2));
+            var x2 = c2.getContext('2d'); x2.drawImage(canvas, 0, 0, c2.width, c2.height);
+            url = c2.toDataURL('image/jpeg', 0.6);
+          }
+          if(url.length > FB_SHOT_MAX){ fbShotSay('That picture is too big even after shrinking — try a smaller screenshot.'); return; }
+          fbSetShot(url);
+          fbShotSay('Screenshot attached ✓ It will travel with your report.');
+        } catch(e){ fbShotSay('Hmm, that picture would not shrink. Try another one.'); }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
   function fbKindNow(){
     var brokeText = $('fbBrokeText') ? $('fbBrokeText').value.trim() : '';
     var hasBug = !!($('fbBroken') && $('fbBroken').checked) || fbTag === 'Bug' || !!fbQuick['Broken'] || !!brokeText;
@@ -11536,6 +11603,7 @@ var LOCATIONS = [
     fbRating = 0; fbTag = ''; fbQuick = {};
     $('fbGameLine').textContent = 'You played ' + gameTitle(fbGame) + ' — how was it? Stars, one line, anything helps!';
     $('fbText').value = '';
+    fbShot = ''; fbPaintShot(); fbShotSay('Optional — a picture of the bug helps a lot. It gets shrunk before sending.');
     if($('fbBroken')) $('fbBroken').checked = false;
     if($('fbBrokeText')) $('fbBrokeText').value = '';
     fbPaintBroken();
@@ -11552,6 +11620,7 @@ var LOCATIONS = [
       $('fbText').value = draft.text || '';
       if($('fbBroken')) $('fbBroken').checked = !!draft.broken;
       if($('fbBrokeText')) $('fbBrokeText').value = draft.brokeText || '';
+      if(draft.screenshot){ fbShot = draft.screenshot; fbPaintShot(); fbShotSay('Screenshot attached ✓ It will travel with your report.'); }
       fbPaintBroken();
       document.querySelectorAll('.fb-tags .pill[data-fb-tag]').forEach(function(x){ x.classList.toggle('active', x.getAttribute('data-fb-tag') === fbTag); });
       document.querySelectorAll('.fb-tags .pill[data-fb-quick]').forEach(function(x){ x.classList.toggle('active', !!fbQuick[x.getAttribute('data-fb-quick')]); });
@@ -11597,6 +11666,10 @@ var LOCATIONS = [
     });
   });
   $('fbClose').addEventListener('click', fbClose);
+  /* FB-SCREENSHOT-2026-11-23: attach button, file picker, remove × */
+  if($('fbShotBtn')) $('fbShotBtn').addEventListener('click', function(){ var f = $('fbShotFile'); if(f) f.click(); });
+  if($('fbShotFile')) $('fbShotFile').addEventListener('change', function(){ var f = this.files && this.files[0]; fbProcessShot(f); this.value = ''; });
+  if($('fbShotRemove')) $('fbShotRemove').addEventListener('click', function(){ fbSetShot(''); fbShotSay('Screenshot removed.'); });
   overlay.addEventListener('click', function(e){ if(e.target === overlay) fbClose(); });
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && !overlay.hidden) fbClose(); });
   function loadFeedback(){
@@ -11637,6 +11710,7 @@ var LOCATIONS = [
       testerName: testerRec ? testerRec.name : '',
       testerComp: testerRec ? !!testerRec.comp : false
     };
+    if(fbShot) newRec.screenshot = fbShot; /* FB-SCREENSHOT-2026-11-23 */
     fbEnsureId(newRec);
     arr.push(newRec);
     try { localStorage.setItem(FB_KEY, JSON.stringify(arr)); } catch(e){}
@@ -11671,8 +11745,8 @@ var LOCATIONS = [
       var text = $('fbText').value;
       var brokeOn = !!($('fbBroken') && $('fbBroken').checked);
       var brokeTxt = $('fbBrokeText') ? $('fbBrokeText').value : '';
-      if(!fbRating && !fbTag && !Object.keys(fbQuick).length && !text.trim() && !brokeOn && !brokeTxt.trim()){ clearDraft(slug); return; }
-      saveDraft(slug, { rating: fbRating, tag: fbTag, quick: Object.keys(fbQuick), text: text, broken: brokeOn, brokeText: brokeTxt });
+      if(!fbRating && !fbTag && !Object.keys(fbQuick).length && !text.trim() && !brokeOn && !brokeTxt.trim() && !fbShot){ clearDraft(slug); return; }
+      saveDraft(slug, { rating: fbRating, tag: fbTag, quick: Object.keys(fbQuick), text: text, broken: brokeOn, brokeText: brokeTxt, screenshot: fbShot || '' });
     } catch(e){}
   }
   $('fbText').addEventListener('input', persistDraft);
@@ -16052,6 +16126,11 @@ function renderTesterAuth(){
       Object.keys(src || {}).forEach(function(k){
         if(k === 'fbSent' || k === 'fbKey' || k === 'fbAnon') return;
         var v = src[k];
+        if(k === 'screenshot' && typeof v === 'string'){
+          /* FB-SCREENSHOT-2026-11-23: data URL already shrunk client-side; validate + hard cap. */
+          if(v.indexOf('data:image/') === 0 && v.length <= 450000) out[k] = v;
+          return;
+        }
         if(typeof v === 'string'){
           var cap = (k === 'comment' || k === 'text') ? 1000 : 500;
           out[k] = cleanText(v, cap);
@@ -16552,7 +16631,7 @@ function renderTesterAuth(){
               if(!auth.anon && window.holoInbox && window.holoInbox.notifySelf){ try { window.holoInbox.notifySelf('system', 'Report received', 'Thanks, agent — we got your report and will look into it. Watch this inbox for updates.'); } catch(e){} }
               if(auth.anon) anonDayBump();
               var cur = loadFeedback();
-              cur.forEach(function(x){ if(x.id === r.id){ x.fbSent = true; if(auth.anon) x.fbAnon = true; if(data && data.name) x.fbKey = data.name; } });
+              cur.forEach(function(x){ if(x.id === r.id){ x.fbSent = true; if(auth.anon) x.fbAnon = true; if(data && data.name) x.fbKey = data.name; if(x.screenshot){ delete x.screenshot; x.screenshotSent = true; } } }); /* FB-SCREENSHOT-2026-11-23 */
               try { localStorage.setItem(FB_KEY, JSON.stringify(cur)); } catch(e){}
             }).catch(function(){ /* stays queued, retried by poller */ });
         });
@@ -19288,6 +19367,7 @@ footer .egg-row{justify-content:center}
       var quick = Array.isArray(d.quick) ? d.quick.join(' · ') : '';
       if(quick) bits.push(quick);
       if(d.tag) bits.push(d.tag);
+      if(d.screenshot) bits.push('📷 screenshot attached'); /* FB-SCREENSHOT-2026-11-23 */
       var preview = String(d.text || '').trim();
       if(preview.length > 90) preview = preview.slice(0, 90) + '…';
       var when = '';
@@ -19345,8 +19425,11 @@ footer .egg-row{justify-content:center}
           if(p.getAttribute('data-fb-quick')) quick.push(p.getAttribute('data-fb-quick'));
           if(p.getAttribute('data-fb-tag')) tag = p.getAttribute('data-fb-tag');
         });
-        if(rating || tag || quick.length || text.trim() || brokeOn || brokeTxt.trim()){
-          window.saveDraft(lastGame, { rating: rating, tag: tag, quick: quick, text: text, broken: brokeOn, brokeText: brokeTxt });
+        var shotImg = document.getElementById('fbShotImg');
+        var shotPrev = document.getElementById('fbShotPrev');
+        var shot = (shotImg && shotPrev && !shotPrev.hidden && shotImg.src) ? shotImg.src : ''; /* FB-SCREENSHOT-2026-11-23 */
+        if(rating || tag || quick.length || text.trim() || brokeOn || brokeTxt.trim() || shot){
+          window.saveDraft(lastGame, { rating: rating, tag: tag, quick: quick, text: text, broken: brokeOn, brokeText: brokeTxt, screenshot: shot });
         }
       } catch(e){}
     });
@@ -19364,6 +19447,13 @@ footer .egg-row{justify-content:center}
 })();
 </script>
 
+<style>
+/* FB-SCREENSHOT-2026-11-23 (Holo 08:36): screenshot preview in Report back */
+.fb-shot{margin-top:10px}
+.fb-shot-prev{position:relative;display:inline-block;margin-top:8px}
+.fb-shot-prev img{max-width:180px;max-height:140px;border-radius:10px;border:2px solid #8b5cff;display:block}
+.fb-shot-x{position:absolute;top:-8px;right:-8px}
+</style>
 <style>
 /* FB-PIXEL-ICONS-2026-11-22 (Holo 23:40): pixel SVG icons on Report back chips */
 .fb-ic{width:18px;height:18px;vertical-align:-3px;margin-right:2px;shape-rendering:crispEdges;flex:none}
