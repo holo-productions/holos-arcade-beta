@@ -15026,6 +15026,7 @@ function renderTesterAuth(){
   var lastRect = null, missingSince = 0;
   var currentTarget = null, playBtn = null, snapshot = null, lastFocus = null;
   var savedHtmlOverflow = null;
+  var lastCheckAt = 0, fixCount = 0, resizeTimer = 0;
   function byId(id){ return document.getElementById(id); }
   function isShown(el){
     if(!el) return false;
@@ -15090,9 +15091,25 @@ function renderTesterAuth(){
      for scroll offsets, and phone nav-panel open/close so steps
      whose buttons live in the hamburger panel (Inbox, FAQ) can
      actually show their target on a phone. */
+  /* TOUR-OFFSET-FIX-2026-11-23 (Holo 07:57): the sticky nav bar
+     overlaps page content, and the old offset measured only the
+     header element's height — on a phone the open menu panel
+     hangs BELOW the header (absolute, top:100%) and overlaps
+     more of the page, so targets could land hidden under the
+     bar/panel and the gold box pointed at the bar. Measure the
+     live occluded band instead: the bottom edge of the sticky
+     header, plus the open nav panel's bottom edge when shown.
+     Measured fresh on every call, so the condensed in-game
+     header, two-row phone headers and font swaps all count. */
   function headerOffset(){
     var h = document.querySelector('header.topbar');
-    return h ? h.getBoundingClientRect().height : 76;
+    var bottom = h ? h.getBoundingClientRect().bottom : 76;
+    var p = byId('navPanel');
+    if(p && !p.hidden){
+      var pr = p.getBoundingClientRect();
+      if(pr.height > 0 && pr.bottom > bottom) bottom = pr.bottom;
+    }
+    return Math.max(0, bottom);
   }
   function closeNavPanel(){
     var p = byId('navPanel'), b = byId('navMenuBtn');
@@ -15224,19 +15241,44 @@ function renderTesterAuth(){
   function reducedMotion(){
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
+  function scrollPanelTo(panel, el){
+    try {
+      var pr = panel.getBoundingClientRect(), er = el.getBoundingClientRect();
+      if(er.top < pr.top) panel.scrollTop -= (pr.top - er.top) + 8;
+      else if(er.bottom > pr.bottom) panel.scrollTop += (er.bottom - pr.bottom) + 8;
+    } catch(e){}
+  }
   function scrollToTarget(el){
     if(!el) return;
     var lv = byId('loginView');
-    var behavior = 'auto'; /* instant during tour: smooth scroll made the highlight chase a moving rect */
     if(lv && !lv.hidden && lv.contains(el)){
-      try { el.scrollIntoView({ behavior: behavior, block: 'center', inline: 'nearest' }); } catch(e){ el.scrollIntoView(); }
+      try { el.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'nearest' }); }
+      catch(e){ try { el.scrollIntoView({ block: 'center' }); } catch(e2){ el.scrollIntoView(); } }
+      return;
+    }
+    /* TOUR-OFFSET-FIX-2026-11-23: targets inside the sticky header
+       or its menu panel don't move when the page scrolls — never
+       scroll the page for them (the old code scrolled up by the
+       header height for the XP bubble / nav links, shifting the
+       page behind the tour). If the target sits inside the
+       panel's own scroll area, scroll the PANEL so it shows. */
+    var header = document.querySelector('header.topbar');
+    if(header && header.contains(el)){
+      var panel = byId('navPanel');
+      if(panel && panel.contains(el)) scrollPanelTo(panel, el);
       return;
     }
     var r = el.getBoundingClientRect();
     var head = headerOffset() + 8;
-    if(r.top >= head && r.bottom <= window.innerHeight) return; /* already on screen: no re-scroll */
-    var top = window.scrollY + r.top - Math.max(head, window.innerHeight * 0.18);
-    window.scrollTo({ top: Math.max(0, top), behavior: behavior });
+    if(r.top >= head && r.bottom <= window.innerHeight - 4) return; /* fully clear of the sticky bar: no re-scroll */
+    /* Aim the target just below the sticky bar (or ~18% down the
+       screen, whichever is lower) so the bar never covers it.
+       behavior:'instant' — 'auto' follows html{scroll-behavior:
+       smooth} and the highlight chased the moving rect. */
+    var want = Math.max(head, Math.min(window.innerHeight * 0.18, window.innerHeight - r.height - 12));
+    var top = window.scrollY + r.top - want;
+    try { window.scrollTo({ top: Math.max(0, top), behavior: 'instant' }); }
+    catch(e){ window.scrollTo(0, Math.max(0, top)); }
   }
   function position(){
     if(!active) return;
@@ -15271,6 +15313,24 @@ function renderTesterAuth(){
       return;
     }
     var r = steps[idx].tightBox ? tightRect(currentTarget) : currentTarget.getBoundingClientRect();
+    /* TOUR-OFFSET-FIX-2026-11-23: safety net — if layout shifted
+       after the settle checks and the target slipped under the
+       sticky bar (or off the bottom), scroll it back into the
+       clear zone and re-measure. Throttled + capped per step so
+       it can never fight the user or loop. Header/panel targets
+       are exempt: page scroll can't move them. */
+    if(fixCount < 3 && (Date.now() - lastCheckAt) > 250){
+      lastCheckAt = Date.now();
+      var headerEl = document.querySelector('header.topbar');
+      if(!(headerEl && headerEl.contains(currentTarget))){
+        var occ = headerOffset();
+        if(r.top < occ - 2 || r.top > window.innerHeight - 8){
+          fixCount++;
+          scrollToTarget(currentTarget);
+          r = steps[idx].tightBox ? tightRect(currentTarget) : currentTarget.getBoundingClientRect();
+        }
+      }
+    }
     lastRect = r;
     var pad = 7;
     highlight.style.left = Math.max(2, r.left - pad) + 'px';
@@ -15297,6 +15357,18 @@ function renderTesterAuth(){
     position();
     raf = requestAnimationFrame(tick);
   }
+  /* TOUR-OFFSET-FIX-2026-11-23: rotating/resizing changes the
+     header height (wrap breakpoints) and the viewport — re-scroll
+     to the current target and reposition once it settles. */
+  function onResize(){
+    if(!active) return;
+    if(resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function(){
+      resizeTimer = 0;
+      if(!active) return;
+      if(currentTarget){ scrollToTarget(currentTarget); position(); }
+    }, 120);
+  }
   function renderStep(){
     countEl.textContent = 'Step ' + (idx + 1) + ' of ' + steps.length;
     titleEl.textContent = steps[idx].title;
@@ -15315,6 +15387,7 @@ function renderTesterAuth(){
     var token = ++stepToken;
     var step = steps[idx];
     currentTarget = null;
+    fixCount = 0; lastCheckAt = 0;
     /* TOUR-FIX2-2026-11-23: hide the spotlight until this step's
        target is measured — otherwise the gold box visibly flies
        from the last step's spot to the new one (the glitch seen
@@ -15337,7 +15410,20 @@ function renderTesterAuth(){
         currentTarget = t;
         scrollToTarget(currentTarget);
         position();
-        setTimeout(function(){ position(); }, 60);
+        /* TOUR-OFFSET-FIX-2026-11-23: layout can still shift after
+           the first measure (fonts, lazy cards, panel opening) and
+           leave the target under the sticky bar — re-check twice
+           once things settle and re-scroll only if needed
+           (scrollToTarget no-ops when the target is already clear). */
+        [140, 380].forEach(function(ms){
+          setTimeout(function(){
+            if(!active || token !== stepToken) return;
+            var fresh = null;
+            try { fresh = step.target(); } catch(e){}
+            if(fresh && isShown(fresh)) currentTarget = fresh;
+            if(currentTarget){ scrollToTarget(currentTarget); position(); }
+          }, ms);
+        });
         try { nextBtn.focus({ preventScroll: true }); } catch(e){}
         return;
       }
@@ -15364,6 +15450,8 @@ function renderTesterAuth(){
     root.setAttribute('aria-hidden', 'false');
     document.body.classList.add('tour-active');
     document.addEventListener('keydown', onKey, true);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
     showStep(0);
     tick();
   }
@@ -15377,6 +15465,9 @@ function renderTesterAuth(){
     root.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('tour-active');
     document.removeEventListener('keydown', onKey, true);
+    window.removeEventListener('resize', onResize);
+    window.removeEventListener('orientationchange', onResize);
+    if(resizeTimer){ clearTimeout(resizeTimer); resizeTimer = 0; }
     restoreSnapshot();
     document.documentElement.style.overflow = savedHtmlOverflow || '';
     savedHtmlOverflow = null;
