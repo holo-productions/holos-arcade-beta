@@ -1661,11 +1661,6 @@ body[data-view="about"] .view-main,body[data-view="about"] .view-library,body[da
    games" is a proper button styled like Report back, on the LEFT. */
 #legalView #legalBack,#legalView #legalBackBottom{background:linear-gradient(92deg,#ffb020 0%,#ffd43b 50%,#ffb020 100%);color:#140b33;border:3px solid #fff;border-radius:999px;box-shadow:0 6px 0 #b45309,0 0 0 3px rgba(255,176,32,.35),0 0 30px rgba(255,176,32,.55);font-family:var(--pixel);font-size:11px;line-height:1.6;font-weight:800;text-decoration:none;padding:10px 18px;min-height:44px;cursor:pointer}
 #legalView #legalBack:hover,#legalView #legalBackBottom:hover{filter:brightness(1.08)}
-/* FAQ-BACK-BTN-2026-11-23 (Holo 00:03): user FAQ "Back to games" wears
-   the same gold button treatment as the Terms page. */
-#faqView #faqBack,#faqView #faqBackBottom{background:linear-gradient(92deg,#ffb020 0%,#ffd43b 50%,#ffb020 100%);color:#140b33;border:3px solid #fff;border-radius:999px;box-shadow:0 6px 0 #b45309,0 0 0 3px rgba(255,176,32,.35),0 0 30px rgba(255,176,32,.55);font-family:var(--pixel);font-size:11px;line-height:1.6;font-weight:800;text-decoration:none;padding:10px 18px;min-height:44px;cursor:pointer}
-#faqView #faqBack:hover,#faqView #faqBackBottom:hover{filter:brightness(1.08)}
-#faqView #faqBack::after,#faqView #faqBackBottom::after{display:none}
 #legalView .legal-bar-inner{justify-content:flex-start}
 .cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;margin:14px 0 6px}
 .cat-tile{background:linear-gradient(165deg,#150b38,#0a0620);border:2px solid rgba(139,92,255,.6);border-radius:16px;padding:20px 14px;text-align:center;cursor:pointer;color:#e9e4ff;font-family:inherit}
@@ -11560,6 +11555,7 @@ var LOCATIONS = [
     });
     wrap.innerHTML = html;
   }
+  window.renderReviews = renderReviews;
   function openReviews(){ renderReviews(); if(window.holoShowView) window.holoShowView('account', { keepScroll:true }); setTimeout(function(){ try { reviewsView.scrollIntoView({ behavior:'smooth', block:'start' }); } catch(e){} }, 40); }
   function closeReviews(){ /* Trophy Case lives in the profile view now — nothing to close. */ }
   ['reviewsBack','reviewsBackBottom'].forEach(function(id){ var b = $(id); if(b) b.addEventListener('click', closeReviews); });
@@ -14863,6 +14859,7 @@ function renderTesterAuth(){
   var active = false, idx = 0, raf = 0, stepToken = 0;
   var lastRect = null, missingSince = 0;
   var currentTarget = null, playBtn = null, snapshot = null, lastFocus = null;
+  var savedHtmlOverflow = null;
   function byId(id){ return document.getElementById(id); }
   function isShown(el){
     if(!el) return false;
@@ -14884,6 +14881,19 @@ function renderTesterAuth(){
       }
     }
     return firstShownBtn || btns[0] || null;
+  }
+  /* TOUR-FIX2-2026-11-23: the duck step must point at an actual
+     game card's duck — scan the fav buttons themselves for the
+     first one on a shown card (hidden-view / show-more cards are
+     display:none and skipped), instead of deriving it from the
+     Play button another step happened to measure. */
+  function findFavDuck(){
+    var btns = document.querySelectorAll('.game-card .fav-btn');
+    for(var i = 0; i < btns.length; i++){
+      var c = btns[i].closest ? btns[i].closest('.game-card') : null;
+      if(c && isShown(c) && isShown(btns[i])) return btns[i];
+    }
+    return null;
   }
   function firstShown(selectors){
     for(var i = 0; i < selectors.length; i++){
@@ -14910,6 +14920,25 @@ function renderTesterAuth(){
     if(el && isShown(el)) return;
     var p = byId('navPanel'), b = byId('navMenuBtn');
     if(p && p.hidden && b && isShown(b)) b.click();
+  }
+  /* TOUR-FIX2-2026-11-23 (Holo 00:02): lock page scroll while the
+     tour runs — the browser must not scroll behind the bubbles.
+     Body overflow is restored from the snapshot on end; the html
+     overflow is saved/restored alongside. showMain() clears body
+     overflow on every step, so showStep re-locks after prepare.
+     Programmatic scrollToTarget still works (overflow:hidden
+     boxes scroll by script, just not by the user). The backdrop
+     also swallows wheel/touchmove so iOS touch-drag can't scroll
+     the page (the tour card itself still scrolls internally). */
+  function lockScroll(){
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+  }
+  var tourBackdrop = root.querySelector('.tour-backdrop');
+  if(tourBackdrop){
+    var blockScroll = function(e){ e.preventDefault(); };
+    tourBackdrop.addEventListener('wheel', blockScroll, { passive:false });
+    tourBackdrop.addEventListener('touchmove', blockScroll, { passive:false });
   }
   /* ---- Borrowed-screen handling ---- */
   function takeSnapshot(){
@@ -14966,30 +14995,30 @@ function renderTesterAuth(){
   var steps = [
     { title:'One bar to rule the Arcade',
       text:'Everything lives in one bar now: Daily, Library, Categories, Favourites, Trophy Case, Friends and News. On a phone, tap \u2630 to open the menu \u2014 same links, smaller bar.',
-      prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); },
-      target:function(){ return firstShown(['#navMenuBtn', '#subNav', '.topbar-inner']); } },
+      prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#subNav'); },
+      target:function(){ return firstShown(['#subNav', '#navMenuBtn', '.topbar-inner']); } },
     { title:'Your Daily page',
-      text:'Game of the Day and Challenge of the Day live here. Tap Shuffle \uD83C\uDFB2 on the Daily Dare tile and a dare is dealt right there \u2014 or tap the tile to pick your own in the Trophy Case.',
-      prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('daily', { keepScroll:true, skipHash:true }); },
-      target:function(){ return firstShown(['#dailyTiles', '#dailyTileDare', '#game-of-the-day']); } },
-    { title:'Pick a game, old-school style',
-      text:'Tap any game to open its Game Menu \u2014 PRESS START energy. You\u2019ll find Practice, Rules and How to play before you hit \u25B6 Play.',
-      prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true, skipHash:true }); },
-      target:function(){ playBtn = findPlay(); var c = playBtn && playBtn.closest ? playBtn.closest('.game-card') : null; return c || playBtn; } },
+      text:'Tap Daily in the menu \u2014 Game of the Day and Challenge of the Day live there. On the Daily page, tap Shuffle \uD83C\uDFB2 on the Daily Dare tile and a dare is dealt right there, or tap the tile to pick your own in the Trophy Case.',
+      prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#gotdNavLink'); },
+      target:function(){ return firstShown(['#gotdNavLink']); } },
+    { title:'The Library',
+      text:'Tap Library in the menu to browse every game. Tap a game to open its Game Menu \u2014 Practice, Rules and How to play are there before you play.',
+      prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#libraryNavLink'); },
+      target:function(){ return firstShown(['#libraryNavLink']); } },
     { title:'Duck a favourite',
       text:'Tap the duck on a game and it\u2019ll paddle over to your pond under Favourites, saved for next time.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true, skipHash:true }); },
-      target:function(){ if(!playBtn || !document.contains(playBtn)) playBtn = findPlay(); var c = playBtn && playBtn.closest ? playBtn.closest('.game-card') : null; return (c && c.querySelector('.fav-btn')) || document.querySelector('.fav-btn'); } },
+      target:function(){ return findFavDuck() || firstShown(['.fav-btn']); } },
     { title:'Glitch XP lives in your bubble',
-      text:'Line two of your bubble shows your Glitch XP and Level. You earn XP by playing \u2014 it\u2019s never spent, and it stays with you.',
+      text:'Line two of your bubble shows your Glitch XP and Level \u2014 exclusive for testers only. You earn XP by playing; it\u2019s never spent, and it stays with you.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); },
       target:function(){ return firstShown(['#chipCoins', '#testerChip']); } },
     { title:'Inbox \u2709\uFE0F \u2014 replies and drafts',
-      text:'The envelope is your Inbox: replies to your reports land here. Start a report and tap Finish later? It waits here as a draft for 30 days.',
+      text:'The envelope is your Inbox: replies to your reports land here, and pushed notifications land here too \u2014 also as emails from Holo\u2019s Arcade (topsecret@holosarcade.ca). Start a report and tap Finish later? It waits here as a draft for 30 days.',
       prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#inboxBellBtn'); },
       target:function(){ return firstShown(['#inboxBellBtn']); } },
     { title:'FAQ \u2014 answers, fast',
-      text:'Stuck on something? The FAQ up top answers the common stuff \u2014 playing, XP, friends, your account. Signed out? There\u2019s a separate login FAQ just for sign-in troubles.',
+      text:'Stuck on something? The FAQ up top answers the common stuff \u2014 playing, XP, friends, your account.',
       prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#loginFaqLink'); },
       target:function(){ return firstShown(['#loginFaqLink']); } },
     { title:'Friends',
@@ -14998,7 +15027,7 @@ function renderTesterAuth(){
       target:function(){ return firstShown(['#friendAddForm', '#friends']); } },
     { title:'Trophy Case stamps',
       text:'Stamps are earned by reporting on a game \u2014 playing alone doesn\u2019t earn one. File a report, get the stamp.',
-      prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('account', { keepScroll:true, skipHash:true }); },
+      prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('account', { keepScroll:true, skipHash:true }); if(typeof window.renderReviews === 'function'){ try { window.renderReviews(); } catch(e){} } },
       target:function(){ return firstShown(['#rvStamps', '#reviewsTitle', '#reviewsView']); } },
     { title:'More coming soon',
       text:'New games and features land here all the time — Prize Wheel is coming soon. Keep an eye on News for what\u2019s next!',
@@ -15045,6 +15074,7 @@ function renderTesterAuth(){
            dock if the target stays missing past the settle window. */
         if(!missingSince) missingSince = Date.now();
         if(lastRect && (Date.now() - missingSince) < 450) return;
+        highlight.style.opacity = '0';
         highlight.style.width = '0px'; highlight.style.height = '0px';
         card.style.left = '12px'; card.style.top = 'auto'; card.style.bottom = '12px';
         return;
@@ -15061,6 +15091,7 @@ function renderTesterAuth(){
     var maxH = window.innerHeight - Math.max(2, r.top - pad) - 4;
     if(hh > maxH) hh = Math.max(40, maxH); /* taller-than-screen target: spotlight its visible top */
     highlight.style.height = hh + 'px';
+    highlight.style.opacity = '1';
     var margin = 12;
     var cw = card.offsetWidth, ch = card.offsetHeight;
     var left = Math.max(margin, Math.min(window.innerWidth - cw - margin, r.left + r.width / 2 - cw / 2));
@@ -15094,8 +15125,15 @@ function renderTesterAuth(){
     var token = ++stepToken;
     var step = steps[idx];
     currentTarget = null;
+    /* TOUR-FIX2-2026-11-23: hide the spotlight until this step's
+       target is measured — otherwise the gold box visibly flies
+       from the last step's spot to the new one (the glitch seen
+       after Next on the Friends bubble). */
+    highlight.style.opacity = '0';
+    lastRect = null; missingSince = 0;
     var fb = byId('fbOverlay'); if(fb && !step.opensReview) fb.hidden = true;
     try { step.prepare(); } catch(e){}
+    lockScroll();
     renderStep();
     /* Wait for the view switch to settle and the step's target to
        actually be on screen before measuring — a single fixed
@@ -15125,6 +15163,8 @@ function renderTesterAuth(){
     try { if(typeof getTester !== 'function' || !getTester()) return; } catch(e){ return; }
     lastFocus = document.activeElement;
     snapshot = takeSnapshot();
+    savedHtmlOverflow = document.documentElement.style.overflow;
+    lockScroll();
     ['player','faqView','loginFaqView','legalView','fbOverlay'].forEach(function(id){
       var el = byId(id); if(el) el.hidden = true;
     });
@@ -15148,6 +15188,8 @@ function renderTesterAuth(){
     document.body.classList.remove('tour-active');
     document.removeEventListener('keydown', onKey, true);
     restoreSnapshot();
+    document.documentElement.style.overflow = savedHtmlOverflow || '';
+    savedHtmlOverflow = null;
     closeNavPanel();
     if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true });
     if(lastFocus && lastFocus.focus){ try { lastFocus.focus({ preventScroll: true }); } catch(e){} }
@@ -17422,9 +17464,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       var bell = document.createElement('button');
       bell.type = 'button'; bell.id = 'inboxBellBtn'; bell.className = 'nav-actbtn';
       bell.setAttribute('aria-label', 'Inbox'); bell.title = 'Inbox';
-      /* INBOX-SVG-2026-11-23 (Holo 00:03): envelope emoji rendered as a
-         box on her phone — inline SVG envelope instead (same look). */
-      bell.innerHTML = '<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true" style="vertical-align:middle"><rect x="0.5" y="0.5" width="15" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M1.5 1.8 L8 6.8 L14.5 1.8" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span id="inboxBadge" hidden>0</span>';
+      bell.innerHTML = '✉️<span id="inboxBadge" hidden>0</span>';
       var signOut = document.getElementById('signOutBtn');
       if(signOut && signOut.parentNode === line) line.insertBefore(bell, signOut); else line.appendChild(bell);
       bell.addEventListener('click', function(){ if(window.holoShowView) window.holoShowView('inbox'); refresh(); });
@@ -18129,7 +18169,7 @@ footer .egg-row{justify-content:center}
    Escape end it as always) and never forced again once seen or
    dismissed. "Take the tour" still works any time. */
 (function(){
-  var TOUR_VERSION = '2';
+  var TOUR_VERSION = '3';
   function flagKey(){
     try { var t = (typeof getTester === 'function') ? getTester() : null; return 'holos-arcade-tour-seen-' + (t ? t.code : 'guest'); }
     catch(e){ return 'holos-arcade-tour-seen-guest'; }
