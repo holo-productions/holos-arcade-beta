@@ -15075,10 +15075,17 @@ function renderTesterAuth(){
     });
     return hosts;
   }
+  /* EGG-RESET-FIX-2026-11-23 (Holo 10:21): scramble the date seed.
+     Raw FNV hashes of consecutive dates differ by exactly the FNV
+     prime, which with 26 hosts was a rigid -1 spot/day rotation —
+     the eggs looked like they never reset. The scramble makes
+     consecutive days land far apart, and each friend gets their
+     own scramble so the gap between them varies day to day. */
+  function scrambleSeed(n){ n = Math.imul(n ^ (n >>> 16), 2246822519); n ^= n >>> 13; n = Math.imul(n, 3266489917); n ^= n >>> 16; return n >>> 0; }
   function dailySpotIndexes(dateStr, hostCount){
-    var seed = seedFrom(dateStr), used = {}, out = [];
+    var base = seedFrom(dateStr), used = {}, out = [];
     ['eevee','gizmo'].forEach(function(kind, i){
-      var idx = (seed + i * 37) % hostCount;
+      var idx = scrambleSeed(base + i * 2654435769) % hostCount;
       var guard = 0;
       while(used[idx] && guard < hostCount){ idx = (idx + 7) % hostCount; guard++; }
       used[idx] = 1;
@@ -15088,11 +15095,13 @@ function renderTesterAuth(){
   }
   /* Same spots for everyone on a given day; new spots next day. */
   window.holoEggSpotsFor = function(dateStr){ var hosts = dailyHosts(); return hosts.length < 2 ? [] : dailySpotIndexes(dateStr, hosts.length); };
+  var builtForDate = '';
   function buildDailyEggs(){
     var hosts = dailyHosts();
     if(hosts.length < 2) return;
+    builtForDate = todayStr();
     var state = eggLoad();
-    var spots = dailySpotIndexes(todayStr(), hosts.length);
+    var spots = dailySpotIndexes(builtForDate, hosts.length);
     ['eevee','gizmo'].forEach(function(kind, i){
       var idx = spots[i];
       var host = hosts[idx];
@@ -15106,6 +15115,7 @@ function renderTesterAuth(){
       b.title = 'Psst \u2014 someone is hiding here (today\u2019s spot!)';
       b.innerHTML = EGG_SVGS[kind];
       host.appendChild(b);
+      attachEgg(b);
     });
   }
   /* ---- Trophy Case: Egg Hunter trophy ---- */
@@ -15225,10 +15235,32 @@ function renderTesterAuth(){
     try { celebrateConfetti(reduced ? 8 : (justEarned ? 130 : (kinds >= 2 ? 60 : 18))); } catch(e){}
     renderEggTrophy();
   }
-  buildDailyEggs();
-  document.querySelectorAll('.egg').forEach(function(b){
+  /* EGG-RESET-FIX-2026-11-23: wire each egg once (rebuilt daily
+     eggs included), and roll over to the new day's spots + fresh
+     found state when the page stays open past midnight. */
+  function attachEgg(b){
+    if(!b || b.__eggWired) return;
+    b.__eggWired = true;
     b.addEventListener('click', function(){ onEggClick(b); });
-  });
+  }
+  function rebuildDailyEggs(){
+    document.querySelectorAll('.egg.daily-egg').forEach(function(b){ b.remove(); });
+    buildDailyEggs();
+    renderEggTrophy();
+  }
+  function checkEggDay(){
+    if(builtForDate && todayStr() !== builtForDate) rebuildDailyEggs();
+  }
+  function scheduleEggMidnight(){
+    var now = new Date();
+    var next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 5);
+    setTimeout(function(){ checkEggDay(); scheduleEggMidnight(); }, Math.max(1000, next - now));
+  }
+  buildDailyEggs();
+  document.querySelectorAll('.egg').forEach(function(b){ attachEgg(b); });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) checkEggDay(); });
+  window.addEventListener('focus', checkEggDay);
+  scheduleEggMidnight();
   ['reviewsNavLink','reviewsNavLink2','reviewsLink','trophyCaseBtn','clubMissionsBtn'].forEach(function(id){
     var el = document.getElementById(id);
     if(el) el.addEventListener('click', function(){ setTimeout(renderEggTrophy, 0); });
@@ -19440,6 +19472,13 @@ footer .wrap{display:flex;flex-direction:column;align-items:center;gap:2px}
 footer p{margin:4px 0}
 footer a.legal-link{padding:6px 4px}
 footer .egg-row{justify-content:center}
+/* FOOTER-SMALL-2026-11-23 (Holo 10:21): smaller footer */
+footer{padding:10px 0 12px;margin-top:16px;font-size:12px}
+footer .wrap{gap:1px}
+footer p{margin:2px 0}
+footer .hp-logo{width:22px;height:22px}
+footer .egg-row{margin-top:4px}
+footer .egg-row .egg{width:32px;height:32px}
 </style>
 
 <script>
