@@ -987,6 +987,11 @@ body.preview-as-tester #pointsWallet{display:none!important}
 .egg-row{display:flex;gap:2px;align-items:center;margin-top:8px}
 .egg-row .egg{position:static;width:38px;height:38px;opacity:.6}
 .egg-row .egg:hover,.egg-row .egg:focus-visible{opacity:1}
+/* FOOTER-EGGS-FOUND-ONLY-2026-11-23 (Holo 16:41): the footer egg row
+   only shows eggs found today — unfound ones stay hidden, and the
+   whole row hides when nothing is found yet today. */
+.egg-row .egg.egg-hidden{display:none!important}
+.egg-row[hidden]{display:none!important}
 /* Daily Easter eggs + Egg Hunter trophy */
 @keyframes eggParty{0%{transform:rotate(0) scale(1) translateY(0)}15%{transform:rotate(0) scale(1.15) translateY(-14px)}45%{transform:rotate(360deg) scale(1.3) translateY(-10px)}58%{transform:rotate(360deg) scale(1.05,.85) translateY(0)}70%{transform:rotate(348deg) scale(1.1) translateY(-3px)}82%{transform:rotate(372deg) scale(1.1) translateY(-3px)}100%{transform:rotate(360deg) scale(1) translateY(0)}}
 .egg.dancing svg{animation:eggParty 1.15s ease}
@@ -5263,7 +5268,7 @@ setTimeout(function(){
     <p>Points will be combined across devices in the future — you won't lose them.</p>
     <p><a class="legal-link" href="#legal" id="legalLink">Legal &amp; Policies</a> &nbsp;·&nbsp; <a class="legal-link" href="#help" id="footerContactLink">Contact</a> &nbsp;·&nbsp; <a class="legal-link" href="#about" id="aboutLink">About</a> &nbsp;·&nbsp; <a class="legal-link" href="#faq" id="faqLink">FAQ</a></p>
     <p><button class="g-btn fb-open" type="button" data-fb-game="games-hub">💬 Feedback<small>Tell us what you think</small></button></p>
-    <div class="egg-row"><button type="button" class="egg" data-egg="eevee" aria-label="Hidden Eevee the merle dog — tap to say hi" title="Psst — someone is hiding here"><svg width="26" height="23" aria-hidden="true"><use href="#eggEevee"></use></svg></button><button type="button" class="egg" data-egg="gizmo" aria-label="Hidden Gizmo the calico cat — tap to say hi" title="Psst — someone is hiding here"><svg width="24" height="22" aria-hidden="true"><use href="#eggGizmo"></use></svg></button></div>
+    <div class="egg-row" id="footerEggRow"><button type="button" class="egg" data-egg="eevee" aria-label="Hidden Eevee the merle dog — tap to say hi" title="Psst — someone is hiding here"><svg width="26" height="23" aria-hidden="true"><use href="#eggEevee"></use></svg></button><button type="button" class="egg" data-egg="gizmo" aria-label="Hidden Gizmo the calico cat — tap to say hi" title="Psst — someone is hiding here"><svg width="24" height="22" aria-hidden="true"><use href="#eggGizmo"></use></svg></button></div>
   </div>
 </footer>
 
@@ -15092,7 +15097,9 @@ function renderTesterAuth(){
    account (the `eggs` + `eggsDaily` fields of the per-account
    record, guest key when signed out): finding BOTH Eevee and
    Gizmo on the same day earns the 🥚 Egg Hunter trophy in the
-   Trophy Case. */
+   Trophy Case. The footer egg row is a found-today display only
+   (Holo 2026-11-23 16:41): an egg shows there only once found
+   that day, and the footer is never a hiding spot. */
 (function(){
   var EGG_MSGS = {
     eevee:'\uD83D\uDC3E You found Eevee! Black, white and grey merle, one eye half blue, half brown \u2014 that fluffy curled tail gives her away every time.',
@@ -15131,17 +15138,40 @@ function renderTesterAuth(){
   /* The trophy pair: BOTH friends found on the same day
      (state.daily is keyed to today's date and resets overnight). */
   function dailyComplete(state){ return !!(state.daily && state.daily.kinds && state.daily.kinds.eevee && state.daily.kinds.gizmo); }
+  /* FOOTER-EGGS-FOUND-ONLY-2026-11-23 (Holo 16:41): the footer egg
+     row is a found-today display, not a hiding spot. Each footer
+     egg shows only once that friend has been found today; the
+     whole row hides while nothing is found yet. Found state comes
+     from the same daily record as the trophy (eggLoad: daily.kinds
+     is kept only when its date is today, so a new day resets the
+     footer to hidden automatically). */
+  function syncFooterEggs(){
+    var row = document.getElementById('footerEggRow');
+    if(!row) return;
+    var state = eggLoad();
+    var shown = 0;
+    row.querySelectorAll('.egg[data-egg]').forEach(function(b){
+      var found = !!(state.daily && state.daily.kinds && state.daily.kinds[b.getAttribute('data-egg')]);
+      b.classList.toggle('egg-hidden', !found);
+      if(found) shown++;
+    });
+    row.hidden = shown === 0;
+  }
   /* ---- Daily pair: one Eevee, one Gizmo, new spots every day ---- */
   function seedFrom(str){ var h = 2166136261; for(var i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return Math.abs(h); }
   function dailyHosts(){
     /* FRAME ONLY (Holo 2026-11-22): eggs hide on the website frame
-       across the views — never on game cards or inside games. */
+       across the views — never on game cards or inside games.
+       FOOTER-EGGS-FOUND-ONLY-2026-11-23 (Holo 16:41): the footer is
+       NOT a hiding spot any more — it only shows eggs already
+       found today (see syncFooterEggs), so daily eggs never hide
+       in the footer. */
     var hosts = [];
     ['.hero', '.hero-logo-panel', '.gotd', '#dailyChallengePanel', '#favorites',
      '.featured', '.featured-visual', '#friends', '#yourArcadePanel',
      '#all-games', '#personal', '#cards', '#board', '#arcade', '#music',
      '#spooky', '#sports', '#party', '#strategy', '#calm', '#kids',
-     '#puzzles', '#fair', '#sim', 'footer .wrap', '.egg-row'].forEach(function(sel){
+     '#puzzles', '#fair', '#sim'].forEach(function(sel){
       var el = document.querySelector(sel); if(el) hosts.push(el);
     });
     return hosts;
@@ -15298,6 +15328,7 @@ function renderTesterAuth(){
     var justEarned = false;
     if(dailyComplete(state) && !state.trophyAt){ state.trophyAt = new Date().toISOString(); justEarned = true; }
     eggSave(state);
+    syncFooterEggs();
     var kinds = ['eevee','gizmo'].filter(function(k){ return !!state.daily.kinds[k]; }).length;
     var msg = EGG_MSGS[kind] || EGG_MSGS.eevee;
     if(justEarned) msg = '\uD83C\uDFC6 Trophy earned: Egg Hunter! You found Eevee and Gizmo on the same day \u2014 your trophy is waiting in the \uD83C\uDFC6 Trophy Case!';
@@ -15317,6 +15348,7 @@ function renderTesterAuth(){
   function rebuildDailyEggs(){
     document.querySelectorAll('.egg.daily-egg').forEach(function(b){ b.remove(); });
     buildDailyEggs();
+    syncFooterEggs();
     renderEggTrophy();
   }
   function checkEggDay(){
@@ -15329,6 +15361,7 @@ function renderTesterAuth(){
   }
   buildDailyEggs();
   document.querySelectorAll('.egg').forEach(function(b){ attachEgg(b); });
+  syncFooterEggs();
   document.addEventListener('visibilitychange', function(){ if(!document.hidden) checkEggDay(); });
   window.addEventListener('focus', checkEggDay);
   scheduleEggMidnight();
@@ -15339,7 +15372,7 @@ function renderTesterAuth(){
   try {
     var origAuth = window.renderTesterAuth;
     if(typeof origAuth === 'function' && !origAuth.__eggWrapped){
-      var wrappedAuth = function(){ var r = origAuth.apply(this, arguments); try { renderEggTrophy(); } catch(e){} return r; };
+      var wrappedAuth = function(){ var r = origAuth.apply(this, arguments); try { renderEggTrophy(); syncFooterEggs(); } catch(e){} return r; };
       wrappedAuth.__eggWrapped = true;
       window.renderTesterAuth = wrappedAuth;
     }
