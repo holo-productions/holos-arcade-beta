@@ -10150,6 +10150,14 @@ var LOCATIONS = [
         </div>
     </details>
 
+    <details class="legal-section">
+      <summary>Where do replies to my reports go?</summary>
+      <div class="legal-content">
+        <p>Tap the bell at the top to open your Inbox. When we reply to a report or have news for you, it lands there. The pink dot means something new is waiting.</p>
+      <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="inbox">Go to Inbox &#8594;</button></p>
+        </div>
+    </details>
+
 
     <button class="btn btn-dark legal-back-bottom" id="faqBackBottom" type="button">← Back to games</button>
   </div>
@@ -10272,6 +10280,7 @@ var LOCATIONS = [
     else if(go === 'friends'){ el = document.getElementById('friends'); if(el) el.scrollIntoView({ behavior:'smooth', block:'start' }); }
     else if(go === 'account'){ el = document.getElementById('accountBox'); if(el){ var tgt = el.hidden ? (el.closest('section') || el) : el; tgt.scrollIntoView({ behavior:'smooth', block:'start' }); } }
     else if(go === 'feedback'){ if(typeof window.openFeedbackForm === 'function') window.openFeedbackForm(); else { el = document.getElementById('reviewFab'); if(el) el.click(); } }
+    else if(go === 'inbox'){ if(window.holoShowView) window.holoShowView('inbox'); }
   }
   document.querySelectorAll('[data-faq-go]').forEach(function(b){
     b.addEventListener('click', function(){ faqGoTarget(b.getAttribute('data-faq-go')); });
@@ -15043,6 +15052,8 @@ function renderTesterAuth(){
             .then(function(res){ if(!res.ok) throw new Error('rtdb ' + res.status); return res.json(); })
             .then(function(data){
               sent++;
+              /* NOTIF-CENTER-2026-11-22: signed-in reporters get a "report received" notice in their own inbox. */
+              if(!auth.anon && window.holoInbox && window.holoInbox.notifySelf){ try { window.holoInbox.notifySelf('system', 'Report received', 'Thanks, agent — we got your report and will look into it. Watch this inbox for updates.'); } catch(e){} }
               if(auth.anon) anonDayBump();
               var cur = loadFeedback();
               cur.forEach(function(x){ if(x.id === r.id){ x.fbSent = true; if(auth.anon) x.fbAnon = true; if(data && data.name) x.fbKey = data.name; } });
@@ -15707,7 +15718,7 @@ function renderTesterAuth(){
   addClass(document.getElementById('empty'), 'view-library');
   addClass(document.getElementById('flatGrid'), 'view-library');
   LIB_IDS.forEach(function(id){ addClass(document.getElementById(id), 'view-library'); });
-  var VIEWS = { main:'#top', library:'#library', categories:'#categories', friends:'#friends', account:'#account', news:'#news', daily:'#daily', favourites:'#favorites', about:'#about' };
+  var VIEWS = { main:'#top', library:'#library', categories:'#categories', friends:'#friends', account:'#account', news:'#news', daily:'#daily', favourites:'#favorites', about:'#about', inbox:'#inbox' };
   /* SUBNAV-2026-11-22 (Holo 20:56): second sticky nav under the
      topbar, SAME links on desktop + phone (phone only scrolls the
      row sideways — viewing exception). View links move here with
@@ -15788,6 +15799,7 @@ function renderTesterAuth(){
     if(h === '#daily' || h === '#game-of-the-day') return 'daily';
     if(h === '#about') return 'about';
     if(h === '#favorites') return 'favourites';
+    if(h === '#inbox') return 'inbox';
     if(h === '#top' || h === '') return 'main';
     return null;
   }
@@ -16639,5 +16651,254 @@ function renderTesterAuth(){
   update();
 })();
 </script>
+<!-- NOTIF-CENTER-2026-11-22 (Holo 22:57): Phase 1 inbox — bell +
+     unread badge in the signed-in topbar, Inbox view (#inbox),
+     notices at /users/$uid/notifications. Own-inbox read/mark-read
+     works under current rules; cross-user sends (owner thank-you)
+     need the rules publish in
+     firebase-rules-notifications-update-2026-11-22.md and fail
+     soft until then. -->
+<style>
+/* NOTIF-CENTER-2026-11-22 */
+body:not([data-view="inbox"]) #inbox{display:none!important}
+body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[data-view="inbox"] .view-daily,body[data-view="inbox"] .view-favourites,body[data-view="inbox"] #friends,body[data-view="inbox"] #yourArcadePanel,body[data-view="inbox"] #news,body[data-view="inbox"] #categories,body[data-view="inbox"] #about{display:none!important}
+#inboxBellBtn{position:relative}
+#inboxBadge{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#ff2e9a;color:#fff;font-size:11px;font-weight:800;line-height:18px;text-align:center;box-shadow:0 0 8px rgba(255,46,154,.8)}
+#inbox .inbox-list{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+#inbox .inbox-item{background:#0a0620;border:2px solid #8b5cff;border-radius:14px;padding:12px 14px;color:#e9e4ff}
+#inbox .inbox-item.unread{border-color:#ff2e9a;box-shadow:0 0 10px rgba(255,46,154,.35)}
+#inbox .inbox-item h3{margin:0 0 4px;font-size:15px;color:#fff}
+#inbox .inbox-item p{margin:0 0 6px;font-size:14px}
+#inbox .inbox-meta{font-size:12px;color:#b8f4ff}
+#inbox .inbox-empty{color:#cfc8ff;font-size:14px;margin-top:12px}
+#inbox .inbox-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+</style>
+<script>
+/* NOTIF-CENTER-2026-11-22 */
+(function(){
+  var FB_API_KEY = 'AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak';
+  var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+  var AUTH_KEY = 'holos-firebase-auth';
+  var TYPES = { 'review-fixed':'✅', 'friend-request':'👥', 'friend-accepted':'🤝', 'announcement':'📣', 'support-reply':'💬', 'system':'🔔' };
+  function loadAuth(){ try { var v = JSON.parse(localStorage.getItem(AUTH_KEY)); if(v && v.idToken && v.uid) return v; } catch(e){} return null; }
+  function freshToken(){
+    var a = loadAuth(); if(!a) return Promise.resolve(null);
+    if(a.exp && a.exp > Date.now() + 60000) return Promise.resolve(a.idToken);
+    if(!a.refreshToken) return Promise.resolve(null);
+    return fetch('https://securetoken.googleapis.com/v1/token?key=' + FB_API_KEY, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:'grant_type=refresh_token&refresh_token=' + encodeURIComponent(a.refreshToken) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(j && j.id_token){ a.idToken = j.id_token; a.refreshToken = j.refresh_token || a.refreshToken; a.exp = Date.now() + ((parseInt(j.expires_in,10)||3600)*1000); try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e){} return a.idToken; } return null; })
+      .catch(function(){ return null; });
+  }
+  function api(method, path, body){
+    return freshToken().then(function(tok){
+      if(!tok) return null;
+      return fetch(FB_RTDB + path + '.json?auth=' + encodeURIComponent(tok), { method:method, headers:{ 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined })
+        .then(function(r){ return r.ok ? r.json().catch(function(){ return true; }) : null; }).catch(function(){ return null; });
+    }).catch(function(){ return null; });
+  }
+  var items = [];
+  function unreadCount(){ return items.filter(function(n){ return !n.read; }).length; }
+  function renderBadge(){
+    var b = document.getElementById('inboxBadge'); if(!b) return;
+    var n = unreadCount();
+    b.textContent = n > 9 ? '9+' : String(n);
+    b.hidden = n === 0;
+  }
+  function esc(s){ var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+  function when(ts){
+    try { var d = new Date(ts); if(isNaN(d)) return ''; return d.toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }); } catch(e){ return ''; }
+  }
+  function renderList(){
+    var list = document.getElementById('inboxList'); if(!list) return;
+    if(!items.length){ list.innerHTML = '<p class="inbox-empty">No messages yet, agent. When we reply to a report or have news for you, it lands here.</p>'; return; }
+    list.innerHTML = items.map(function(n){
+      var icon = TYPES[n.type] || '🔔';
+      var linkBtn = n.link ? '<div class="inbox-actions"><button type="button" class="btn btn-light inbox-open" data-link="' + esc(n.link) + '">Open</button></div>' : '';
+      return '<article class="inbox-item' + (n.read ? '' : ' unread') + '" data-id="' + esc(n.id) + '"><h3>' + icon + ' ' + esc(n.title) + '</h3><p>' + esc(n.body) + '</p><div class="inbox-meta">' + esc(when(n.createdAt)) + (n.read ? '' : ' · New') + '</div>' + linkBtn + '</article>';
+    }).join('');
+    list.querySelectorAll('.inbox-open').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        var link = btn.getAttribute('data-link') || '';
+        markRead(btn.closest('.inbox-item').getAttribute('data-id'));
+        if(link.indexOf('game:') === 0){ try { location.hash = '#game/' + link.slice(5); } catch(e){} }
+        else if(window.holoShowView){ window.holoShowView(link || 'main'); }
+      });
+    });
+  }
+  function refresh(){
+    var a = loadAuth(); if(!a) { items = []; renderBadge(); renderList(); return Promise.resolve(items); }
+    return api('GET', '/users/' + encodeURIComponent(a.uid) + '/notifications').then(function(data){
+      items = [];
+      if(data && typeof data === 'object'){
+        Object.keys(data).forEach(function(id){ var n = data[id] || {}; n.id = id; items.push(n); });
+        items.sort(function(x, y){ return (y.createdAt || 0) - (x.createdAt || 0); });
+      }
+      renderBadge(); renderList();
+      return items;
+    });
+  }
+  function markRead(id){
+    var a = loadAuth(); if(!a || !id) return Promise.resolve(false);
+    items.forEach(function(n){ if(n.id === id) n.read = true; });
+    renderBadge(); renderList();
+    return api('PATCH', '/users/' + encodeURIComponent(a.uid) + '/notifications/' + encodeURIComponent(id), { read:true }).then(function(r){ return r !== null; });
+  }
+  function markAllRead(){
+    var a = loadAuth(); if(!a) return Promise.resolve(false);
+    var patch = {};
+    items.forEach(function(n){ if(!n.read){ n.read = true; patch[n.id + '/read'] = true; } });
+    renderBadge(); renderList();
+    if(!Object.keys(patch).length) return Promise.resolve(true);
+    return api('PATCH', '/users/' + encodeURIComponent(a.uid) + '/notifications', patch).then(function(r){ return r !== null; });
+  }
+  function sendNotice(toUid, notice){
+    /* Cross-user create — needs the rules publish; fails soft (null) until then. */
+    if(!toUid || !notice) return Promise.resolve(null);
+    var body = { type: String(notice.type || 'system').slice(0, 40), title: String(notice.title || '').slice(0, 120), body: String(notice.body || '').slice(0, 600), createdAt: Date.now(), read: false };
+    if(notice.link) body.link = String(notice.link).slice(0, 120);
+    if(notice.fromName) body.fromName = String(notice.fromName).slice(0, 60);
+    if(notice.reportId) body.reportId = String(notice.reportId).slice(0, 80);
+    return api('POST', '/users/' + encodeURIComponent(toUid) + '/notifications', body);
+  }
+  function notifySelf(type, title, body, link){
+    var a = loadAuth(); if(!a) return Promise.resolve(null);
+    return sendNotice(a.uid, { type:type, title:title, body:body, link:link }).then(function(r){ refresh(); return r; });
+  }
+  function thankTester(uid, gameName, slug){
+    /* Owner flow (plan Phase 1): fixed template, Holo approves wording. */
+    return sendNotice(uid, { type:'review-fixed', title:'Fixed — thank you, agent!', body:'We looked into your report about ' + (gameName || 'a game') + '. Fixed. Thank you for helping make the Arcade better!', link: slug ? ('game:' + slug) : '' });
+  }
+  function buildUI(){
+    var line = document.querySelector('.nav-line-btns');
+    if(line && !document.getElementById('inboxBellBtn')){
+      var bell = document.createElement('button');
+      bell.type = 'button'; bell.id = 'inboxBellBtn'; bell.className = 'nav-actbtn';
+      bell.setAttribute('aria-label', 'Inbox'); bell.title = 'Inbox';
+      bell.innerHTML = '🔔<span id="inboxBadge" hidden>0</span>';
+      var signOut = document.getElementById('signOutBtn');
+      if(signOut && signOut.parentNode === line) line.insertBefore(bell, signOut); else line.appendChild(bell);
+      bell.addEventListener('click', function(){ if(window.holoShowView) window.holoShowView('inbox'); refresh(); });
+    }
+    var main = document.querySelector('main.wrap');
+    if(main && !document.getElementById('inbox')){
+      var sec = document.createElement('section');
+      sec.className = 'hub-panel'; sec.id = 'inbox'; sec.setAttribute('aria-label', 'Inbox');
+      sec.innerHTML = '<h2>📥 Inbox</h2><p class="g-note">Replies and news from the Arcade team land here.</p><div class="inbox-actions"><button type="button" class="btn btn-light" id="inboxMarkAll">Mark all read</button></div><div class="inbox-list" id="inboxList"></div>';
+      main.appendChild(sec);
+      var ma = sec.querySelector('#inboxMarkAll');
+      if(ma) ma.addEventListener('click', markAllRead);
+    }
+  }
+  function signedIn(){ var chip = document.getElementById('testerChip'); return !!(chip && !chip.hidden); }
+  function tick(){ if(signedIn()) refresh(); }
+  buildUI();
+  try { new MutationObserver(function(){ if(document.body.getAttribute('data-view') === 'inbox') refresh(); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] }); } catch(e){}
+  setInterval(tick, 60000);
+  setTimeout(tick, 2500);
+  window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, unreadCount:unreadCount, items:function(){ return items.slice(); } };
+})();
+</script>
+<!-- END-BAR-2026-11-22 (Holo 23:03): after a game finishes, show
+     Replay / Game Menu / Close in the hub game view. Detection:
+     hub-native end panels (tEnd/wEnd/djEnd/mcOver), postMessage
+     {type:'holo-game-finished'} from standalone games, and a
+     same-origin iframe poll for visible game-over markers.
+     Practice Replay = practice again (no score saved, unchanged). -->
+<style>
+/* END-BAR-2026-11-22 */
+#endBar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:12px 0;padding:12px;background:#0a0620;border:2px solid #8b5cff;border-radius:14px}
+#endBar[hidden]{display:none!important}
+#endBar .endbar-title{width:100%;text-align:center;color:#fff;font-weight:800;font-size:15px}
+</style>
+<script>
+/* END-BAR-2026-11-22 */
+(function(){
+  var player = document.getElementById('player'); if(!player) return;
+  var bar = document.createElement('div');
+  bar.id = 'endBar'; bar.hidden = true; bar.setAttribute('role','group'); bar.setAttribute('aria-label','Game finished — what next?');
+  bar.innerHTML = '<span class="endbar-title">Game over — what next?</span>' +
+    '<button type="button" class="g-btn primary" id="endReplay">▶ Replay</button>' +
+    '<button type="button" class="g-btn" id="endMenu">🎮 Game Menu</button>' +
+    '<button type="button" class="g-btn" id="endClose">✕ Close</button>';
+  var banner = document.getElementById('practiceBanner');
+  if(banner && banner.parentNode) banner.parentNode.insertBefore(bar, banner.nextSibling); else player.appendChild(bar);
+  var lastSlug = null;
+  document.addEventListener('click', function(e){
+    var b = e.target && e.target.closest ? e.target.closest('[data-game]') : null;
+    if(b) lastSlug = b.getAttribute('data-game');
+  }, true);
+  function slug(){
+    try { var m = (location.hash || '').match(/#game\/([^/?#]+)/); if(m) return decodeURIComponent(m[1]); } catch(e){}
+    return lastSlug;
+  }
+  function isPractice(){ var b = document.getElementById('practiceBanner'); return !!(b && !b.hidden); }
+  function show(){ if(player.hidden) return; bar.hidden = false; }
+  function hide(){ bar.hidden = true; }
+  window.holoGameFinished = show;
+  /* Native end panels */
+  ['tEnd','wEnd','djEnd','mcOver'].forEach(function(id){
+    var el = document.getElementById(id); if(!el) return;
+    try { new MutationObserver(function(){ if(!el.hidden) show(); }).observe(el, { attributes:true, attributeFilter:['hidden'] }); } catch(e){}
+  });
+  /* postMessage from standalone games */
+  window.addEventListener('message', function(e){
+    try { if(e && e.data && e.data.type === 'holo-game-finished') show(); } catch(err){}
+  });
+  /* Same-origin iframe poll for game-over markers */
+  var OVER_RE = /(game over|you win|you lose|you won|you lost|final score|you scored|well done|congratulations)/i;
+  function iframeFinished(){
+    var fr = player.querySelector('.game-pane:not([hidden]) iframe');
+    if(!fr) return false;
+    try {
+      var doc = fr.contentDocument; if(!doc || !doc.body) return false;
+      var cands = doc.querySelectorAll('[id*="over" i],[id*="end" i],[id*="result" i],[id*="finish" i],[class*="game-over" i],[class*="gameover" i],[class*="end-screen" i],[class*="result" i]');
+      for(var i = 0; i < cands.length; i++){
+        var el = cands[i];
+        var st = fr.contentWindow.getComputedStyle(el);
+        if(st.display === 'none' || st.visibility === 'hidden') continue;
+        if(OVER_RE.test(el.textContent || '')) return true;
+      }
+    } catch(e){}
+    return false;
+  }
+  setInterval(function(){ if(!player.hidden && bar.hidden && iframeFinished()) show(); }, 1500);
+  /* Hide when player closes or a new game opens */
+  try { new MutationObserver(function(){ if(player.hidden) hide(); }).observe(player, { attributes:true, attributeFilter:['hidden'] }); } catch(e){}
+  document.addEventListener('click', function(e){
+    var b = e.target && e.target.closest ? e.target.closest('[data-game]') : null;
+    if(b) hide();
+  }, true);
+  var AGAIN = { trivia:'tAgain', madcow:'mcRestart' };
+  document.getElementById('endReplay').addEventListener('click', function(){
+    var s = slug(); hide();
+    if(!s) return;
+    if(isPractice()){ if(window.holoOpenPractice) window.holoOpenPractice(s); return; }
+    var againId = AGAIN[s]; var again = againId && document.getElementById(againId);
+    if(again){ again.click(); return; }
+    var fr = document.getElementById(s + 'Frame');
+    if(fr){
+      var ds = fr.getAttribute('data-src') || fr.getAttribute('src') || '';
+      ds = ds.replace(/([?&])practice=1(&|$)/, function(m, p1, p2){ return p2 ? p1 : ''; });
+      fr.setAttribute('src', ds);
+      return;
+    }
+    var b = document.querySelector('.game-card [data-game="' + s + '"]') || document.querySelector('[data-game="' + s + '"]');
+    window.__holoDirectStart = true;
+    if(b) b.click();
+  });
+  document.getElementById('endMenu').addEventListener('click', function(){
+    var s = slug(); hide();
+    if(window.holoClosePlayer) window.holoClosePlayer();
+    if(s && window.holoOpenGameMenu) setTimeout(function(){ window.holoOpenGameMenu(s); }, 30);
+  });
+  document.getElementById('endClose').addEventListener('click', function(){
+    hide();
+    if(window.holoClosePlayer) window.holoClosePlayer();
+  });
+  window.holoEndBar = { show:show, hide:hide };
+})();
+</script>
+
 </body>
 </html>
