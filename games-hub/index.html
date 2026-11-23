@@ -7025,6 +7025,7 @@ setTimeout(function(){
       <iframe class="rff-frame" id="word-ladder-laneFrame" title="Word Ladder Lane" data-src="../word-ladder-lane/" loading="lazy"></iframe>
     </section>
 
+</div>
   <!-- ===== How-to-play tutorial overlay ===== -->
   <div class="tut-overlay" id="tutOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="tutTitle">
     <div class="tut-card" id="tutCard">
@@ -7046,7 +7047,6 @@ setTimeout(function(){
       </div>
     </div>
   </div>
-</div>
 <p class="sr-live" aria-live="polite" id="liveRegion" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden"></p>
 
 <script>
@@ -7738,7 +7738,7 @@ setTimeout(function(){
       var s2 = document.createElement('source'); s2.src = T.video.mp4; s2.type = 'video/mp4'; vv.appendChild(s2);
       $('tutVideoCap').textContent = T.video.caption || '';
       vw.hidden = false;
-      try{ vv.load(); var pr = vv.play(); if(pr && pr.catch) pr.catch(function(){}); }catch(e){}
+      try{ vv.load(); }catch(e){}
     } else {
       vw.hidden = true;
       try{ vv.pause(); }catch(e){}
@@ -7755,6 +7755,9 @@ setTimeout(function(){
       list.appendChild(li);
     });
     $('tutOverlay').hidden = false;
+    /* TUT-VIDEO-FIX-2026-11-23: play only after the overlay is visible —
+       playing while still hidden was rejected/blocked on some browsers. */
+    if(T.video && !tutIsRules){ try{ vv.muted = true; var pr = vv.play(); if(pr && pr.catch) pr.catch(function(){}); }catch(e){} }
     announceLive((tutIsRules? 'Rules for ': 'How to play') + T.title + (tutIsRules? '. Rules open.': '. Tutorial open.'));
     $('tutGo').focus();
   }
@@ -10970,7 +10973,7 @@ var LOCATIONS = [
     <details class="legal-section">
       <summary>Where do replies to my reports go?</summary>
       <div class="legal-content">
-        <p>Tap the envelope at the top to open your Inbox. Replies to your reports, friend requests, saved drafts and news land there — new testers also get a mission briefing message. Tap a message to read it; archive it when you're done. The pink number means something new is waiting.</p>
+        <p>Tap the envelope at the top to open your Inbox. Replies to your reports, friend requests, saved drafts and news land there — new testers also get a mission briefing message, and the tour opens it for you on your first sign-in so you can see how the Inbox works. Tap a message to read it; archive it when you're done. The pink number means something new is waiting.</p>
       <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="inbox">Go to Inbox &#8594;</button></p>
         </div>
     </details>
@@ -15877,6 +15880,62 @@ function renderTesterAuth(){
     var lv = byId('loginView'); if(lv) lv.hidden = true;
     document.body.style.overflow = '';
   }
+  /* TOUR-INBOX-WALK-2026-11-23 (Holo 16:42): the final tour step opens
+     the Inbox and the mission briefing message itself, so the tour
+     walks the tester through the real Inbox — the message, the
+     Notifications / Messages / Archive tabs, the filter buttons, and
+     archiving when done. The briefing is found in the cached Inbox
+     items (already loaded by the Inbox refresh); if it hasn't landed
+     yet for this account, one refresh is tried and the step falls
+     back to the open Inbox list — never an error. The copy is picked
+     to match: the "briefing open" text only when it really is open. */
+  var TOUR_INBOX_TEXT_WITH = 'This is your mission briefing, open below \u2014 play whatever you like, no deadlines, no homework. The tabs split your Inbox into Notifications, Messages and Archive, and the buttons mark everything read, or show just unread, drafts or archived. Tap any message to read it, and archive it when you\u2019re done. That\u2019s the tour! Retake it any time with Take the tour up top.';
+  var TOUR_INBOX_TEXT_WITHOUT = 'Here\u2019s your Inbox. Your mission briefing lands here as a message when you first sign in \u2014 tap it any time to read it again. The tabs split everything into Notifications, Messages and Archive, and the buttons mark everything read, or show just unread, drafts or archived. Archive a message when you\u2019re done with it. That\u2019s the tour! Retake it any time with Take the tour up top.';
+  function tourFindBriefing(){
+    try {
+      var items = (window.holoInbox && typeof window.holoInbox.items === 'function') ? window.holoInbox.items() : [];
+      var found = null;
+      items.forEach(function(n){ if(n && n.type === 'mission-briefing' && !found) found = n; });
+      return found;
+    } catch(e){ return null; }
+  }
+  function tourRetargetInbox(){
+    /* The briefing can open after showStep already measured the
+       Inbox list — move the spotlight onto the reading view. */
+    try {
+      if(!active || idx !== steps.length - 1) return;
+      var rd = byId('inboxRead');
+      if(rd && !rd.hidden && isShown(rd)){ currentTarget = rd; scrollToTarget(rd); position(); }
+    } catch(e){}
+  }
+  function tourOpenBriefing(){
+    var step = steps[steps.length - 1];
+    var b = tourFindBriefing();
+    if(b){
+      step.text = TOUR_INBOX_TEXT_WITH;
+      try {
+        if(window.holoInbox.setSection) window.holoInbox.setSection(b.archived ? 'archive' : 'notifications');
+        window.holoInbox.openMessage(b.id);
+      } catch(e){}
+      tourRetargetInbox();
+      return;
+    }
+    step.text = TOUR_INBOX_TEXT_WITHOUT;
+    if(window.holoInbox && typeof window.holoInbox.refresh === 'function'){
+      window.holoInbox.refresh().then(function(){
+        if(!active || idx !== steps.length - 1) return;
+        var b2 = tourFindBriefing();
+        if(!b2) return;
+        step.text = TOUR_INBOX_TEXT_WITH;
+        try { textEl.textContent = step.text; } catch(e){}
+        try {
+          if(window.holoInbox.setSection) window.holoInbox.setSection(b2.archived ? 'archive' : 'notifications');
+          window.holoInbox.openMessage(b2.id);
+        } catch(e){}
+        tourRetargetInbox();
+      }).catch(function(){});
+    }
+  }
   var steps = [
     { title:'One bar to rule the Arcade',
       text:'Everything lives in one bar now: Daily, Library, Categories, Favourites, Trophy Case and Friends. On a phone, tap \u2630 to open the menu \u2014 same links, smaller bar.',
@@ -15923,9 +15982,9 @@ function renderTesterAuth(){
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true }); },
       target:function(){ return firstShown(['#holoBackBtn']); } },
     { title:'How to use your Inbox',
-      text:'Your Inbox holds replies to your reports, friend requests, saved drafts and notifications. Tap the envelope, tap a message to read it, and archive it when you\u2019re done. Your mission briefing is waiting there too. That\u2019s the tour! Retake it any time with Take the tour up top.',
-      prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#inboxBellBtn'); },
-      target:function(){ return firstShown(['#inboxBellBtn']); } }
+      text:'Here\u2019s your Inbox. Your mission briefing lands here as a message when you first sign in \u2014 tap it any time to read it again. The tabs split everything into Notifications, Messages and Archive, and the buttons mark everything read, or show just unread, drafts or archived. Archive a message when you\u2019re done with it. That\u2019s the tour! Retake it any time with Take the tour up top.',
+      prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('inbox', { keepScroll:true, skipHash:true }); tourOpenBriefing(); },
+      target:function(){ var rd = byId('inboxRead'); if(rd && !rd.hidden && isShown(rd)) return rd; return firstShown(['#inbox .inbox-tabs', '#inbox']); } }
   ];
   function reducedMotion(){
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -19827,7 +19886,7 @@ footer .egg-row .egg{width:32px;height:32px}
    Escape end it as always) and never forced again once seen or
    dismissed. "Take the tour" still works any time. */
 (function(){
-  var TOUR_VERSION = '6';
+  var TOUR_VERSION = '7';
   function flagKey(){
     try { var t = (typeof getTester === 'function') ? getTester() : null; return 'holos-arcade-tour-seen-' + (t ? t.code : 'guest'); }
     catch(e){ return 'holos-arcade-tour-seen-guest'; }
