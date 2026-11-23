@@ -555,7 +555,7 @@ body.auth-locked #reviewFab{display:none!important}
 .tester-badges[hidden]{display:none}
 .rbadge{display:inline-flex;align-items:center;gap:4px;background:var(--card);border:1.5px solid var(--gold);color:var(--ink);font-size:11.5px;font-weight:800;padding:4px 8px;border-radius:999px;white-space:nowrap}
 /* DUCK-AVATAR-CIRCLE-2026-11-23 (Holo 2026-11-23 17:06 CST): duck profile pic read as an oval — the gold disc is a circle, but the wide 16:13 duck sat small inside it. The duck now cover-fills its circle (slice, below) so the avatar reads round. */
-.tester-avatar{display:inline-grid;place-items:center;width:30px;height:30px;aspect-ratio:1/1;border-radius:50%;background:var(--gold);font-size:17px;line-height:1;flex:0 0 auto;overflow:hidden}
+.tester-avatar{display:inline-grid;place-items:center;width:30px;height:30px;min-height:0;aspect-ratio:1/1;border-radius:50%;background:var(--gold);font-size:17px;line-height:1;flex:0 0 auto;overflow:hidden}
 .tester-avatar svg{width:22px;height:22px;shape-rendering:crispEdges}
 .rv-badges{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 2px}
 .rv-badges .rbadge{font-size:12.5px;padding:6px 10px}
@@ -11062,9 +11062,16 @@ var LOCATIONS = [
 
   var DAY_MS = 86400000;
   var EPOCH = Math.floor(Date.UTC(2026, 0, 1) / DAY_MS); // 1 Jan 2026, in whole UTC days
+  /* GOTD-LOCALDAY-2026-11-23 (Holo 17:02 "Played today" showed
+     without playing): days were UTC, so the Game of the Day rolled
+     at 18:00 Regina time — an evening play counted as "today" all
+     the next day. Days are the device's LOCAL calendar day now, so
+     "today" means today where the tester is, and the badge rolls at
+     local midnight. The pick stays one game per day, same for
+     everyone in the same timezone. */
   function dayNumNow(){
     var d = new Date();
-    return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / DAY_MS);
+    return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS);
   }
   function dayKey(n){ return new Date(n * DAY_MS).toISOString().slice(0, 10); }
   var today = dayNumNow();
@@ -11083,6 +11090,20 @@ var LOCATIONS = [
   }
   function saveState(){ try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){} }
   var state = loadState();
+  /* GOTD-LOCALDAY-2026-11-23 one-time cleanup (same fix): a flag
+     written under the old UTC day can't be trusted — it may be
+     yesterday evening's play showing as "today". Any lastPlayed
+     from yesterday-local onward is demoted to yesterday-local:
+     the badge clears on next load, the streak number survives (a
+     play today continues it). Runs once, keyed to this fix. */
+  try {
+    if(localStorage.getItem('holoArcade_v1_gotd_dayfix') !== '2026-11-23'){
+      if(state.lastPlayed && /^\d{4}-\d{2}-\d{2}$/.test(state.lastPlayed) && state.lastPlayed >= yKey){
+        state.lastPlayed = yKey; saveState();
+      }
+      localStorage.setItem('holoArcade_v1_gotd_dayfix', '2026-11-23');
+    }
+  } catch(e){}
   function shownStreak(){
     // A streak is still current if the last played day is today or yesterday.
     return (state.lastPlayed === todayKey || state.lastPlayed === yKey) ? state.streak : 0;
@@ -11807,7 +11828,11 @@ var LOCATIONS = [
   "use strict";
   function $(id){ return document.getElementById(id); }
   var DAY_MS = 86400000;
-  function dayNumNow(){ var d = new Date(); return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / DAY_MS); }
+  /* GOTD-LOCALDAY-2026-11-23: local calendar day, same as the Game
+     of the Day card — the streak display, the once-a-day GOTD bonus
+     and the Daily Challenge all roll at local midnight now, not
+     18:00 Regina time. */
+  function dayNumNow(){ var d = new Date(); return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY_MS); }
   function dateKey(n){ return new Date(n * DAY_MS).toISOString().slice(0, 10); }
   var todayN = dayNumNow(), todayK = dateKey(todayN), yK = dateKey(todayN - 1);
 
@@ -15668,15 +15693,27 @@ function renderTesterAuth(){
   var GUEST_KEY = 'holos-arcade-eggs-guest';
   function signedIn(){ try { return (typeof getTester === 'function') && !!getTester(); } catch(e){ return false; } }
   function todayStr(){ var d = new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  /* EGG-REFRESH-2026-11-23 (Holo 17:12: "Can we refresh easter egg now"):
+     on-demand refresh. The daily key is the date + a refresh epoch:
+     bumping EGG_REFRESH re-rolls today's hiding spots for everyone AND
+     resets today's found state (stored daily records keyed to the old
+     epoch no longer match, so both friends can be found again). The
+     trophy (trophyAt) is NOT reset. Tomorrow the date changes, so the
+     epoch only matters today. NOTE: the previous HEAD (4c077cca,
+     duck-avatar commit) shipped an EMPTY games-hub/index.html, so beta
+     briefly served a blank page — the 55bf94b3 push (5c3e7721) already
+     restored a full file; this push builds on that restored HEAD. */
+  var EGG_REFRESH = 1;
+  function eggDayKey(){ return todayStr() + '-r' + EGG_REFRESH; }
   function eggLoad(){
-    var out = { found:{}, daily:{ date: todayStr(), kinds:{} }, trophyAt:'' };
+    var out = { found:{}, daily:{ date: eggDayKey(), kinds:{} }, trophyAt:'' };
     try {
       var raw = null;
       if(signedIn() && typeof loadAccountState === 'function'){ var s = loadAccountState(); raw = s && s.eggs ? s.eggs : null; }
       else { raw = JSON.parse(localStorage.getItem(GUEST_KEY)); }
       if(raw && typeof raw === 'object'){
         if(raw.found && typeof raw.found === 'object') out.found = raw.found;
-        if(raw.daily && raw.daily.date === todayStr() && raw.daily.kinds) out.daily.kinds = raw.daily.kinds;
+        if(raw.daily && raw.daily.date === eggDayKey() && raw.daily.kinds) out.daily.kinds = raw.daily.kinds;
         if(raw.trophyAt) out.trophyAt = raw.trophyAt;
       }
     } catch(e){}
@@ -15750,12 +15787,12 @@ function renderTesterAuth(){
     return out;
   }
   /* Same spots for everyone on a given day; new spots next day. */
-  window.holoEggSpotsFor = function(dateStr){ var hosts = dailyHosts(); return hosts.length < 2 ? [] : dailySpotIndexes(dateStr, hosts.length); };
+  window.holoEggSpotsFor = function(dateStr){ var hosts = dailyHosts(); return hosts.length < 2 ? [] : dailySpotIndexes(dateStr + '-r' + EGG_REFRESH, hosts.length); };
   var builtForDate = '';
   function buildDailyEggs(){
     var hosts = dailyHosts();
     if(hosts.length < 2) return;
-    builtForDate = todayStr();
+    builtForDate = eggDayKey();
     var state = eggLoad();
     var spots = dailySpotIndexes(builtForDate, hosts.length);
     ['eevee','gizmo'].forEach(function(kind, i){
@@ -15907,7 +15944,7 @@ function renderTesterAuth(){
     renderEggTrophy();
   }
   function checkEggDay(){
-    if(builtForDate && todayStr() !== builtForDate) rebuildDailyEggs();
+    if(builtForDate && eggDayKey() !== builtForDate) rebuildDailyEggs();
   }
   function scheduleEggMidnight(){
     var now = new Date();
