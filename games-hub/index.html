@@ -2413,7 +2413,7 @@ setTimeout(function(){
       <div><span class="fc-label">Your username — this is how friends find you</span><span class="fc-code" id="myUsername">Sign in to see your username</span></div>
       <button class="btn btn-dark fc-copy" id="copyUsernameBtn" type="button">📋 Copy my username</button>
     </div>
-    <p class="g-note" style="margin:0">Tell your friends your username, then search for theirs below and tap Add.</p>
+    <p class="g-note" style="margin:0">Tell your friends your Code Name, then search for theirs below and tap Send request.</p>
     <form class="friend-add" id="friendAddForm">
       <input id="friendInput" type="text" autocomplete="off" placeholder="Search by username — e.g. Sam…" aria-label="Search by username" />
       <button class="btn btn-dark" type="submit">🔍 Search</button>
@@ -2427,7 +2427,7 @@ setTimeout(function(){
       <p style="margin:0;color:var(--muted);font-size:14px">Tap Add to add them as a friend.</p>
       <div class="friend-suggest-list" id="friendSuggestList"></div>
     </div>
-    <p style="margin:16px 0 0;color:var(--muted);font-size:13.5px">Friends work on this device for now.</p>
+    <p style="margin:16px 0 0;color:var(--muted);font-size:13.5px">Friend requests work across devices — accept in your Inbox or right here.</p>
   </section>
 
   <section class="hub-panel" id="about" aria-label="About Holo's Arcade">
@@ -10628,7 +10628,7 @@ var LOCATIONS = [
     <details class="legal-section">
       <summary>Can I add friends in the beta?</summary>
       <div class="legal-content">
-        <p>Yes — head to Friends and search by Code Name to add testers you know.</p>
+        <p>Yes — head to Friends, search a Code Name, and send a friend request. When they accept (it lands in their Inbox), you're friends on every device.</p>
       <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="friends">Go to Friends &#8594;</button></p>
         </div>
     </details>
@@ -17381,6 +17381,293 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   setInterval(tick, 60000);
   setTimeout(tick, 2500);
   window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, unreadCount:unreadCount, items:function(){ return items.slice(); } };
+})();
+</script>
+<!-- FRIEND-REQUESTS-2026-11-22 (Holo 23:32): cross-device friend
+     requests. Search a Code Name via the /usernames index -> Send
+     request (/friendRequests/$toUid/$fromUid {fromName, ts}).
+     Incoming requests show in the Inbox and the Friends panel with
+     Accept/Decline. Accept writes both /friends entries, deletes
+     the request, and notices both testers. The Friends list reads
+     /friends (cloud, cross-device); the same-device list above it
+     stays as the fallback. Needs the RTDB rules publish in
+     firebase-rules-friends-update-2026-11-22.md — every cloud call
+     fails soft (null) until then, same pattern as the inbox. -->
+<style>
+/* FRIEND-REQUESTS-2026-11-22 */
+.freq-box{margin-top:14px}
+.freq-box h3{margin:0 0 6px;font-family:"Bricolage Grotesque",sans-serif;font-size:17px}
+.freq-card{display:flex;gap:12px;align-items:center;background:#0a0620;border:2px solid #ff2e9a;border-radius:14px;padding:10px 14px;margin-top:8px;color:#e9e4ff;box-shadow:0 0 10px rgba(255,46,154,.3)}
+.freq-card .friend-main b{font-size:15.5px}
+.freq-card .freq-when{font-size:12px;color:#b8f4ff;display:block;margin-top:2px}
+.freq-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.freq-pending{font-size:13px;font-weight:800;color:#b8f4ff;white-space:nowrap}
+#cloudFriendGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:10px}
+#cloudFriendGrid:empty{display:none}
+.freq-note{margin:8px 0 0;color:var(--muted);font-size:13.5px}
+</style>
+<script>
+/* FRIEND-REQUESTS-2026-11-22 */
+(function(){
+  var FB_API_KEY='<redacted>';
+  var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+  var AUTH_KEY = 'holos-firebase-auth';
+  var OUT_KEY = 'holos-friend-requests-out';
+  function loadAuth(){ try { var v = JSON.parse(localStorage.getItem(AUTH_KEY)); if(v && v.idToken && v.uid) return v; } catch(e){} return null; }
+  function freshToken(){
+    var a = loadAuth(); if(!a) return Promise.resolve(null);
+    if(a.exp && a.exp > Date.now() + 60000) return Promise.resolve(a.idToken);
+    if(!a.refreshToken) return Promise.resolve(null);
+    return fetch('https://securetoken.googleapis.com/v1/token?key=' + FB_API_KEY, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:'grant_type=refresh_token&refresh_token=' + encodeURIComponent(a.refreshToken) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(j && j.id_token){ a.idToken = j.id_token; a.refreshToken = j.refresh_token || a.refreshToken; a.exp = Date.now() + ((parseInt(j.expires_in,10)||3600)*1000); try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e){} return a.idToken; } return null; })
+      .catch(function(){ return null; });
+  }
+  function api(method, path, body){
+    return freshToken().then(function(tok){
+      if(!tok) return null;
+      return fetch(FB_RTDB + path + '.json?auth=' + encodeURIComponent(tok), { method:method, headers:{ 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined })
+        .then(function(r){ if(!r.ok) return null; if(method === 'DELETE') return true; return r.json().catch(function(){ return true; }); }).catch(function(){ return null; });
+    }).catch(function(){ return null; });
+  }
+  function esc(s){ var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+  function when(ts){
+    try { var d = new Date(ts); if(isNaN(d)) return ''; return d.toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }); } catch(e){ return ''; }
+  }
+  function usernameKey(name){ return encodeURIComponent(String(name || '').trim().toLowerCase()); }
+  function myUid(){ var a = loadAuth(); return a ? a.uid : null; }
+  var myNameCache = null;
+  function myName(){
+    if(myNameCache) return Promise.resolve(myNameCache);
+    var uid = myUid(); if(!uid) return Promise.resolve('A tester');
+    return api('GET', '/users/' + encodeURIComponent(uid)).then(function(u){
+      var n = (u && (u.username || u.name)) ? String(u.username || u.name) : 'A tester';
+      myNameCache = n; return n;
+    });
+  }
+  function loadOut(){ try { var v = JSON.parse(localStorage.getItem(OUT_KEY)); if(v && typeof v === 'object') return v; } catch(e){} return {}; }
+  function saveOut(map){ try { localStorage.setItem(OUT_KEY, JSON.stringify(map)); } catch(e){} }
+
+  var incoming = {};   /* fromUid -> {fromName, ts} */
+  var cloudFriends = {}; /* friendUid -> {name, ts} */
+  var outgoing = loadOut(); /* toUid -> {name, ts} (this device's sent list) */
+
+  function searchCloud(name){
+    var q = String(name || '').trim(); if(!q) return Promise.resolve([]);
+    var uid = myUid();
+    return api('GET', '/usernames/' + usernameKey(q)).then(function(exact){
+      var found = [];
+      if(typeof exact === 'string' && exact && exact !== uid) found.push({ uid:exact, name:q });
+      var key = String(q).trim().toLowerCase();
+      var path = '/usernames?orderBy="$key"&startAt=' + encodeURIComponent(JSON.stringify(key)) + '&endAt=' + encodeURIComponent(JSON.stringify(key + '\uf8ff')) + '&limitToFirst=8';
+      return freshToken().then(function(tok){
+        if(!tok) return found;
+        return fetch(FB_RTDB + path + '&auth=' + encodeURIComponent(tok)).then(function(r){ return r.ok ? r.json() : null; }).then(function(data){
+          if(data && typeof data === 'object'){
+            Object.keys(data).forEach(function(k){
+              var u = data[k];
+              if(typeof u !== 'string' || !u || u === uid) return;
+              if(found.some(function(f){ return f.uid === u; })) return;
+              found.push({ uid:u, name:k });
+            });
+          }
+          return found;
+        }).catch(function(){ return found; });
+      });
+    });
+  }
+  function sendRequest(toUid, toName){
+    var uid = myUid(); if(!uid || !toUid || toUid === uid) return Promise.resolve(false);
+    return myName().then(function(name){
+      return api('PUT', '/friendRequests/' + encodeURIComponent(toUid) + '/' + encodeURIComponent(uid), { fromName:name, ts:Date.now() }).then(function(r){
+        if(r === null) return false;
+        outgoing[toUid] = { name: toName || 'Tester', ts: Date.now() }; saveOut(outgoing);
+        if(window.holoInbox && window.holoInbox.sendNotice){
+          try { window.holoInbox.sendNotice(toUid, { type:'friend-request', title:'Friend request', body:name + ' wants to be your friend. Open your Inbox or Friends to accept.', link:'friends' }); } catch(e){}
+        }
+        renderAll();
+        return true;
+      });
+    });
+  }
+  function cancelRequest(toUid){
+    var uid = myUid(); if(!uid || !toUid) return Promise.resolve(false);
+    return api('DELETE', '/friendRequests/' + encodeURIComponent(toUid) + '/' + encodeURIComponent(uid)).then(function(r){
+      delete outgoing[toUid]; saveOut(outgoing); renderAll(); return r !== null;
+    });
+  }
+  function acceptRequest(fromUid){
+    var uid = myUid(); if(!uid || !fromUid) return Promise.resolve(false);
+    var fromName = (incoming[fromUid] && incoming[fromUid].fromName) || 'Tester';
+    return myName().then(function(name){
+      var now = Date.now();
+      return api('PUT', '/friends/' + encodeURIComponent(uid) + '/' + encodeURIComponent(fromUid), { name:fromName, ts:now }).then(function(r1){
+        if(r1 === null) return false;
+        return api('PUT', '/friends/' + encodeURIComponent(fromUid) + '/' + encodeURIComponent(uid), { name:name, ts:now }).then(function(r2){
+          if(r2 === null) return false;
+          return api('DELETE', '/friendRequests/' + encodeURIComponent(uid) + '/' + encodeURIComponent(fromUid)).then(function(){
+            delete incoming[fromUid];
+            if(window.holoInbox && window.holoInbox.sendNotice){
+              try { window.holoInbox.sendNotice(fromUid, { type:'friend-accepted', title:'Friend request accepted', body:name + ' accepted your friend request. You are friends now!', link:'friends' }); } catch(e){}
+            }
+            try { if(typeof showBadgeToast === 'function') showBadgeToast('🤝 ' + fromName + ' is now your friend!'); } catch(e){}
+            return refresh().then(function(){ return true; });
+          });
+        });
+      });
+    });
+  }
+  function declineRequest(fromUid){
+    var uid = myUid(); if(!uid || !fromUid) return Promise.resolve(false);
+    return api('DELETE', '/friendRequests/' + encodeURIComponent(uid) + '/' + encodeURIComponent(fromUid)).then(function(r){
+      delete incoming[fromUid]; renderAll(); return r !== null;
+    });
+  }
+  function removeCloudFriend(friendUid){
+    var uid = myUid(); if(!uid || !friendUid) return Promise.resolve(false);
+    return api('DELETE', '/friends/' + encodeURIComponent(uid) + '/' + encodeURIComponent(friendUid)).then(function(){
+      return api('DELETE', '/friends/' + encodeURIComponent(friendUid) + '/' + encodeURIComponent(uid)).then(function(){
+        delete cloudFriends[friendUid]; renderAll(); return true;
+      });
+    });
+  }
+  function refresh(){
+    var uid = myUid();
+    if(!uid){ incoming = {}; cloudFriends = {}; renderAll(); return Promise.resolve(false); }
+    return api('GET', '/friendRequests/' + encodeURIComponent(uid)).then(function(reqs){
+      incoming = (reqs && typeof reqs === 'object') ? reqs : {};
+      return api('GET', '/friends/' + encodeURIComponent(uid));
+    }).then(function(fr){
+      cloudFriends = (fr && typeof fr === 'object') ? fr : {};
+      /* tidy outgoing: drop ones that became friends */
+      var changed = false;
+      Object.keys(outgoing).forEach(function(toUid){ if(cloudFriends[toUid]){ delete outgoing[toUid]; changed = true; } });
+      if(changed) saveOut(outgoing);
+      renderAll();
+      return true;
+    });
+  }
+  function requestCard(fromUid, r){
+    return '<div class="freq-card"><span class="friend-avatar" aria-hidden="true">🦆</span>' +
+      '<div class="friend-main"><b>' + esc(r.fromName || 'A tester') + '</b><span class="freq-when">wants to be your friend · ' + esc(when(r.ts)) + '</span></div>' +
+      '<div class="freq-actions"><button type="button" class="btn btn-dark" data-freq-accept="' + esc(fromUid) + '">✅ Accept</button>' +
+      '<button type="button" class="btn btn-light" data-freq-decline="' + esc(fromUid) + '">Decline</button></div></div>';
+  }
+  function wireCards(box){
+    if(!box) return;
+    box.querySelectorAll('[data-freq-accept]').forEach(function(b){ b.addEventListener('click', function(){ acceptRequest(b.getAttribute('data-freq-accept')); }); });
+    box.querySelectorAll('[data-freq-decline]').forEach(function(b){ b.addEventListener('click', function(){ declineRequest(b.getAttribute('data-freq-decline')); }); });
+    box.querySelectorAll('[data-freq-cancel]').forEach(function(b){ b.addEventListener('click', function(){ cancelRequest(b.getAttribute('data-freq-cancel')); }); });
+    box.querySelectorAll('[data-freq-remove]').forEach(function(b){ b.addEventListener('click', function(){ removeCloudFriend(b.getAttribute('data-freq-remove')); }); });
+    box.querySelectorAll('[data-freq-send]').forEach(function(b){ b.addEventListener('click', function(){ sendRequest(b.getAttribute('data-freq-send'), b.getAttribute('data-freq-name') || ''); }); });
+  }
+  function renderAll(){
+    var incKeys = Object.keys(incoming);
+    /* Friends panel: incoming + outgoing */
+    var panel = document.getElementById('friendReqPanel');
+    if(panel){
+      var html = '';
+      if(incKeys.length){
+        html += '<h3>📨 Friend requests</h3>' + incKeys.map(function(u){ return requestCard(u, incoming[u] || {}); }).join('');
+      }
+      var outKeys = Object.keys(outgoing);
+      if(outKeys.length){
+        html += '<h3 style="margin-top:14px">⏳ Requests sent</h3>' + outKeys.map(function(u){
+          var o = outgoing[u] || {};
+          return '<div class="freq-card"><span class="friend-avatar" aria-hidden="true">🦆</span>' +
+            '<div class="friend-main"><b>' + esc(o.name || 'Tester') + '</b><span class="freq-when">request sent · ' + esc(when(o.ts)) + '</span></div>' +
+            '<div class="freq-actions"><span class="freq-pending">Waiting…</span><button type="button" class="btn btn-light" data-freq-cancel="' + esc(u) + '">Cancel</button></div></div>';
+        }).join('');
+      }
+      panel.innerHTML = html;
+      panel.hidden = !html;
+      wireCards(panel);
+    }
+    /* Inbox: same incoming cards at the top */
+    var inboxBox = document.getElementById('friendReqInbox');
+    if(inboxBox){
+      inboxBox.innerHTML = incKeys.length ? ('<h3 style="margin:12px 0 0">📨 Friend requests</h3>' + incKeys.map(function(u){ return requestCard(u, incoming[u] || {}); }).join('')) : '';
+      wireCards(inboxBox);
+    }
+    /* Cloud friends grid */
+    var grid = document.getElementById('cloudFriendGrid');
+    if(grid){
+      var keys = Object.keys(cloudFriends);
+      grid.innerHTML = keys.map(function(u){
+        var f = cloudFriends[u] || {};
+        return '<div class="friend-card"><span class="friend-avatar" aria-hidden="true">🦆</span>' +
+          '<div class="friend-main"><b>' + esc(f.name || 'Tester') + '</b>' +
+          '<p class="friend-status on">☁️ Friends across devices</p></div>' +
+          '<button type="button" class="friend-remove" data-freq-remove="' + esc(u) + '" aria-label="Remove ' + esc(f.name || 'friend') + ' from friends" title="Remove friend">✕</button></div>';
+      }).join('');
+      wireCards(grid);
+      var head = document.getElementById('cloudFriendHead');
+      if(head) head.hidden = !keys.length;
+    }
+  }
+  function renderCloudResults(query){
+    var box = document.getElementById('cloudFriendResults'); if(!box) return;
+    var q = String(query || '').trim();
+    if(!q){ box.innerHTML = ''; return; }
+    if(!myUid()){ box.innerHTML = '<p class="friend-no-match">Sign in to send friend requests across devices, agent.</p>'; return; }
+    searchCloud(q).then(function(found){
+      if(!found.length){ box.innerHTML = '<p class="friend-no-match">No tester with that Code Name in the Arcade yet — check the spelling, agent.</p>'; return; }
+      box.innerHTML = found.map(function(f){
+        var action;
+        if(cloudFriends[f.uid]) action = '<span class="already">Friends ✓</span>';
+        else if(outgoing[f.uid]) action = '<span class="freq-pending">Request sent ✓</span>';
+        else if(incoming[f.uid]) action = '<button type="button" class="btn btn-dark" data-freq-accept="' + esc(f.uid) + '">✅ Accept theirs</button>';
+        else action = '<button type="button" class="btn btn-dark" data-freq-send="' + esc(f.uid) + '" data-freq-name="' + esc(f.name) + '">📨 Send request</button>';
+        return '<div class="friend-result"><span class="friend-avatar" aria-hidden="true">🦆</span>' +
+          '<div class="friend-main"><b>' + esc(f.name) + '</b></div>' + action + '</div>';
+      }).join('');
+      wireCards(box);
+    });
+  }
+  function buildUI(){
+    var results = document.getElementById('friendResults');
+    if(results && !document.getElementById('cloudFriendResults')){
+      var cr = document.createElement('div'); cr.className = 'friend-results'; cr.id = 'cloudFriendResults'; cr.setAttribute('aria-live', 'polite');
+      results.parentNode.insertBefore(cr, results.nextSibling);
+    }
+    var grid = document.getElementById('friendGrid');
+    if(grid && !document.getElementById('cloudFriendGrid')){
+      var head = document.createElement('h3'); head.id = 'cloudFriendHead'; head.hidden = true;
+      head.style.cssText = 'margin:16px 0 0;font-family:"Bricolage Grotesque",sans-serif;font-size:17px';
+      head.textContent = '☁️ Friends across devices';
+      var cg = document.createElement('div'); cg.id = 'cloudFriendGrid';
+      grid.parentNode.insertBefore(head, grid.nextSibling);
+      grid.parentNode.insertBefore(cg, head.nextSibling);
+    }
+    var panelHost = document.getElementById('friends');
+    if(panelHost && !document.getElementById('friendReqPanel')){
+      var p = document.createElement('div'); p.className = 'freq-box'; p.id = 'friendReqPanel'; p.hidden = true;
+      var anchor = document.getElementById('friendMsg') || document.getElementById('cloudFriendResults');
+      if(anchor && anchor.parentNode) anchor.parentNode.insertBefore(p, anchor.nextSibling); else panelHost.appendChild(p);
+    }
+    var inbox = document.getElementById('inbox');
+    if(inbox && !document.getElementById('friendReqInbox')){
+      var ib = document.createElement('div'); ib.id = 'friendReqInbox';
+      var list = document.getElementById('inboxList');
+      if(list) inbox.insertBefore(ib, list); else inbox.appendChild(ib);
+    }
+    var form = document.getElementById('friendAddForm');
+    if(form && !form.__freqWired){
+      form.__freqWired = true;
+      form.addEventListener('submit', function(){ var inp = document.getElementById('friendInput'); renderCloudResults(inp ? inp.value : ''); });
+    }
+    var inp2 = document.getElementById('friendInput');
+    if(inp2 && !inp2.__freqWired){
+      inp2.__freqWired = true;
+      var t = null;
+      inp2.addEventListener('input', function(){ clearTimeout(t); t = setTimeout(function(){ renderCloudResults(inp2.value); }, 450); });
+    }
+  }
+  buildUI();
+  try { new MutationObserver(function(){ var v = document.body.getAttribute('data-view'); if(v === 'friends' || v === 'inbox'){ buildUI(); refresh(); } }).observe(document.body, { attributes:true, attributeFilter:['data-view'] }); } catch(e){}
+  setInterval(function(){ if(myUid()) refresh(); }, 60000);
+  setTimeout(function(){ buildUI(); refresh(); }, 2500);
+  window.holoFriends = { refresh:refresh, sendRequest:sendRequest, acceptRequest:acceptRequest, declineRequest:declineRequest, cancelRequest:cancelRequest, removeCloudFriend:removeCloudFriend, searchCloud:searchCloud, incoming:function(){ return incoming; }, cloudFriends:function(){ return cloudFriends; }, outgoing:function(){ return outgoing; } };
 })();
 </script>
 <!-- END-BAR-2026-11-22 (Holo 23:03): after a game finishes, show
