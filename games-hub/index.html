@@ -7089,9 +7089,11 @@ setTimeout(function(){
      (local record + Firebase /users/$uid.dob). 18+ games stay hidden
      until the 18th birthday, computed from the DOB — they unlock
      automatically on the day, no re-ask.
-   - Existing accounts with no DOB get asked once (catch-up prompt
-     after sign-in; if dismissed it asks again next sign-in, never
-     twice in one session).
+   - Existing accounts are NEVER asked: age verification happens only
+     when someone registers (Holo 2026-11-23 17:11: "Then only upon
+     registering"). Accounts with no DOB on file fail open — 18+
+     games stay visible to them until they add a DOB themselves
+     (Your account > Change my date of birth, email-verified).
    - Settings (Your account > 18+ games) has a "Hide 18+ games" toggle
      for the shared-device case ("Lots of parents let kids use their
      devices to play on"): flip it on before handing the device to a
@@ -7204,7 +7206,7 @@ setTimeout(function(){
   }
   function isAdultByDob(){
     var d = dob();
-    if(!d) return true; /* No DOB on file (existing accounts) — fail open; the catch-up prompt collects it. */
+    if(!d) return true; /* No DOB on file (existing accounts) — fail open; no catch-up prompt (Holo 2026-11-23 17:11: age check only at registration). */
     var p = d.split('-'), y = +p[0], m = +p[1] - 1, day = +p[2];
     var eighteenth = new Date(y + 18, m, day);
     if(eighteenth.getMonth() !== m) eighteenth = new Date(y + 18, m + 1, 0); /* Feb 29 -> Feb 28 in non-leap years */
@@ -7433,48 +7435,12 @@ setTimeout(function(){
     }
   }
 
-  /* ---------- DOB catch-up for existing accounts (asked once) ---------- */
-  var catchupTriedCloud = false, catchupDone = false;
-  function openDobCatchup(){
-    openModal('Quick question',
-      '<p>What is your date of birth? We hide the 18+ party games until your 18th birthday — and they switch on by themselves on the day.</p>' +
-      '<div class="login-field"><label for="age18Dob">Date of birth</label>' + dobFieldHTML('age18Dob') + '<p class="login-helper">Type it as DD/MM/YYYY, or tap \uD83D\uDCC5 to pick from a calendar.</p></div>' +
-      '<p class="login-error" id="age18DobErr" role="alert" hidden></p>' +
-      '<p><button type="button" class="btn btn-dark" id="age18DobSave">Save</button> <button type="button" class="btn btn-light" id="age18DobLater">Not now</button></p>',
-      function(){ /* dismissed: ask again next sign-in, never twice this session */ lsDel('holos-arcade-dob-asked-' + code()); });
-    bindDobField('age18Dob');
-    document.getElementById('age18DobSave').addEventListener('click', function(){
-      var v = String((document.getElementById('age18Dob') || {}).value || '');
-      var err = validateDob(v);
-      var errEl = document.getElementById('age18DobErr');
-      if(err){ if(errEl){ errEl.textContent = err; errEl.hidden = false; } return; }
-      if(saveDob(v)){ catchupDone = true; closeModal(); toast('Thanks, agent — date of birth saved.'); }
-    });
-    document.getElementById('age18DobLater').addEventListener('click', function(){ lsDel('holos-arcade-dob-asked-' + code()); closeModal(); });
-  }
-  function maybeCatchup(){
-    if(catchupDone || !sess() || !hubVisible() || modalOpen()) return;
-    if(dob()){ catchupDone = true; return; }
-    try { if(ssGet('holos-arcade-dob-catchup-shown')) return; } catch(e){}
-    if(lsGet('holos-arcade-dob-asked-' + code())) return;
-    if(!catchupTriedCloud && typeof window.betaGetDob === 'function'){
-      catchupTriedCloud = true;
-      window.betaGetDob().then(function(d){
-        if(d && cleanDob(d)){ saveDob(d, true); catchupDone = true; return; }
-        lsSet('holos-arcade-dob-asked-' + code(), '1');
-        try { ssSet('holos-arcade-dob-catchup-shown', '1'); } catch(e){}
-        openDobCatchup();
-      }).catch(function(){
-        lsSet('holos-arcade-dob-asked-' + code(), '1');
-        try { ssSet('holos-arcade-dob-catchup-shown', '1'); } catch(e){}
-        openDobCatchup();
-      });
-      return;
-    }
-    lsSet('holos-arcade-dob-asked-' + code(), '1');
-    try { ssSet('holos-arcade-dob-catchup-shown', '1'); } catch(e){}
-    openDobCatchup();
-  }
+  /* AGE18-NO-CATCHUP-2026-11-23 (Holo 17:11: "Then only upon registering"):
+     the DOB catch-up prompt for existing accounts is REMOVED — age
+     verification happens only when someone registers. Existing
+     accounts with no DOB are never asked; they fail open (18+ games
+     visible) until they add a DOB themselves via Your account >
+     Change my date of birth (email-verified flow). */
 
   /* ---------- Settings wiring + live re-apply ---------- */
   function setMsg(t){ var m = document.getElementById('adultSettingsMsg'); if(m){ m.textContent = t; m.hidden = false; } }
@@ -7531,11 +7497,6 @@ setTimeout(function(){
   else wireSettings();
   var wireIv = setInterval(function(){ wireSettings(); if(wired) clearInterval(wireIv); }, 1000);
   setTimeout(function(){ clearInterval(wireIv); }, 15000);
-  var catchIv = setInterval(function(){ maybeCatchup(); }, 2000);
-  setTimeout(function(){ clearInterval(catchIv); }, 90000);
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', maybeCatchup);
-  else maybeCatchup();
-
   window.holoDobFieldHTML = dobFieldHTML;
   window.holoBindDobField = bindDobField;
   window.holoAge18 = {
@@ -20547,18 +20508,23 @@ footer .egg-row .egg{width:32px;height:32px}
 </style>
 
 <script>
-/* TOUR-AUTOSHOW-2026-11-22 (Holo 23:42): the updated tour auto-opens
-   ONCE on next sign-in (existing testers) and on first sign-in (new
-   testers), via a per-account version flag. Dismissible (Skip / x /
-   Escape end it as always) and never forced again once seen or
-   dismissed. "Take the tour" still works any time. */
+/* TOUR-AUTOSHOW-2026-11-22 (Holo 23:42), narrowed 2026-11-23 17:11
+   (Holo: "Then only upon registering"): the tour auto-opens ONLY on
+   first sign-in for NEW accounts — accounts that have never had a
+   tour shown (no tour-seen flag at all). Existing accounts NEVER
+   auto-open on a version bump; a new TOUR_VERSION alone does not
+   re-show it to them. Dismissible (Skip / x / Escape end it as
+   always) and never forced again once seen or dismissed.
+   "Take the tour" still works any time. */
 (function(){
   var TOUR_VERSION = '8';
   function flagKey(){
     try { var t = (typeof getTester === 'function') ? getTester() : null; return 'holos-arcade-tour-seen-' + (t ? t.code : 'guest'); }
     catch(e){ return 'holos-arcade-tour-seen-guest'; }
   }
-  function seen(){ try { return localStorage.getItem(flagKey()) === TOUR_VERSION; } catch(e){ return true; } }
+  /* New accounts only: auto-open fires only when NO tour-seen flag exists at all.
+     Any stored value (any version) means this account has toured before. */
+  function seen(){ try { return localStorage.getItem(flagKey()) !== null; } catch(e){ return true; } }
   function markSeen(){ try { localStorage.setItem(flagKey(), TOUR_VERSION); } catch(e){} }
   function signedIn(){
     try { return !!(typeof getTester === 'function' && getTester()); } catch(e){ return false; }
