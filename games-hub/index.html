@@ -2714,6 +2714,24 @@ setTimeout(function(){
           <p id="emailPrefsMsg" role="status" hidden></p>
         </div>
         </details>
+        <!-- AGE18-2026-11-23 (Holo 2026-11-23 16:46-16:48 CST): Hide 18+ games + parent PIN. Toggle is per device and flips in one tap before handing the device to a kid; turning games back ON needs the parent PIN. Setting/changing the PIN always needs email verification first (see the AGE18 module). -->
+        <details class="acct-fold" id="fold-adult">
+          <summary>18+ games</summary>
+        <div class="adult-settings" id="adultSettingsBox">
+          <p class="contact-note">Hide the 18+ party games on this device before handing it to a kid. Turning them back on needs the parent PIN. Your date of birth hides them automatically until your 18th birthday.</p>
+          <div class="tgl-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0">
+            <span>Hide 18+ games<br><small>Kings Cup Party, Cup Toss Party and Never Have I Ever Party disappear from the Library, search, Categories and Game of the Day.</small></span>
+            <button class="tgl" id="hide18Toggle" type="button" aria-pressed="false">Off</button>
+          </div>
+          <p id="adultSettingsMsg" class="acct-set-msg" role="status" hidden></p>
+          <div class="tgl-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0">
+            <span>Parent PIN<br><small id="parentPinState">No PIN set yet.</small></span>
+            <button class="btn" id="parentPinBtn" type="button">Set up parent PIN</button>
+          </div>
+          <p class="contact-note" id="adultDobLine">Date of birth: on file.</p>
+          <p><button type="button" class="tier3-link" id="adultDobChangeBtn">Change my date of birth</button></p>
+        </div>
+        </details>
         <!-- SIGN-OUT-EVERYWHERE-2026-11-23 (Holo 2026-11-23 07:58 CST): sign out on this device + every other device. Writes sessionsRevokedAt to /users/$uid (fail-soft); other devices sign out next time they load or refresh their sign-in. -->
         <details class="acct-fold" id="fold-signout">
           <summary>Sign out everywhere</summary>
@@ -4515,7 +4533,7 @@ setTimeout(function(){
       <div>
         <span class="kicker personal">Adults Only</span>
         <h2>18+ Party Games</h2>
-        <p>Party games for adults (18+). Each game asks you to confirm your age before it opens. Drink responsibly. Know your limits. Water counts too.</p>
+        <p>Party games for adults (18+). They stay hidden until your 18th birthday, and you can hide them on any device from Your account under 18+ games. Drink responsibly. Know your limits. Water counts too.</p>
       </div>
       <span class="meta"><span>18+</span><span>Party</span><span>Free • Live</span></span>
     </div>
@@ -7050,6 +7068,417 @@ setTimeout(function(){
 <p class="sr-live" aria-live="polite" id="liveRegion" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden"></p>
 
 <script>
+/* AGE18-2026-11-23 (Holo 2026-11-23 16:46-16:48 CST): hide 18+ games from kids.
+   - Date of birth is collected at sign-up and stored on the account
+     (local record + Firebase /users/$uid.dob). 18+ games stay hidden
+     until the 18th birthday, computed from the DOB — they unlock
+     automatically on the day, no re-ask.
+   - Existing accounts with no DOB get asked once (catch-up prompt
+     after sign-in; if dismissed it asks again next sign-in, never
+     twice in one session).
+   - Settings (Your account > 18+ games) has a "Hide 18+ games" toggle
+     for the shared-device case ("Lots of parents let kids use their
+     devices to play on"): flip it on before handing the device to a
+     kid. Turning games back ON always goes through adultUnlock18()
+     below — THE single unlock entry point — and needs the parent PIN.
+     Turning them OFF is free, no PIN.
+   - Parent PIN: set/change ALWAYS needs email verification first
+     (button -> verification email -> "I've verified" check -> set PIN).
+     The PIN itself is stored as a hash only, never plain text.
+   - Effective visibility is always computed live (DOB + toggle), so
+     the two can never drift apart. */
+(function(){
+  "use strict";
+  var ADULT_SLUGS = ['kings-cup-party','cup-toss-party','never-have-i-ever-party'];
+  var LS_ACCOUNTS = 'holos-arcade-accounts';
+  var LS_SESSION = 'holos-arcade-tester-login';
+  function lsGet(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function lsSet(k, v){ try { localStorage.setItem(k, v); } catch(e){} }
+  function lsDel(k){ try { localStorage.removeItem(k); } catch(e){} }
+  function ssGet(k){ try { return sessionStorage.getItem(k); } catch(e){ return null; } }
+  function ssSet(k, v){ try { sessionStorage.setItem(k, v); } catch(e){} }
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function sess(){
+    try {
+      var v = JSON.parse(lsGet(LS_SESSION) || ssGet(LS_SESSION) || 'null');
+      return (v && v.name && v.code) ? v : null;
+    } catch(e){ return null; }
+  }
+  function code(){ var s = sess(); return s ? s.code : 'guest'; }
+  function accounts(){ try { var v = JSON.parse(lsGet(LS_ACCOUNTS) || '{}'); return (v && typeof v === 'object') ? v : {}; } catch(e){ return {}; } }
+  function saveAccounts(a){ lsSet(LS_ACCOUNTS, JSON.stringify(a || {})); }
+  function acct(){ var s = sess(); if(!s) return null; var all = accounts(); return all[String(s.name || '').toLowerCase()] || null; }
+  function acctKey(){ var s = sess(); return s ? String(s.name || '').toLowerCase() : null; }
+  function setAcctField(k, v){ var key = acctKey(); if(!key) return false; var all = accounts(); if(!all[key]) return false; all[key][k] = v; saveAccounts(all); return true; }
+  function toast(msg){ try { if(typeof showBadgeToast === 'function'){ showBadgeToast(msg); return; } } catch(e){} try { var m = document.getElementById('adultSettingsMsg'); if(m){ m.textContent = msg; m.hidden = false; } } catch(e2){} }
+
+  /* ---------- Date of birth ---------- */
+  function cleanDob(v){
+    v = String(v || '').trim();
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(v)) return '';
+    var d = new Date(v + 'T00:00:00');
+    if(isNaN(d.getTime())) return '';
+    if(d.toISOString().slice(0, 10) !== v) return '';
+    return v;
+  }
+  function validateDob(v){
+    if(!String(v || '').trim()) return 'Pop your date of birth in first, agent.';
+    var c = cleanDob(v);
+    if(!c) return 'That date of birth does not look right, agent.';
+    var d = new Date(c + 'T00:00:00'), now = new Date();
+    if(d > now) return 'That date is in the future, agent.';
+    if(now.getFullYear() - d.getFullYear() > 120) return 'That date looks too far back, agent — check the year.';
+    return null;
+  }
+  function dob(){
+    var a = acct();
+    if(a && a.dob) return cleanDob(a.dob);
+    return cleanDob(lsGet('holos-arcade-dob-' + code()));
+  }
+  function isAdultByDob(){
+    var d = dob();
+    if(!d) return true; /* No DOB on file (existing accounts) — fail open; the catch-up prompt collects it. */
+    var p = d.split('-'), y = +p[0], m = +p[1] - 1, day = +p[2];
+    var eighteenth = new Date(y + 18, m, day);
+    if(eighteenth.getMonth() !== m) eighteenth = new Date(y + 18, m + 1, 0); /* Feb 29 -> Feb 28 in non-leap years */
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    return today >= eighteenth;
+  }
+  function saveDob(d, silent){
+    var c = cleanDob(d);
+    if(!c) return false;
+    setAcctField('dob', c);
+    lsSet('holos-arcade-dob-' + code(), c);
+    try { if(typeof window.betaSetDob === 'function') window.betaSetDob(c); } catch(e){}
+    if(!silent) applyAll();
+    return true;
+  }
+
+  /* ---------- Hide toggle (per device) ---------- */
+  function hideKey(){ return 'holos-arcade-hide18-' + code(); }
+  function hide18(){
+    if(!isAdultByDob()) return true; /* Under 18: always hidden, whatever the toggle says. */
+    try { var v = lsGet(hideKey()); if(v !== null) return v === '1'; } catch(e){}
+    var a = acct();
+    if(a && a.hide18 !== undefined) return !!a.hide18;
+    return false;
+  }
+  function syncAdultSettings(){
+    try {
+      if(typeof window.betaSetAdultSettings === 'function') window.betaSetAdultSettings({ hide18: hide18(), parentPinHash: pinHash() || null });
+    } catch(e){}
+  }
+  function setHide18(val){
+    lsSet(hideKey(), val ? '1' : '0');
+    setAcctField('hide18', !!val);
+    syncAdultSettings();
+    applyAll();
+  }
+  function adultGamesVisible(){ return isAdultByDob() && !hide18(); }
+  function isAdultSlug(slug){ return ADULT_SLUGS.indexOf(String(slug || '')) !== -1; }
+  function isAdultCard(card){
+    try {
+      var b = card && card.querySelector ? card.querySelector('[data-game]') : null;
+      if(b && isAdultSlug(b.getAttribute('data-game'))) return true;
+      var cat = card && card.getAttribute ? (card.getAttribute('data-cat') || '') : '';
+      return (' ' + cat + ' ').indexOf(' party19 ') !== -1;
+    } catch(e){ return false; }
+  }
+  function showBlocked(){ toast('\uD83D\uDD1E 18+ games are hidden on this device. Turn them on in Your account — it needs the parent PIN.'); }
+
+  /* ---------- Parent PIN (hash only, never plain text) ---------- */
+  function pinKey(){ return 'holos-arcade-parent-pin-' + code(); }
+  function pinHash(){
+    var v = lsGet(pinKey());
+    if(v) return v;
+    var a = acct();
+    return (a && a.parentPinHash) ? a.parentPinHash : '';
+  }
+  function hasPin(){ return !!pinHash(); }
+  function fnv(s){
+    /* Identical to the hub's fallbackPasswordHash (same string, same
+       two-part output) so a PIN set where crypto.subtle exists still
+       checks where it does not, and vice versa. */
+    var h1 = 0x811c9dc5, h2 = 5381;
+    s = 'holos-arcade::parent-pin::' + String(s == null ? '' : s);
+    for(var i = 0; i < s.length; i++){
+      var c = s.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193);
+      h2 = (Math.imul(h2, 33) ^ c) >>> 0;
+    }
+    return 'fnv:' + (h1 >>> 0).toString(16) + '.' + h2.toString(16);
+  }
+  function hashPin(pin){
+    try {
+      if(typeof window.hashPassword === 'function') return window.hashPassword('parent-pin::' + pin);
+    } catch(e){}
+    return Promise.resolve(fnv(pin));
+  }
+  function setPin(pin){
+    return hashPin(pin).then(function(h){
+      lsSet(pinKey(), h);
+      setAcctField('parentPinHash', h);
+      syncAdultSettings();
+      syncToggleUI();
+      return true;
+    });
+  }
+  function checkPin(pin){
+    /* Accept either hash form (SHA-256 where crypto.subtle exists,
+       the two-part fallback hash where it does not) — same dual-hash
+       rule the hub already uses for passwords. */
+    return hashPin(pin).then(function(h){
+      if(h === pinHash()) return true;
+      return fnv(pin) === pinHash();
+    });
+  }
+
+  /* ---------- One modal, reused by every 18+ step ---------- */
+  var overlay = null, titleEl = null, bodyEl = null;
+  function ensureModal(){
+    if(overlay) return;
+    overlay = document.createElement('div');
+    overlay.id = 'age18Overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(6,3,20,.78);display:none;align-items:center;justify-content:center;padding:18px';
+    overlay.innerHTML = '<div role="dialog" aria-modal="true" aria-labelledby="age18Title" style="background:#0a0620;border:2px solid rgba(139,92,255,.6);border-radius:16px;max-width:460px;width:100%;padding:22px 18px;color:#e9e4ff;position:relative">' +
+      '<button class="pop-x" id="age18CloseX" type="button" aria-label="Close">\u00D7</button>' +
+      '<h3 id="age18Title" style="font-family:var(--pixel);font-size:13px;line-height:1.7;color:#fff;margin:0 0 10px"></h3>' +
+      '<div id="age18Body" style="font-size:14.5px;line-height:1.55"></div></div>';
+    document.body.appendChild(overlay);
+    titleEl = document.getElementById('age18Title');
+    bodyEl = document.getElementById('age18Body');
+    document.getElementById('age18CloseX').addEventListener('click', function(){ closeModal(); if(modalCancel) modalCancel(); });
+  }
+  var modalCancel = null;
+  function modalOpen(){ return !!(overlay && overlay.style.display === 'flex'); }
+  function openModal(title, bodyHTML, onCancel){
+    ensureModal();
+    modalCancel = onCancel || null;
+    titleEl.textContent = title;
+    bodyEl.innerHTML = bodyHTML;
+    overlay.style.display = 'flex';
+  }
+  function closeModal(){ if(overlay) overlay.style.display = 'none'; modalCancel = null; }
+  function hubVisible(){
+    var lv = document.getElementById('loginView');
+    if(lv && !lv.hidden) return false;
+    var t = document.getElementById('siteTour');
+    if(t && !t.hidden) return false;
+    var pl = document.getElementById('player');
+    if(pl && !pl.hidden) return false;
+    return true;
+  }
+
+  /* ---------- THE single unlock entry point (PIN lives here) ---------- */
+  function adultUnlock18(cb){
+    if(!isAdultByDob()){ toast('These games stay hidden until your 18th birthday.'); cb(false); return; }
+    if(!hasPin()){ openVerifiedSetup('pin', cb); return; } /* No PIN yet — set one up first (email-verified). */
+    openPinPrompt(cb);
+  }
+  function openPinPrompt(cb){
+    openModal('Parent PIN',
+      '<p>Enter the parent PIN to turn the 18+ games back on.</p>' +
+      '<div class="login-field"><label for="age18Pin">Parent PIN</label><input id="age18Pin" type="password" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="4 digits" /></div>' +
+      '<p class="login-error" id="age18PinErr" role="alert" hidden></p>' +
+      '<p><button type="button" class="btn btn-dark" id="age18PinGo">Unlock 18+ games</button> <button type="button" class="btn btn-light" id="age18PinCancel">Cancel</button></p>' +
+      '<p class="login-helper">Forgot the PIN? Set a new one in Your account under 18+ games — it needs an email check first.</p>',
+      function(){ cb(false); });
+    var inp = document.getElementById('age18Pin');
+    if(inp) inp.focus();
+    document.getElementById('age18PinGo').addEventListener('click', function(){
+      var v = String((inp && inp.value) || '').trim();
+      var err = document.getElementById('age18PinErr');
+      function fail(m){ if(err){ err.textContent = m; err.hidden = false; } }
+      if(!/^\d{4}$/.test(v)){ fail('That PIN needs 4 digits, agent.'); return; }
+      checkPin(v).then(function(ok){
+        if(ok){ closeModal(); cb(true); }
+        else fail('That PIN did not match, agent. Have another try.');
+      });
+    });
+    document.getElementById('age18PinCancel').addEventListener('click', function(){ closeModal(); cb(false); });
+  }
+
+  /* ---------- Email-verified setup (PIN set/change + DOB change) ----------
+     Button -> verification email -> "I've verified" check -> set form.
+     No PIN or DOB change can happen from inside the Arcade without the
+     email step. Reuses the existing verification-email system
+     (sendBetaEmailVerification / betaRecheckVerified). */
+  function sendVerifyEmail(){
+    if(typeof window.betaResendVerification === 'function') return window.betaResendVerification();
+    if(typeof window.sendBetaEmailVerification === 'function') return window.sendBetaEmailVerification();
+    return Promise.resolve({ sent:false });
+  }
+  function openVerifiedSetup(mode, cb){
+    var email = (acct() && acct().email) || (sess() && sess().email) || '';
+    var isDob = mode === 'dob';
+    openModal(isDob ? 'Change date of birth' : (hasPin() ? 'Change parent PIN' : 'Set up parent PIN'),
+      '<p>Setting or changing this always needs an email check first. We send a verification link to <b>' + esc(email) + '</b> — tap the link in it, then come back here and tap "I\'ve verified".</p>' +
+      '<p class="login-error" id="age18VerMsg" role="status" hidden></p>' +
+      '<p><button type="button" class="btn btn-dark" id="age18SendEmail">Send verification email</button> <button type="button" class="btn btn-light" id="age18CheckBtn">I\'ve verified my email</button></p>' +
+      '<div id="age18SetBox" hidden></div>',
+      function(){ cb(false); });
+    var msgEl = document.getElementById('age18VerMsg');
+    function showMsg(t){ if(msgEl){ msgEl.textContent = t; msgEl.hidden = false; } }
+    document.getElementById('age18SendEmail').addEventListener('click', function(){
+      sendVerifyEmail().then(function(r){
+        showMsg(r && r.sent ? 'Verification email sent, agent. Check your inbox (and spam folder), tap the link, then tap "I\'ve verified" below.' : 'That did not send just now, agent. Wait a minute and tap Send again, or email topsecret@holosarcade.ca for help.');
+      }).catch(function(){ showMsg('That did not send just now, agent. Wait a minute and tap Send again.'); });
+    });
+    document.getElementById('age18CheckBtn').addEventListener('click', function(){
+      if(typeof window.betaRecheckVerified !== 'function'){ showMsg('Email checking works in the Glitch Lab, agent. Ask Holo for the Glitch Lab link.'); return; }
+      window.betaRecheckVerified().then(function(r){
+        if(r && r.verified){ showSetForm(); }
+        else showMsg('Not verified yet, agent. Tap the link in the verification email first, then tap "I\'ve verified" again. No email? Tap Send above.');
+      }).catch(function(){ showMsg('Could not check just now, agent. Check your internet and tap "I\'ve verified" again in a minute.'); });
+    });
+    function showSetForm(){
+      var box = document.getElementById('age18SetBox');
+      if(!box) return;
+      if(isDob){
+        box.innerHTML = '<div class="login-field"><label for="age18NewDob">New date of birth</label><input id="age18NewDob" type="date" autocomplete="bday" /></div>' +
+          '<p class="login-error" id="age18SetErr" role="alert" hidden></p>' +
+          '<p><button type="button" class="btn btn-dark" id="age18SetGo">Save date of birth</button></p>';
+        box.hidden = false;
+        document.getElementById('age18SetGo').addEventListener('click', function(){
+          var v = String((document.getElementById('age18NewDob') || {}).value || '');
+          var err = validateDob(v);
+          var errEl = document.getElementById('age18SetErr');
+          if(err){ if(errEl){ errEl.textContent = err; errEl.hidden = false; } return; }
+          if(saveDob(v)){ closeModal(); toast('Date of birth updated.'); cb(true); }
+        });
+      } else {
+        box.innerHTML = '<div class="login-field"><label for="age18NewPin">New parent PIN</label><input id="age18NewPin" type="password" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="4 digits" /></div>' +
+          '<div class="login-field"><label for="age18NewPin2">New parent PIN again</label><input id="age18NewPin2" type="password" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="4 digits" /></div>' +
+          '<p class="login-error" id="age18SetErr" role="alert" hidden></p>' +
+          '<p><button type="button" class="btn btn-dark" id="age18SetGo">Save parent PIN</button></p>';
+        box.hidden = false;
+        document.getElementById('age18SetGo').addEventListener('click', function(){
+          var v1 = String((document.getElementById('age18NewPin') || {}).value || '').trim();
+          var v2 = String((document.getElementById('age18NewPin2') || {}).value || '').trim();
+          var errEl = document.getElementById('age18SetErr');
+          function fail(m){ if(errEl){ errEl.textContent = m; errEl.hidden = false; } }
+          if(!/^\d{4}$/.test(v1)){ fail('The PIN needs 4 digits, agent.'); return; }
+          if(v1 !== v2){ fail('Those PINs do not match, agent. Have another try.'); return; }
+          setPin(v1).then(function(){ closeModal(); toast('Parent PIN saved.'); cb(true); });
+        });
+      }
+    }
+  }
+
+  /* ---------- DOB catch-up for existing accounts (asked once) ---------- */
+  var catchupTriedCloud = false, catchupDone = false;
+  function openDobCatchup(){
+    openModal('Quick question',
+      '<p>What is your date of birth? We hide the 18+ party games until your 18th birthday — and they switch on by themselves on the day.</p>' +
+      '<div class="login-field"><label for="age18Dob">Date of birth</label><input id="age18Dob" type="date" autocomplete="bday" /></div>' +
+      '<p class="login-error" id="age18DobErr" role="alert" hidden></p>' +
+      '<p><button type="button" class="btn btn-dark" id="age18DobSave">Save</button> <button type="button" class="btn btn-light" id="age18DobLater">Not now</button></p>',
+      function(){ /* dismissed: ask again next sign-in, never twice this session */ lsDel('holos-arcade-dob-asked-' + code()); });
+    document.getElementById('age18DobSave').addEventListener('click', function(){
+      var v = String((document.getElementById('age18Dob') || {}).value || '');
+      var err = validateDob(v);
+      var errEl = document.getElementById('age18DobErr');
+      if(err){ if(errEl){ errEl.textContent = err; errEl.hidden = false; } return; }
+      if(saveDob(v)){ catchupDone = true; closeModal(); toast('Thanks, agent — date of birth saved.'); }
+    });
+    document.getElementById('age18DobLater').addEventListener('click', function(){ lsDel('holos-arcade-dob-asked-' + code()); closeModal(); });
+  }
+  function maybeCatchup(){
+    if(catchupDone || !sess() || !hubVisible() || modalOpen()) return;
+    if(dob()){ catchupDone = true; return; }
+    try { if(ssGet('holos-arcade-dob-catchup-shown')) return; } catch(e){}
+    if(lsGet('holos-arcade-dob-asked-' + code())) return;
+    if(!catchupTriedCloud && typeof window.betaGetDob === 'function'){
+      catchupTriedCloud = true;
+      window.betaGetDob().then(function(d){
+        if(d && cleanDob(d)){ saveDob(d, true); catchupDone = true; return; }
+        lsSet('holos-arcade-dob-asked-' + code(), '1');
+        try { ssSet('holos-arcade-dob-catchup-shown', '1'); } catch(e){}
+        openDobCatchup();
+      }).catch(function(){
+        lsSet('holos-arcade-dob-asked-' + code(), '1');
+        try { ssSet('holos-arcade-dob-catchup-shown', '1'); } catch(e){}
+        openDobCatchup();
+      });
+      return;
+    }
+    lsSet('holos-arcade-dob-asked-' + code(), '1');
+    try { ssSet('holos-arcade-dob-catchup-shown', '1'); } catch(e){}
+    openDobCatchup();
+  }
+
+  /* ---------- Settings wiring + live re-apply ---------- */
+  function setMsg(t){ var m = document.getElementById('adultSettingsMsg'); if(m){ m.textContent = t; m.hidden = false; } }
+  function syncToggleUI(){
+    var t = document.getElementById('hide18Toggle');
+    if(!t) return;
+    var under = !isAdultByDob();
+    var hidden = hide18();
+    t.textContent = hidden ? 'On' : 'Off';
+    t.setAttribute('aria-pressed', hidden ? 'true' : 'false');
+    t.disabled = under;
+    var st = document.getElementById('parentPinState');
+    if(st) st.textContent = hasPin() ? 'PIN is set. Turning 18+ games back on needs it.' : 'No PIN set yet — set one up so a kid can\'t switch the games back on.';
+    var dl = document.getElementById('adultDobLine');
+    if(dl){
+      if(under) dl.textContent = dob() ? 'Date of birth on file — 18+ games stay hidden until your 18th birthday.' : 'No date of birth on file yet.';
+      else dl.textContent = dob() ? 'Date of birth on file — you\'re 18 or older, so 18+ games can be shown.' : 'No date of birth on file yet.';
+    }
+    var pb = document.getElementById('parentPinBtn');
+    if(pb) pb.textContent = hasPin() ? 'Change parent PIN' : 'Set up parent PIN';
+  }
+  function applyAll(){
+    try { if(typeof window.holoRefreshLibrary === 'function') window.holoRefreshLibrary(); } catch(e){}
+    try { if(typeof window.holoRefreshCatTiles === 'function') window.holoRefreshCatTiles(); } catch(e){}
+    try { if(typeof window.holoRefreshGotd === 'function') window.holoRefreshGotd(); } catch(e){}
+    try { if(typeof window.holoRefreshFavourites === 'function') window.holoRefreshFavourites(); } catch(e){}
+    syncToggleUI();
+  }
+  var wired = false;
+  function wireSettings(){
+    if(wired) return;
+    var t = document.getElementById('hide18Toggle');
+    if(!t) return;
+    wired = true;
+    t.addEventListener('click', function(){
+      if(hide18()){
+        adultUnlock18(function(ok){
+          if(ok){ setHide18(false); setMsg('18+ games are back on this device.'); }
+          syncToggleUI();
+        });
+      } else {
+        setHide18(true);
+        setMsg('18+ games hidden on this device.');
+        syncToggleUI();
+      }
+    });
+    var pb = document.getElementById('parentPinBtn');
+    if(pb) pb.addEventListener('click', function(){ openVerifiedSetup('pin', function(ok){ if(ok) syncToggleUI(); }); });
+    var db = document.getElementById('adultDobChangeBtn');
+    if(db) db.addEventListener('click', function(){ openVerifiedSetup('dob', function(ok){ if(ok) syncToggleUI(); }); });
+    syncToggleUI();
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireSettings);
+  else wireSettings();
+  var wireIv = setInterval(function(){ wireSettings(); if(wired) clearInterval(wireIv); }, 1000);
+  setTimeout(function(){ clearInterval(wireIv); }, 15000);
+  var catchIv = setInterval(function(){ maybeCatchup(); }, 2000);
+  setTimeout(function(){ clearInterval(catchIv); }, 90000);
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', maybeCatchup);
+  else maybeCatchup();
+
+  window.holoAge18 = {
+    ADULT_SLUGS: ADULT_SLUGS.slice(),
+    isAdultSlug: isAdultSlug, isAdultCard: isAdultCard,
+    dob: dob, validateDob: validateDob, saveDob: saveDob, isAdultByDob: isAdultByDob,
+    hide18: hide18, setHide18: setHide18, adultGamesVisible: adultGamesVisible,
+    hasPin: hasPin, adultUnlock18: adultUnlock18, showBlocked: showBlocked,
+    applyAll: applyAll, syncToggleUI: syncToggleUI
+  };
+})();
+</script>
+
+<script>
 (function(){
   "use strict";
   function $(id){ return document.getElementById(id); }
@@ -7138,6 +7567,13 @@ setTimeout(function(){
   function refreshRecentSet(){ recentSet = {}; loadRecents().forEach(function(r){ recentSet[r.slug] = r.ts || 0; }); }
   function apply(){
     if(filter === 'recent') refreshRecentSet();
+    /* AGE18-2026-11-23: hidden 18+ games never show in the Library,
+       search or shelf filters. */
+    var age18Hidden = !!(window.holoAge18 && !window.holoAge18.adultGamesVisible());
+    if(age18Hidden && filter === 'party19'){
+      filter = 'all';
+      pills.forEach(function(x){ x.classList.toggle('active', x.getAttribute('data-filter') === 'all'); });
+    }
     var q = (search.value||'').toLowerCase().trim(), visible = 0;
     var paging = !q && filter === 'all';
     var counts = {}, totals = {};
@@ -7146,6 +7582,7 @@ setTimeout(function(){
       var txt = ((c.textContent||'') + ' ' + (c.getAttribute('data-search')||'') + ' ' + (c.getAttribute('data-cat')||'')).toLowerCase();
       var show = (filter==='all' || (filter==='recent' ? !!recentSet[cardSlugOf(c)] : cat.indexOf(filter)!==-1)) && (!q || txt.indexOf(q)!==-1);
       if(q && isComingSoon(c)) show = false;
+      if(show && age18Hidden && window.holoAge18.isAdultCard(c)) show = false;
       if(show){
         visible++;
         var key = groupKeyOf(c);
@@ -7165,6 +7602,8 @@ setTimeout(function(){
       sec.querySelectorAll('.game-card').forEach(function(c){ if(c.style.display !== 'none') any = true; });
       sec.style.display = any ? '' : 'none';
     });
+    var p19 = document.querySelector('.pill[data-filter="party19"]');
+    if(p19) p19.style.display = age18Hidden ? 'none' : '';
     empty.textContent = (filter === 'recent' && !visible)
       ? 'No recently played games yet \u2014 play a game and it will show up here so you can find it again (and tap the duck to favourite it!).'
       : 'No game matches that search \u2014 try \u201Ctrivia\u201D or clear the filters.';
@@ -7175,7 +7614,7 @@ setTimeout(function(){
        finished testing and moved to live (0 until launch). */
     var lc = $('libCount');
     if(lc){
-      var totalGames = cards.length;
+      var totalGames = age18Hidden ? cards.filter(function(c){ return !window.holoAge18.isAdultCard(c); }).length : cards.length;
       var LIVE_GAMES = 0;
       lc.textContent = (!q && filter === 'all')
         ? ('🧪 ' + totalGames + (totalGames === 1 ? ' game' : ' games') + ' in the Glitch Lab · 🚀 ' + LIVE_GAMES + ' live so far')
@@ -7216,6 +7655,9 @@ setTimeout(function(){
     });
   });
   search.addEventListener('input', apply);
+  /* AGE18-2026-11-23: let the 18+ module re-run the filter when the
+     toggle or date of birth changes (no reload needed). */
+  window.holoRefreshLibrary = function(){ try { apply(); } catch(e){} };
 
   /* EASY-ADDS-2026-11-23 (Holo 2026-11-23 08:18): recently-added
      dates drive the "New" badge (shows for 30 days) and the
@@ -7302,6 +7744,11 @@ setTimeout(function(){
   var player = $('player'), currentGame = null;
   var starters = {}, stoppers = {};
   function openGame(name){
+    /* AGE18-2026-11-23: 18+ games never open while hidden — covers
+       card taps, Game Menu Play, Game of the Day, Shuffle, deep
+       links (#game/<slug>) and practice opens, all of which funnel
+       through here. */
+    if(window.holoAge18 && window.holoAge18.isAdultSlug(name) && !window.holoAge18.adultGamesVisible()){ try { window.holoAge18.showBlocked(); } catch(e){} return; }
     if(currentGame && stoppers[currentGame]) stoppers[currentGame]();
     currentGame = name;
     $('playerTitle').textContent = TITLES[name] || 'Game';
@@ -7456,6 +7903,9 @@ setTimeout(function(){
   TITLES['snack-stand'] = 'Run a Café';
   $('surpriseBtn').addEventListener('click', function(){
     var live = ['trivia','werewolf','madcow','dj','poker','solitaire'].concat(Object.keys(NEW_GAMES));
+    /* AGE18-2026-11-23: Shuffle never lands on a hidden 18+ game. */
+    if(window.holoAge18 && !window.holoAge18.adultGamesVisible()) live = live.filter(function(s){ return !window.holoAge18.isAdultSlug(s); });
+    if(!live.length) return;
     openGame(live[Math.floor(Math.random()*live.length)]);
   });
 
@@ -7779,7 +8229,7 @@ setTimeout(function(){
     var cb = tutOnClose; tutOnClose = null; tutGame = null;
     if(cb) cb();
     if(!player.hidden) $('playerBack').focus();
-    /* WOLF-LETSPLAY-2026-11-23 (Holo 16:55): the "Got it — let's play"
+    /* WOLF-LETSPLAY-2026-11-23 (Holo 16:55, merged from live): the "Got it — let's play"
        button must actually start the game. For Werewolf the tutorial
        opens WITHOUT starting the hunt (WEREWOLF-GOTIT), so tapping it
        used to close the popup and leave the player hidden — the game
@@ -10585,8 +11035,8 @@ var LOCATIONS = [
   }
   function dayKey(n){ return new Date(n * DAY_MS).toISOString().slice(0, 10); }
   var today = dayNumNow();
-  var idx = ((today - EPOCH) % GOTD_GAMES.length + GOTD_GAMES.length) % GOTD_GAMES.length;
-  var game = GOTD_GAMES[idx];
+  var idx = 0;
+  var game = GOTD_GAMES[0];
   var todayKey = dayKey(today), yKey = dayKey(today - 1);
 
   /* Daily streak — saved in this browser only, under the hub's prefix. */
@@ -10624,17 +11074,31 @@ var LOCATIONS = [
 
   /* Fill the card and point its Play button at today's game. The hub's
      own [data-game] wiring opens it in the full-screen player. */
-  $('gotdIcon').textContent = ''; /* NO-TILE-EMOJI-2026-11-22 */
-  $('gotdName').textContent = game.name;
-  var li = $('libGotdIcon'); if(li) li.textContent = ''; /* NO-TILE-EMOJI-2026-11-22 */
-  var ln = $('libGotdName'); if(ln) ln.textContent = game.name;
-  var lb = $('libGotdPlay'); if(lb) lb.textContent = '▶ Play ' + game.name;
-  $('gotdDesc').textContent = game.desc;
-  $('gotdDate').textContent = new Date(today * DAY_MS).toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'UTC' });
-  var playBtn = $('gotdPlay');
-  playBtn.setAttribute('data-game', game.id);
-  playBtn.textContent = '▶ Play ' + game.name;
-  renderGotd();
+  function pickGotd(){
+    idx = ((today - EPOCH) % GOTD_GAMES.length + GOTD_GAMES.length) % GOTD_GAMES.length;
+    game = GOTD_GAMES[idx];
+    /* AGE18-2026-11-23: when 18+ games are hidden, today's pick steps
+       forward to the next non-18+ game (same date, everyone sees the
+       same game). */
+    if(window.holoAge18 && !window.holoAge18.adultGamesVisible()){
+      var guard = 0;
+      while(window.holoAge18.isAdultSlug(game.id) && guard++ < GOTD_GAMES.length){ idx = (idx + 1) % GOTD_GAMES.length; game = GOTD_GAMES[idx]; }
+    }
+    $('gotdIcon').textContent = ''; /* NO-TILE-EMOJI-2026-11-22 */
+    $('gotdName').textContent = game.name;
+    var li = $('libGotdIcon'); if(li) li.textContent = ''; /* NO-TILE-EMOJI-2026-11-22 */
+    var ln = $('libGotdName'); if(ln) ln.textContent = game.name;
+    var lb = $('libGotdPlay'); if(lb) lb.textContent = '▶ Play ' + game.name;
+    $('gotdDesc').textContent = game.desc;
+    $('gotdDate').textContent = new Date(today * DAY_MS).toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'UTC' });
+    var playBtn = $('gotdPlay');
+    playBtn.setAttribute('data-game', game.id);
+    playBtn.textContent = '▶ Play ' + game.name;
+    renderGotd();
+  }
+  pickGotd();
+  /* AGE18-2026-11-23: re-pick when 18+ visibility changes. */
+  window.holoRefreshGotd = pickGotd;
 
   /* Opening today's featured game counts toward the streak — but only
      on a REAL start, never for just opening the Game Menu.
@@ -10982,7 +11446,7 @@ var LOCATIONS = [
     <details class="legal-section">
       <summary>Where do replies to my reports go?</summary>
       <div class="legal-content">
-        <p>Tap the envelope at the top to open your Inbox. Replies to your reports, friend requests, saved drafts and news land there — new testers also get a mission briefing message, and the tour opens it for you on your first sign-in so you can see how the Inbox works. Tap a message to read it; archive it when you're done. The pink number means something new is waiting.</p>
+        <p>Tap the envelope at the top to open your Inbox. Replies to your reports, friend requests, saved drafts and news land there — new testers also get a mission briefing message, and the tour walks you through it step by step on your first sign-in. Tap a message to read it; archive it when you're done. The pink number means something new is waiting.</p>
       <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="inbox">Go to Inbox &#8594;</button></p>
         </div>
     </details>
@@ -11039,6 +11503,22 @@ var LOCATIONS = [
       <summary>Can I stop friend requests?</summary>
       <div class="legal-content">
         <p>Yes. In Your account, turn Accept friend requests off. Other testers then see that you are not accepting requests, and new requests to you are blocked. Friends you already have stay.</p>
+      <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="account">Go to Your account &#8594;</button></p>
+        </div>
+    </details>
+
+    <details class="legal-section">
+      <summary>How do I hide 18+ games from kids?</summary>
+      <div class="legal-content">
+        <p>In Your account, under 18+ games, turn Hide 18+ games on. Kings Cup Party, Cup Toss Party and Never Have I Ever Party disappear from the Library, search, Categories and Game of the Day. Turning them back on needs the parent PIN. Your date of birth (asked when you register) hides them automatically until your 18th birthday, when they switch on by themselves.</p>
+      <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="account">Go to Your account &#8594;</button></p>
+        </div>
+    </details>
+
+    <details class="legal-section">
+      <summary>What is the parent PIN?</summary>
+      <div class="legal-content">
+        <p>A 4-digit PIN that unlocks the 18+ games after they have been hidden. Set it up in Your account under 18+ games. Setting or changing the PIN always needs email verification first: we email you a link, and only after you tap it can you set or change the PIN. Turning the games off is free and never needs the PIN.</p>
       <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="account">Go to Your account &#8594;</button></p>
         </div>
     </details>
@@ -11507,6 +11987,8 @@ var LOCATIONS = [
   /* ---------- Play events → points, challenge, stats ---------- */
   function onPlay(slug){
     if(!slug) return;
+    /* AGE18-2026-11-23: a blocked 18+ open earns no points. */
+    if(window.holoAge18 && window.holoAge18.isAdultSlug(slug) && !window.holoAge18.adultGamesVisible()) return;
     H.totalOpens++; H.plays[slug] = (H.plays[slug] || 0) + 1;
     if(!H.dayPlays[todayK]) H.dayPlays[todayK] = {};
     H.dayPlays[todayK][slug] = true;
@@ -12540,13 +13022,13 @@ function normalizeInviteCode(code){
      in public UI; owner dash (owner-only) may display it. */
   try { return String(code == null ? '' : code).trim().toUpperCase().slice(0, 40); } catch(e){ return ''; }
 }
-function cacheLocalAccount(name, email, password, uid, existing, inviteCode, role){
+function cacheLocalAccount(name, email, password, uid, existing, inviteCode, role, dob){
   return hashPassword(password).then(function(pwHash){
     var now = new Date().toISOString();
     var key = String(name || '').trim().toLowerCase();
     var all = getAccounts();
     var prev = existing || all[key] || {};
-    var rec = { name:String(name || prev.name || '').trim(), email:String(email || prev.email || '').trim(), emailVerified: !!prev.emailVerified, needsReverify: !!prev.needsReverify, emailVerification: prev.emailVerification || { provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp: !!prev.comp, code: prev.code || ('ACCT-' + key), inviteCode: normalizeInviteCode(inviteCode || prev.inviteCode || ''), newsletterOptIn: (prev.newsletterOptIn === undefined ? true : !!prev.newsletterOptIn), role: String(role || prev.role || ((typeof isOwnerMode === 'function' && isOwnerMode()) || isBossName(name) ? 'owner' : '')), termsAcceptedAt: prev.termsAcceptedAt || now, createdAt: prev.createdAt || now };
+    var rec = { name:String(name || prev.name || '').trim(), email:String(email || prev.email || '').trim(), emailVerified: !!prev.emailVerified, needsReverify: !!prev.needsReverify, emailVerification: prev.emailVerification || { provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp: !!prev.comp, code: prev.code || ('ACCT-' + key), inviteCode: normalizeInviteCode(inviteCode || prev.inviteCode || ''), newsletterOptIn: (prev.newsletterOptIn === undefined ? true : !!prev.newsletterOptIn), dob: (dob && /^\d{4}-\d{2}-\d{2}$/.test(String(dob))) ? String(dob) : (prev.dob || ''), role: String(role || prev.role || ((typeof isOwnerMode === 'function' && isOwnerMode()) || isBossName(name) ? 'owner' : '')), termsAcceptedAt: prev.termsAcceptedAt || now, createdAt: prev.createdAt || now };
     if(uid) rec.uid = uid; else if(prev.uid) rec.uid = prev.uid;
     all[key] = rec;
     saveAccounts(all);
@@ -12728,7 +13210,7 @@ function sendBetaEmailVerification(){
   } catch(e){}
   return Promise.resolve({ sent:false, pending:true });
 }
-function createAccount(name, email, password, confirmPassword, inviteCode, termsAccepted, rememberMe){
+function createAccount(name, email, password, confirmPassword, inviteCode, termsAccepted, rememberMe, dob){
   /* Account creation via invite link or owner mode (UI built
      by buildInviteUI() for ?invite= links and by
      buildOwnerUI() for the secret owner link only).
@@ -12747,20 +13229,25 @@ function createAccount(name, email, password, confirmPassword, inviteCode, terms
   var inviteCodeNorm = normalizeInviteCode(inviteCode);
   if(!password || String(password).length < 6) return Promise.resolve({ ok:false, error:'Your password needs at least 6 characters, agent.' });
   if(String(password) !== String(confirmPassword || '')) return Promise.resolve({ ok:false, error:'Those passwords do not match, agent. Have another try.' });
+  /* AGE18-2026-11-23: date of birth is required at sign-up; 18+ games
+     stay hidden until the 18th birthday. */
+  var dobErr = (window.holoAge18 && window.holoAge18.validateDob) ? window.holoAge18.validateDob(dob) : null;
+  if(dobErr) return Promise.resolve({ ok:false, error:dobErr });
+  dob = String(dob || '').trim();
   var accounts = getAccounts();
   var key = name.toLowerCase();
   if(accounts[key]) return Promise.resolve({ ok:false, error:'That username is already taken, agent. Try a different username.' });
   if(typeof window.betaSignUpAsync === 'function'){
-    return window.betaSignUpAsync(email, password, name, inviteCodeNorm).then(function(res){
+    return window.betaSignUpAsync(email, password, name, inviteCodeNorm, dob).then(function(res){
       if(!res || !res.ok) return { ok:false, error:(res && res.error) || 'Could not finish registration, agent. Check your internet and try again in a minute.' };
-      return cacheLocalAccount(name, email, password, res.uid, null, inviteCodeNorm, res.role || '').then(function(rec){
+      return cacheLocalAccount(name, email, password, res.uid, null, inviteCodeNorm, res.role || '', dob).then(function(rec){
         rememberLastEmail(rec.email); return { ok:true, account:{ name:rec.name, code:rec.code, email:rec.email, emailVerified:false } };
       });
     }).catch(function(){ return { ok:false, error:'Could not reach the sign in service, agent. Check your internet and try again in a minute.' }; });
   }
   return hashPassword(password).then(function(pwHash){
     var now = new Date().toISOString();
-    var rec = { name:name, email:email, emailVerified:false, emailVerification:{ provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp:false, code:'ACCT-' + key, inviteCode:inviteCodeNorm, newsletterOptIn:true, role:((typeof isOwnerMode === 'function' && isOwnerMode()) || isBossName(name) ? 'owner' : ''), termsAcceptedAt:now, createdAt:now };
+    var rec = { name:name, email:email, emailVerified:false, emailVerification:{ provider:'firebase-auth', method:'sendEmailVerification', status:'pending', requestedAt:now }, pwHash:pwHash, comp:false, code:'ACCT-' + key, inviteCode:inviteCodeNorm, newsletterOptIn:true, dob:dob || '', role:((typeof isOwnerMode === 'function' && isOwnerMode()) || isBossName(name) ? 'owner' : ''), termsAcceptedAt:now, createdAt:now };
     accounts[key] = rec;
     saveAccounts(accounts);
     /* Firebase Auth email verification (beta build): ask the
@@ -13738,6 +14225,7 @@ function renderTesterAuth(){
       '<form id="createForm" novalidate>' +
       '<div class="login-field"><label for="createName">Code Name</label><input id="createName" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
       '<div class="login-field"><label for="createEmail">Your email</label><input id="createEmail" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
+      '<div class="login-field"><label for="createDob">Date of birth</label><input id="createDob" type="date" autocomplete="bday" /><p class="login-helper">We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
       '<div class="login-field"><label for="createPw">Choose a password</label><input id="createPw" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
       '<div class="login-field"><label for="createPw2">Confirm password</label><input id="createPw2" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
       '<div class="login-field"><label for="createInvite">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInvite" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Enter the code from your invite link.</p></div>' +
@@ -13859,6 +14347,7 @@ function renderTesterAuth(){
       var pw2 = document.getElementById('createPw2').value;
       var inv = document.getElementById('createInvite').value;
       var trm = (document.getElementById('createTerms') || document.getElementById('createTermsOwner')).checked;
+      var dob = (document.getElementById('createDob') || {}).value || '';
       /* CUSTOM-VALIDATION-2026-11-22: same checks as createAccount,
          shown as themed field messages instead of the native
          tooltip. createAccount still re-checks before Firebase. */
@@ -13871,11 +14360,14 @@ function renderTesterAuth(){
       var trmEl = (document.getElementById('createTerms') || document.getElementById('createTermsOwner'));
       if(!String(nm || '').trim()){ markFieldInvalid(nameEl, '⚠️ This field needs filling in, agent!'); fail('Pop your username in first, agent.'); if(nameEl) nameEl.focus(); return; }
       if(!validAccountEmail(em)){ markFieldInvalid(emailEl2, String(em || '').trim() ? '⚠️ That email looks off, agent.' : '⚠️ This field needs filling in, agent!'); fail('Pop a valid email in, agent. Your verification link goes there.'); if(emailEl2) emailEl2.focus(); return; }
+      var dobEl = document.getElementById('createDob');
+      var dobErr = (window.holoAge18 && window.holoAge18.validateDob) ? window.holoAge18.validateDob(dob) : null;
+      if(dobErr){ markFieldInvalid(dobEl, '⚠️ ' + dobErr); fail(dobErr); if(dobEl) dobEl.focus(); return; }
       if(!pw || String(pw).length < 6){ markFieldInvalid(pwEl2, !pw ? '⚠️ This field needs filling in, agent!' : '⚠️ Needs 6+ characters, agent.'); fail('Your password needs at least 6 characters, agent.'); if(pwEl2) pwEl2.focus(); return; }
       if(String(pw) !== String(pw2 || '')){ markFieldInvalid(pw2El, '⚠️ Passwords do not match, agent.'); fail('Those passwords do not match, agent. Have another try.'); if(pw2El) pw2El.focus(); return; }
       if(!String(inv || '').trim()){ markFieldInvalid(invEl, '⚠️ This field needs filling in, agent!'); fail('Your invite code is required, agent. It comes with your invite link. No code? Ask Holo for one.'); if(invEl) invEl.focus(); return; }
       if(!trm){ markFieldInvalid(trmEl, '⚠️ Tick this box first, agent!'); fail('Please tick the box to agree to the Terms & Policies first.'); return; }
-      createAccount(nm, em, pw, pw2, inv, trm, false).then(function(res){
+      createAccount(nm, em, pw, pw2, inv, trm, false, dob).then(function(res){
         if(res.ok){
           if(err) err.hidden = true;
           clearAllFieldMarks(cForm);
@@ -13955,6 +14447,7 @@ function renderTesterAuth(){
       '<form id="createFormOwner" novalidate>' +
       '<div class="login-field"><label for="createNameOwner">Code Name</label><input id="createNameOwner" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
       '<div class="login-field"><label for="createEmailOwner">Your email</label><input id="createEmailOwner" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
+      '<div class="login-field"><label for="createDobOwner">Date of birth</label><input id="createDobOwner" type="date" autocomplete="bday" /><p class="login-helper">We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
       '<div class="login-field"><label for="createPwOwner">Choose a password</label><input id="createPwOwner" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
       '<div class="login-field"><label for="createPw2Owner">Confirm password</label><input id="createPw2Owner" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
       '<div class="login-field"><label for="createInviteOwner">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInviteOwner" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Enter the code from your invite link.</p></div>' +
@@ -14393,6 +14886,7 @@ function renderTesterAuth(){
       var pw2 = document.getElementById('createPw2Owner').value;
       var inv = document.getElementById('createInviteOwner').value;
       var trm = document.getElementById('createTermsOwner').checked;
+      var dob = (document.getElementById('createDobOwner') || {}).value || '';
       /* CUSTOM-VALIDATION-2026-11-22: same checks as createAccount,
          shown as themed field messages instead of the native
          tooltip. createAccount still re-checks before Firebase. */
@@ -14405,11 +14899,14 @@ function renderTesterAuth(){
       var trmEl = document.getElementById('createTermsOwner');
       if(!String(nm || '').trim()){ markFieldInvalid(nameEl, '⚠️ This field needs filling in, agent!'); fail('Pop your username in first, agent.'); if(nameEl) nameEl.focus(); return; }
       if(!validAccountEmail(em)){ markFieldInvalid(emailEl2, String(em || '').trim() ? '⚠️ That email looks off, agent.' : '⚠️ This field needs filling in, agent!'); fail('Pop a valid email in, agent. Your verification link goes there.'); if(emailEl2) emailEl2.focus(); return; }
+      var dobEl = document.getElementById('createDobOwner');
+      var dobErr = (window.holoAge18 && window.holoAge18.validateDob) ? window.holoAge18.validateDob(dob) : null;
+      if(dobErr){ markFieldInvalid(dobEl, '⚠️ ' + dobErr); fail(dobErr); if(dobEl) dobEl.focus(); return; }
       if(!pw || String(pw).length < 6){ markFieldInvalid(pwEl2, !pw ? '⚠️ This field needs filling in, agent!' : '⚠️ Needs 6+ characters, agent.'); fail('Your password needs at least 6 characters, agent.'); if(pwEl2) pwEl2.focus(); return; }
       if(String(pw) !== String(pw2 || '')){ markFieldInvalid(pw2El, '⚠️ Passwords do not match, agent.'); fail('Those passwords do not match, agent. Have another try.'); if(pw2El) pw2El.focus(); return; }
       if(!String(inv || '').trim()){ markFieldInvalid(invEl, '⚠️ This field needs filling in, agent!'); fail('Your invite code is required, agent. It comes with your invite link. No code? Ask Holo for one.'); if(invEl) invEl.focus(); return; }
       if(!trm){ markFieldInvalid(trmEl, '⚠️ Tick this box first, agent!'); fail('Please tick the box to agree to the Terms & Policies first.'); return; }
-      createAccount(nm, em, pw, pw2, inv, trm, false).then(function(res){
+      createAccount(nm, em, pw, pw2, inv, trm, false, dob).then(function(res){
         if(res.ok){
           if(err) err.hidden = true;
           clearAllFieldMarks(cForm);
@@ -14979,7 +15476,8 @@ function renderTesterAuth(){
   var titles = {};
   function renderFavorites(){
     var favs = favLoad();
-    var slugs = Object.keys(favs);
+    /* AGE18-2026-11-23: hidden 18+ games never list in Favourites. */
+    var slugs = Object.keys(favs).filter(function(s){ return !(window.holoAge18 && window.holoAge18.isAdultSlug(s) && !window.holoAge18.adultGamesVisible()); });
     document.querySelectorAll('.fav-btn').forEach(function(btn){
       var on = !!favs[btn.getAttribute('data-fav-slug')];
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
@@ -15054,6 +15552,8 @@ function renderTesterAuth(){
     }
   } catch(e){}
   renderFavorites();
+  /* AGE18-2026-11-23: re-render when 18+ visibility changes. */
+  window.holoRefreshFavourites = renderFavorites;
 })();
 </script>
 
@@ -15889,17 +16389,19 @@ function renderTesterAuth(){
     var lv = byId('loginView'); if(lv) lv.hidden = true;
     document.body.style.overflow = '';
   }
-  /* TOUR-INBOX-WALK-2026-11-23 (Holo 16:42): the final tour step opens
-     the Inbox and the mission briefing message itself, so the tour
-     walks the tester through the real Inbox — the message, the
-     Notifications / Messages / Archive tabs, the filter buttons, and
-     archiving when done. The briefing is found in the cached Inbox
-     items (already loaded by the Inbox refresh); if it hasn't landed
-     yet for this account, one refresh is tried and the step falls
-     back to the open Inbox list — never an error. The copy is picked
-     to match: the "briefing open" text only when it really is open. */
-  var TOUR_INBOX_TEXT_WITH = 'This is your mission briefing, open below \u2014 play whatever you like, no deadlines, no homework. The tabs split your Inbox into Notifications, Messages and Archive, and the buttons mark everything read, or show just unread, drafts or archived. Tap any message to read it, and archive it when you\u2019re done. That\u2019s the tour! Retake it any time with Take the tour up top.';
-  var TOUR_INBOX_TEXT_WITHOUT = 'Here\u2019s your Inbox. Your mission briefing lands here as a message when you first sign in \u2014 tap it any time to read it again. The tabs split everything into Notifications, Messages and Archive, and the buttons mark everything read, or show just unread, drafts or archived. Archive a message when you\u2019re done with it. That\u2019s the tour! Retake it any time with Take the tour up top.';
+  /* TOUR-INBOX-WALK-2026-11-23 (Holo 16:42, expanded 16:52): the
+     tour ends with a walk through the real Inbox, in short steps:
+     first the envelope icon (tap it to open), then the mission
+     briefing message itself, then the tabs, then the filter
+     buttons, then read-and-archive. The briefing is found in the
+     cached Inbox items (already loaded by the Inbox refresh); if
+     it hasn't landed yet for this account, one refresh is tried
+     and the step falls back to the open Inbox list — never an
+     error. The copy is picked to match: the "briefing open" text
+     only when it really is open. */
+  var TOUR_BRIEFING_IDX = 12;
+  var TOUR_INBOX_TEXT_WITH = 'This is your mission briefing \u2014 play whatever you like, no deadlines, no homework. It\u2019s the first message in your Inbox.';
+  var TOUR_INBOX_TEXT_WITHOUT = 'Here\u2019s your Inbox. Your mission briefing lands here as a message when you first sign in \u2014 tap it any time to read it again.';
   function tourFindBriefing(){
     try {
       var items = (window.holoInbox && typeof window.holoInbox.items === 'function') ? window.holoInbox.items() : [];
@@ -15912,18 +16414,18 @@ function renderTesterAuth(){
     /* The briefing can open after showStep already measured the
        Inbox list — move the spotlight onto the reading view. */
     try {
-      if(!active || idx !== steps.length - 1) return;
+      if(!active || idx !== TOUR_BRIEFING_IDX) return;
       var rd = byId('inboxRead');
       if(rd && !rd.hidden && isShown(rd)){ currentTarget = rd; scrollToTarget(rd); position(); }
     } catch(e){}
   }
   function tourOpenBriefing(){
-    var step = steps[steps.length - 1];
+    var step = steps[TOUR_BRIEFING_IDX];
     var b = tourFindBriefing();
     if(b){
       step.text = TOUR_INBOX_TEXT_WITH;
       try {
-        if(window.holoInbox.setSection) window.holoInbox.setSection(b.archived ? 'archive' : 'notifications');
+        if(window.holoInbox.setSection) window.holoInbox.setSection(b.archived ? 'archive' : 'messages');
         window.holoInbox.openMessage(b.id);
       } catch(e){}
       tourRetargetInbox();
@@ -15932,18 +16434,28 @@ function renderTesterAuth(){
     step.text = TOUR_INBOX_TEXT_WITHOUT;
     if(window.holoInbox && typeof window.holoInbox.refresh === 'function'){
       window.holoInbox.refresh().then(function(){
-        if(!active || idx !== steps.length - 1) return;
+        if(!active || idx !== TOUR_BRIEFING_IDX) return;
         var b2 = tourFindBriefing();
         if(!b2) return;
         step.text = TOUR_INBOX_TEXT_WITH;
         try { textEl.textContent = step.text; } catch(e){}
         try {
-          if(window.holoInbox.setSection) window.holoInbox.setSection(b2.archived ? 'archive' : 'notifications');
+          if(window.holoInbox.setSection) window.holoInbox.setSection(b2.archived ? 'archive' : 'messages');
           window.holoInbox.openMessage(b2.id);
         } catch(e){}
         tourRetargetInbox();
       }).catch(function(){});
     }
+  }
+  function tourCloseBriefing(){
+    /* TOUR-INBOX-EXPAND-2026-11-23 (Holo 16:52): the tabs, buttons
+       and read steps need the Inbox list — but the reading view
+       hides tabs, buttons and list. Close it with the Inbox's own
+       close (no history back: the tour stays put). */
+    try {
+      if(window.holoInbox && typeof window.holoInbox.closeMessage === 'function') window.holoInbox.closeMessage(false);
+      else { var rd = byId('inboxRead'); if(rd) rd.hidden = true; var sec = byId('inbox'); if(sec) sec.classList.remove('inbox-reading'); }
+    } catch(e){}
   }
   var steps = [
     { title:'One bar to rule the Arcade',
@@ -15990,10 +16502,26 @@ function renderTesterAuth(){
       text:'Your browser\u2019s Back button works all over the Arcade now \u2014 every game and page has its own place in history. There\u2019s a Back button in the Arcade too, so use whichever you like.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true }); },
       target:function(){ return firstShown(['#holoBackBtn']); } },
-    { title:'How to use your Inbox',
-      text:'Here\u2019s your Inbox. Your mission briefing lands here as a message when you first sign in \u2014 tap it any time to read it again. The tabs split everything into Notifications, Messages and Archive, and the buttons mark everything read, or show just unread, drafts or archived. Archive a message when you\u2019re done with it. That\u2019s the tour! Retake it any time with Take the tour up top.',
+    { title:'Tap the envelope',
+      text:'See the envelope up top? Tap it to open your Inbox \u2014 that\u2019s where replies, friend requests, drafts and news land.',
+      prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#inboxBellBtn'); },
+      target:function(){ return firstShown(['#inboxBellBtn']); } },
+    { title:'Your mission briefing',
+      text:'Here\u2019s your Inbox. Your mission briefing lands here as a message when you first sign in \u2014 tap it any time to read it again.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('inbox', { keepScroll:true, skipHash:true }); tourOpenBriefing(); },
-      target:function(){ var rd = byId('inboxRead'); if(rd && !rd.hidden && isShown(rd)) return rd; return firstShown(['#inbox .inbox-tabs', '#inbox']); } }
+      target:function(){ var rd = byId('inboxRead'); if(rd && !rd.hidden && isShown(rd)) return rd; return firstShown(['#inboxList', '#inbox']); } },
+    { title:'The tabs',
+      text:'These tabs split your Inbox in three: Notifications for news and replies, Messages for friend requests and chats, and Archive for anything you\u2019ve put away.',
+      prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('inbox', { keepScroll:true, skipHash:true }); tourCloseBriefing(); },
+      target:function(){ return firstShown(['#inbox .inbox-tabs', '#inbox']); } },
+    { title:'The buttons',
+      text:'These buttons tidy things up: Mark all read and Clear notifications clear the pink badges, and Show unread only, Show drafts only and Show archived only filter the list.',
+      prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('inbox', { keepScroll:true, skipHash:true }); tourCloseBriefing(); },
+      target:function(){ return firstShown(['#inbox .inbox-actions', '#inbox']); } },
+    { title:'Read it, then archive it',
+      text:'Tap any message to read it \u2014 then archive it when you\u2019re done and it moves to the Archive tab. That\u2019s the tour! Retake it any time with Take the tour up top.',
+      prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('inbox', { keepScroll:true, skipHash:true }); tourCloseBriefing(); },
+      target:function(){ try { var b = tourFindBriefing(); if(b){ var it = document.querySelector('.inbox-item[data-id="' + b.id + '"]'); if(it && isShown(it)) return it; } } catch(e){} return firstShown(['#inboxList .inbox-item', '#inboxList', '#inbox']); } }
   ];
   function reducedMotion(){
     return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -16463,6 +16991,12 @@ function renderTesterAuth(){
       return fetch(FB_RTDB + '/users/' + encodeURIComponent(rec.uid) + '.json?auth=' + encodeURIComponent(rec.idToken), { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload || {}) }).then(function(r){ return !!r.ok; }).catch(function(){ return false; });
     } catch(e){ return Promise.resolve(false); }
   }
+  function patchUserPath(rec, sub, payload){
+    try {
+      if(!rec || !rec.uid || !rec.idToken || typeof fetch !== 'function') return Promise.resolve(false);
+      return fetch(FB_RTDB + '/users/' + encodeURIComponent(rec.uid) + '/' + sub + '.json?auth=' + encodeURIComponent(rec.idToken), { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload || {}) }).then(function(r){ return !!r.ok; }).catch(function(){ return false; });
+    } catch(e){ return Promise.resolve(false); }
+  }
   function fetchUser(rec){
     try {
       if(!rec || !rec.uid || !rec.idToken || typeof fetch !== 'function') return Promise.resolve(null);
@@ -16497,13 +17031,14 @@ function renderTesterAuth(){
     } catch(e){}
     return '';
   }
-  window.betaSignUpAsync = function(email, password, username, inviteCode){
+  window.betaSignUpAsync = function(email, password, username, inviteCode, dob){
     if(!email || !password || typeof fetch !== 'function') return Promise.resolve({ ok:false, code:'NETWORK', error:betaFriendlyError('') });
     return doSignUp(email, password).then(function(r){
       if(r.ok && r.json && r.json.idToken){
         var rec = saveAuth(r.json, email);
         if(!rec) return { ok:false, code:'NETWORK', error:betaFriendlyError('') };
         var patch = { email:email, newsletterOptIn:true, emailPrefs:{ messages:true, notifications:true, friendRequests:true, reportReplies:true } }; /* EMAIL-PREFS-2026-11-23 defaults */
+        if(dob && /^\d{4}-\d{2}-\d{2}$/.test(String(dob))) patch.dob = String(dob); /* AGE18-2026-11-23: DOB noted on /users/$uid at register */
         if(username) patch.username = String(username);
         var notedCode = cleanInviteCode(inviteCode || localInviteCodeFor(email));
         if(notedCode) patch.inviteCode = notedCode;
@@ -16540,6 +17075,32 @@ function renderTesterAuth(){
     var rec = loadAuth();
     if(!rec) return Promise.resolve(null);
     return fetchUser(rec).then(function(u){ return (u && u.emailPrefs) ? u.emailPrefs : null; });
+  };
+
+  /* AGE18-2026-11-23: date of birth + 18+ settings on /users/$uid
+     (fail-soft, same pattern as email prefs). DOB lives at the top
+     level; hide18 + parent PIN hash live under /users/$uid/settings
+     so a PATCH there never wipes the sound/music keys. */
+  window.betaSetDob = function(dob){
+    var rec = loadAuth();
+    if(!rec) return Promise.resolve(false);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dob || ''))) return Promise.resolve(false);
+    return patchUser(rec, { dob: String(dob) });
+  };
+  window.betaGetDob = function(){
+    var rec = loadAuth();
+    if(!rec) return Promise.resolve(null);
+    return fetchUser(rec).then(function(u){ var d = u && u.dob; return (/^\d{4}-\d{2}-\d{2}$/.test(String(d || ''))) ? String(d) : null; });
+  };
+  window.betaSetAdultSettings = function(s){
+    var rec = loadAuth();
+    if(!rec) return Promise.resolve(false);
+    return patchUserPath(rec, 'settings', { hide18: !!(s && s.hide18), parentPinHash: (s && s.parentPinHash) || null });
+  };
+  window.betaGetAdultSettings = function(){
+    var rec = loadAuth();
+    if(!rec) return Promise.resolve(null);
+    return fetchUser(rec).then(function(u){ return (u && u.settings) ? u.settings : null; });
   };
 
   /* ACCOUNT-SETTINGS-2026-11-23 (Holo 2026-11-23 08:08 CST):
@@ -17590,9 +18151,12 @@ function renderTesterAuth(){
     var cards = document.querySelectorAll('.game-card');
     document.querySelectorAll('.pill[data-filter]').forEach(function(pill){
       var f = pill.getAttribute('data-filter');
+      /* AGE18-2026-11-23: no Adults Only tile while 18+ is hidden. */
+      if(f === 'party19' && window.holoAge18 && !window.holoAge18.adultGamesVisible()) return;
       var n = 0;
       cards.forEach(function(c){
         if(c.querySelector('.soon')) return;
+        if(window.holoAge18 && window.holoAge18.isAdultCard(c) && !window.holoAge18.adultGamesVisible()) return;
         if(f === 'all'){ n++; return; }
         var cats = (c.getAttribute('data-cat') || '').split(/\s+/);
         if(cats.indexOf(f) !== -1) n++;
@@ -17615,6 +18179,8 @@ function renderTesterAuth(){
     });
   }
   buildCategoryTiles();
+  /* AGE18-2026-11-23: rebuild the tiles when 18+ visibility changes. */
+  window.holoRefreshCatTiles = function(){ var g = document.getElementById('catGrid'); if(g) g.innerHTML = ''; buildCategoryTiles(); };
     var h = (window.location.hash || '').toLowerCase();
     if(h === '#categories') return 'categories';
     if(h === '#library' || h === '#all-games') return 'library';
@@ -18582,13 +19148,12 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 #inboxDraftToggle[aria-pressed="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
 /* INBOX-EMAIL-2026-11-23 (Holo 08:33): Archived filter toggle */
 #inboxArchiveToggle[aria-pressed="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
-/* INBOX-MENU-2026-11-23 (Holo 08:39): section tabs — Notifications / Messages / Archive */
-#inbox .inbox-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-#inbox .inbox-tab{display:inline-flex;align-items:center;gap:6px}
-#inbox .inbox-tab[aria-selected="true"]{background:#ff2e9a;color:#fff;border-color:#ff2e9a}
-#inbox .tab-count{min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#ff2e9a;color:#fff;font-size:11px;font-weight:800;line-height:18px;text-align:center}
-#inbox .inbox-tab[aria-selected="true"] .tab-count{background:#fff;color:#ff2e9a}
-#inbox.inbox-reading .inbox-tabs{display:none!important}
+/* INBOX-DROPDOWN-2026-11-23 (Holo 17:00): section picker is a dropdown, not tabs — default All messages (everything except archived) */
+#inbox .inbox-filter{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+#inbox .inbox-filter label{font-weight:800;color:#e9e4ff;font-size:14px}
+#inbox .inbox-select{background:#0a0620;color:#e9e4ff;border:2px solid var(--violet);border-radius:10px;font-family:inherit;font-size:14px;font-weight:700;padding:9px 10px;min-height:40px}
+#inbox .inbox-select:focus{outline:2px solid var(--pink);outline-offset:1px}
+#inbox.inbox-reading .inbox-filter{display:none!important}
 #inbox .inbox-item.unread h3{color:#ffd7f2}
 /* INBOX-EMAIL-2026-11-23 (Holo 08:31): email/chat-style rows + reading view */
 #inbox .inbox-list{gap:8px}
@@ -18650,9 +19215,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   var unreadOnly = false; /* INBOX-CLEAR-FILTER-2026-11-23 */
   var draftsOnly = false; /* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:13): All / Unread / Drafts */
   var archivedOnly = false; /* INBOX-EMAIL-2026-11-23 (Holo 08:33): Archived filter — archive only, no delete */
-  /* INBOX-MENU-2026-11-23 (Holo 08:39): Inbox sections — Notifications / Messages / Archive */
-  var section = 'notifications';
-  var MSG_TYPES = { 'friend-request':1, 'friend-accepted':1, 'support-reply':1, 'dm':1, 'message':1 };
+  /* INBOX-DROPDOWN-2026-11-23 (Holo 17:00): sections picked from a dropdown — default 'all' (everything except archived); Archive stays reachable in the dropdown */
+  var section = 'all';
+  var MSG_TYPES = { 'friend-request':1, 'friend-accepted':1, 'support-reply':1, 'dm':1, 'message':1, 'mission-briefing':1 }; /* BRIEFING-AS-MESSAGE-2026-11-23 (Holo 16:58): the mission briefing is a received message from Holo's Arcade — it lives in the Messages tab, not Notifications. The type stays 'mission-briefing' so first-sign-in dedup and the tour lookup still match it. */
   function sectionOf(n){
     if(n.archived) return 'archive';
     return MSG_TYPES[n.type] ? 'messages' : 'notifications';
@@ -19895,7 +20460,7 @@ footer .egg-row .egg{width:32px;height:32px}
    Escape end it as always) and never forced again once seen or
    dismissed. "Take the tour" still works any time. */
 (function(){
-  var TOUR_VERSION = '7';
+  var TOUR_VERSION = '8';
   function flagKey(){
     try { var t = (typeof getTester === 'function') ? getTester() : null; return 'holos-arcade-tour-seen-' + (t ? t.code : 'guest'); }
     catch(e){ return 'holos-arcade-tour-seen-guest'; }
@@ -19940,11 +20505,14 @@ footer .egg-row .egg{width:32px;height:32px}
 </script>
 
 <script>
-/* MISSION-BRIEFING-INBOX-2026-11-23 (Holo 16:35): the mission briefing
+/* MISSION-BRIEFING-INBOX-2026-11-23 (Holo 16:35, as-message 16:58): the mission briefing
    moved out of the tour (too long as a panel) into the Inbox. Delivered
    ONCE per account on first sign-in via the existing Inbox mechanism
    (holoInbox.notifySelf -> POST /users/$uid/notifications, the same one
-   that delivered the test notification). A true on-register hook isn't
+   that delivered the test notification). It renders as a RECEIVED MESSAGE
+   in the Messages tab, from Holo's Arcade (see MSG_TYPES: type
+   'mission-briefing' counts as a message) — readable and archivable
+   like any other message. A true on-register hook isn't
    feasible: registration does NOT sign the tester in, so there is no
    auth token at register time to write the notice with. Deduped
    server-side by notification type 'mission-briefing' (so it lands once
