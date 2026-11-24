@@ -8,7 +8,7 @@
    Hide 18+ toggle, but this standalone URL stayed directly reachable. This
    guard runs first, before anything renders, and reads the SAME stored state
    the hub uses (holos-arcade-accounts + holos-arcade-dob-<code> +
-   holos-arcade-hide18-<code>, same fail-open rule: no DOB on file = adult).
+   holos-arcade-hide18-<code>, same fail-closed rule: no DOB on file = hidden (Holo 2026-11-24 00:30; owner + gizmo-* exempt)).
    If the viewer is under 18 or 18+ is hidden on this device, it bounces
    straight to the hub — the parent PIN lives in the hub, so turning games
    back on happens there, not here. Skipped only when framed by the
@@ -42,9 +42,22 @@
       if (acct && acct.dob) return cleanDob(acct.dob);
       return cleanDob(lsGet('holos-arcade-dob-' + code));
     }
+    function age18Exempt() {
+      try {
+        var a = JSON.parse(lsGet('holos-firebase-auth') || 'null');
+        if (a && a.uid === 'wQEvX4fiG6QSDMWaxx20JaQwRPP2') return true;
+        if (a && a.email && String(a.email).trim().toLowerCase().indexOf('gizmo-') === 0) return true;
+      } catch (e) {}
+      try {
+        if (acct && acct.role === 'owner') return true;
+        if (acct && acct.email && String(acct.email).trim().toLowerCase().indexOf('gizmo-') === 0) return true;
+      } catch (e2) {}
+      return false;
+    }
     function isAdultByDob() {
+      if (age18Exempt()) return true;
       var d = dob();
-      if (!d) return true;
+      if (!d) return false;
       var p = d.split('-'), y = +p[0], m = +p[1] - 1, day = +p[2];
       var eighteenth = new Date(y + 18, m, day);
       if (eighteenth.getMonth() !== m) eighteenth = new Date(y + 18, m + 1, 0);
