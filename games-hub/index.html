@@ -19698,6 +19698,19 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 #inboxRead .bubble{position:relative;border:1px solid rgba(57,213,255,.28);border-radius:2px;background:rgba(10,18,44,.92)}
 #inboxRead .bubble::before{content:"";position:absolute;inset:-2px;z-index:1;pointer-events:none;background:linear-gradient(var(--cyan),var(--cyan)) left top/26px 3px,linear-gradient(var(--cyan),var(--cyan)) left top/3px 26px,linear-gradient(var(--cyan),var(--cyan)) right top/26px 3px,linear-gradient(var(--cyan),var(--cyan)) right top/3px 26px,linear-gradient(var(--cyan),var(--cyan)) left bottom/26px 3px,linear-gradient(var(--cyan),var(--cyan)) left bottom/3px 26px,linear-gradient(var(--cyan),var(--cyan)) right bottom/26px 3px,linear-gradient(var(--cyan),var(--cyan)) right bottom/3px 26px;background-repeat:no-repeat;filter:drop-shadow(0 0 5px rgba(57,213,255,.8))}
 #inbox .inbox-item .inbox-actions .btn,#inboxRead .read-actions .btn{border-radius:2px;border-color:var(--cyan)}
+/* DEVICE-QUESTIONNAIRE-2026-11-23 (Holo 22:27): chips + form inside the Inbox message reading view. One-tap chips, no new page; answers save to the tester record. */
+.dq-wrap{margin:12px 16px 16px;border-top:1px solid var(--line);padding-top:4px}
+.dq-q{font-weight:800;font-size:14px;margin:14px 0 6px}
+.dq-q span{font-weight:400;color:var(--muted)}
+.dq-row{display:flex;flex-wrap:wrap;gap:8px}
+.dq-chip{appearance:none;background:var(--chip);border:1.5px solid var(--line);border-radius:999px;padding:8px 13px;font-weight:700;font-size:13.5px;color:inherit;cursor:pointer;min-height:40px}
+.dq-chip.on{background:var(--gold);border-color:var(--gold);color:#0a0620}
+.dq-input{width:100%;box-sizing:border-box;background:var(--chip);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;color:inherit;min-height:44px}
+.dq-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px}
+.dq-status{font-size:13.5px;font-weight:700;color:var(--muted)}
+.dq-thanks{font-weight:800;font-size:15px;margin:6px 0}
+.dq-note{color:var(--muted);font-size:13.5px;margin:0 0 10px}
+.dq-summary{font-size:13.5px;line-height:1.5;color:var(--muted);margin:0 0 12px}
 /* GAMES-HUD-CORNERS-2026-11-23 (Holo: "Lets use the hud corners for all games but pick from the others when ready to go live. Every game will have different ones."): HUD Corners is the uniform game border for now — the same cyan corner brackets as the Inbox (theme-hud from the inbox-bubble-borders / game-borders pickers) on every game tile and on the frame around the open-game play area. Per-game different borders come later at live; do NOT assign per-game borders now. The other seven picker styles are banked for seasonal themes and stay OUT of beta. inset:0 (not -2px like the Inbox) because .game-card and .cat-tile have overflow:hidden, which would clip brackets drawn outside the box. Brackets sit on z-index:3 with pointer-events:none so they draw over the card art instead of hiding behind it. */
 .game-card{position:relative;border:1px solid rgba(57,213,255,.28);border-radius:2px}
 .game-card::before{content:"";position:absolute;inset:0;z-index:3;pointer-events:none;background:linear-gradient(var(--cyan),var(--cyan)) left top/26px 3px,linear-gradient(var(--cyan),var(--cyan)) left top/3px 26px,linear-gradient(var(--cyan),var(--cyan)) right top/26px 3px,linear-gradient(var(--cyan),var(--cyan)) right top/3px 26px,linear-gradient(var(--cyan),var(--cyan)) left bottom/26px 3px,linear-gradient(var(--cyan),var(--cyan)) left bottom/3px 26px,linear-gradient(var(--cyan),var(--cyan)) right bottom/26px 3px,linear-gradient(var(--cyan),var(--cyan)) right bottom/3px 26px;background-repeat:no-repeat;filter:drop-shadow(0 0 5px rgba(57,213,255,.8))}
@@ -19742,6 +19755,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   var MSG_TYPES = { 'friend-request':1, 'friend-accepted':1, 'support-reply':1, 'dm':1, 'message':1, 'mission-briefing':1 }; /* BRIEFING-AS-MESSAGE-2026-11-23 (Holo 16:58): the mission briefing is a received message from Holo's Arcade — it lives in the Messages tab, not Notifications. The type stays 'mission-briefing' so first-sign-in dedup and the tour lookup still match it. */
   function sectionOf(n){
     if(n.archived) return 'archive';
+    if(n.reportId === 'device-questionnaire-v1') return 'messages'; /* DEVICE-QUESTIONNAIRE-2026-11-23: the questionnaire is a message from the Arcade team (sits next to the mission briefing), even though its type is 'system' for the RTDB allowlist. */
     return MSG_TYPES[n.type] ? 'messages' : 'notifications';
   }
   function setSection(s){
@@ -19919,9 +19933,11 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(notice.reportId) body.reportId = String(notice.reportId).slice(0, 80);
     return api('POST', '/users/' + encodeURIComponent(toUid) + '/notifications', body);
   }
-  function notifySelf(type, title, body, link){
+  function notifySelf(type, title, body, link, reportId){
     var a = loadAuth(); if(!a) return Promise.resolve(null);
-    return sendNotice(a.uid, { type:type, title:title, body:body, link:link }).then(function(r){ refresh(); return r; });
+    var ntc = { type:type, title:title, body:body, link:link };
+    if(reportId) ntc.reportId = String(reportId).slice(0, 80); /* DEVICE-QUESTIONNAIRE-2026-11-23: optional marker so the reader can tell a questionnaire message apart from other 'system' notices. */
+    return sendNotice(a.uid, ntc).then(function(r){ refresh(); return r; });
   }
   function thankTester(uid, gameName, slug){
     /* Owner flow (plan Phase 1): fixed template, Holo approves wording. */
@@ -19929,6 +19945,157 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   }
   /* INBOX-EMAIL-2026-11-23: chat-style reading view */
   var readingId = null;
+  /* DEVICE-QUESTIONNAIRE-2026-11-23 (Holo 22:27): "What are you playing on?"
+     One-tap chips inside the Inbox message reading view — NOT the Report
+     back form, which stays 4 inputs. All 7 questions from
+     ~/workspace/games/tester-device-questionnaire.md. Answers save to the
+     tester's own RTDB record (/users/$uid/devices) and the message is
+     marked answered so it shows as done on re-open. The message is type
+     'system' with reportId 'device-questionnaire-v1': 'system' is already
+     in the RTDB notification type allowlist, so this needs no rules
+     change (a custom type would be rejected by .validate — the same trap
+     the mission-briefing type sits in; see the send block at the end of
+     the file). DORMANT until DEVICE_QUESTIONNAIRE_LIVE is flipped true. */
+  var DQ_REPORT_ID = 'device-questionnaire-v1';
+  function dqIsQuestionnaire(n){ return !!n && n.type === 'system' && n.reportId === DQ_REPORT_ID; }
+  var DQ_PLATFORMS = ['Phone — iPhone', 'Phone — Android', 'Tablet — iPad', 'Tablet — Android', 'Computer — Windows', 'Computer — Mac', 'Computer — Chromebook', 'Console', 'Smart TV', 'Other'];
+  var DQ_CONSOLES = ['PlayStation 5', 'PlayStation 4', 'Xbox Series X / S', 'Xbox One', 'Nintendo Switch', 'Nintendo Switch 2', 'Steam Deck', 'Other', 'None'];
+  var DQ_GAMEPADS = ['PlayStation controller', 'Xbox controller', 'Switch Pro controller', 'Generic Bluetooth controller', 'Other', 'None'];
+  function dqChip(row, label, single){
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'dq-chip'; b.textContent = label;
+    b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', function(){
+      if(single){
+        var sibs = row.querySelectorAll('.dq-chip');
+        for(var i = 0; i < sibs.length; i++){ sibs[i].classList.remove('on'); sibs[i].setAttribute('aria-pressed', 'false'); }
+        b.classList.add('on'); b.setAttribute('aria-pressed', 'true');
+      } else {
+        var on = b.classList.toggle('on');
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        if(on && label === 'None'){ var s2 = row.querySelectorAll('.dq-chip'); for(var j = 0; j < s2.length; j++){ if(s2[j] !== b){ s2[j].classList.remove('on'); s2[j].setAttribute('aria-pressed', 'false'); } } }
+        if(on && label !== 'None'){ var s3 = row.querySelectorAll('.dq-chip'); for(var k = 0; k < s3.length; k++){ if(s3[k].textContent === 'None'){ s3[k].classList.remove('on'); s3[k].setAttribute('aria-pressed', 'false'); } } }
+      }
+    });
+    row.appendChild(b);
+    return b;
+  }
+  function dqRow(form, group, labels, single){
+    var row = document.createElement('div'); row.className = 'dq-row'; row.setAttribute('data-dq-group', group);
+    if(single) row.setAttribute('data-dq-single', '1');
+    labels.forEach(function(l){ dqChip(row, l, !!single); });
+    form.appendChild(row);
+    return row;
+  }
+  function dqCollect(form){
+    function multi(group){
+      var out = []; var row = form.querySelector('[data-dq-group="' + group + '"]');
+      if(row){ var chips = row.querySelectorAll('.dq-chip.on'); for(var i = 0; i < chips.length; i++) out.push(chips[i].textContent); }
+      return out;
+    }
+    function field(name){ var el = form.querySelector('[data-dq-field="' + name + '"]'); return el ? String(el.value || '').slice(0, 120) : ''; }
+    var singles = multi('canPlugIn'); var browsers = multi('consoleBrowser'); var testing = multi('upForTesting');
+    return { platforms: multi('platforms'), model: field('model'), consoles: multi('consoles'), gamepads: multi('gamepads'), canPlugIn: singles.length ? singles[0] : '', consoleBrowser: browsers.length ? browsers[0] : '', upForTesting: testing.length ? testing[0] : '', other: field('other'), answeredAt: new Date().toISOString() };
+  }
+  function dqFill(form, saved){
+    if(!saved) return;
+    function multi(group, vals){
+      if(!vals || !vals.length) return;
+      var row = form.querySelector('[data-dq-group="' + group + '"]'); if(!row) return;
+      var chips = row.querySelectorAll('.dq-chip');
+      for(var i = 0; i < chips.length; i++){ if(vals.indexOf(chips[i].textContent) >= 0){ chips[i].classList.add('on'); chips[i].setAttribute('aria-pressed', 'true'); } }
+    }
+    function field(name, v){ var el = form.querySelector('[data-dq-field="' + name + '"]'); if(el && v) el.value = v; }
+    multi('platforms', saved.platforms); multi('consoles', saved.consoles); multi('gamepads', saved.gamepads);
+    multi('canPlugIn', saved.canPlugIn ? [saved.canPlugIn] : []); multi('consoleBrowser', saved.consoleBrowser ? [saved.consoleBrowser] : []); multi('upForTesting', saved.upForTesting ? [saved.upForTesting] : []);
+    field('model', saved.model); field('other', saved.other);
+  }
+  function dqSummaryText(d){
+    if(!d) return '';
+    var bits = [];
+    if(d.platforms && d.platforms.length) bits.push('Plays on: ' + d.platforms.join(', '));
+    if(d.model) bits.push('Model: ' + d.model);
+    if(d.consoles && d.consoles.length) bits.push('Consoles: ' + d.consoles.join(', '));
+    if(d.gamepads && d.gamepads.length) bits.push('Gamepads: ' + d.gamepads.join(', '));
+    if(d.canPlugIn) bits.push('Can plug in to test: ' + d.canPlugIn);
+    if(d.consoleBrowser) bits.push('Console/TV browser: ' + d.consoleBrowser);
+    if(d.upForTesting) bits.push('Up for gamepad testing: ' + d.upForTesting);
+    if(d.other) bits.push('Anything else: ' + d.other);
+    return bits.join(' · ');
+  }
+  function dqShowSaved(wrap, n, ans){
+    wrap.innerHTML = '';
+    var t = document.createElement('p'); t.className = 'dq-thanks'; t.textContent = 'Thanks — your answers are saved.';
+    wrap.appendChild(t);
+    var sum = dqSummaryText(ans);
+    if(sum){ var s = document.createElement('p'); s.className = 'dq-summary'; s.textContent = sum; wrap.appendChild(s); }
+    var note = document.createElement('p'); note.className = 'dq-note'; note.textContent = 'You can change them any time.';
+    wrap.appendChild(note);
+    var edit = document.createElement('button'); edit.type = 'button'; edit.className = 'btn btn-light'; edit.textContent = 'Change my answers';
+    edit.addEventListener('click', function(){ dqBuildForm(wrap, n, ans); });
+    wrap.appendChild(edit);
+  }
+  function dqBuildForm(wrap, n, saved){
+    wrap.innerHTML = '';
+    var form = document.createElement('div'); form.className = 'dq-form';
+    function q(num, text, hint){
+      var p = document.createElement('p'); p.className = 'dq-q'; p.textContent = (num ? num + '. ' : '') + text + ' ';
+      if(hint){ var sp = document.createElement('span'); sp.textContent = hint; p.appendChild(sp); }
+      form.appendChild(p);
+    }
+    function input(name, placeholder, max){
+      var el = document.createElement('input'); el.type = 'text'; el.className = 'dq-input'; el.setAttribute('data-dq-field', name);
+      el.placeholder = placeholder; el.maxLength = max || 120; el.setAttribute('autocomplete', 'off');
+      form.appendChild(el);
+      return el;
+    }
+    q('1', 'What do you usually play on?', 'Tick all that apply.');
+    dqRow(form, 'platforms', DQ_PLATFORMS, false);
+    q('2', 'If phone or tablet, which model?', 'Optional.');
+    input('model', 'e.g. iPhone 13, Galaxy S25+', 80);
+    q('3', 'Do you have a games console?', 'Tick all that apply.');
+    dqRow(form, 'consoles', DQ_CONSOLES, false);
+    q('4', 'Do you have a gamepad or controller?', 'Tick all that apply.');
+    dqRow(form, 'gamepads', DQ_GAMEPADS, false);
+    q('', 'Could you plug it in or pair it to test with?', '');
+    dqRow(form, 'canPlugIn', ['Yes', 'No'], true);
+    q('5', 'Can you open a website on your console or TV?', '');
+    dqRow(form, 'consoleBrowser', ['Yes', 'No', 'Not sure'], true);
+    q('6', 'Up for testing with a console or gamepad when that lands?', '');
+    dqRow(form, 'upForTesting', ['Yes', 'No', 'Maybe'], true);
+    q('7', 'Anything else you play games on?', '');
+    input('other', 'Handhelds, an old laptop, a TV stick — anything that opens a browser', 120);
+    var acts = document.createElement('div'); acts.className = 'dq-actions';
+    var save = document.createElement('button'); save.type = 'button'; save.className = 'btn btn-light'; save.textContent = 'Save my answers';
+    var status = document.createElement('span'); status.className = 'dq-status'; status.setAttribute('role', 'status');
+    acts.appendChild(save); acts.appendChild(status); form.appendChild(acts);
+    wrap.appendChild(form);
+    dqFill(form, saved);
+    save.addEventListener('click', function(){
+      var a = loadAuth();
+      if(!a){ status.textContent = 'Sign in again to save — this needs your account.'; return; }
+      var ans = dqCollect(form);
+      save.disabled = true; save.textContent = 'Saving…'; status.textContent = '';
+      api('PATCH', '/users/' + encodeURIComponent(a.uid), { devices: ans }).then(function(ok){
+        if(!ok){ save.disabled = false; save.textContent = 'Save my answers'; status.textContent = 'Could not save — check your connection and try again.'; return; }
+        return api('PATCH', '/users/' + encodeURIComponent(a.uid) + '/notifications/' + encodeURIComponent(n.id), { answered: true, answeredAt: ans.answeredAt }).then(function(){
+          try { n.answered = true; n.answeredAt = ans.answeredAt; } catch(e){}
+          dqShowSaved(wrap, n, ans);
+        });
+      });
+    });
+  }
+  function renderDeviceQuestionnaire(thread, n){
+    var wrap = document.createElement('div'); wrap.className = 'dq-wrap'; thread.appendChild(wrap);
+    if(!n.answered){ dqBuildForm(wrap, n, null); return; }
+    var a = loadAuth();
+    if(!a){ dqBuildForm(wrap, n, null); return; }
+    wrap.innerHTML = '<p class="dq-note">Loading your saved answers…</p>';
+    api('GET', '/users/' + encodeURIComponent(a.uid)).then(function(rec){
+      var d = rec && rec.devices;
+      if(d && (d.platforms || d.consoles || d.gamepads || d.model || d.other || d.canPlugIn || d.consoleBrowser || d.upForTesting)) dqShowSaved(wrap, n, d);
+      else dqBuildForm(wrap, n, d || null);
+    }).catch(function(){ dqBuildForm(wrap, n, null); });
+  }
   function openMessage(id){
     var n = null; items.forEach(function(x){ if(x.id === id) n = x; });
     if(!n) return;
@@ -19951,6 +20118,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     thread.appendChild(sr);
     var bub = document.createElement('div'); bub.className = 'bubble'; bub.textContent = n.body || '';
     thread.appendChild(bub);
+    if(dqIsQuestionnaire(n)) renderDeviceQuestionnaire(thread, n); /* DEVICE-QUESTIONNAIRE-2026-11-23: the chips + form render under the bubble. */
     var acts = rd.querySelector('.read-actions'); acts.innerHTML = '';
     if(n.link){
       var ob = document.createElement('button'); ob.type = 'button'; ob.className = 'btn btn-light'; ob.textContent = 'Open';
@@ -21120,6 +21288,65 @@ footer .egg-row .egg{width:32px;height:32px}
       var has = existing.some(function(n){ return n && n.type === 'mission-briefing'; });
       if(has){ markDone(); return null; }
       return window.holoInbox.notifySelf('mission-briefing', 'Your mission briefing', BODY).then(function(r){
+        if(r) markDone(); else tried = false; /* no Firebase auth yet — retry next load */
+        return r;
+      });
+    }).catch(function(){ tried = false; });
+  }
+  var iv = setInterval(function(){ maybeSend(); }, 2000);
+  setTimeout(function(){ clearInterval(iv); }, 60000);
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', maybeSend);
+  else maybeSend();
+})();
+/* DEVICE-QUESTIONNAIRE-2026-11-23 (Holo 22:27): "What are you playing on?"
+   DORMANT — nothing is sent while DEVICE_QUESTIONNAIRE_LIVE is false.
+   How Holo triggers the send: she says "send it out" and Gizmo flips the
+   one line below to true in a single hub push. On every tester's next
+   sign-in / load after that, their own client self-sends this message
+   once into their Inbox (same pattern as the mission briefing:
+   holoInbox.notifySelf -> POST /users/$uid/notifications, deduped by
+   reportId 'device-questionnaire-v1' plus a per-account localStorage
+   flag). No owner-side send, no UID list needed, no email. The message
+   is type 'system' — already in the RTDB notification type allowlist —
+   so no Firebase rules change is needed. NOTE: the mission briefing uses
+   type 'mission-briefing', which is NOT in the documented allowlist, so
+   verify in the Firebase Console whether the briefing actually lands
+   live; the questionnaire deliberately avoids that trap. The form itself
+   lives in the Inbox reader (renderDeviceQuestionnaire, NOTIF-CENTER
+   block): one-tap chips + the console/gamepad follow-ups, answers saved
+   to the tester's own record (/users/$uid/devices). The Report back form
+   is untouched (still 4 inputs). */
+(function(){
+  var DEVICE_QUESTIONNAIRE_LIVE = false;
+  var REPORT_ID = 'device-questionnaire-v1';
+  var TITLE = 'Quick one, agent — what do you play on?';
+  var BODY = 'No homework, just tick what fits and reply. It helps us test the Arcade on the right gadgets. Tap the chips below to answer — it takes ten seconds.';
+  function flagKey(){
+    try { var t = (typeof getTester === 'function') ? getTester() : null; return 'holos-arcade-device-q-sent-' + (t ? t.code : 'guest'); }
+    catch(e){ return 'holos-arcade-device-q-sent-guest'; }
+  }
+  function done(){ try { return localStorage.getItem(flagKey()) === '1'; } catch(e){ return true; } }
+  function markDone(){ try { localStorage.setItem(flagKey(), '1'); } catch(e){} }
+  function signedIn(){
+    try { return !!(typeof getTester === 'function' && getTester()); } catch(e){ return false; }
+  }
+  function hubVisible(){
+    var lv = document.getElementById('loginView');
+    if(lv && !lv.hidden) return false;
+    return true;
+  }
+  var tried = false;
+  function maybeSend(){
+    if(!DEVICE_QUESTIONNAIRE_LIVE || tried || done() || !signedIn() || !hubVisible()) return;
+    if(!window.holoInbox || typeof window.holoInbox.notifySelf !== 'function') return;
+    tried = true;
+    var check = (typeof window.holoInbox.refresh === 'function') ? window.holoInbox.refresh() : Promise.resolve();
+    Promise.resolve(check).then(function(){
+      var existing = [];
+      try { existing = window.holoInbox.items() || []; } catch(e){}
+      var has = existing.some(function(n){ return n && n.reportId === REPORT_ID; });
+      if(has){ markDone(); return null; }
+      return window.holoInbox.notifySelf('system', TITLE, BODY, null, REPORT_ID).then(function(r){
         if(r) markDone(); else tried = false; /* no Firebase auth yet — retry next load */
         return r;
       });
