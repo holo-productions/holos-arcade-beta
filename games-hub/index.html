@@ -2742,18 +2742,13 @@ setTimeout(function(){
     </div>
     <p class="g-note" style="margin:0">Tell your friends your Code Name, then search for theirs below and tap Send request.</p>
     <form class="friend-add" id="friendAddForm">
-      <input id="friendInput" type="text" autocomplete="off" placeholder="Search by username — e.g. Sam…" aria-label="Search by username" />
+      <input id="friendInput" type="text" autocomplete="off" placeholder="Type their full username — e.g. Sam" aria-label="Search by username" />
       <button class="btn btn-dark" type="submit">🔍 Search</button>
     </form>
     <div class="friend-results" id="friendResults" aria-live="polite"></div>
     <p class="friend-msg" id="friendMsg" role="status"></p>
     <p id="friendEmpty" style="margin:14px 0 0;font-weight:700">No friends yet — search for a tester by username above and they’ll show up here.</p>
     <div class="friend-grid" id="friendGrid"></div>
-    <div class="friend-suggest" id="friendSuggestWrap" hidden>
-      <h3>Testers on this device</h3>
-      <p style="margin:0;color:var(--muted);font-size:14px">Tap Add to add them as a friend.</p>
-      <div class="friend-suggest-list" id="friendSuggestList"></div>
-    </div>
     <p style="margin:16px 0 0;color:var(--muted);font-size:13.5px">Friend requests work across devices — accept in your Inbox or right here.</p>
   </section>
 
@@ -17170,13 +17165,14 @@ function renderTesterAuth(){
    keeps their own list on sign-in — the same pattern as
    Favorites and the Easter eggs. Signed-out picks keep to a
    guest key on this device.
-   Search uses getAccounts() (every account made on this
-   browser) and a result is only offered when it matches a real
-   tester account on this device — an unknown username gets a
-   no-match note, never a placeholder friend. A match shows that
-   friend's live on-device stats (games played, badges, last
-   active, favorites) read from their account record, and
-   adding is mutual — you are added to their list too.
+   PRIVACY-LOCKDOWN-2026-11-24 (Holo: keep friends private,
+   never public on Glitch): search is exact-username only —
+   typing part of a name lists nobody, and there is no
+   browseable list of testers on this device (the old
+   "Testers on this device" suggestions are gone). A friend
+   card shows only that friend's name — never their games
+   played, badges, favourites, last active, email or date of
+   birth. Nobody but the owner ever sees their friends list.
    Cross-device friends need the online wiring and are not
    promised here. Friend cards use the rubber duck avatar:
    Eevee and Gizmo are the owner's own characters and are
@@ -17288,10 +17284,11 @@ function renderTesterAuth(){
     var inp = document.getElementById('friendInput'); if(inp) inp.value = '';
     renderFriendResults('');
   }
-  /* Live username search: every tester account on this device
-     whose username contains what was typed, minus me. Results
-     carry an Add button (or a Friends ✓ note when they're
-     already on the list). */
+  /* Live username search — PRIVACY-LOCKDOWN-2026-11-24: exact
+     username only. A partial name lists nobody, so testers
+     can't browse each other by typing letters. Results carry
+     an Add button (or a Friends ✓ note when they're already
+     on the list). */
   function searchAccounts(query){
     var n = normalize(query); if(!n) return [];
     var t = me();
@@ -17303,7 +17300,7 @@ function renderTesterAuth(){
         if(t && String(a.code) === String(t.code)) return;
         var nameL = String(a.name || '').toLowerCase();
         var userL = String(a.code || '').toLowerCase().replace(/^acct-/, '');
-        if(k.indexOf(n) !== -1 || nameL.indexOf(n) !== -1 || userL.indexOf(n) !== -1) out.push(a);
+        if(k === n || nameL === n || userL === n) out.push(a);
       });
     } catch(e){}
     out.sort(function(x, y){ return String(x.name).localeCompare(String(y.name)); });
@@ -17315,7 +17312,7 @@ function renderTesterAuth(){
     if(!n){ box.innerHTML = ''; return; }
     var results = searchAccounts(query);
     if(!results.length){
-      box.innerHTML = '<p class="friend-no-match">No tester with that username on this device yet — check the spelling, agent. In the Glitch Lab, friends need an account on this same browser.</p>';
+      box.innerHTML = '<p class="friend-no-match">No tester with that exact username on this device yet — check the spelling, agent. In the Glitch Lab, friends need an account on this same browser.</p>';
       return;
     }
     var friends = friendsLoad();
@@ -17354,48 +17351,18 @@ function renderTesterAuth(){
     if(grid){
       grid.innerHTML = codes.map(function(code){
         var f = friends[code] || {};
-        var st = otherState(code);
-        var playedSet = {};
-        if(st){ Object.keys(st.played || {}).forEach(function(k){ playedSet[k] = 1; }); Object.keys(st.reviewed || {}).forEach(function(k){ playedSet[k] = 1; }); }
-        var played = st ? Object.keys(playedSet).length : 0;
-        var badges = st ? Object.keys(st.badges || {}).length : 0;
-        var favs = st ? Object.keys(st.favorites || {}).length : 0;
-        var last = st ? prettyDate(st.lastActivity) : '';
-        var stats = st
-          ? '<span>🎮 ' + played + (played === 1 ? ' game' : ' games') + ' played</span><span>🏅 ' + badges + (badges === 1 ? ' badge' : ' badges') + '</span><span>❤️ ' + favs + (favs === 1 ? ' favourite' : ' favourites') + '</span>'
-          : '<span>🎮 Stats arrive when they play on this device</span>';
-        var status = st
-          ? '<p class="friend-status on">✓ On this device' + (last ? ' · Last active ' + esc(last) : '') + '</p>'
-          : '<p class="friend-status off">On this device — their stats appear once they’ve played here.</p>';
+        /* PRIVACY-LOCKDOWN-2026-11-24: a friend card shows only
+           the friend's name. No games played, badges,
+           favourites, last active, email or date of birth —
+           those are theirs, not for display here. (The old
+           code read the friend's whole on-device account
+           record for stats; that read is gone.) */
         return '<div class="friend-card"><span class="friend-avatar" aria-hidden="true">' + AVATAR_SVGS[avatarFor(f.name || code)] + '</span>' +
-          '<div class="friend-main"><b>' + esc(f.name || plainUsername({ code:code })) + '</b><span class="fc">' + esc(String(code).replace(/^acct-/i, '')) + '</span>' +
-          '<div class="friend-stats">' + stats + '</div>' + status + '</div>' +
+          '<div class="friend-main"><b>' + esc(f.name || plainUsername({ code:code })) + '</b><span class="fc">' + esc(String(code).replace(/^acct-/i, '')) + '</span></div>' +
           '<button type="button" class="friend-remove" data-friend-remove="' + esc(code) + '" aria-label="Remove ' + esc(f.name || code) + ' from friends" title="Remove friend">✕</button></div>';
       }).join('');
       grid.querySelectorAll('[data-friend-remove]').forEach(function(b){
         b.addEventListener('click', function(){ removeFriend(b.getAttribute('data-friend-remove')); });
-      });
-    }
-    /* Suggestions: other accounts on this device, not me, not already friends. */
-    var wrap = document.getElementById('friendSuggestWrap');
-    var list = document.getElementById('friendSuggestList');
-    if(wrap && list){
-      var suggestions = [];
-      try {
-        var accounts = (typeof getAccounts === 'function') ? getAccounts() : {};
-        Object.keys(accounts).forEach(function(k){
-          var a = accounts[k]; if(!a || !a.code) return;
-          if(t && String(a.code) === String(t.code)) return;
-          if(friends[a.code]) return;
-          suggestions.push(a);
-        });
-      } catch(e){}
-      wrap.hidden = !suggestions.length;
-      list.innerHTML = suggestions.map(function(a){
-        return '<span class="suggest-chip">' + esc(a.name) + ' <button type="button" data-friend-suggest="' + esc(a.code) + '">➕ Add</button></span>';
-      }).join('');
-      list.querySelectorAll('[data-friend-suggest]').forEach(function(b){
-        b.addEventListener('click', function(){ addFriend(b.getAttribute('data-friend-suggest')); });
       });
     }
   }
@@ -21364,27 +21331,20 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     })).then(function(){ return found; });
   }
   function searchCloud(name){
+    /* PRIVACY-LOCKDOWN-2026-11-24: exact Code Name only. The
+       old prefix query listed up to 8 matching usernames, so
+       testers could browse each other by typing letters — and
+       the /usernames index itself was listable by any
+       signed-in tester (probed live 2026-11-24). The rules
+       update in firebase-rules-dms-update-2026-11-24.md moves
+       the /usernames read to the per-name level, so only an
+       exact lookup like this one works. */
     var q = String(name || '').trim(); if(!q) return Promise.resolve([]);
     var uid = myUid();
     return api('GET', '/usernames/' + usernameKey(q)).then(function(exact){
       var found = [];
       if(typeof exact === 'string' && exact && exact !== uid) found.push({ uid:exact, name:q });
-      var key = String(q).trim().toLowerCase();
-      var path = '/usernames?orderBy="$key"&startAt=' + encodeURIComponent(JSON.stringify(key)) + '&endAt=' + encodeURIComponent(JSON.stringify(key + '\uf8ff')) + '&limitToFirst=8';
-      return freshToken().then(function(tok){
-        if(!tok) return found;
-        return fetch(FB_RTDB + path + '&auth=' + encodeURIComponent(tok)).then(function(r){ return r.ok ? r.json() : null; }).then(function(data){
-          if(data && typeof data === 'object'){
-            Object.keys(data).forEach(function(k){
-              var u = data[k];
-              if(typeof u !== 'string' || !u || u === uid) return;
-              if(found.some(function(f){ return f.uid === u; })) return;
-              found.push({ uid:u, name:k });
-            });
-          }
-          return found;
-        }).catch(function(){ return found; });
-      });
+      return found;
     }).then(function(found){ return markAccepts(found || []); });
   }
   function sendRequest(toUid, toName){
