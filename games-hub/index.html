@@ -8682,7 +8682,14 @@ setTimeout(function(){
     /* AGE18-2026-11-23: Shuffle never lands on a hidden 18+ game. */
     if(window.holoAge18 && !window.holoAge18.adultGamesVisible()) live = live.filter(function(s){ return !window.holoAge18.isAdultSlug(s); });
     if(!live.length) return;
-    openGame(live[Math.floor(Math.random()*live.length)]);
+    /* DAILY-UNTESTED-2026-11-24: Shuffle draws from games that still
+       need testing first — 3 in 4 shuffles land on an untested game,
+       the rest anywhere, so it still feels random. Falls back to the
+       full list when everything has been tried. */
+    var untested = live;
+    try { if(window.holoDailyTested && window.holoDailyTested.games) untested = live.filter(function(s){ return !window.holoDailyTested.games[s]; }); } catch(e){}
+    var pool = (untested.length && Math.random() < 0.75) ? untested : live;
+    openGame(pool[Math.floor(Math.random()*pool.length)]);
   });
 
   /* ================================================================
@@ -11608,20 +11615,74 @@ var LOCATIONS = [
 })();
 </script>
 <script>
+/* ============ Daily picks — tested state & per-player seeding ============
+   DAILY-UNTESTED-2026-11-24 (Holo: Daily picks steer testers to
+   untested games/modes, unique per player — and Shuffle too).
+   "Tested" = at least one tester review for that game in the Tester
+   Feedback Sheet. The seed below is a snapshot of the sheet — refresh
+   it whenever new reviews land (see the holos-arcade manual).
+   Per-mode tested state lives in TESTED_MODES[slug] = [mode names]
+   once the tracker capture lands; until then it is empty and the
+   Challenge targets the least-played difficulty (Hard first).
+   Picks are seeded from the player's own identity (Firebase uid,
+   else tester code name, else device id) + the day, so two testers
+   get different untested games on the same day and the arcade covers
+   more ground. Same player + same day = same pick on every device. */
+window.holoDailyTested = {
+  games: {
+    '8-ball-pool':1,'abc-fun':1,'air-hockey':1,'algebra-quest-2':1,
+    'archery':1,'arrow-tap-puzzle':1,'backgammon':1,'ball-sort-bay':1,
+    'balloon-pop':1,'basketball-shootout':1,'battleship':1,'beat-tapper-2':1,
+    'biology-explorer-2':1,'bingo':1,'blob-arena':1,'block-blast-cove':1,
+    'block-drop':1,'block-fit':1,'bolt-and-box':1,'bowling':1,
+    'blackjack':1,'edm':1,'kart-racing':1,'madcow':1
+  },
+  modes: {},
+  updated: '2026-11-24'
+};
+window.holoDaily = (function(){
+  "use strict";
+  var DAY_MS = 86400000;
+  function seedId(){
+    try { var a = JSON.parse(localStorage.getItem('holos-firebase-auth') || 'null'); if(a && a.uid) return 'u:' + String(a.uid); } catch(e){}
+    try {
+      var s = null;
+      try { s = JSON.parse(localStorage.getItem('holos-arcade-tester-login') || 'null'); } catch(e0){}
+      if(!s){ try { s = JSON.parse(sessionStorage.getItem('holos-arcade-tester-login') || 'null'); } catch(e1){} }
+      if(s && s.name) return 'c:' + String(s.name);
+    } catch(e){}
+    try { var d = localStorage.getItem('holos-arcade-device-id'); if(d) return 'd:' + String(d); } catch(e){}
+    return 'anon';
+  }
+  function hash32(str){ var h = 2166136261; for(var i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function rngFrom(seed){ var a = seed >>> 0; return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function dayKey(n){ return new Date(n * DAY_MS).toISOString().slice(0, 10); }
+  function isTested(slug){ try { return !!(window.holoDailyTested && window.holoDailyTested.games && window.holoDailyTested.games[slug]); } catch(e){ return false; } }
+  function testedModes(slug){ try { var m = window.holoDailyTested && window.holoDailyTested.modes && window.holoDailyTested.modes[slug]; return Array.isArray(m) ? m.slice() : []; } catch(e){ return []; } }
+  function adultHidden(){ try { return !!(window.holoAge18 && !window.holoAge18.adultGamesVisible()); } catch(e){ return false; } }
+  function isAdultSlug(s){ try { return !!(window.holoAge18 && window.holoAge18.isAdultSlug(s)); } catch(e){ return false; } }
+  return { seedId:seedId, hash32:hash32, rngFrom:rngFrom, dayKey:dayKey, isTested:isTested, testedModes:testedModes, adultHidden:adultHidden, isAdultSlug:isAdultSlug };
+})();
+</script>
+<script>
 (function(){
   "use strict";
   function $(id){ return document.getElementById(id); }
 
   /* ============ Game of the Day ============
-     One featured game per day, the same for everyone: the pick is
-     (whole days since 1 Jan 2026, UTC) modulo the number of games in
-     the fixed list below, so the feature rotates through every game in
-     the arcade with no repeats until the full cycle completes, then
-     the cycle restarts. List order is fixed: the 4 games built into
-     this page first, then every standalone game in the order its card
-     appears on the hub. The Play button uses the hub's normal
-     data-game wiring, so embedded games open their pane and standalone
-     games open their ../<slug>/ frame, exactly like their own cards. */
+     One featured game per day, unique per player: the pick is seeded
+     from the player's identity + the local day, drawn from the games
+     nobody has tried yet (window.holoDailyTested), so each tester
+     gets a different untested game and the arcade covers more ground.
+     Same player + same day = same game on every device. Once every
+     game has been tried, the pick falls back to the full list.
+     No repeat of yesterday's game, and no same-genre two days
+     running when the pool allows. List order is fixed: the 4 games
+     built into this page first, then every standalone game in the
+     order its card appears on the hub. The Play button uses the hub's
+     normal data-game wiring, so embedded games open their pane and
+     standalone games open their ../<slug>/ frame, exactly like
+     their own cards. */
   var GOTD_GAMES = [
     { id:'tic-tac-toe', icon:'❌', name:'Tic Tac Toe', desc:'Classic X and O. Two players pass the phone, or play vs the computer.' },
     { id:'dots-and-boxes', icon:'🔲', name:'Dots and Boxes', desc:'Draw lines, claim boxes, most boxes wins. Two players or vs computer.' },
@@ -11878,12 +11939,64 @@ var LOCATIONS = [
 
   /* Fill the card and point its Play button at today's game. The hub's
      own [data-game] wiring opens it in the full-screen player. */
+  /* DAILY-UNTESTED-2026-11-24: per-player seeded pick from the
+     untested pool (see the shared block above). Deterministic for a
+     given (player, day): pickGameFor(dayNum, prevPick) applies the
+     no-repeat + variety step against the previous day's final pick. */
+  var GOTD_FALLBACK_CAT = { trivia:'trivia', werewolf:'personal', madcow:'personal', dj:'personal music', edm:'trivia music', rhythm:'music', gizmo:'personal' };
+  function gotdGenre(entry){
+    try {
+      var b = document.querySelector('.game-card [data-game="' + entry.id + '"]');
+      var c = b && b.closest('.game-card');
+      var cat = c && c.getAttribute('data-cat');
+      if(cat) return String(cat).split(/\s+/)[0];
+    } catch(e){}
+    var f = GOTD_FALLBACK_CAT[entry.id];
+    return f ? f.split(/\s+/)[0] : '';
+  }
+  function untestedGotdPool(){
+    var pool = GOTD_GAMES.filter(function(g){ return !window.holoDaily.isTested(g.id); });
+    if(window.holoDaily.adultHidden()) pool = pool.filter(function(g){ return !window.holoDaily.isAdultSlug(g.id); });
+    if(!pool.length){
+      /* Everything tried (or everything left is 18+ and hidden):
+         fall back to the whole list, 18+ filter still applied. */
+      pool = GOTD_GAMES.slice();
+      if(window.holoDaily.adultHidden()) pool = pool.filter(function(g){ return !window.holoDaily.isAdultSlug(g.id); });
+    }
+    return pool;
+  }
+  function seededGotdIndex(dayNum, len){
+    var seed = window.holoDaily.hash32(window.holoDaily.seedId() + '|gotd|' + window.holoDaily.dayKey(dayNum));
+    return Math.floor(window.holoDaily.rngFrom(seed)() * len);
+  }
+  function pickGameFor(dayNum, prevPick){
+    var pool = untestedGotdPool();
+    if(!pool.length) pool = GOTD_GAMES.slice();
+    var idx = seededGotdIndex(dayNum, pool.length);
+    var pick = pool[idx];
+    /* No repeat of yesterday's pick, and no same-genre two days
+       running when the pool allows: re-seed from earlier days (up to
+       2 tries); if the pool is too small to avoid it, keep the pick. */
+    var tries = 0;
+    while(tries < 2 && prevPick && (pick.id === prevPick.id || (gotdGenre(pick) && gotdGenre(pick) === gotdGenre(prevPick)))){
+      idx = seededGotdIndex(dayNum - 1 - tries, pool.length);
+      pick = pool[idx];
+      tries++;
+    }
+    return pick;
+  }
+  /* Shared with tests. */
+  window.holoDaily.pickGameFor = pickGameFor;
   function pickGotd(){
-    idx = ((today - EPOCH) % GOTD_GAMES.length + GOTD_GAMES.length) % GOTD_GAMES.length;
-    game = GOTD_GAMES[idx];
+    /* Yesterday's exact final pick (its own variety step included),
+       so today's no-repeat / no-same-genre step is judged against
+       what the player actually saw yesterday. */
+    var prev = pickGameFor(today - 1, pickGameFor(today - 2, null));
+    game = pickGameFor(today, prev);
+    idx = GOTD_GAMES.indexOf(game);
     /* AGE18-2026-11-23: when 18+ games are hidden, today's pick steps
-       forward to the next non-18+ game (same date, everyone sees the
-       same game). */
+       forward to the next non-18+ game. (The untested pool above
+       already filters 18+ games when hidden; this is a backstop.) */
     if(window.holoAge18 && !window.holoAge18.adultGamesVisible()){
       var guard = 0;
       while(window.holoAge18.isAdultSlug(game.id) && guard++ < GOTD_GAMES.length){ idx = (idx + 1) % GOTD_GAMES.length; game = GOTD_GAMES[idx]; }
@@ -12666,18 +12779,113 @@ var LOCATIONS = [
   }
 
   /* ---------- Daily challenge ---------- */
-  var CHALS = [
-    { type:'cards',  text:'Play any card game' },
-    { type:'puzzle', text:'Play a puzzle game' },
-    { type:'gotd',   text:'Play the Game of the Day' },
-    { type:'diff3',  text:'Play 3 different games' },
-    { type:'music',  text:'Play a music game' }
-  ];
-  var chal = CHALS[((todayN % CHALS.length) + CHALS.length) % CHALS.length];
+  /* DAILY-UNTESTED-2026-11-24 (Holo: Daily picks steer testers to
+     untested games/modes, unique per player). The challenge is seeded
+     from the player's identity + the local day. Weighted draw:
+     untested game / untested mode first, then the old category
+     challenges. Same player + same day = same challenge on every
+     device. A challenge never repeats its type two days running when
+     the draw allows, and never targets the same game two days running.
+     "Untested mode" means a difficulty the tracker has no review for
+     yet (TESTED_MODES, filled from the Feedback Sheet once the
+     per-mode capture lands; empty until then, so the challenge asks
+     for the least-played difficulty — Hard first). A mode challenge
+     completes when the target game is played; the mode itself is
+     confirmed by the tester's feedback, which records it. */
+  /* NO_MODE_GAMES: the 21 games with no difficulty setting at all
+     (difficulty audit 2026-11-24) — learning games use grade bands,
+     duels have a human opponent. They can still be challenge targets
+     as untested games, just never as "Play X on Hard". */
+  var NO_MODE_GAMES = ['abc-fun','algebra-quest-2','biology-explorer-2','character-creator','chemistry-lab','colours-and-shapes','counting-stars','geometry-lab-2','history-quest','math-mountain-2','science-facts-quiz','typing-adventure','vocab-exam-prep-2','world-explorer-2','dice-duel','dots-and-boxes','gomoku','guess-the-number-duel','rock-paper-scissors','tic-tac-toe','word-chain-duel'];
+  var DIFF_MODES = ['Hard','Normal','Easy']; /* hardest untested first; matches the tracker capture vocabulary */
+  function allGameSlugs(){
+    var slugs = Object.keys(catOf);
+    ['trivia','werewolf','madcow','dj','edm','rhythm','gizmo'].forEach(function(s){ if(slugs.indexOf(s) === -1) slugs.push(s); });
+    return slugs;
+  }
+  function untestedSlugs(){
+    var all = allGameSlugs();
+    var out = all.filter(function(s){ return !window.holoDaily.isTested(s); });
+    if(window.holoDaily.adultHidden()) out = out.filter(function(s){ return !window.holoDaily.isAdultSlug(s); });
+    if(!out.length){
+      out = all.slice();
+      if(window.holoDaily.adultHidden()) out = out.filter(function(s){ return !window.holoDaily.isAdultSlug(s); });
+    }
+    return out;
+  }
+  function pickModeFor(slug){
+    /* Returns the hardest difficulty with no review yet, or null. */
+    if(NO_MODE_GAMES.indexOf(slug) !== -1) return null;
+    var tested = window.holoDaily.testedModes(slug);
+    for(var i = 0; i < DIFF_MODES.length; i++){
+      if(tested.indexOf(DIFF_MODES[i]) === -1) return { modeKey: DIFF_MODES[i].toLowerCase(), modeLabel: DIFF_MODES[i] };
+    }
+    return null;
+  }
+  function pickChallengeRaw(dayNum, prevChal){
+    var rnd = window.holoDaily.rngFrom(window.holoDaily.hash32(window.holoDaily.seedId() + '|chal|' + window.holoDaily.dayKey(dayNum)));
+    var weights = ['untested','untested','untestedmode','untestedmode','cards','puzzle','music','gotd','diff3'];
+    var type = weights[Math.floor(rnd() * weights.length)];
+    var tries = 0;
+    while(tries < 3 && prevChal && type === prevChal.type){
+      type = weights[Math.floor(rnd() * weights.length)];
+      tries++;
+    }
+    var target = null, mode = null, text = '';
+    var pool, cand;
+    if(type === 'untested' || type === 'untestedmode'){
+      pool = untestedSlugs();
+      /* Don't target today's Game of the Day or yesterday's target. */
+      pool = pool.filter(function(s){ return s !== gotdId() && (!prevChal || s !== prevChal.target); });
+      if(!pool.length) pool = untestedSlugs();
+      if(!pool.length) pool = allGameSlugs();
+      cand = pool[Math.floor(rnd() * pool.length)];
+      if(type === 'untestedmode'){
+        mode = pickModeFor(cand);
+        if(!mode){
+          /* No untested mode for this game (no-mode game, or every
+             difficulty tried): fall back to a plain untested pick. */
+          type = 'untested';
+        }
+      }
+      target = cand;
+      if(type === 'untestedmode') text = 'Play ' + gameName(target) + ' on ' + mode.modeLabel;
+      else text = 'Play ' + gameName(target) + ' — nobody has tried it yet';
+    } else if(type === 'gotd'){
+      target = gotdId();
+      text = 'Play the Game of the Day';
+    } else if(type === 'diff3'){
+      text = 'Play 3 different games';
+    } else {
+      /* Category challenge: pick a matching game to point at. */
+      pool = allGameSlugs().filter(function(s){ return hasCat(s, type); });
+      if(window.holoDaily.adultHidden()) pool = pool.filter(function(s){ return !window.holoDaily.isAdultSlug(s); });
+      if(!pool.length) pool = allGameSlugs();
+      target = pool[Math.floor(rnd() * pool.length)];
+      text = 'Play a ' + type + ' game';
+    }
+    return { type:type, target:target, modeKey: mode ? mode.modeKey : null, modeLabel: mode ? mode.modeLabel : null, text:text };
+  }
+  function pickChallenge(dayNum){
+    var prev = pickChallengeRaw(dayNum - 1, null);
+    return pickChallengeRaw(dayNum, prev);
+  }
+  var chal = pickChallenge(todayN);
+  /* Shared with tests. */
+  window.holoDaily.pickChallenge = pickChallenge;
+  window.holoDaily.chalToday = function(){ return chal; };
+  window.holoDaily.allGameSlugs = allGameSlugs;
+  window.holoDaily.untestedSlugs = untestedSlugs;
   function chalProgress(){
     var played = H.dayPlays[todayK] || {}, slugs = Object.keys(played);
     if(chal.type === 'diff3') return { done: slugs.length >= 3, label: slugs.length + ' / 3 different games played today' };
     if(chal.type === 'gotd'){ var g = gotdId(); return { done: !!played[g], label: g ? ('Today\'s game: ' + gameName(g)) : '' }; }
+    if(chal.type === 'untested' || chal.type === 'untestedmode'){
+      var t = chal.target;
+      var done = !!played[t];
+      var lbl = done ? 'Done — you tried it today' : ('Today\'s target: ' + gameName(t) + (chal.modeLabel ? ' on ' + chal.modeLabel : ''));
+      return { done: done, label: lbl };
+    }
     var tok = chal.type;
     var hit = slugs.some(function(s){ return hasCat(s, tok); });
     return { done: hit, label: hit ? 'Done — you played one today' : 'Open a matching game from the library below' };
@@ -12704,12 +12912,15 @@ var LOCATIONS = [
     if(lp2){ lp2.textContent = p.textContent; lp2.style.color = done ? 'var(--good)' : 'var(--ink)'; }
     /* CHALLENGE-LINKS-2026-11-22 (Holo 19:58): shortcut to the
        challenge target — a category opens the Library filtered,
-       a specific game opens its Game Menu. Rotation unchanged. */
+       a specific game opens its Game Menu. DAILY-UNTESTED-2026-11-24:
+       untested / untested-mode challenges link straight to their
+       target game. */
     var lk = $('hubChallengeLink');
     var llk = $('libChalLink');
     if(llk && lk){ llk.hidden = false; }
     if(lk){
       if(chal.type === 'gotd' && gotdId()){ lk.hidden = false; lk.textContent = '▶ Play ' + gameName(gotdId()) + ' →'; lk.href = '#game/' + gotdId(); lk.setAttribute('data-chal-game', gotdId()); lk.removeAttribute('data-chal-cat'); }
+      else if((chal.type === 'untested' || chal.type === 'untestedmode') && chal.target){ lk.hidden = false; lk.textContent = '▶ Play ' + gameName(chal.target) + ' →'; lk.href = '#game/' + chal.target; lk.setAttribute('data-chal-game', chal.target); lk.removeAttribute('data-chal-cat'); }
       else if(chal.type === 'diff3'){ lk.hidden = false; lk.textContent = '🎮 Browse all games →'; lk.href = '#library'; lk.setAttribute('data-chal-cat', 'all'); lk.removeAttribute('data-chal-game'); }
       else { lk.hidden = false; lk.textContent = '🎮 Browse matching games →'; lk.href = '#library'; lk.setAttribute('data-chal-cat', chal.type); lk.removeAttribute('data-chal-game'); }
       if(llk){ llk.textContent = lk.textContent; llk.hidden = lk.hidden; llk.href = lk.href; }
