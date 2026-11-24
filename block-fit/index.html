@@ -624,6 +624,7 @@ a{color:var(--ha-cyan)}
       <ul>
         <li>You always have <strong>3 pieces</strong> in the tray below the board.</li>
         <li><strong>Drag</strong> a piece onto the board, or <strong>tap a piece, then tap the board</strong> to place it where you tapped (the piece centres on your tap).</li>
+        <li>While you drag — or hover the board with a piece selected — a <strong>ghost outline</strong> shows where the piece would land: teal means it fits, red means it doesn't.</li>
         <li>Pieces cannot overlap other blocks or hang off the edge of the board. They cannot be rotated.</li>
         <li>When all 3 pieces are used, 3 fresh pieces arrive.</li>
         <li>The game ends when <strong>none</strong> of your remaining pieces can fit anywhere on the board. Pieces that no longer fit are dimmed in the tray.</li>
@@ -1049,7 +1050,7 @@ function findHint(){
 function showHint(){
   if (gameIsOver) return;
   var cand = findHint();
-  clearHint();
+  clearHint(); clearGhost(); /* GHOST-OUTLINE-2026-11-24 */
   if (!cand){
     hintEl.textContent = "No piece fits right now — tap 🎲 Fresh pieces to keep practising.";
     renderTray();
@@ -1111,7 +1112,7 @@ function placePiece(slotIdx, br, bc){
   if (!canPlace(piece, br, bc)) return false;
 
   if (practiceMode) pushUndo();
-  clearHint();
+  clearHint(); clearGhost(); /* GHOST-OUTLINE-2026-11-24 */
   piece.cells.forEach(function(cell){ board[br + cell[0]][bc + cell[1]] = piece.color; });
   tray[slotIdx] = null;
   selectedSlot = -1;
@@ -1286,12 +1287,29 @@ window.addEventListener("pointerup", function(e){
       selectedSlot = d.slot;
       hintEl.textContent = "Piece selected — now tap the board where it should land.";
     }
+    clearGhost(); /* GHOST-OUTLINE-2026-11-24: stale preview must not linger across selections */
     renderTray();
   }
 });
 window.addEventListener("pointercancel", function(){
   drag = null; hideGhost(); clearGhost();
 });
+
+/* GHOST-OUTLINE-2026-11-24: tap-to-place preview — with a piece selected,
+   hovering the board shows the same ghost outline the drag path paints
+   (teal = fits, red = doesn't), centred on the hovered cell exactly as
+   placement centres it. Clears when the pointer leaves or the piece is placed. */
+boardEl.addEventListener("pointermove", function(e){
+  if (selectedSlot < 0 || gameIsOver || drag) return;
+  var piece = tray[selectedSlot];
+  if (!piece) return;
+  var cellEl = e.target.closest(".cell");
+  if (!cellEl) return;
+  var tr = +cellEl.dataset.r, tc = +cellEl.dataset.c;
+  var br = tr - Math.floor(piece.h / 2), bc = tc - Math.floor(piece.w / 2);
+  paintGhost(piece, br, bc);
+});
+boardEl.addEventListener("pointerleave", function(){ clearGhost(); });
 
 boardEl.addEventListener("pointerdown", function(e){
   if (selectedSlot < 0 || gameIsOver) return;
