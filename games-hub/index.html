@@ -495,6 +495,12 @@ html.bigtext main,html.bigtext .topbar,html.bigtext footer{zoom:1.25}
 .fb-card h3{margin:0 0 4px;font-family:"Bricolage Grotesque",sans-serif;font-size:22px}
 .fb-stars{display:flex;gap:6px;margin:12px 0}
 .fb-stars button{font-size:30px;line-height:1;background:none;border:none;cursor:pointer;padding:6px;color:var(--muted);min-width:44px;min-height:44px}
+#fbMarks{margin-top:10px;border:1px dashed var(--line);border-radius:12px;padding:10px 12px}
+#fbMarks .fb-marks-title{font-family:var(--pixel);font-size:11px;margin-bottom:8px}
+#fbMarks .fb-mark-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+#fbMarks .fb-mark-row .fb-mark-lab{font-size:12px;opacity:.85;min-width:74px}
+#fbMarks .pill{padding:4px 10px;border-radius:999px;border:1.5px solid var(--line);background:var(--bg2);color:var(--ink);cursor:pointer;font-size:13px}
+#fbMarks .pill.active{border-color:#ffb020;background:rgba(255,176,32,.22);font-weight:700}
 .fb-stars button.on{color:var(--gold)}
 .fb-tags{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
 #fbText{width:100%;box-sizing:border-box;font:inherit;font-size:15px;padding:12px;border-radius:14px;border:1.5px solid var(--line);background:var(--bg2);color:var(--ink);resize:vertical}
@@ -12505,6 +12511,13 @@ var LOCATIONS = [
       <button type="button" data-v="4" aria-label="4 stars">☆</button>
       <button type="button" data-v="5" aria-label="5 stars">☆</button>
     </div>
+    <div id="fbMarks" hidden>
+      <div class="fb-marks-title">What did you test?</div>
+      <div class="fb-mark-row" data-mark="mode"><span class="fb-mark-lab">Mode</span><button type="button" class="pill" data-v="Scored play">Scored play</button><button type="button" class="pill" data-v="Practice">Practice</button></div>
+      <div class="fb-mark-row" data-mark="difficulty"><span class="fb-mark-lab">Difficulty</span><button type="button" class="pill" data-v="Easy">Easy</button><button type="button" class="pill" data-v="Normal">Normal</button><button type="button" class="pill" data-v="Hard">Hard</button></div>
+      <div class="fb-mark-row" data-mark="level"><span class="fb-mark-lab">Level</span><button type="button" class="pill" data-v="Levels 1–2">Levels 1–2</button><button type="button" class="pill" data-v="Levels 3–5">Levels 3–5</button><button type="button" class="pill" data-v="Levels 6+">Levels 6+</button></div>
+      <div class="fb-mark-row" data-mark="options"><span class="fb-mark-lab">Options</span><button type="button" class="pill" data-v="Hints on">Hints on</button><button type="button" class="pill" data-v="Hints off">Hints off</button><button type="button" class="pill" data-v="No hints">No hints</button></div>
+    </div>
     <div class="fb-q">
       <p>First things first — was it fun?</p>
       <div class="fb-tags" role="group" aria-label="Was it fun?">
@@ -12883,6 +12896,8 @@ var LOCATIONS = [
     return (m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)) + ' min';
   }
   var fbQuick = {};
+  /* MODE-LEVEL-TRACK-2026-11-24: tester-tapped "What did you test?" marks. */
+  var fbMark = {mode:'', difficulty:'', level:'', options:''};
   var overlay = $('fbOverlay');
 
   var SLUG_ALIASES = {
@@ -12923,7 +12938,13 @@ var LOCATIONS = [
   function txt(id){ var el = $(id); return el ? el.textContent.trim() : ''; }
   /* Auto-captured details: mode / level / difficulty / score where the game shows them. */
   function collectDetails(slug){
-    var d = { mode:'', level:'', difficulty:'', score:'' };
+    /* MODE-LEVEL-TRACK-2026-11-24: what the tester actually played, for the
+       tracker. Anything not found stays '' — never block the report.
+       Why the tracker was blank: before this, only the 4 hub-native games
+       had any capture (HUD reads + a stored difficulty key that is only
+       written when a tester taps a difficulty button) — standalone games
+       in iframes were never read at all. */
+    var d = { mode:'', level:'', difficulty:'', score:'', options:'' };
     try { var _dv = localStorage.getItem('holoArcade_v1_diff_' + slug); d.difficulty = _dv === null ? '' : JSON.parse(_dv); } catch(e){} /* MADCOW-DIFF-FIX-2026-11-24: feedback reads the same prefixed key the games' store uses (store is scoped to the games IIFE) */
     var pane = document.getElementById('pane-' + slug);
     if(pane){
@@ -12945,6 +12966,122 @@ var LOCATIONS = [
       d.score = txt('djScore');
     } else if(slug === 'werewolf'){
       d.level = txt('wTurnChip') || txt('wClockChip') || '';
+    } else {
+      /* Standalone game in an iframe. Its difficulty/mode live in its own
+         DOM: a segmented control whose selected button carries
+         aria-pressed="true" (or .active), a <select id="difficulty">, or
+         a caption/label pairing (#diffLabel / #modeLabel). Server-ready
+         games expose __holoGameState. Nothing is found -> stays blank. */
+      var fr = null;
+      try { if(typeof frameFor === 'function') fr = frameFor(slug); } catch(e){}
+      if(!fr){
+        try {
+          var pane2 = document.getElementById('pane-' + slug);
+          if(pane2) fr = pane2.querySelector('iframe');
+        } catch(e){}
+      }
+      if(fr){
+        var idoc = null, iwin = null;
+        try { idoc = fr.contentDocument || (fr.contentWindow && fr.contentWindow.document); } catch(e){}
+        try { iwin = fr.contentWindow; } catch(e){}
+        /* 1) structured state object (server-ready games, e.g. archery) */
+        try {
+          var gs = iwin && iwin.__holoGameState;
+          if(gs){
+            if(gs.mode) d.mode = String(gs.mode);
+            if(gs.difficulty) d.difficulty = String(gs.difficulty);
+            if(gs.level != null && gs.level !== '') d.level = String(gs.level);
+            if(gs.round != null && gs.round !== '' && !d.level) d.level = 'Round ' + gs.round;
+            if(gs.score != null && gs.score !== '') d.score = String(gs.score);
+            if(gs.options != null && gs.options !== '') d.options = String(gs.options);
+            if(gs.hints != null) d.options = (d.options ? d.options + '; ' : '') + 'hints ' + (gs.hints ? 'on' : 'off');
+          }
+        } catch(e){}
+        if(idoc){
+          var q = function(s){ try { return idoc.querySelector(s); } catch(e){ return null; } };
+          var qt = function(s){ var el = q(s); return el ? (el.textContent || '').trim() : ''; };
+          var qall = function(s){ try { return idoc.querySelectorAll(s); } catch(e){ return []; } };
+          /* 2) segmented controls: selected button by aria-pressed or .active */
+          var segs = ['[aria-pressed="true"]', 'button.active', '[role="tab"][aria-selected="true"]', '[role="radio"][aria-checked="true"]'];
+          var segHits = [];
+          segs.forEach(function(sel){
+            var list = qall(sel);
+            for(var i=0;i<list.length;i++){
+              var el = list[i];
+              var t = (el.textContent || '').trim();
+              if(!t) continue;
+              var g = null;
+              try { g = el.closest('[role="group"], [role="radiogroup"], fieldset, .seg, .segmented, .btn-group, div'); } catch(e){}
+              var lbl = '';
+              try {
+                var lab = (g && g.getAttribute('aria-labelledby')) ? idoc.getElementById(g.getAttribute('aria-labelledby')) : null;
+                if(lab) lbl = (lab.textContent || '').trim();
+                if(!lbl && g) { var cap = g.querySelector('label, .caption, .seg-label, span:first-child'); if(cap) lbl = (cap.textContent || '').trim(); }
+                if(!lbl) { var al = el.getAttribute('aria-label') || ''; if(al) lbl = al; }
+              } catch(e){}
+              segHits.push({t:t, lbl:lbl, val:(el.getAttribute('data-value') || el.getAttribute('data-diff') || el.getAttribute('data-mode') || el.getAttribute('value') || '')});
+            }
+          });
+          segHits.forEach(function(h){
+            var L = (h.lbl + ' ' + h.val).toLowerCase();
+            var val = h.val || h.t;
+            if(!d.difficulty && /diff/.test(L)) d.difficulty = val;
+            else if(!d.mode && /(mode|play|round)/.test(L)) d.mode = h.t;
+            else if(!d.difficulty && /^(easy|normal|medium|hard|expert|gentle|stampede|chill|classic)$/i.test(h.t)) d.difficulty = h.t;
+          });
+          /* 3) caption/id-labelled selects and labels */
+          var selD = q('select#difficulty, select[name="difficulty"], select[aria-label*="ifficul" i]');
+          if(selD && selD.options && selD.selectedIndex >= 0){
+            var opt = selD.options[selD.selectedIndex];
+            d.difficulty = (opt.textContent || opt.value || '').trim() || opt.value;
+          }
+          if(!d.difficulty){ var dl = q('#diffLabel, #difficultyLabel, #diffValue, #difficultyValue'); if(dl) d.difficulty = (dl.textContent || '').trim(); }
+          if(!d.mode){ var ml = q('#modeLabel, #modeValue, #gameMode'); if(ml) d.mode = (ml.textContent || '').trim(); }
+          /* 4) score / level / round readouts (a bare number in a round
+             readout reads "Round N" in the tracker, not just "N") */
+          if(!d.score) d.score = qt('#scoreNow, #scoreLabel, #score, #scorePill, #scoreValue, [data-score]');
+          if(!d.level){
+            var rn = qt('#roundNow, #roundLabel, #round, #levelNow, #levelLabel, #level, #levelValue');
+            if(rn){
+              if(/^\d+$/.test(rn) && q('#roundNow, #roundLabel, #round')) d.level = 'Round ' + rn;
+              else d.level = rn;
+            }
+          }
+          /* 5) hint toggles in the frame */
+          try {
+            var hs = q('#hintToggle, #hintsToggle, input[name="hints"], input#noHints');
+            if(hs){ var on = hs.type === 'checkbox' ? hs.checked : (hs.getAttribute('aria-pressed') === 'true' || hs.classList.contains('active')); d.options = 'hints ' + (on ? 'on' : 'off'); }
+            var nh = q('#noHintsLabel, [data-no-hints]');
+            if(nh && !d.options) d.options = 'no hints';
+          } catch(e){}
+        }
+        /* 6) practice via frame URL */
+        try { var src = fr.getAttribute('src') || ''; if(src.indexOf('practice=1') !== -1 || src.indexOf('mode=practice') !== -1){ if(!d.mode) d.mode = 'Practice'; } } catch(e){}
+      }
+    }
+    /* Practice is hub-known too: the practice banner is in the DOM when a
+       practice round is open. Record it as the mode when nothing else says
+       so, or as a suffix when the game has its own mode. (isPractice /
+       wantPractice live in other IIFE-wrapped script blocks and are NOT
+       reachable from here — the DOM is the shared source of truth.)
+       Before this, practice plays left Mode blank. */
+    try {
+      var _pr = false;
+      try { var _pb2 = document.getElementById('practiceBanner'); if(_pb2 && !_pb2.hidden) _pr = true; } catch(e){}
+      if(_pr){
+        if(!d.mode) d.mode = 'Practice';
+        else if(d.mode.indexOf('Practice') === -1) d.mode = d.mode + ' · Practice';
+      }
+    } catch(e){}
+    /* Menu-button fallback (native games): the active .gm-diff-btn when
+       nothing was stored yet. */
+    if(!d.difficulty){
+      try {
+        if(typeof currentSlug !== 'undefined' && currentSlug === slug){
+          var ab = document.querySelector('.gm-diff-btn.active, .gm-mode-btn.active');
+          if(ab) d.difficulty = (ab.textContent || '').trim();
+        }
+      } catch(e){}
     }
     return d;
   }
@@ -13107,7 +13244,7 @@ var LOCATIONS = [
   window.openFeedbackForm = function(game){ fbOpen(game); };
   function fbOpen(game){
     fbGame = normalizeSlug(game || playerSlug() || 'games-hub');
-    fbRating = 0; fbTag = ''; fbQuick = {};
+    fbRating = 0; fbTag = ''; fbQuick = {}; fbMark = {mode:'', difficulty:'', level:'', options:''};
     $('fbGameLine').textContent = 'You played ' + gameTitle(fbGame) + ' — how was it? Stars, one line, anything helps!';
     $('fbText').value = '';
     fbShot = ''; fbPaintShot(); fbShotSay('Optional — a picture of the bug helps a lot. It gets shrunk before sending.');
@@ -13131,6 +13268,7 @@ var LOCATIONS = [
       fbPaintBroken();
       document.querySelectorAll('.fb-tags .pill[data-fb-tag]').forEach(function(x){ x.classList.toggle('active', x.getAttribute('data-fb-tag') === fbTag); });
       document.querySelectorAll('.fb-tags .pill[data-fb-quick]').forEach(function(x){ x.classList.toggle('active', !!fbQuick[x.getAttribute('data-fb-quick')]); });
+      if(draft.marks) fbMark = {mode: draft.marks.mode || '', difficulty: draft.marks.difficulty || '', level: draft.marks.level || '', options: draft.marks.options || ''};
     }
     var d = collectDetails(fbGame);
     var bits = [];
@@ -13144,6 +13282,34 @@ var LOCATIONS = [
     bits.push('Build: ' + HUB_BUILD);
     if(draft) bits.push('Draft restored — we saved your place ✓');
     $('fbMetaLine').textContent = 'Psst — we\'ll quietly tack this on for Holo: ' + bits.join(' · ');
+    /* MODE-LEVEL-TRACK-2026-11-24: show the "What did you test?" chips
+       only when auto-capture missed something; pre-fill from what it found. */
+    (function fbPaintMarks(d){
+      var box = $('fbMarks');
+      if(!box) return;
+      var missing = !d.mode || !d.difficulty || !d.level;
+      box.hidden = !missing;
+      function paintRow(key, v){
+        var row = box.querySelector('[data-mark="' + key + '"]');
+        if(!row) return;
+        var val = fbMark[key] || v || '';
+        if(key === 'level' && val){
+          var m = /\d+/.exec(val);
+          if(m){ var n = parseInt(m[0], 10); val = n <= 2 ? 'Levels 1–2' : (n <= 5 ? 'Levels 3–5' : 'Levels 6+'); }
+        }
+        if(key === 'difficulty' && val){
+          var dl = val.toLowerCase();
+          if(/easy|gentle|chill/.test(dl)) val = 'Easy';
+          else if(/hard|expert|stampede/.test(dl)) val = 'Hard';
+          else if(/normal|medium|classic/.test(dl)) val = 'Normal';
+        }
+        row.querySelectorAll('.pill').forEach(function(p){ p.classList.toggle('active', p.getAttribute('data-v') === val); });
+      }
+      paintRow('mode', d.mode);
+      paintRow('difficulty', d.difficulty);
+      paintRow('level', d.level);
+      paintRow('options', d.options);
+    })(d);
     fbPaintStars();
     overlay.hidden = false;
   }
@@ -13170,6 +13336,18 @@ var LOCATIONS = [
       var q = p.getAttribute('data-fb-quick');
       if(fbQuick[q]){ delete fbQuick[q]; p.classList.remove('active'); }
       else { fbQuick[q] = 1; p.classList.add('active'); }
+    });
+  });
+  /* MODE-LEVEL-TRACK-2026-11-24: "What did you test?" chips — one tap per
+     row, tap again to clear; saved in the draft via persistDraft. */
+  document.querySelectorAll('#fbMarks .pill').forEach(function(b){
+    b.addEventListener('click', function(){
+      var row = b.closest('[data-mark]');
+      var key = row.getAttribute('data-mark');
+      var v = b.getAttribute('data-v');
+      fbMark[key] = (fbMark[key] === v) ? '' : v;
+      row.querySelectorAll('.pill').forEach(function(p){ p.classList.toggle('active', p.getAttribute('data-v') === fbMark[key]); });
+      persistDraft();
     });
   });
   $('fbClose').addEventListener('click', fbClose);
@@ -13208,8 +13386,9 @@ var LOCATIONS = [
       game: slug, rating: fbRating, tags: tags,
       kind: kindNow, broken: kindNow !== 'review', brokeText: brokeText,
       text: $('fbText').value.trim(), tag: fbTag,
-      mode: d.mode || '', level: d.level || '', difficulty: d.difficulty || '',
+      mode: fbMark.mode || d.mode || '', level: fbMark.level || d.level || '', difficulty: fbMark.difficulty || d.difficulty || '',
       score: (d.score === '' || d.score == null) ? '' : d.score,
+      options: fbMark.options || d.options || '',
       sessionSeconds: sessionSecondsNow(),
       gameSeconds: gameSecondsNow(),
       device: deviceInfo(), build: HUB_BUILD,
@@ -13254,8 +13433,8 @@ var LOCATIONS = [
       var text = $('fbText').value;
       var brokeOn = !!($('fbBroken') && $('fbBroken').checked);
       var brokeTxt = $('fbBrokeText') ? $('fbBrokeText').value : '';
-      if(!fbRating && !fbTag && !Object.keys(fbQuick).length && !text.trim() && !brokeOn && !brokeTxt.trim() && !fbShot){ clearDraft(slug); return; }
-      saveDraft(slug, { rating: fbRating, tag: fbTag, quick: Object.keys(fbQuick), text: text, broken: brokeOn, brokeText: brokeTxt, screenshot: fbShot || '' });
+      if(!fbRating && !fbTag && !Object.keys(fbQuick).length && !text.trim() && !brokeOn && !brokeTxt.trim() && !fbShot && !fbMark.mode && !fbMark.difficulty && !fbMark.level && !fbMark.options){ clearDraft(slug); return; }
+      saveDraft(slug, { rating: fbRating, tag: fbTag, quick: Object.keys(fbQuick), text: text, broken: brokeOn, brokeText: brokeTxt, screenshot: fbShot || '', marks: {mode: fbMark.mode, difficulty: fbMark.difficulty, level: fbMark.level, options: fbMark.options} });
     } catch(e){}
   }
   $('fbText').addEventListener('input', persistDraft);
@@ -13442,7 +13621,7 @@ var LOCATIONS = [
           + tags.map(function(x){ return '<span class="rv-tag">' + esc(x) + '</span>'; }).join('')
           + ' <time>' + esc(r.timestamp ? new Date(r.timestamp).toLocaleString() : '') + '</time>'
           + (r.text ? '<p>' + esc(r.text) + '</p>' : '<p class="rv-meta-line">(no comment — stars &amp; quick picks only)</p>')
-          + '<p class="rv-detail">' + esc([r.mode ? 'Mode: ' + r.mode : '', r.level || '', r.difficulty ? 'Difficulty: ' + r.difficulty : '', (r.score !== '' && r.score != null) ? 'Score: ' + r.score : '', (r.sessionSeconds != null && r.sessionSeconds !== '') ? fmtPlayMins(r.sessionSeconds) + ' in app' : '', (r.gameSeconds != null && r.gameSeconds !== '' && +r.gameSeconds > 0) ? fmtPlayMins(r.gameSeconds) + ' in this game' : '', r.build ? 'Build: ' + r.build : '', r.device ? 'Device: ' + r.device : '', r.testerName ? 'Tester: ' + r.testerName : ''].filter(Boolean).join(' · ')) + '</p></div>';
+          + '<p class="rv-detail">' + esc([r.mode ? 'Mode: ' + r.mode : '', r.level || '', r.difficulty ? 'Difficulty: ' + r.difficulty : '', (r.score !== '' && r.score != null) ? 'Score: ' + r.score : '', r.options ? 'Options: ' + r.options : '', (r.sessionSeconds != null && r.sessionSeconds !== '') ? fmtPlayMins(r.sessionSeconds) + ' in app' : '', (r.gameSeconds != null && r.gameSeconds !== '' && +r.gameSeconds > 0) ? fmtPlayMins(r.gameSeconds) + ' in this game' : '', r.build ? 'Build: ' + r.build : '', r.device ? 'Device: ' + r.device : '', r.testerName ? 'Tester: ' + r.testerName : ''].filter(Boolean).join(' · ')) + '</p></div>';
       });
       html += '</div>';
     });
@@ -13496,10 +13675,10 @@ var LOCATIONS = [
   /* ---------- Copy / share export ---------- */
   function csvCell(v){ v = String(v == null ? '' : v); return '"' + v.replace(/"/g, '""') + '"'; }
   function feedbackCsv(){
-    var head = ['Date','Game','Stars','Tag','Tags','Comment','Mode','Level','Difficulty','Score','sessionSeconds','gameSeconds','Device','Build','Tester','Comp'];
+    var head = ['Date','Game','Stars','Tag','Tags','Comment','Mode','Level','Difficulty','Score','Options','sessionSeconds','gameSeconds','Device','Build','Tester','Comp'];
     var lines = [head.join(',')];
     loadFeedback().forEach(function(r){
-      lines.push([r.timestamp || '', gameTitle(normalizeSlug(r.game)), r.rating || '', r.tag || '', (Array.isArray(r.tags) ? r.tags.join('; ') : ''), r.text || '', r.mode || '', r.level || '', r.difficulty || '', (r.score == null ? '' : r.score), (r.sessionSeconds == null ? '' : r.sessionSeconds), (r.gameSeconds == null ? '' : r.gameSeconds), r.device || '', r.build || '', r.testerName || '', r.testerName ? (r.testerComp ? 'yes' : 'no') : ''].map(csvCell).join(','));
+      lines.push([r.timestamp || '', gameTitle(normalizeSlug(r.game)), r.rating || '', r.tag || '', (Array.isArray(r.tags) ? r.tags.join('; ') : ''), r.text || '', r.mode || '', r.level || '', r.difficulty || '', (r.score == null ? '' : r.score), r.options || '', (r.sessionSeconds == null ? '' : r.sessionSeconds), (r.gameSeconds == null ? '' : r.gameSeconds), r.device || '', r.build || '', r.testerName || '', r.testerName ? (r.testerComp ? 'yes' : 'no') : ''].map(csvCell).join(','));
     });
     return lines.join('\n');
   }
@@ -13508,7 +13687,7 @@ var LOCATIONS = [
     loadFeedback().forEach(function(r){
       out.push('— ' + gameTitle(normalizeSlug(r.game)) + ' · ' + starStr(r.rating) + (r.tag ? ' · ' + r.tag : '') + (Array.isArray(r.tags) && r.tags.length ? ' · ' + r.tags.join(', ') : ''));
       if(r.text) out.push('  "' + r.text + '"');
-      var det = [r.mode ? 'Mode: ' + r.mode : '', r.level || '', r.difficulty ? 'Difficulty: ' + r.difficulty : '', (r.score !== '' && r.score != null) ? 'Score: ' + r.score : '', (r.sessionSeconds != null && r.sessionSeconds !== '') ? fmtPlayMins(r.sessionSeconds) + ' in app' : '', (r.gameSeconds != null && r.gameSeconds !== '' && +r.gameSeconds > 0) ? fmtPlayMins(r.gameSeconds) + ' in this game' : '', (r.sessionSeconds != null && r.sessionSeconds !== '') ? 'sessionSeconds: ' + r.sessionSeconds : '', (r.gameSeconds != null && r.gameSeconds !== '') ? 'gameSeconds: ' + r.gameSeconds : '', r.build ? 'Build: ' + r.build : '', r.device ? 'Device: ' + r.device : '', r.testerName ? 'Tester: ' + r.testerName : '', r.timestamp || ''].filter(Boolean).join(' · ');
+      var det = [r.mode ? 'Mode: ' + r.mode : '', r.level || '', r.difficulty ? 'Difficulty: ' + r.difficulty : '', (r.score !== '' && r.score != null) ? 'Score: ' + r.score : '', r.options ? 'Options: ' + r.options : '', (r.sessionSeconds != null && r.sessionSeconds !== '') ? fmtPlayMins(r.sessionSeconds) + ' in app' : '', (r.gameSeconds != null && r.gameSeconds !== '' && +r.gameSeconds > 0) ? fmtPlayMins(r.gameSeconds) + ' in this game' : '', (r.sessionSeconds != null && r.sessionSeconds !== '') ? 'sessionSeconds: ' + r.sessionSeconds : '', (r.gameSeconds != null && r.gameSeconds !== '') ? 'gameSeconds: ' + r.gameSeconds : '', r.build ? 'Build: ' + r.build : '', r.device ? 'Device: ' + r.device : '', r.testerName ? 'Tester: ' + r.testerName : '', r.timestamp || ''].filter(Boolean).join(' · ');
       if(det) out.push('  ' + det);
       out.push('');
     });
@@ -23048,8 +23227,16 @@ footer .egg-row .egg{width:32px;height:32px}
         var shotImg = document.getElementById('fbShotImg');
         var shotPrev = document.getElementById('fbShotPrev');
         var shot = (shotImg && shotPrev && !shotPrev.hidden && shotImg.src) ? shotImg.src : ''; /* FB-SCREENSHOT-2026-11-23 */
-        if(rating || tag || quick.length || text.trim() || brokeOn || brokeTxt.trim() || shot){
-          window.saveDraft(lastGame, { rating: rating, tag: tag, quick: quick, text: text, broken: brokeOn, brokeText: brokeTxt, screenshot: shot });
+        /* MODE-LEVEL-TRACK-2026-11-24: keep the tapped "What did you test?"
+           marks in this snapshot, or it overwrites the draft persistDraft
+           just saved and drops them. */
+        var marks = {mode:'', difficulty:'', level:'', options:''};
+        document.querySelectorAll('#fbMarks .pill.active').forEach(function(p){
+          var row = p.closest('[data-mark]');
+          if(row) marks[row.getAttribute('data-mark')] = p.getAttribute('data-v');
+        });
+        if(rating || tag || quick.length || text.trim() || brokeOn || brokeTxt.trim() || shot || marks.mode || marks.difficulty || marks.level || marks.options){
+          window.saveDraft(lastGame, { rating: rating, tag: tag, quick: quick, text: text, broken: brokeOn, brokeText: brokeTxt, screenshot: shot, marks: marks });
         }
       } catch(e){}
     });
