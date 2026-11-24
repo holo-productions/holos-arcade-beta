@@ -12425,6 +12425,91 @@ var LOCATIONS = [
     var sw = (window.screen && window.screen.width) || 0, sh = (window.screen && window.screen.height) || 0;
     return (navigator.userAgent || '') + ' · window ' + w + '×' + h + ' · screen ' + sw + '×' + sh;
   }
+  /* FB-CONTEXT-2026-11-23 (Holo: capture as much location/info as
+     possible so a bug can be found even from a one-line report).
+     One shared auto-context builder for every report path (feedback
+     form, help chat, crash reports, account recovery, code-name
+     change). Everything here is automatic — no new questions for
+     the tester. Never includes passwords, invite codes, or
+     localStorage contents; the signed-in email + code name go to
+     the owner-only Sheet, never into tester-facing copy. */
+  var __holoPrevHash = '';
+  try {
+    window.addEventListener('hashchange', function(e){
+      try { __holoPrevHash = String((e && e.oldURL) || '').split('#')[1] || ''; } catch(_){}
+    });
+  } catch(e){}
+  function holoParseOs(ua){
+    var s = String(ua || ''), m;
+    if(/iPhone|iPad|iPod/.test(s)){ m = s.match(/OS (\d+)[_.](\d+)/); return 'iOS' + (m ? ' ' + m[1] + '.' + m[2] : ''); }
+    if(/Android/.test(s)){ m = s.match(/Android (\d+(?:\.\d+)?)/); return 'Android' + (m ? ' ' + m[1] : ''); }
+    if(/Windows NT/.test(s)){ m = s.match(/Windows NT (\d+(?:\.\d+)?)/); return 'Windows' + (m ? ' ' + m[1] : ''); }
+    if(/Mac OS X/.test(s)){ m = s.match(/Mac OS X (\d+)[_.](\d+)/); return 'macOS' + (m ? ' ' + m[1] + '.' + m[2] : ''); }
+    if(/CrOS/.test(s)) return 'ChromeOS';
+    if(/Linux/i.test(s)) return 'Linux';
+    return '';
+  }
+  function holoParseBrowser(ua){
+    var s = String(ua || ''), m;
+    if(/Edg\/([\d.]+)/.test(s)){ m = s.match(/Edg\/([\d.]+)/); return 'Edge ' + m[1]; }
+    if(/OPR\/([\d.]+)/.test(s)){ m = s.match(/OPR\/([\d.]+)/); return 'Opera ' + m[1]; }
+    if(/FxiOS\/([\d.]+)/.test(s)){ m = s.match(/FxiOS\/([\d.]+)/); return 'Firefox ' + m[1]; }
+    if(/Firefox\/([\d.]+)/.test(s)){ m = s.match(/Firefox\/([\d.]+)/); return 'Firefox ' + m[1]; }
+    if(/CriOS\/([\d.]+)/.test(s)){ m = s.match(/CriOS\/([\d.]+)/); return 'Chrome ' + m[1]; }
+    if(/Chrome\/([\d.]+)/.test(s)){ m = s.match(/Chrome\/([\d.]+)/); return 'Chrome ' + m[1]; }
+    if(/Version\/([\d.]+).*Safari/.test(s)){ m = s.match(/Version\/([\d.]+)/); return 'Safari ' + m[1]; }
+    if(/Safari/.test(s)) return 'Safari';
+    return '';
+  }
+  function holoReportContext(){
+    var ctx = {};
+    try {
+      var ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+      ctx.url = String((typeof location !== 'undefined' && location.href) || '').slice(0, 500);
+      var path = ((typeof location !== 'undefined' && location.pathname) || '') + ((typeof location !== 'undefined' && location.search) || '') + ((typeof location !== 'undefined' && location.hash) || '');
+      ctx.page = path.slice(0, 500);
+      ctx.view = String((typeof location !== 'undefined' && location.hash) || '#main').slice(0, 200);
+      ctx.prevHash = __holoPrevHash ? ('#' + __holoPrevHash) : '';
+      try { ctx.referrer = String(document.referrer || '').slice(0, 500); } catch(e){ ctx.referrer = ''; }
+      ctx.host = (typeof location !== 'undefined' && location.hostname) || '';
+      var standalone = false;
+      try { standalone = !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone); } catch(e){}
+      ctx.appMode = standalone ? 'app' : 'browser';
+      var w = (typeof window !== 'undefined' && window.innerWidth) || 0, h = (typeof window !== 'undefined' && window.innerHeight) || 0;
+      var sw = (typeof window !== 'undefined' && window.screen && window.screen.width) || 0, sh = (typeof window !== 'undefined' && window.screen && window.screen.height) || 0;
+      ctx.viewport = w + '×' + h;
+      ctx.screen = sw + '×' + sh;
+      var touchPts = 0;
+      try { touchPts = navigator.maxTouchPoints || 0; } catch(e){}
+      var low = ua.toLowerCase();
+      if(/iphone|ipod|android.*mobile|windows phone/.test(low)) ctx.deviceType = 'phone';
+      else if(/ipad/.test(low) || (/android/.test(low) && !/mobile/.test(low)) || (/macintosh/.test(low) && touchPts > 0)) ctx.deviceType = 'tablet';
+      else ctx.deviceType = 'desktop';
+      ctx.os = holoParseOs(ua);
+      ctx.browserVer = holoParseBrowser(ua);
+      try { var a = JSON.parse(localStorage.getItem('holos-firebase-auth') || 'null'); if(a && a.email) ctx.testerEmail = String(a.email); } catch(e){}
+      try { var t = (typeof getTester === 'function') ? getTester() : null; if(t && t.name) ctx.testerName = String(t.name); } catch(e){}
+      var now = new Date();
+      try { ctx.tsLocal = now.toLocaleString(); } catch(e){ ctx.tsLocal = now.toString(); }
+      try { ctx.tz = (Intl.DateTimeFormat().resolvedOptions().timeZone) || ''; } catch(e){ ctx.tz = ''; }
+      try { var slug = (typeof playerSlug === 'function') ? playerSlug() : null; if(slug){ ctx.game = slug; try { ctx.gameTitle = gameTitle(slug); } catch(e2){ ctx.gameTitle = slug; } } } catch(e){}
+      try {
+        var le = window.__holoLastError;
+        if(le && le.message && le.at && (Date.now() - le.at) < 30 * 60 * 1000) ctx.lastError = String(le.message).slice(0, 300);
+      } catch(e){}
+    } catch(e){}
+    return ctx;
+  }
+  window.holoReportContext = holoReportContext;
+  function holoMergeContext(rec, skip){
+    try {
+      var ctx = (typeof window.holoReportContext === 'function') ? window.holoReportContext() : {};
+      var skipMap = {}; (skip || []).forEach(function(k){ skipMap[k] = true; });
+      Object.keys(ctx).forEach(function(k){ if(!skipMap[k] && ctx[k] !== undefined && ctx[k] !== '') rec[k] = ctx[k]; });
+    } catch(e){}
+    return rec;
+  }
+  window.holoMergeContext = holoMergeContext;
   function fbPaintBroken(){
     var on = !!($('fbBroken') && $('fbBroken').checked);
     if($('fbBrokeText')) $('fbBrokeText').style.display = on ? '' : 'none';
@@ -12604,6 +12689,8 @@ var LOCATIONS = [
       testerName: testerRec ? testerRec.name : '',
       testerComp: testerRec ? !!testerRec.comp : false
     };
+    try { holoMergeContext(newRec, ['game', 'gameTitle', 'testerName']); } catch(e){}
+    try { newRec.gameTitle = gameTitle(slug); } catch(e){ newRec.gameTitle = slug; }
     if(fbShot) newRec.screenshot = fbShot; /* FB-SCREENSHOT-2026-11-23 */
     fbEnsureId(newRec);
     arr.push(newRec);
@@ -17943,6 +18030,7 @@ function renderTesterAuth(){
   var errCount = 0;
   function reportError(message, source, line){
     try {
+      try { window.__holoLastError = { message: String(message || 'Unknown error').slice(0, 300), source: String(source || '').slice(0, 300), line: line || 0, at: Date.now() }; } catch(e2){}
       if(errCount >= 5) return;
       errCount++;
       var nowIso = new Date().toISOString();
@@ -17963,6 +18051,7 @@ function renderTesterAuth(){
         ts: nowIso,
         timestamp: nowIso
       };
+      try { if(typeof window.holoMergeContext === 'function') window.holoMergeContext(payload, ['game']); } catch(e){}
       /* Signed-out capture: queue like reviews so the report is
          saved on this device and flushes on sign-in, or right
          away through the anonymous path when enabled. */
@@ -18246,6 +18335,8 @@ function renderTesterAuth(){
         testerName: name,
         username: name
       };
+      try { if(typeof window.holoMergeContext === 'function') window.holoMergeContext(rec, ['game', 'testerName']); } catch(e){}
+      if(!rec.gameTitle) rec.gameTitle = "Holo's Arcade (the whole hub)";
       var arr = [];
       try {
         var v = JSON.parse(localStorage.getItem("holos-arcade-feedback"));
@@ -19199,6 +19290,7 @@ function renderTesterAuth(){
     var from = currentName();
     var now = new Date();
     var rec = { id: now.toISOString() + '-' + Math.random().toString(36).slice(2, 9), kind:'help', game:'games-hub', rating:0, tags:['codename-change'], tag:'codename-change', text:'Code Name change request: from "' + from + '" to "' + cnState.name + '". Availability at send time: ' + cnState.status + '.', device:(navigator.userAgent || ''), userAgent:(navigator.userAgent || ''), page:(location.pathname || ''), timestamp:now.toISOString(), ts:now.getTime(), testerName:from, username:from };
+    try { if(typeof window.holoMergeContext === 'function') window.holoMergeContext(rec, ['game', 'testerName']); } catch(e){}
     try {
       var arr = [];
       try { var v = JSON.parse(localStorage.getItem('holos-arcade-feedback')); if(Array.isArray(v)) arr = v; } catch(e){}
@@ -19308,6 +19400,7 @@ function renderTesterAuth(){
     if(!okAll){ showMsg('A couple of fields need a look, agent — check the pink ones.'); if(firstBad) { try { firstBad.focus(); } catch(err){} } return; }
     var now = new Date();
     var rec = { id: now.toISOString() + '-' + Math.random().toString(36).slice(2, 9), kind:'help', game:'games-hub', rating:0, tags:['account-recovery'], tag:'account-recovery', subject:'Account recovery request', problem:'Account recovery request', codeName:codeName, oldEmail:oldEmail, newEmail:newEmail, inviteCode:invite, notes:notes, text:'Account recovery request. Code Name: ' + codeName + '. Old email: ' + oldEmail + '. New email: ' + newEmail + '.' + (invite ? ' Invite code: ' + invite + '.' : '') + (notes ? ' Anything else: ' + notes : ''), device:(navigator.userAgent || ''), userAgent:(navigator.userAgent || ''), page:(location.pathname || ''), timestamp:now.toISOString(), ts:now.getTime(), testerName:codeName, username:codeName };
+    try { if(typeof window.holoMergeContext === 'function') window.holoMergeContext(rec, ['game', 'testerName']); } catch(e){}
     try {
       var arr = [];
       try { var v = JSON.parse(localStorage.getItem('holos-arcade-feedback')); if(Array.isArray(v)) arr = v; } catch(err){}
