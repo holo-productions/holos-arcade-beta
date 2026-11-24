@@ -3049,6 +3049,7 @@ setTimeout(function(){
           <span>Parent PIN<br><small id="parentPinState">No PIN set yet.</small></span>
           <button class="btn" id="parentPinBtn" type="button">Set up parent PIN</button>
         </div>
+        <p><button type="button" class="tier3-link" id="parentPinForgotBtn" hidden>Forgot PIN?</button></p>
         <p class="contact-note" id="adultDobLine">Date of birth: on file.</p>
         <p class="contact-note" id="adultDobNudge" hidden>⚠️ No date of birth on file yet — 18+ games stay hidden until you add one. It only takes a few seconds.</p>
         <p><button type="button" class="tier3-link" id="adultDobChangeBtn">Change my date of birth</button></p>
@@ -7977,12 +7978,13 @@ setTimeout(function(){
     opts = opts || {};
     var pinMsg = opts.message || 'Enter the parent PIN to turn the 18+ games back on.';
     var pinGo = opts.goLabel || 'Unlock 18+ games';
-    var pinHelp = opts.helper || 'Forgot the PIN? Set a new one in Settings under 18+ games — it needs an email check first.';
+    var pinHelp = opts.helper || 'Only the parent should know this PIN.';
     openModal('Parent PIN',
       '<p>' + pinMsg + '</p>' +
       '<div class="login-field"><label for="age18Pin">Parent PIN</label><input id="age18Pin" type="password" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="4 digits" /></div>' +
       '<p class="login-error" id="age18PinErr" role="alert" hidden></p>' +
       '<p><button type="button" class="btn btn-dark" id="age18PinGo">' + pinGo + '</button> <button type="button" class="btn btn-light" id="age18PinCancel">Cancel</button></p>' +
+      '<p><button type="button" class="tier3-link" id="age18PinForgot">Forgot PIN?</button></p>' +
       '<p class="login-helper">' + pinHelp + '</p>',
       function(){ cb(false); });
     var inp = document.getElementById('age18Pin');
@@ -7998,6 +8000,16 @@ setTimeout(function(){
       });
     });
     document.getElementById('age18PinCancel').addEventListener('click', function(){ closeModal(); cb(false); });
+    /* PARENT-PIN-RESET-2026-11-24: a forgotten PIN resets by email alone — no
+       current PIN needed. The pending gated change is abandoned
+       (cb(false)) and the same email-verified setup first-time PIN
+       setup uses opens instead. A kid without inbox access cannot
+       complete it: the verification link only goes to the account
+       email, and "I've verified" is checked against Firebase. */
+    document.getElementById('age18PinForgot').addEventListener('click', function(){
+      cb(false);
+      openVerifiedSetup('pin', function(ok){ if(ok) syncToggleUI(); });
+    });
   }
 
   /* ---------- Email-verified setup (PIN set/change + DOB change) ----------
@@ -8010,7 +8022,14 @@ setTimeout(function(){
     if(typeof window.sendBetaEmailVerification === 'function') return window.sendBetaEmailVerification();
     return Promise.resolve({ sent:false });
   }
-  function openVerifiedSetup(mode, cb){
+  /* KID-MODE-2026-11-24 (Holo 2026-11-24 08:17): setting a parent PIN for
+     the first time IS activating kid mode — the 18+ games hide the
+     moment the PIN is set, no separate Hide toggle needed. Only the
+     Settings first-time setup passes opts.kidMode; PIN resets and
+     the 18+ unlock path never auto-hide (a reset only changes the
+     PIN, and unlocking is trying to turn 18+ back ON). */
+  function openVerifiedSetup(mode, cb, opts){
+    opts = opts || {};
     var email = (acct() && acct().email) || (sess() && sess().email) || '';
     var isDob = mode === 'dob';
     openModal(isDob ? 'Change date of birth' : (hasPin() ? 'Change parent PIN' : 'Set up parent PIN'),
@@ -8062,7 +8081,14 @@ setTimeout(function(){
           function fail(m){ if(errEl){ errEl.textContent = m; errEl.hidden = false; } }
           if(!/^\d{4}$/.test(v1)){ fail('The PIN needs 4 digits, agent.'); return; }
           if(v1 !== v2){ fail('Those PINs do not match, agent. Have another try.'); return; }
-          setPin(v1).then(function(){ closeModal(); toast('Parent PIN saved.'); cb(true); });
+          var wasFirstPin = !hasPin();
+          setPin(v1).then(function(){
+            var kidMode = !!(opts.kidMode && wasFirstPin);
+            if(kidMode) setHide18(true);
+            closeModal();
+            toast(kidMode ? 'Parent PIN saved. Kid mode is on — the 18+ games are now hidden.' : 'Parent PIN saved.');
+            cb(true);
+          });
         });
       }
     }
@@ -8117,6 +8143,8 @@ setTimeout(function(){
     if(dobBtn) dobBtn.textContent = dob() ? 'Change my date of birth' : 'Add my date of birth';
     var pb = document.getElementById('parentPinBtn');
     if(pb) pb.textContent = hasPin() ? 'Change parent PIN' : 'Set up parent PIN';
+    var pf2 = document.getElementById('parentPinForgotBtn');
+    if(pf2) pf2.hidden = under || !hasPin();
   }
   function applyAll(){
     try { if(typeof window.holoRefreshLibrary === 'function') window.holoRefreshLibrary(); } catch(e){}
@@ -8156,9 +8184,19 @@ setTimeout(function(){
        the very first PIN has no current PIN, so it goes straight to
        the email flow, as before. */
     if(pb) pb.addEventListener('click', function(){
+      /* KID-MODE-2026-11-24: first-time setup from here activates kid mode (auto-hide 18+). */
+      var firstTimePin = !hasPin();
       requireParentPin('Enter the current parent PIN to change it.', function(ok){
-        if(ok) openVerifiedSetup('pin', function(ok2){ if(ok2) syncToggleUI(); });
+        if(ok) openVerifiedSetup('pin', function(ok2){ if(ok2) syncToggleUI(); }, { kidMode: firstTimePin });
       });
+    });
+    var pf = document.getElementById('parentPinForgotBtn');
+    /* PARENT-PIN-RESET-2026-11-24: forgotten-PIN reset from Settings — straight
+       to the email-verified flow, no current PIN needed. Same flow
+       first-time setup uses; a kid without inbox access cannot
+       complete it. */
+    if(pf) pf.addEventListener('click', function(){
+      openVerifiedSetup('pin', function(ok2){ if(ok2) syncToggleUI(); });
     });
     var db = document.getElementById('adultDobChangeBtn');
     /* PARENT-PIN-RULE-2026-11-24: changing the date of birth is a
@@ -14856,7 +14894,12 @@ function renderTesterAuth(){
   var cpMsg = document.getElementById('cpMsg');
   function cpShow(t, ok){ if(cpMsg){ cpMsg.textContent = t || ''; cpMsg.className = 'acct-set-msg' + (ok ? ' ok' : ''); cpMsg.hidden = !t; } }
   function cpBad(el, bad){ if(!el) return; el.classList.toggle('field-invalid', !!bad); if(bad) el.setAttribute('aria-invalid','true'); else el.removeAttribute('aria-invalid'); }
-  if(cpBtn) cpBtn.addEventListener('click', function(){
+  /* PARENT-PIN-RESET-2026-11-24 (Holo 2026-11-24 08:15): Change password is a
+     sensitive setting — with a parent PIN active it needs the PIN
+     first, then the existing flow unchanged. No PIN active =
+     behaviour unchanged. Uses the same gateSettingsChange helper
+     as the other Settings controls in this module. */
+  function doChangePassword(){
     var cur = cpCur ? String(cpCur.value || '') : '';
     var nw = cpNew ? String(cpNew.value || '') : '';
     var cf = cpConf ? String(cpConf.value || '') : '';
@@ -14880,6 +14923,9 @@ function renderTesterAuth(){
       cpBtn.disabled = false;
       cpShow('Could not change your password just now, agent. Try again in a minute.');
     });
+  }
+  if(cpBtn) cpBtn.addEventListener('click', function(){
+    gateSettingsChange('your password', doChangePassword);
   });
   /* --- Sound + music toggles --- */
   window.holoSettings = window.holoSettings || { sound:true, music:true };
