@@ -712,10 +712,29 @@ var HINTS=[
 var hintIdx=0;
 function nextHint(){$("practiceHint").textContent=HINTS[hintIdx%HINTS.length];hintIdx++;}
 
+/* WIND-GAUGE-FIX-2026-11-24: the gauge must show the force applied.
+   Before: the gauge rounded the wind to a 0-5 level (hiding up to ~40%
+   of force inside one level) AND Hard multiplied the wind mid-flight by
+   a hidden gust (1+0.4*sin) the gauge never showed — so a level 2 could
+   out-drop a level 3/4 and the "same wind" could land differently.
+   Now: any gust is rolled into the wind up front, and the wind is
+   snapped to the gauge's own level grid, so the level shown IS the
+   force applied, levels are strictly ordered, and the same level +
+   same aim + same draw always lands the same way. */
 function rollWind(){
   var d=DIFFS[difficulty];
   wind=(Math.random()*2-1)*d.windMax;
-  if(Math.abs(wind)<0.08)wind=0; // sometimes calm
+  if(d.gusty){
+    /* Gusts still vary shot to shot — but they are rolled now and
+       shown on the gauge, never applied invisibly mid-flight. */
+    wind*=1+0.4*Math.sin(Math.random()*Math.PI*2);
+    if(wind>d.windMax)wind=d.windMax;
+    if(wind<-d.windMax)wind=-d.windMax;
+  }
+  /* Snap to the gauge grid: level = round(|wind|/windMax*5), so the
+     applied wind is exactly (level/5)*windMax. Level 0 is calm. */
+  var lvl=Math.round(Math.abs(wind)/d.windMax*5);
+  wind=lvl===0?0:(wind<0?-1:1)*(lvl/5)*d.windMax;
   updateWindHUD();
 }
 function updateWindHUD(){
@@ -1035,8 +1054,10 @@ function step(dt){
   if(flight&&!flight.stuck){
     var d=DIFFS[difficulty];
     flight.t+=dt;
+    /* WIND-GAUGE-FIX-2026-11-24: the wind shown on the gauge is the
+       wind applied. Gusts are rolled into the wind at rollWind() and
+       shown there — never adjusted invisibly mid-flight. */
     var windAcc=wind*d.windAccel;
-    if(d.gusty)windAcc*=1+0.4*Math.sin(flight.t*3.1);
     var px=flight.x,py=flight.y;
     flight.vy+=180*dt;          // gravity — flat at full draw, arcing at weak draw
     flight.vy+=windAcc*dt;      // wind pushes the arrow up/down
