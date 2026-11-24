@@ -16246,21 +16246,22 @@ function renderTesterAuth(){
         if(pwField) pwField.focus(); else nameField.focus();
       }
     });
-    /* ---- Owner invite tools ----
-       Generate a parked invite code, copy/share the
-       ?invite=CODE link, or open a prefilled Gmail compose
-       addressed to one tester's email. Codes are NOT validated
-       (parked for now) — the UI says so. Owner-only:
-       this panel is built inside buildOwnerUI, so visitors
-       never see it. */
+    /* ---- Owner invite tools ---- INVITE-FIX-2026-11-24
+       Generate a parked invite code (or type your own),
+       copy/share the full invite link, or open a prefilled
+       Gmail compose addressed to one tester's email. Codes
+       are NOT validated (parked for now) — the UI says so.
+       Owner-only: this panel is built inside buildOwnerUI,
+       so visitors never see it. */
+    var INVITE_BASE_URL = 'https://beta.holosarcade.ca/games-hub/';
     var invitePanel = document.createElement('div');
     invitePanel.className = 'invite-tools';
     invitePanel.id = 'inviteTools';
     invitePanel.innerHTML =
       '<h3 class="invite-tools-title">\uD83C\uDF9F\uFE0F Invite a tester</h3>' +
       '<p class="login-helper" style="margin:0 0 10px">Share this link to bring a friend into the tester club. Invite codes activate soon \u2014 the link opens sign-up with the code filled in, but codes aren\u2019t checked yet.</p>' +
-      '<p class="login-helper" style="margin:0 0 10px">Heads up: this link will update soon to holosarcade.ca \u2014 and I\u2019ll be making more updates, so check back to see new updates!</p>' +
       '<div class="login-field"><label for="inviteLink">Your invite link</label><input id="inviteLink" type="text" readonly /></div>' +
+      '<div class="login-field"><label for="inviteCodeInput">Invite code</label><input id="inviteCodeInput" type="text" autocomplete="off" maxlength="40" placeholder="e.g. ZOOM" /><p class="login-helper" style="margin:6px 0 0">Type your own code, or tap New code for a random one. Codes aren\u2019t checked yet.</p></div>' +
       '<div class="invite-actions">' +
       '<button type="button" class="btn btn-light login-switch" id="inviteGenBtn">\uD83C\uDFB2 New code</button>' +
       '<button type="button" class="btn btn-light login-switch" id="inviteCopyBtn">\uD83D\uDCCB Copy invite link</button>' +
@@ -16281,11 +16282,9 @@ function renderTesterAuth(){
       return 'TESTER-' + c;
     }
     function currentInviteLink(){
-      /* Relative invite link only — the page's own address is
-         never read into it (the shell owns the shareable URL);
-         Gizmo adds the invite code to the real link in the
-         Gmail draft, as the helper text below says. */
-      return '?invite=' + encodeURIComponent(inviteState.code);
+      /* INVITE-FIX-2026-11-24: full beta link, so the emailed
+         "secret link" works pasted on its own. */
+      return INVITE_BASE_URL + '?invite=' + encodeURIComponent(inviteState.code);
     }
     function inviteStatus(msg){
       var s = document.getElementById('inviteStatus');
@@ -16295,6 +16294,22 @@ function renderTesterAuth(){
       var inp = document.getElementById('inviteLink');
       if(inp) inp.value = currentInviteLink();
       refreshGmailTry();
+    }
+    function cleanInviteCode(v){
+      return String(v || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 40);
+    }
+    function bindInviteCodeInput(inputId, getCode, setCode, refreshFn){
+      var ci = document.getElementById(inputId);
+      if(!ci) return;
+      ci.value = getCode();
+      ci.addEventListener('input', function(){
+        var cleaned = cleanInviteCode(ci.value);
+        ci.value = cleaned;
+        if(cleaned){ setCode(cleaned); refreshFn(); }
+      });
+      ci.addEventListener('change', function(){
+        if(!cleanInviteCode(ci.value)) ci.value = getCode();
+      });
     }
     function copyInviteLink(){
       var link = currentInviteLink();
@@ -16311,8 +16326,8 @@ function renderTesterAuth(){
         done();
       }
     }
-    var INVITE_FROM = 'myairecord@gmail.com';
-    var INVITE_GMAIL_STATUS = 'Gmail opened ready to send from myairecord@gmail.com \u2014 just tap Send there. If Gmail asks you to sign in, sign in as myairecord@gmail.com. Invite also copied, so you can paste it anywhere.';
+    var INVITE_FROM = 'play@holosarcade.ca';
+    var INVITE_GMAIL_STATUS = 'Gmail opened ready to send from play@holosarcade.ca \u2014 just tap Send there. If Gmail asks you to sign in, sign in as myairecord@gmail.com. Invite also copied, so you can paste it anywhere.';
     function inviteSubject(){
       /* Exact invite wording approved by Holo — do not reword. */
       return '\uD83C\uDFAE TOP SECRET MISSION: Tester Wanted!';
@@ -16458,9 +16473,12 @@ function renderTesterAuth(){
     }
     inviteState.code = makeInviteCode();
     refreshInviteLink();
+    bindInviteCodeInput('inviteCodeInput', function(){ return inviteState.code; }, function(c){ inviteState.code = c; }, refreshInviteLink);
     var genBtn = document.getElementById('inviteGenBtn');
     if(genBtn) genBtn.addEventListener('click', function(){
       inviteState.code = makeInviteCode();
+      var ci = document.getElementById('inviteCodeInput');
+      if(ci) ci.value = inviteState.code;
       refreshInviteLink();
       inviteStatus('New invite code ready: ' + inviteState.code + ' \uD83C\uDF9F\uFE0F');
     });
@@ -16504,13 +16522,14 @@ function renderTesterAuth(){
       liveMount.innerHTML =
         '<span class="kicker personal">Owner only · Invite a tester</span>' +
         '<h2>\uD83C\uDF9F\uFE0F Send a tester invite</h2>' +
-        '<p style="margin:0;color:var(--muted);max-width:640px">Type a tester\u2019s email and hit Save draft request \u2014 the invite is saved here and copied, and Gizmo will add it to your Gmail drafts (from myairecord@gmail.com) for you to review and send. Or copy / share the invite link instead. Invite codes activate soon \u2014 the code in the link isn\u2019t checked yet.</p>' +
+        '<p style="margin:0;color:var(--muted);max-width:640px">Type a tester\u2019s email and hit Save draft request \u2014 the invite is saved here and copied, and Gizmo will add it to your Gmail drafts (from play@holosarcade.ca) for you to review and send. Or copy / share the invite link instead. Invite codes activate soon \u2014 the code in the link isn\u2019t checked yet.</p>' +
         '<div class="live-invite-grid">' +
         '<div class="login-field"><label for="liveInviteEmail">Tester\u2019s email</label><input id="liveInviteEmail" type="email" autocomplete="email" placeholder="friend@example.com" /></div>' +
         '<button type="button" class="btn btn-dark live-invite-send" id="liveInviteSendBtn">Save draft request \u2709\uFE0F</button>' +
         '</div>' +
         '<p class="login-helper" style="margin:8px 0 0">Arcade can\u2019t create Gmail drafts itself \u2014 Gizmo does that from chat. This saves your list here.</p>' +
         '<div class="login-field" style="margin-top:12px"><label for="liveInviteLink">Your invite link</label><input id="liveInviteLink" type="text" readonly /></div>' +
+        '<div class="login-field"><label for="liveInviteCodeInput">Invite code</label><input id="liveInviteCodeInput" type="text" autocomplete="off" maxlength="40" placeholder="e.g. ZOOM" /><p class="login-helper" style="margin:6px 0 0">Type your own code, or tap New code for a random one. Codes aren\u2019t checked yet.</p></div>' +
         '<div class="live-invite-actions">' +
         '<button type="button" class="btn btn-light" id="liveInviteGenBtn">\uD83C\uDFB2 New code</button>' +
         '<button type="button" class="btn btn-light" id="liveInviteCopyBtn">\uD83D\uDCCB Copy invite link</button>' +
@@ -16522,11 +16541,9 @@ function renderTesterAuth(){
         '<div class="draft-box"><h3 class="draft-title">Pending draft requests</h3><div class="draft-list" id="liveInviteDraftList"></div><p class="login-helper" id="liveInviteDraftEmpty" style="margin:6px 0 0">No pending drafts yet.</p></div>';
       var liveState = { code: makeInviteCode() };
       function liveInviteLink(){
-        /* Relative invite link only — never built from the
-           page's own address (the shell owns the shareable
-           URL); Gizmo adds the code to the real link in the
-           Gmail draft. */
-        return '?invite=' + encodeURIComponent(liveState.code);
+        /* INVITE-FIX-2026-11-24: full beta link, so the emailed
+           "secret link" works pasted on its own. */
+        return INVITE_BASE_URL + '?invite=' + encodeURIComponent(liveState.code);
       }
       function liveStatus(msg){
         var s = document.getElementById('liveInviteStatus');
@@ -16558,9 +16575,12 @@ function renderTesterAuth(){
         }
       }
       liveRefresh();
+      bindInviteCodeInput('liveInviteCodeInput', function(){ return liveState.code; }, function(c){ liveState.code = c; }, liveRefresh);
       var lGen = document.getElementById('liveInviteGenBtn');
       if(lGen) lGen.addEventListener('click', function(){
         liveState.code = makeInviteCode();
+        var lci = document.getElementById('liveInviteCodeInput');
+        if(lci) lci.value = liveState.code;
         liveRefresh();
         liveStatus('New invite code ready: ' + liveState.code + ' \uD83C\uDF9F\uFE0F');
       });
