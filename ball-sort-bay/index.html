@@ -406,7 +406,10 @@ $("fbSave").addEventListener("click",function(){
  lsSet("holos-arcade-feedback",arr); $("fbDone").style.display="block"; setTimeout(function(){$("fbModal").classList.remove("open")},900);
 });
 paintChrome();
-var CAP=4, tubes=[], selTube=-1, moves=0, history=[], initial=[], extraUsed=0, won=false;
+/* BALL-SORT-FIX-2026-11-24: undo stack was named `history`, which can never
+   shadow window.history (read-only) - history.push() threw on every pour, so
+   no ball could ever move. Renamed to undoStack. */
+var CAP=4, tubes=[], selTube=-1, moves=0, undoStack=[], initial=[], extraUsed=0, won=false;
 var PALETTE=[["#e4572e","Coral"],["#2563eb","Blue"],["#1d7a3a","Green"],["#e19a12","Amber"],["#7c5cbf","Purple"],["#c9184a","Pink"],["#0e7569","Teal"],["#8d5a2b","Cocoa"]];
 function cfg(){return difficulty==="easy"?{colors:3,empty:2}:difficulty==="hard"?{colors:7,empty:2}:{colors:5,empty:2}}
 function isSolved(t){return t.every(function(tb){return tb.length===0||(tb.length===CAP&&tb.every(function(v){return v===tb[0]}))})}
@@ -420,7 +423,7 @@ function genLevel(){
   var mixed=tubes.filter(function(tb){return tb.length&&tb.some(function(v){return v!==tb[0]})}).length;
   if(!isSolved(tubes)&&mixed>=2)break;
  }
- initial=JSON.parse(JSON.stringify(tubes));history=[];moves=0;selTube=-1;extraUsed=0;won=false;
+ initial=JSON.parse(JSON.stringify(tubes));undoStack=[];moves=0;selTube=-1;extraUsed=0;won=false;
  $("btnNext").style.display="none";render();say("Tap a tube, then tap where to pour.");
 }
 function newGame(){setScore(0);setLevel(1);genLevel()}
@@ -429,35 +432,40 @@ function render(){
  var box=$("tubes");box.innerHTML="";
  tubes.forEach(function(tb,i){
   var d=document.createElement("div");d.className="tube"+(i===selTube?" sel":"")+((tb.length===CAP&&tb.every(function(v){return v===tb[0]}))?" done":"");
-  d.setAttribute("role","button");d.setAttribute("aria-label","Tube "+(i+1));
+  d.setAttribute("role","button");d.setAttribute("aria-label","Tube "+(i+1)+(tb.length?(", "+tb.length+" ball"+(tb.length>1?"s":"")+", top "+PALETTE[tb[tb.length-1]][1]):", empty"));
   tb.forEach(function(v){var b=document.createElement("div");b.className="ball";b.style.background=PALETTE[v][0];d.appendChild(b)});
   d.addEventListener("click",function(){tapTube(i)});box.appendChild(d);
  });
 }
 function tapTube(i){
  if(won)return;
- if(selTube<0){if(tubes[i].length){selTube=i;render()}return}
- if(selTube===i){selTube=-1;render();return}
- pour(selTube,i);selTube=-1;render();
+ if(selTube<0){
+  if(!tubes[i].length){say("That tube is empty \u2014 tap a tube with balls to pick it up.");return}
+  selTube=i;render();say("Tube "+(i+1)+" picked up \u2014 now tap another tube to pour into it.");return;
+ }
+ if(selTube===i){selTube=-1;render();say("Tap a tube, then tap where to pour.");return}
+ if(pour(selTube,i)){selTube=-1}
+ render();
 }
 function pour(from,to){
  var src=tubes[from],dst=tubes[to];
- if(!src.length)return;
- if(dst.length>=CAP){say("That tube is full.");return}
+ if(!src.length)return false;
+ if(dst.length>=CAP){say("That tube is full.");return false}
  var top=src[src.length-1];
- if(dst.length&&dst[dst.length-1]!==top){say("You can only pour onto the same colour.");return}
+ if(dst.length&&dst[dst.length-1]!==top){say("You can only pour onto the same colour.");return false}
  var run=0;for(var i=src.length-1;i>=0;i--){if(src[i]===top)run++;else break}
  var n=Math.min(run,CAP-dst.length);
- history.push(JSON.stringify(tubes));
+ undoStack.push(JSON.stringify(tubes));
  for(var k=0;k<n;k++)dst.push(src.pop());
  moves++;
  if(isSolved(tubes)){won=true;var pts=Math.max(100,500+cfg().colors*100-moves*5);addScore(pts);say("Sorted! Level "+curLevel+" complete in "+moves+" moves (+"+pts+").");$("btnNext").style.display="inline-block"}
- else say("Moves: "+moves);
+ else say("Poured into tube "+(to+1)+". Moves: "+moves);
+ return true;
 }
 $("btnNew").addEventListener("click",newGame);
-$("btnUndo").addEventListener("click",function(){if(history.length){tubes=JSON.parse(history.pop());moves=Math.max(0,moves-1);won=false;$("btnNext").style.display="none";render();say("Undone.")}});
-$("btnRestart").addEventListener("click",function(){tubes=JSON.parse(JSON.stringify(initial));history=[];moves=0;selTube=-1;won=false;$("btnNext").style.display="none";render();say("Level restarted.")});
-$("btnExtra").addEventListener("click",function(){if(extraUsed>=2){say("No more extra tubes this level.");return}extraUsed++;history.push(JSON.stringify(tubes));tubes.push([]);setScore(Math.max(0,curScore-100));render();say("Extra tube added (-100).")});
+$("btnUndo").addEventListener("click",function(){if(undoStack.length){tubes=JSON.parse(undoStack.pop());moves=Math.max(0,moves-1);won=false;$("btnNext").style.display="none";render();say("Undone.")}});
+$("btnRestart").addEventListener("click",function(){tubes=JSON.parse(JSON.stringify(initial));undoStack=[];moves=0;selTube=-1;won=false;$("btnNext").style.display="none";render();say("Level restarted.")});
+$("btnExtra").addEventListener("click",function(){if(extraUsed>=2){say("No more extra tubes this level.");return}extraUsed++;undoStack.push(JSON.stringify(tubes));tubes.push([]);setScore(Math.max(0,curScore-100));render();say("Extra tube added (-100).")});
 $("btnNext").addEventListener("click",function(){setLevel(curLevel+1);genLevel()});
 window.onDiff=function(){newGame()};
 newGame();
