@@ -1,0 +1,1099 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Vending Machine</title>
+<style>
+  :root{
+    --bg:#eef3f6; --surface:#ffffff; --surface2:#e6eef3; --ink:#10222e; --muted:#5a6f7c;
+    --line:#cfdde6; --accent:#0e7c86; --accent-ink:#fff; --red:#d93a2b; --blue:#1769c2;
+    --gold:#e8a317; --shadow:0 10px 28px rgba(16,34,46,.12);
+    --radius:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0c171f; --surface:#13242f; --surface2:#1a303f; --ink:#eaf3f7; --muted:#9db4c0;
+      --line:#2a4354; --accent:#2bb3bf; --accent-ink:#06222a;
+      --shadow:0 10px 28px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:ui-rounded,"Avenir Next","Segoe UI",system-ui,-apple-system,sans-serif;line-height:1.45;-webkit-tap-highlight-color:transparent}
+  button,[role="button"],select,summary,input,textarea{font:inherit}
+  button{min-height:44px;min-width:44px;cursor:pointer}
+  .wrap{max-width:560px;margin:0 auto;padding:14px 14px 28px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0 12px}
+  .brand{display:flex;align-items:center;gap:10px;min-width:0}
+  .vend-dot{width:40px;height:40px;flex:0 0 40px;border-radius:12px;background:#ff3ec8;display:grid;place-items:center;box-shadow:inset 0 0 0 3px #fff,0 2px 8px rgba(0,0,0,.25)}
+  h1{font-size:28px;line-height:1;margin:0;letter-spacing:-.02em;font-weight:900}
+  .brand p{margin:2px 0 0;color:var(--muted);font-size:13px;font-weight:600}
+  .nav{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .nav button,.btn{border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 14px;font-weight:700;font-size:14px}
+  .nav button[aria-pressed="true"],.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .btn.primary{font-size:15px;padding:10px 20px}
+  .btn.danger{border-color:#e5b3ad;color:var(--red)}
+  .scoreboard{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;text-align:center}
+  .stat-cell .lab{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .stat-cell .val{font-size:24px;font-weight:900;line-height:1.1;font-variant-numeric:tabular-nums}
+  .stat-cell .val small{font-size:14px;color:var(--muted)}
+  .mid-status{text-align:center;font-size:13px;font-weight:800;color:var(--accent);min-height:1.4em;margin:8px 0 0}
+  .mid-status.warn{color:var(--red)}
+  .practice-bar{margin-top:12px;background:var(--surface2);border:1.5px dashed var(--accent);border-radius:var(--radius);padding:10px 14px;display:flex;gap:10px;align-items:flex-start}
+  .practice-bar .tag{flex:0 0 auto;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:3px 9px;margin-top:1px}
+  .practice-bar p{margin:0;font-size:14px;font-weight:600}
+  .practice-bar p span{color:var(--muted);font-weight:600}
+  .btn[aria-pressed="true"].practice-on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+
+  /* ---- Vending machine cabinet ---- */
+  .machine-wrap{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:12px;position:relative}
+  .machine{background:linear-gradient(180deg,#2b1a5e,#140b33 60%,#0a0620);border:3px solid #8b5cff;border-radius:16px;padding:14px;box-shadow:0 0 26px rgba(139,92,255,.35)}
+  .machine.shaking{animation:vmshake .28s linear}
+  @keyframes vmshake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px) rotate(-.6deg)}40%{transform:translateX(6px)}60%{transform:translateX(-5px) rotate(.6deg)}80%{transform:translateX(4px)}}
+  .machine-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+  .machine-head .m-title{font-family:"Press Start 2P","Courier New",monospace;font-size:11px;line-height:1.6;color:#ffd43b;text-shadow:0 0 10px rgba(255,212,59,.5)}
+  .credit{display:flex;align-items:center;gap:6px;background:#000;border:2px solid #38e1ff;border-radius:8px;padding:4px 10px;font-weight:900;color:#38e1ff;font-variant-numeric:tabular-nums}
+  .credit .lab{font-size:10px;letter-spacing:.08em}
+  .credit .val{font-size:18px}
+  .snack-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .snack{position:relative;background:linear-gradient(180deg,#fff,#e8e4ff);border:3px solid #3b82f6;border-radius:12px;padding:8px 4px 6px;text-align:center;cursor:pointer;min-height:104px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;color:#140b33}
+  .snack:hover{border-color:#ff3ec8}
+  .snack.selected{border-color:#ffb020;box-shadow:0 0 0 3px #ffb020,0 0 16px rgba(255,176,32,.7);outline:none}
+  .snack.soldout{opacity:.45}
+  .snack .key{position:absolute;top:4px;left:6px;font-size:11px;font-weight:900;color:#8b5cff}
+  .snack .pic{height:44px;display:flex;align-items:center;justify-content:center}
+  .snack .pic svg{width:44px;height:44px}
+  .snack .nm{font-size:13px;font-weight:800;line-height:1.15}
+  .snack .pr{font-size:13px;font-weight:900;color:#b45309}
+  .snack .pr::before{content:"\25CF ";color:#e8a317}
+  .snack.stuck{border-color:#d93a2b;animation:stuckwiggle .5s ease-in-out infinite}
+  @keyframes stuckwiggle{0%,100%{transform:rotate(-1.5deg)}50%{transform:rotate(1.5deg)}}
+  .snack .stuck-tag{position:absolute;top:4px;right:4px;background:#d93a2b;color:#fff;font-size:10px;font-weight:900;border-radius:999px;padding:2px 7px;letter-spacing:.04em}
+  .machine-mid{display:flex;gap:10px;margin-top:12px;align-items:stretch}
+  .tray{flex:1;background:#000;border:2px solid #38e1ff;border-radius:10px;min-height:64px;display:flex;align-items:center;justify-content:center;gap:8px;padding:6px;color:#e9e4ff;font-weight:700;font-size:14px;overflow:hidden}
+  .tray .tray-pic svg{width:40px;height:40px}
+  .tray.empty{color:#7dd3e8;font-size:13px}
+  .coin-slot{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+  .slot-btn{background:linear-gradient(92deg,#ffb020,#ffd43b);border:3px solid #fff;border-radius:12px;color:#140b33;font-weight:900;font-size:13px;padding:10px 12px;box-shadow:0 4px 0 #b45309;min-width:104px}
+  .slot-btn:active{transform:translateY(3px);box-shadow:0 1px 0 #b45309}
+  .slot-btn:disabled{opacity:.5}
+  .shake-btn{background:linear-gradient(92deg,#ff3ec8,#8b5cff);border:3px solid #fff;border-radius:12px;color:#fff;font-weight:900;font-size:13px;padding:10px 12px;box-shadow:0 4px 0 #4c1d95;min-width:104px}
+  .shake-btn:active{transform:translateY(3px);box-shadow:0 1px 0 #4c1d95}
+  .shake-btn:disabled{opacity:.45}
+  .purse-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;background:rgba(255,255,255,.08);border:1px solid rgba(139,92,255,.5);border-radius:10px;padding:8px 12px;color:#e9e4ff;font-size:14px;font-weight:700}
+  .purse-row b{color:#ffd43b;font-variant-numeric:tabular-nums}
+  .timer-row{display:flex;align-items:center;gap:10px;margin-top:10px}
+  .timer-row .lab{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#9db4c0;white-space:nowrap}
+  .timer-track{flex:1;height:14px;border-radius:999px;background:rgba(255,255,255,.12);border:1px solid rgba(139,92,255,.6);overflow:hidden}
+  .timer-fill{height:100%;width:100%;border-radius:999px;background:linear-gradient(90deg,#38e1ff,#8b5cff,#ff3ec8);transition:width .2s linear}
+  .timer-fill.low{background:linear-gradient(90deg,#d93a2b,#ff7a5c)}
+  .timer-pct{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;color:#e9e4ff;min-width:44px;text-align:right}
+  .overlay{position:absolute;inset:12px;border-radius:16px;display:none;place-items:center;text-align:center;background:rgba(10,6,32,.82);color:#fff;padding:20px;z-index:5}
+  .overlay.show{display:grid}
+  .overlay h2{margin:0 0 6px;font-size:26px;font-weight:900}
+  .overlay p{margin:0 0 14px;font-size:15px;opacity:.92;max-width:38ch}
+  .overlay .btn{border:none}
+  .overlay .end-stats{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:0 0 14px}
+  .overlay .end-stats div{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700}
+  .overlay .end-stats b{display:block;font-size:22px;color:#ffd43b}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .controls .btn{flex:1 1 auto}
+  .diff-row{margin-top:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+  .diff-row label,.diff-row .lab{font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px}
+  .seg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .seg button{border:1.5px solid var(--line);background:var(--surface2);color:var(--ink);border-radius:10px;padding:10px 6px;font-weight:800;font-size:15px;min-height:48px}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .diff-note{font-size:13px;color:var(--muted);margin:8px 0 0;min-height:1.4em}
+  .sound-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;font-size:14px;font-weight:600}
+  .bests{margin-top:14px}
+  .bests h2,.panel h2{font-size:19px;margin:0 0 8px;font-weight:900}
+  .bests-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center}
+  .stat b{display:block;font-size:20px;font-weight:900;font-variant-numeric:tabular-nums}
+  .stat span{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+  @media(max-width:420px){.bests-grid{grid-template-columns:repeat(2,1fr)} h1{font-size:24px} .scoreboard{grid-template-columns:1fr 1fr} .snack{min-height:96px}}
+  .hint{font-size:13px;color:var(--muted);text-align:center;margin:10px 4px 0}
+  kbd{background:var(--surface2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;font-size:12px;font-family:inherit;font-weight:700}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-top:4px}
+  .panel h3{margin:16px 0 6px;font-size:16px}
+  .panel p,.panel li{font-size:15px}
+  .panel ul,.panel ol{padding-left:22px;margin:6px 0}
+  .panel li{margin:5px 0}
+  .backrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+  .stars{display:flex;gap:6px;margin:6px 0 4px}
+  .stars button{width:52px;height:52px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface2);font-size:26px;line-height:1;color:var(--muted);padding:0}
+  .stars button.on{color:var(--gold);border-color:var(--gold);background:var(--surface)}
+  textarea{width:100%;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);padding:12px;min-height:96px;resize:vertical}
+  .saved-note{font-size:14px;font-weight:700;color:var(--accent);min-height:1.4em;margin:8px 0 0}
+  .prev{background:var(--surface2);border-radius:12px;padding:12px;margin-top:12px;font-size:14px}
+  .prev:empty{display:none}
+  footer{margin-top:22px;text-align:center;color:var(--muted);font-size:13px;font-weight:600;padding:14px 8px 4px;border-top:1px solid var(--line)}
+  [hidden]{display:none !important}
+.vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
+@media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
+.vtut-card{position:relative;border-radius:14px;padding:12px 10px 10px;text-align:center;background:rgba(128,128,128,.10);border:1px solid rgba(128,128,128,.28)}
+.vtut-num{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;background:#ff5fa2;color:#fff;font-size:12px;font-weight:800;line-height:20px}
+.vtut-pic{height:52px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.vtut-pic svg{width:44px;height:44px}
+.vtut-card b{display:block;font-size:.92rem;margin-bottom:2px}
+.vtut-card p{margin:0;font-size:.85rem;line-height:1.35;opacity:.92}
+
+/* ================= GAME-THEME-2026-11-22 =================
+   Shared Arcade theme layer: navy cabinet frame, pixel gradient
+   title, cyan accents, 3-tier chrome buttons, console-framed stage.
+   CSS only - no JS or gameplay changes. */
+:root{--ha-navy:#0a0620;--ha-pink:#ff3ec8;--ha-violet:#8b5cff;--ha-blue:#3b82f6;--ha-cyan:#38e1ff;--ha-gold:#ffb020;--ha-grad:linear-gradient(92deg,#ff3ec8 0%,#ff7ad9 22%,#8b5cff 52%,#3b82f6 82%,#38e1ff 100%);--ha-pixel:"Press Start 2P","Courier New",monospace}
+html{background:#0a0620}
+h1{font-family:var(--ha-pixel);font-size:clamp(15px,4.5vw,24px);line-height:1.7;letter-spacing:0;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(2px 2px 0 rgba(139,92,255,.45))}
+#btnStart,#startBtn,#playBtn,#btnPlay,#newBtn,#newGameBtn,#btnNew,#againBtn,#btnAgain,#btnPlayAgain,#fbSave,#btnSaveFeedback,#btnFbSave{background:linear-gradient(92deg,#ffb020 0%,#ffd43b 50%,#ffb020 100%);color:#140b33;border:3px solid #fff;border-radius:12px;font-family:var(--ha-pixel);font-size:11px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #b45309,0 0 18px rgba(255,176,32,.5);cursor:pointer}
+#btnRules,#rulesBtn,#btnFeedback,#feedbackBtn,#btnFeedbackFooter,#btnTutorial,#tutorialBtn,#howBtn,#btnHow,#ovHow,#btnPractice,#practiceBtn{background:var(--ha-grad);color:#fff;border:none;border-radius:10px;font-family:var(--ha-pixel);font-size:10px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #4c1d95,0 8px 20px rgba(255,62,200,.3);cursor:pointer}
+.vtut-card{border:2px solid rgba(139,92,255,.55);background:linear-gradient(180deg,#1e1247,#140b33);color:#e9e4ff;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+.vtut-num{background:var(--ha-grad)}
+a{color:var(--ha-cyan)}
+.modal:has(.vtut-grid),.sheet:has(.vtut-grid),.card:has(.vtut-grid),.box:has(.vtut-grid),.panel:has(.vtut-grid),.tut-card,.tutorial-backdrop{max-width:min(92vw,560px);max-height:88dvh;overflow-y:auto;box-sizing:border-box}
+.vtut-grid{grid-template-columns:1fr}
+@media (min-width:521px){.vtut-grid{grid-template-columns:1fr 1fr}}
+.modal:has(.vtut-grid) :is(h2,h3),.sheet:has(.vtut-grid) :is(h2,h3),.card:has(.vtut-grid) :is(h2,h3),.box:has(.vtut-grid) :is(h2,h3),.panel:has(.vtut-grid) :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;color:#fff;background:#0a0620;border:2px solid rgba(139,92,255,.65);border-radius:10px;padding:10px 12px;margin:0 0 12px}
+.modal:has(.vtut-grid) :is(h2,h3)::before,.sheet:has(.vtut-grid) :is(h2,h3)::before,.card:has(.vtut-grid) :is(h2,h3)::before,.box:has(.vtut-grid) :is(h2,h3)::before,.panel:has(.vtut-grid) :is(h2,h3)::before{content:"Vending Machine — ";background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tut-card .tut-head{background:#0a0620}
+.tut-card .tut-head :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+@keyframes haCoinBlink{50%{opacity:.25}}
+.insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
+@media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <div class="vend-dot" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><rect x="6" y="3" width="12" height="18" rx="2" fill="#140b33"/><rect x="9" y="6" width="6" height="4" rx="1" fill="#38e1ff"/><rect x="9" y="13" width="6" height="2" rx="1" fill="#ffd43b"/><rect x="9" y="17" width="6" height="2" rx="1" fill="#ff3ec8"/></svg></div>
+      <div><h1>Vending Machine</h1><p>Feed coins, pick your snack — and pray it doesn't get stuck.</p></div>
+    </div>
+  </div>
+  <nav class="nav" aria-label="Game sections" style="justify-content:flex-start;padding-bottom:12px">
+    <button type="button" data-view="game" aria-pressed="true">Play</button>
+    <button type="button" data-view="tutorial" aria-pressed="false">Tutorial</button>
+    <button type="button" data-view="rules" aria-pressed="false">Rules</button>
+    <button type="button" data-view="feedback" aria-pressed="false">Feedback</button>
+  </nav>
+
+  <!-- GAME VIEW -->
+  <section id="view-game">
+    <div class="scoreboard" aria-live="polite">
+      <div class="stat-cell"><div class="lab">Time</div><div class="val" id="clock">1:30</div></div>
+      <div class="stat-cell"><div class="lab">Score</div><div class="val" id="scoreNow">0</div></div>
+      <div class="stat-cell"><div class="lab">Coin purse</div><div class="val" id="purseNow">20</div></div>
+      <div class="stat-cell"><div class="lab">Best</div><div class="val" id="bestNow">0</div></div>
+    </div>
+    <p class="mid-status" id="status">Ready</p>
+
+    <div class="practice-bar" id="practiceBar" hidden>
+      <span class="tag">Practice</span>
+      <p>Practice — scores don&rsquo;t count. <span id="practiceHint">No timer pressure — learn the machine. Tip: feed a few coins first, then buy the cheap snacks fast for speed bonuses.</span></p>
+    </div>
+
+    <div class="machine-wrap">
+      <div class="machine" id="machine">
+        <div class="machine-head">
+          <span class="m-title">SNACK-O-MATIC 3000</span>
+          <div class="credit" aria-label="Inserted credit"><span class="lab">CREDIT</span><span class="val" id="creditNow">0</span></div>
+        </div>
+        <div class="snack-grid" id="snackGrid" role="grid" aria-label="Snack selection"></div>
+        <div class="machine-mid">
+          <div class="tray empty" id="tray" aria-live="polite">Pick-up tray — empty</div>
+          <div class="coin-slot">
+            <button type="button" class="slot-btn" id="btnCoin" aria-label="Insert a coin">&#9679; INSERT COIN</button>
+            <button type="button" class="shake-btn" id="btnShake" disabled aria-label="Shake the machine">SHAKE (S)</button>
+          </div>
+        </div>
+        <div class="purse-row"><span>Coin purse: <b id="purseRow">20</b> coins</span><span>Sales: <b id="salesNow">0</b> &middot; Stuck lost: <b id="lostNow">0</b></span></div>
+        <div class="timer-row" aria-label="Round timer">
+          <span class="lab">Time</span>
+          <div class="timer-track"><div class="timer-fill" id="timerFill"></div></div>
+          <span class="timer-pct" id="timerPct">1:30</span>
+        </div>
+      </div>
+      <div class="overlay show" id="overlay">
+        <div>
+          <h2 id="ovTitle">Hungry?</h2>
+          <p id="ovText">Feed coins, pick a snack, and pray it doesn't get stuck on the coil. 90 seconds — sell as much as you can!</p>
+          <div class="end-stats" id="ovStats" hidden></div>
+          <button type="button" class="btn primary" id="ovBtn">Start round</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button type="button" class="btn primary" id="btnPlay">Start</button>
+      <button type="button" class="btn" id="btnPause" disabled>Pause</button>
+      <button type="button" class="btn" id="btnPractice" aria-pressed="false">Practice round</button>
+      <button type="button" class="btn danger" id="btnReset">Reset round</button>
+    </div>
+
+    <div class="diff-row">
+      <span class="lab" id="diffLab">Difficulty — stuck chance &amp; shakes</span>
+      <div class="seg" role="group" aria-labelledby="diffLab">
+        <button type="button" data-diff="easy" aria-pressed="false">Easy</button>
+        <button type="button" data-diff="normal" aria-pressed="true">Normal</button>
+        <button type="button" data-diff="hard" aria-pressed="false">Hard</button>
+      </div>
+      <p class="diff-note" id="diffNote"></p>
+      <div class="sound-row"><span>Sound effects</span><button type="button" class="btn" id="btnSound" aria-pressed="true" style="min-height:40px;padding:4px 14px">On</button></div>
+    </div>
+
+    <div class="bests">
+      <h2>Your bests</h2>
+      <div class="bests-grid">
+        <div class="stat"><b id="bRounds">0</b><span>Rounds</span></div>
+        <div class="stat"><b id="bScore">0</b><span>Best score</span></div>
+        <div class="stat"><b id="bSales">0</b><span>Best sales</span></div>
+        <div class="stat"><b id="bStuck">0</b><span>Snacks freed</span></div>
+      </div>
+      <p class="hint">Saved on this device. Finish a round to set a best score.</p>
+    </div>
+
+    <p class="hint"><kbd>Space</kbd> insert coin &middot; <kbd>1</kbd>–<kbd>9</kbd> or arrows + <kbd>Enter</kbd> pick a snack &middot; <kbd>S</kbd> shake a stuck snack &middot; <kbd>P</kbd> pause. Controller: D-pad moves, A picks, Start pauses.</p>
+  </section>
+
+  <!-- TUTORIAL VIEW -->
+  <section id="view-tutorial" hidden>
+    <div class="panel">
+      <h2>How to play — 30-second tutorial</h2>
+      <p>No walkthrough is forced on you — this page is here whenever you want it.</p>
+      <div class="vtut-grid">
+        <div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3"><circle cx="24" cy="24" r="14"/><circle cx="24" cy="24" r="6" fill="#fbbf24" stroke="none"/><path d="M24 6v4M24 38v4M6 24h4M38 24h4"/></svg></div><b>Insert a coin</b><p>Tap INSERT COIN or press Space. Coins move from your purse to credit.</p></div>
+        <div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#38e1ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="10" y="8" width="28" height="32" rx="4"/><path d="M18 18h12M18 26h12"/></svg></div><b>Pick a snack</b><p>Tap a snack, or press 1–9, or use the arrows and Enter.</p></div>
+        <div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M24 8v30M14 28l10 10 10-10"/></svg></div><b>It drops!</b><p>The snack lands in the tray. Each sale adds points to your score.</p></div>
+        <div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#f87171" stroke-width="3" stroke-linecap="round"><path d="M10 14h28M14 14l-2 22a4 4 0 0 0 4 4h16a4 4 0 0 0 4-4l-2-22"/><path d="M20 22v10M28 22v10"/></svg></div><b>Stuck!</b><p>Sometimes a snack jams on the coil. Don't panic — shake it loose.</p></div>
+        <div class="vtut-card"><span class="vtut-num">5</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#a78bfa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 24h24M12 24l6-6M12 24l6 6M36 24l-6-6M36 24l-6 6"/></svg></div><b>Shake it</b><p>Press S or tap SHAKE. You only get a few shakes per stuck snack.</p></div>
+        <div class="vtut-card"><span class="vtut-num">6</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="24" r="16"/><path d="M24 14v10l7 4"/></svg></div><b>Beat the clock</b><p>90 seconds (75 on Hard). Fast back-to-back sales earn speed bonuses.</p></div>
+      </div>
+      <h3>Picking a difficulty</h3>
+      <p><strong>Easy</strong> is kind — snacks rarely stick (1-in-6) and you get 4 shakes. <strong>Normal</strong> is the classic machine: 1-in-4 stuck, 3 shakes. <strong>Hard</strong> is a rusty old machine: 1-in-3 stuck, only 2 shakes, and a shorter 75-second round.</p>
+      <div class="backrow"><button type="button" class="btn primary" data-goto="game">Got it — play</button><button type="button" class="btn" data-goto="rules">Read the rules</button></div>
+    </div>
+  </section>
+
+  <!-- RULES VIEW -->
+  <section id="view-rules" hidden>
+    <div class="panel">
+      <h2>Rules</h2>
+      <h3>The round</h3>
+      <ul>
+        <li>One <strong>90-second</strong> round (75 seconds on Hard). Sell as many snacks as you can before time runs out.</li>
+        <li>You start each round with <strong>20 coins</strong> in your purse.</li>
+      </ul>
+      <h3>Buying snacks</h3>
+      <ul>
+        <li><strong>Space</strong> or the <strong>INSERT COIN</strong> button moves one coin from your purse into credit.</li>
+        <li>Tap a snack, press <strong>1–9</strong>, or move with the <strong>arrow keys</strong> and press <strong>Enter</strong> to buy it.</li>
+        <li>Each snack costs <strong>1–3 coins</strong>. If you can't afford it, nothing dispenses — no penalty, just feed more coins.</li>
+        <li>A sold snack drops into the tray. The machine restocks itself, so every snack is always available.</li>
+      </ul>
+      <h3>Stuck snacks</h3>
+      <ul>
+        <li>Sometimes a snack jams on the coil instead of dropping. <strong>Easy: 1-in-6, Normal: 1-in-4, Hard: 1-in-3.</strong></li>
+        <li>Press <strong>S</strong> or tap <strong>SHAKE</strong> to shake the machine. Each shake has a chance to free it. <strong>Easy: 4 shakes, Normal: 3, Hard: 2</strong> per stuck snack.</li>
+        <li>Free it and the sale counts. Run out of shakes and the snack is lost — no points, but your coins are refunded.</li>
+        <li>While a snack is stuck you can't buy another one. Shake first!</li>
+      </ul>
+      <h3>Score</h3>
+      <ul>
+        <li>Each sale scores <strong>price &times; 10</strong> points (a 3-coin snack is worth 30).</li>
+        <li><strong>Speed bonus:</strong> sell another snack within 4 seconds of the last sale and earn <strong>+5</strong>.</li>
+        <li>When time runs out, the round ends — score is sales plus speed bonuses only.</li>
+        <li>Your best score, best sales in a round, and total snacks freed are saved on this device.</li>
+      </ul>
+      <h3>Difficulty</h3>
+      <ul>
+        <li><strong>Easy:</strong> 90 seconds, stuck 1-in-6, 4 shakes.</li>
+        <li><strong>Normal:</strong> 90 seconds, stuck 1-in-4, 3 shakes.</li>
+        <li><strong>Hard:</strong> 75 seconds, stuck 1-in-3, 2 shakes.</li>
+        <li>You can change difficulty between rounds — it takes effect on the next round. Your choice is remembered for next time.</li>
+      </ul>
+      <h3>Practice round</h3>
+      <ul>
+        <li>Tap <strong>Practice round</strong> to switch to a practice session at any time.</li>
+        <li>No timer, no score is kept — just feed coins and learn the machine.</li>
+        <li>Practice never saves anything. Tap the button again to return to a timed round.</li>
+      </ul>
+      <div class="backrow"><button type="button" class="btn primary" data-goto="game">Back to the game</button></div>
+    </div>
+  </section>
+
+  <!-- FEEDBACK VIEW -->
+  <section id="view-feedback" hidden>
+    <div class="panel">
+      <h2>Feedback</h2>
+      <p>How's the game feel? Your rating and comment are saved on this device only.</p>
+      <span class="lab" style="font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)">Your rating</span>
+      <div class="stars" id="stars" role="radiogroup" aria-label="Star rating">
+        <button type="button" data-star="1" aria-label="1 star">&#9733;</button>
+        <button type="button" data-star="2" aria-label="2 stars">&#9733;</button>
+        <button type="button" data-star="3" aria-label="3 stars">&#9733;</button>
+        <button type="button" data-star="4" aria-label="4 stars">&#9733;</button>
+        <button type="button" data-star="5" aria-label="5 stars">&#9733;</button>
+      </div>
+      <label for="fbText" style="font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)">Comment</label>
+      <textarea id="fbText" placeholder="What worked? What was too hard, too easy, or glitchy?" style="margin-top:6px"></textarea>
+      <p style="font-size:13px;color:var(--muted);margin:10px 0 0">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+      <div class="backrow">
+        <button type="button" class="btn primary" id="btnFbSave">Save feedback</button>
+        <button type="button" class="btn" data-goto="game">Back to the game</button>
+      </div>
+      <p class="saved-note" id="fbNote" aria-live="polite"></p>
+      <div class="prev" id="fbPrev"></div>
+    </div>
+  </section>
+
+  <footer>More games at Holo's Arcade</footer>
+</div>
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id);};
+
+/* ---------- Views ---------- */
+var views={game:$("view-game"),tutorial:$("view-tutorial"),rules:$("view-rules"),feedback:$("view-feedback")};
+function showView(name){
+  Object.keys(views).forEach(function(k){views[k].hidden=(k!==name);});
+  document.querySelectorAll("[data-view]").forEach(function(b){b.setAttribute("aria-pressed", b.getAttribute("data-view")===name?"true":"false");});
+  if(name!=="game" && STATE.game==="playing"){pauseGame();}
+  window.scrollTo({top:0});
+}
+document.querySelectorAll("[data-view]").forEach(function(b){b.addEventListener("click",function(){showView(b.getAttribute("data-view"));});});
+document.querySelectorAll("[data-goto]").forEach(function(b){b.addEventListener("click",function(){showView(b.getAttribute("data-goto"));});});
+
+/* ---------- Storage ---------- */
+function load(key,fallback){try{var v=localStorage.getItem(key);return v?JSON.parse(v):fallback;}catch(e){return fallback;}}
+function save(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
+
+/* ---------- Difficulty ---------- */
+var DIFFS={
+  easy:{label:"Easy",stuckDenom:6,maxShakes:4,roundLen:90,note:"Easy — snacks rarely stick (1-in-6), 4 shakes each, 90-second round."},
+  normal:{label:"Normal",stuckDenom:4,maxShakes:3,roundLen:90,note:"Normal — stuck 1-in-4, 3 shakes each, 90-second round."},
+  hard:{label:"Hard",stuckDenom:3,maxShakes:2,roundLen:75,note:"Hard — rusty machine: stuck 1-in-3, only 2 shakes, 75-second round."}
+};
+var difficulty=load("vendingMachine_difficulty","normal");
+if(!DIFFS[difficulty])difficulty="normal";
+function applyDiff(){
+  document.querySelectorAll("[data-diff]").forEach(function(b){b.setAttribute("aria-pressed",b.getAttribute("data-diff")===difficulty?"true":"false");});
+  $("diffNote").textContent=DIFFS[difficulty].note;
+  save("vendingMachine_difficulty",difficulty);
+  STATE.difficulty=difficulty;
+  syncState();
+}
+document.querySelectorAll("[data-diff]").forEach(function(b){b.addEventListener("click",function(){difficulty=b.getAttribute("data-diff");applyDiff();beep(660,.05,"sine",.04);});});
+
+/* ---------- Snacks ---------- */
+var SNACKS=[
+  {name:"Chips",price:1,svg:'<svg viewBox="0 0 48 48"><rect x="12" y="10" width="24" height="30" rx="4" fill="#e11d48"/><rect x="12" y="10" width="24" height="9" rx="4" fill="#fbbf24"/><text x="24" y="33" text-anchor="middle" font-size="9" font-weight="900" fill="#fff" font-family="sans-serif">CHIPS</text></svg>'},
+  {name:"Chocolate",price:2,svg:'<svg viewBox="0 0 48 48"><rect x="10" y="10" width="28" height="28" rx="4" fill="#7c2d12"/><rect x="15" y="15" width="7" height="7" rx="1" fill="#b45309"/><rect x="26" y="15" width="7" height="7" rx="1" fill="#b45309"/><rect x="15" y="26" width="7" height="7" rx="1" fill="#b45309"/><rect x="26" y="26" width="7" height="7" rx="1" fill="#b45309"/></svg>'},
+  {name:"Cookies",price:2,svg:'<svg viewBox="0 0 48 48"><circle cx="18" cy="22" r="11" fill="#d97706"/><circle cx="32" cy="28" r="11" fill="#b45309"/><circle cx="15" cy="20" r="1.6" fill="#451a03"/><circle cx="21" cy="25" r="1.6" fill="#451a03"/><circle cx="30" cy="25" r="1.6" fill="#451a03"/><circle cx="35" cy="31" r="1.6" fill="#451a03"/></svg>'},
+  {name:"Juice Box",price:2,svg:'<svg viewBox="0 0 48 48"><rect x="13" y="12" width="22" height="28" rx="3" fill="#f97316"/><rect x="13" y="12" width="22" height="8" rx="3" fill="#fb923c"/><rect x="30" y="6" width="4" height="10" rx="2" fill="#38e1ff" transform="rotate(20 32 11)"/><text x="24" y="34" text-anchor="middle" font-size="9" font-weight="900" fill="#fff" font-family="sans-serif">JUICE</text></svg>'},
+  {name:"Candy Bar",price:1,svg:'<svg viewBox="0 0 48 48"><rect x="10" y="17" width="28" height="14" rx="4" fill="#db2777"/><path d="M10 20l-5-4v16l5-4zM38 20l5-4v16l-5-4z" fill="#f9a8d4"/><rect x="18" y="21" width="12" height="6" rx="3" fill="#fff"/></svg>'},
+  {name:"Popcorn",price:2,svg:'<svg viewBox="0 0 48 48"><path d="M14 18h20l-3 22H17z" fill="#dc2626"/><path d="M20 18l-1 22M28 18l1 22" stroke="#fff" stroke-width="3"/><circle cx="18" cy="13" r="5" fill="#fef3c7"/><circle cx="26" cy="10" r="5" fill="#fef3c7"/><circle cx="33" cy="14" r="5" fill="#fef3c7"/></svg>'},
+  {name:"Pretzel",price:1,svg:'<svg viewBox="0 0 48 48"><path d="M24 14c-8 0-12 6-10 12 1.5 5 6 8 10 8s8.5-3 10-8c2-6-2-12-10-12zm0 6c3 0 5 2.5 4.5 5-.4 2-2 3.5-4.5 3.5s-4.1-1.5-4.5-3.5c-.5-2.5 1.5-5 4.5-5z" fill="none" stroke="#b45309" stroke-width="4" stroke-linecap="round"/><circle cx="18" cy="18" r="1.4" fill="#fff"/><circle cx="30" cy="18" r="1.4" fill="#fff"/></svg>'},
+  {name:"Soda Can",price:3,svg:'<svg viewBox="0 0 48 48"><rect x="15" y="10" width="18" height="30" rx="4" fill="#2563eb"/><rect x="15" y="10" width="18" height="8" rx="4" fill="#60a5fa"/><text x="24" y="32" text-anchor="middle" font-size="10" font-weight="900" fill="#fff" font-family="sans-serif">POP</text></svg>'},
+  {name:"Gummy Bears",price:3,svg:'<svg viewBox="0 0 48 48"><circle cx="17" cy="16" r="5" fill="#22c55e"/><ellipse cx="17" cy="28" rx="8" ry="10" fill="#22c55e"/><circle cx="31" cy="16" r="5" fill="#a855f7"/><ellipse cx="31" cy="28" rx="8" ry="10" fill="#a855f7"/><circle cx="15" cy="15" r="1.3" fill="#052e16"/><circle cx="19" cy="15" r="1.3" fill="#052e16"/><circle cx="29" cy="15" r="1.3" fill="#3b0764"/><circle cx="33" cy="15" r="1.3" fill="#3b0764"/></svg>'}
+];
+
+/* ---------- SERVER-READY-2026-11-23 state ----------
+   Single source of truth. No networking here — this object is
+   only read locally / by the hub. PLAYERS is the slot model
+   (solo game: one slot). */
+var PLAYERS=[{id:"p1",slot:0}];
+var STATE={
+  game:"idle",            // idle | playing | paused | finished
+  score:0,
+  best:0,
+  time:90,                // seconds left
+  result:null,
+  difficulty:difficulty,
+  practice:false,
+  startedAt:null,
+  endedAt:null
+};
+var purse=20, credit=0, sales=0, lostStuck=0, freedStuck=0;
+var selected=0, stuck=null; // stuck: {index, shakesLeft} or null
+var lastSaleAt=null;        // round elapsed seconds of last sale
+var elapsed=0, lastTs=null;
+var forceStuckNext=false, forceFreeNext=false;
+var practice=false;
+
+function syncState(){
+  // SERVER-READY-2026-11-23: clean JSON game state for the future server.
+  window.__holoGameState={
+    slug:"vending-machine",
+    score:STATE.score,
+    best:STATE.best,
+    time:Math.ceil(STATE.time),
+    sales:sales,
+    purse:purse,
+    credit:credit,
+    stuck:stuck?{snack:stuck.index,shakesLeft:stuck.shakesLeft}:null,
+    difficulty:STATE.difficulty,
+    mode:STATE.practice?"practice":"round",
+    state:STATE.game,
+    players:PLAYERS
+  };
+}
+
+/* ---------- Bests ---------- */
+var bests=load("vendingMachine_bests",{rounds:0,bestScore:0,bestSales:0,freed:0});
+STATE.best=bests.bestScore||0;
+function renderBests(){
+  $("bRounds").textContent=bests.rounds;
+  $("bScore").textContent=bests.bestScore;
+  $("bSales").textContent=bests.bestSales;
+  $("bStuck").textContent=bests.freed;
+  $("bestNow").textContent=bests.bestScore;
+}
+function fmtClock(s){s=Math.max(0,Math.ceil(s));var m=Math.floor(s/60);var sec=s%60;return m+":"+(sec<10?"0":"")+sec;}
+
+/* ---------- Audio ---------- */
+var audioCtx=null, soundOn=load("vendingMachine_sound",true);
+function beep(freq,dur,type,vol){
+  if(!soundOn)return;
+  try{
+    if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==="suspended")audioCtx.resume();
+    var o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=type||"square";o.frequency.value=freq;
+    g.gain.setValueAtTime(vol||.05,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+(dur||.07));
+    o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+(dur||.07));
+  }catch(e){}
+}
+function coinSound(){beep(1320,.06,"sine",.05);setTimeout(function(){beep(1760,.08,"sine",.04);},60);}
+function clunkSound(){beep(180,.15,"sawtooth",.06);setTimeout(function(){beep(120,.18,"sawtooth",.05);},90);}
+$("btnSound").textContent=soundOn?"On":"Off";
+$("btnSound").setAttribute("aria-pressed",soundOn?"true":"false");
+$("btnSound").addEventListener("click",function(){soundOn=!soundOn;save("vendingMachine_sound",soundOn);this.textContent=soundOn?"On":"Off";this.setAttribute("aria-pressed",soundOn?"true":"false");if(soundOn)beep(660,.06,"sine",.05);});
+
+/* ---------- Score funnel ---------- */
+function commitScore(points,reason){
+  if(typeof points!=="number"||!isFinite(points))return;
+  STATE.score+=points;
+  if(STATE.score<0)STATE.score=0;
+  updateHUD();syncState();
+}
+
+/* ---------- Snack grid ---------- */
+var grid=$("snackGrid");
+SNACKS.forEach(function(s,i){
+  var d=document.createElement("button");
+  d.type="button";
+  d.className="snack";
+  d.setAttribute("role","gridcell");
+  d.setAttribute("data-snack",i);
+  d.setAttribute("aria-label",s.name+", "+s.price+" coin"+(s.price>1?"s":""));
+  d.innerHTML='<span class="key">'+(i+1)+'</span><span class="pic">'+s.svg+'</span><span class="nm">'+s.name+'</span><span class="pr">'+s.price+' coin'+(s.price>1?"s":"")+'</span>';
+  d.addEventListener("click",function(){selectSnack(i);buySnack(i);});
+  grid.appendChild(d);
+});
+function paintGrid(){
+  var tiles=grid.children;
+  for(var i=0;i<tiles.length;i++){
+    tiles[i].classList.toggle("selected",i===selected);
+    tiles[i].classList.toggle("stuck",!!(stuck&&stuck.index===i));
+    var tag=tiles[i].querySelector(".stuck-tag");
+    if(stuck&&stuck.index===i){
+      if(!tag){tag=document.createElement("span");tag.className="stuck-tag";tag.textContent="STUCK!";tiles[i].appendChild(tag);}
+    }else if(tag){tag.parentNode.removeChild(tag);}
+  }
+  $("btnShake").disabled=!(stuck&&STATE.game==="playing");
+}
+function selectSnack(i){
+  selected=((i%9)+9)%9;
+  paintGrid();
+}
+function setTray(html,empty){
+  var t=$("tray");
+  t.innerHTML=html;
+  t.classList.toggle("empty",!!empty);
+}
+function setStatus(t,warn){var s=$("status");s.textContent=t;s.classList.toggle("warn",!!warn);}
+
+/* ---------- HUD ---------- */
+function updateHUD(){
+  $("clock").textContent=fmtClock(STATE.time);
+  $("scoreNow").textContent=STATE.score;
+  $("purseNow").textContent=purse;
+  $("purseRow").textContent=purse;
+  $("creditNow").textContent=credit;
+  $("salesNow").textContent=sales;
+  $("lostNow").textContent=lostStuck;
+  var total=DIFFS[difficulty].roundLen;
+  var frac=practice?1:Math.max(0,STATE.time/total);
+  $("timerFill").style.width=Math.round(frac*100)+"%";
+  $("timerFill").classList.toggle("low",!practice&&STATE.time<=10);
+  $("timerPct").textContent=practice?"—":fmtClock(STATE.time);
+  $("btnCoin").disabled=!(STATE.game==="playing"&&purse>0);
+  paintGrid();
+}
+
+/* ---------- Core actions ---------- */
+function insertCoin(){
+  if(STATE.game!=="playing")return false;
+  if(purse<=0){setStatus("Purse is empty — sell what you can!",true);beep(180,.12,"sawtooth",.05);return false;}
+  if(credit>=9){setStatus("Credit is full — buy a snack first!",true);return false;}
+  purse--;credit++;
+  coinSound();
+  try{if(window.holoBuzz)window.holoBuzz(15);}catch(e){}
+  setStatus("Coin in! Credit: "+credit+". Pick a snack.");
+  updateHUD();syncState();
+  return true;
+}
+function buySnack(i){
+  if(STATE.game!=="playing")return;
+  selectSnack(i);
+  if(stuck){setStatus("A snack is stuck! Shake the machine first (S).",true);beep(220,.12,"sawtooth",.05);return;}
+  var s=SNACKS[i];
+  if(credit<s.price){
+    setStatus("Not enough credit — "+s.name+" costs "+s.price+" coin"+(s.price>1?"s":"")+". Insert more!",true);
+    beep(180,.1,"sawtooth",.05);
+    return;
+  }
+  credit-=s.price;
+  var willStick=forceStuckNext||(Math.floor(Math.random()*DIFFS[difficulty].stuckDenom)===0);
+  forceStuckNext=false;
+  if(willStick){
+    stuck={index:i,shakesLeft:DIFFS[difficulty].maxShakes,price:s.price};
+    setStatus(s.name+" is STUCK on the coil! Shake it loose — "+stuck.shakesLeft+" shakes left.",true);
+    beep(140,.2,"sawtooth",.07);
+    try{if(window.holoBuzz)window.holoBuzz(60);}catch(e){}
+    updateHUD();syncState();
+    return;
+  }
+  completeSale(i,s.price,false);
+}
+function completeSale(i,price,wasStuck){
+  var s=SNACKS[i];
+  sales++;
+  var pts=price*10;
+  var bonus=0;
+  if(lastSaleAt!==null&&(elapsed-lastSaleAt)<=4){bonus=5;}
+  lastSaleAt=elapsed;
+  if(wasStuck)freedStuck++;
+  commitScore(pts+bonus,wasStuck?"freed-sale":"sale");
+  setTray('<span class="tray-pic">'+s.svg+'</span><span>'+s.name+' — enjoy!</span>',false);
+  clunkSound();
+  setStatus(s.name+" sold! +"+pts+" pts"+(bonus?" (+5 speed bonus!)":"")+(wasStuck?" — freed from the coil!":""));
+  try{if(window.holoBuzz)window.holoBuzz(25);}catch(e){}
+  updateHUD();syncState();
+}
+function shakeMachine(){
+  if(STATE.game!=="playing"||!stuck)return false;
+  var m=$("machine");
+  m.classList.remove("shaking");
+  void m.offsetWidth; // restart animation
+  m.classList.add("shaking");
+  beep(300,.08,"square",.05);
+  stuck.shakesLeft--;
+  var freed=forceFreeNext||(Math.random()<0.6);
+  forceFreeNext=false;
+  if(freed){
+    var idx=stuck.index,price=stuck.price;
+    stuck=null;
+    completeSale(idx,price,true);
+    return true;
+  }
+  if(stuck.shakesLeft<=0){
+    var s=SNACKS[stuck.index];
+    credit+=stuck.price; // refund: lost sale, coins back
+    lostStuck++;
+    setStatus(s.name+" wouldn't budge — lost sale! Coins refunded.",true);
+    beep(140,.25,"sawtooth",.06);
+    stuck=null;
+    updateHUD();syncState();
+    return false;
+  }
+  setStatus("Still stuck! "+stuck.shakesLeft+" shake"+(stuck.shakesLeft>1?"s":"")+" left — shake again!",true);
+  updateHUD();syncState();
+  return false;
+}
+
+/* ---------- Round flow ---------- */
+function resetRound(){
+  purse=20;credit=0;sales=0;lostStuck=0;freedStuck=0;
+  selected=0;stuck=null;lastSaleAt=null;elapsed=0;
+  STATE.score=0;STATE.result=null;
+  STATE.time=DIFFS[difficulty].roundLen;
+  STATE.startedAt=null;STATE.endedAt=null;
+  setTray("Pick-up tray — empty",true);
+  setStatus(practice?"Practice — ready":"Ready");
+  updateHUD();syncState();
+}
+function showOverlay(title,text,btn,statsHtml){
+  $("ovTitle").textContent=title;$("ovText").textContent=text;$("ovBtn").textContent=btn;
+  var st=$("ovStats");
+  if(statsHtml){st.innerHTML=statsHtml;st.hidden=false;}else{st.innerHTML="";st.hidden=true;}
+  $("overlay").classList.add("show");
+}
+function hideOverlay(){$("overlay").classList.remove("show");}
+function startGame(){
+  if(STATE.game==="finished"||STATE.game==="idle")resetRound();
+  STATE.game="playing";
+  STATE.startedAt=new Date().toISOString();
+  hideOverlay();
+  setStatus(practice?"Practice — sell away!":"Selling! Feed coins, pick snacks.");
+  $("btnPlay").textContent="Selling…";$("btnPlay").disabled=true;
+  $("btnPause").disabled=false;$("btnPause").textContent="Pause";
+  lastTs=null;
+  if(window.requestAnimationFrame)requestAnimationFrame(loop);
+  else setTimeout(function(){loop(performance.now());},16);
+  beep(520,.07,"sine",.05);
+  setTimeout(function(){beep(880,.09,"sine",.05);},120);
+  updateHUD();syncState();
+}
+function pauseGame(){
+  if(STATE.game!=="playing")return;
+  STATE.game="paused";setStatus("Paused");
+  showOverlay("Paused","Take a breather — the machine waits right where you left it.","Resume");
+  $("btnPlay").disabled=false;$("btnPlay").textContent="Resume";$("btnPause").disabled=true;
+}
+function resumeGame(){
+  if(STATE.game!=="paused")return;
+  STATE.game="playing";hideOverlay();setStatus(practice?"Practice — sell away!":"Selling!");
+  $("btnPlay").disabled=true;$("btnPlay").textContent="Selling…";$("btnPause").disabled=false;
+  lastTs=null;
+  if(window.requestAnimationFrame)requestAnimationFrame(loop);
+  else setTimeout(function(){loop(performance.now());},16);
+}
+function publishResult(){
+  // SERVER-READY-2026-11-23: one funnel on round finish. No networking.
+  STATE.result={
+    slug:"vending-machine",
+    score:STATE.score,
+    sales:sales,
+    lostStuck:lostStuck,
+    freedStuck:freedStuck,
+    difficulty:STATE.difficulty,
+    practice:STATE.practice,
+    startedAt:STATE.startedAt,
+    endedAt:STATE.endedAt
+  };
+  syncState();
+  return STATE.result;
+}
+function finishRound(){
+  STATE.game="finished";
+  STATE.endedAt=new Date().toISOString();
+  STATE.time=0;
+  if(!practice){
+    bests.rounds++;
+    if(STATE.score>bests.bestScore)bests.bestScore=STATE.score;
+    if(sales>bests.bestSales)bests.bestSales=sales;
+    bests.freed+=freedStuck;
+    save("vendingMachine_bests",bests);
+    STATE.best=bests.bestScore;
+  }
+  renderBests();
+  var result=publishResult();
+  setStatus("Round over!");
+  showOverlay("Time's up!",
+    "You sold "+sales+" snack"+(sales===1?"":"s")+" for "+STATE.score+" points"+(lostStuck?" — "+lostStuck+" stuck snack"+(lostStuck===1?"":"s")+" lost.":" — nothing got stuck for good!"),
+    "Play again",
+    '<div>Score<b>'+STATE.score+'</b></div><div>Best<b>'+bests.bestScore+'</b></div><div>Sales<b>'+sales+'</b></div><div>Freed<b>'+freedStuck+'</b></div>');
+  $("btnPlay").disabled=false;$("btnPlay").textContent="Play again";$("btnPause").disabled=true;
+  beep(880,.2,"sine",.06);setTimeout(function(){beep(1174,.25,"sine",.06);},180);
+  updateHUD();syncState();
+}
+function step(dt){
+  if(STATE.game!=="playing")return;
+  if(practice)return; // practice: no timer
+  elapsed+=dt;
+  STATE.time-=dt;
+  if(STATE.time<=0){STATE.time=0;updateHUD();syncState();finishRound();return;}
+  updateHUD();syncState();
+}
+function loop(ts){
+  if(STATE.game!=="playing")return;
+  if(!lastTs)lastTs=ts;
+  var dt=Math.min(0.05,(ts-lastTs)/1000);lastTs=ts;
+  step(dt);
+  if(STATE.game==="playing"){
+    if(window.requestAnimationFrame)requestAnimationFrame(loop);
+    else setTimeout(function(){loop(performance.now());},16);
+  }
+}
+
+$("btnPlay").addEventListener("click",function(){if(STATE.game==="paused")resumeGame();else startGame();});
+$("ovBtn").addEventListener("click",function(){if(STATE.game==="paused")resumeGame();else startGame();});
+$("btnPause").addEventListener("click",pauseGame);
+$("btnCoin").addEventListener("click",insertCoin);
+$("btnShake").addEventListener("click",shakeMachine);
+$("btnReset").addEventListener("click",function(){
+  STATE.game="idle";resetRound();
+  if(practice){
+    showOverlay("Practice round","No timer, no score kept — just feed coins and learn the machine.","Start practice");
+    setStatus("Practice — ready");
+  }else{
+    showOverlay("Hungry?","Feed coins, pick a snack, and pray it doesn't get stuck on the coil. "+DIFFS[difficulty].roundLen+" seconds — sell as much as you can!","Start round");
+    setStatus("Ready");
+  }
+  $("btnPlay").disabled=false;$("btnPlay").textContent="Start";$("btnPause").disabled=true;
+});
+
+/* ---------- Practice ---------- */
+var HINTS=[
+  "No timer pressure — learn the machine. Tip: feed a few coins first, then buy the cheap snacks fast for speed bonuses.",
+  "Tip: 1-coin snacks are the fastest way to rack up speed bonuses.",
+  "Tip: keep credit topped up so a stuck snack never leaves you waiting.",
+  "Tip: shaking early is better — don't let a stuck snack eat your round.",
+  "Tip: 3-coin snacks are worth 30 points each. Worth the wait when the clock is kind."
+];
+var hintIdx=0;
+function nextHint(){$("practiceHint").textContent=HINTS[hintIdx%HINTS.length];hintIdx++;}
+function applyPractice(){
+  STATE.practice=practice;
+  var b=$("btnPractice");
+  b.setAttribute("aria-pressed",practice?"true":"false");
+  b.classList.toggle("practice-on",practice);
+  b.textContent=practice?"Practice: On":"Practice round";
+  $("practiceBar").hidden=!practice;
+  if(practice){
+    hintIdx=0;nextHint();
+    setStatus("Practice — ready");
+  }else{
+    setStatus(STATE.game==="playing"?"Selling!":"Ready");
+  }
+  updateHUD();syncState();
+}
+$("btnPractice").addEventListener("click",function(){
+  practice=!practice;
+  if(STATE.game==="finished"){STATE.game="idle";}
+  applyPractice();beep(practice?720:520,.06,"sine",.05);
+});
+
+/* ---------- Input: keyboard ---------- */
+function normCode(e){
+  if(e.code)return e.code;
+  var k=e.key||"";
+  var map={"ArrowUp":"ArrowUp","ArrowDown":"ArrowDown","ArrowLeft":"ArrowLeft","ArrowRight":"ArrowRight"," ":"Space","Enter":"Enter","p":"KeyP","P":"KeyP","s":"KeyS","S":"KeyS","w":"KeyW","a":"KeyA","d":"KeyD","W":"KeyW","A":"KeyA","D":"KeyD"};
+  return map[k]||k;
+}
+window.addEventListener("keydown",function(e){
+  var c=normCode(e);
+  if(c==="KeyP"){if(STATE.game==="playing")pauseGame();else if(STATE.game==="paused")resumeGame();return;}
+  if(STATE.game!=="playing")return;
+  if(c==="Space"){e.preventDefault();insertCoin();return;}
+  if(c==="KeyS"){e.preventDefault();shakeMachine();return;}
+  if(c==="Enter"){e.preventDefault();buySnack(selected);return;}
+  if(c==="ArrowLeft"){e.preventDefault();selectSnack(selected-1);return;}
+  if(c==="ArrowRight"){e.preventDefault();selectSnack(selected+1);return;}
+  if(c==="ArrowUp"){e.preventDefault();selectSnack(selected-3);return;}
+  if(c==="ArrowDown"){e.preventDefault();selectSnack(selected+3);return;}
+  if(/^Digit[1-9]$/.test(c)){e.preventDefault();buySnack(+c.slice(5)-1);return;}
+  if(e.key&&/^[1-9]$/.test(e.key)){buySnack(+e.key-1);}
+});
+
+/* ---------- Feedback ---------- */
+var fb=load("vendingMachine_feedback",null),rating=fb?fb.rating:0;
+function paintStars(){document.querySelectorAll("[data-star]").forEach(function(b){b.classList.toggle("on",+b.getAttribute("data-star")<=rating);});}
+document.querySelectorAll("[data-star]").forEach(function(b){b.addEventListener("click",function(){rating=+b.getAttribute("data-star");paintStars();$("fbNote").textContent="";});});
+if(fb){$("fbText").value=fb.comment||"";renderPrev();}
+function renderPrev(){
+  if(!fb)return;
+  $("fbPrev").innerHTML="<strong>Saved feedback:</strong> "+"★".repeat(fb.rating)+"☆".repeat(5-fb.rating)+"<br>"+(fb.comment?fb.comment.replace(/</g,"&lt;"):"<em>No comment</em>")+"<br><span style='color:var(--muted)'>"+fb.date+"</span>";
+}
+$("btnFbSave").addEventListener("click",function(){
+  if(!rating){$("fbNote").textContent="Please tap a star rating first.";return;}
+  fb={rating:rating,comment:$("fbText").value.trim(),date:new Date().toLocaleDateString()};
+  save("vendingMachine_feedback",fb);renderPrev();
+  try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "vending-machine", rating: fb.rating||0, text: fb.comment||"", tag: "", mode: practice?"practice":"real", level: "", difficulty: difficulty, score: STATE.score, device: (navigator.userAgent||"").slice(0,120), playTime: Math.round(elapsed), timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+  $("fbNote").textContent="Thanks! Feedback saved on this device.";
+  beep(760,.08,"sine",.05);
+});
+
+/* ---------- Test / debug handle (no networking, local only) ---------- */
+window.__vendingMachine={
+  start:startGame,pause:pauseGame,resume:resumeGame,
+  step:function(dt){step(dt);},
+  insertCoin:insertCoin,buy:buySnack,shake:shakeMachine,
+  forceStuck:function(){forceStuckNext=true;},
+  forceFree:function(){forceFreeNext=true;},
+  state:function(){return {state:STATE.game,practice:practice,score:STATE.score,best:STATE.best,time:+STATE.time.toFixed(2),purse:purse,credit:credit,sales:sales,lostStuck:lostStuck,freedStuck:freedStuck,selected:selected,stuck:stuck?{index:stuck.index,shakesLeft:stuck.shakesLeft}:null,difficulty:difficulty,result:STATE.result};},
+  setTime:function(s){STATE.time=s;}
+};
+
+/* ---------- Init ---------- */
+// HOLO-PRACTICE-2026-11-23: honour ?practice=1 on load (guard block sets window.__holoPractice).
+if(window.__holoPractice){practice=true;}
+applyDiff();renderBests();paintStars();resetRound();applyPractice();
+if(!practice){
+  showOverlay("Hungry?","Feed coins, pick a snack, and pray it doesn't get stuck on the coil. "+DIFFS[difficulty].roundLen+" seconds — sell as much as you can!","Start round");
+}else{
+  showOverlay("Practice round","No timer, no score kept — just feed coins and learn the machine.","Start practice");
+}
+syncState();
+})();
+</script>
+<script>
+/* INSERT-COIN-2026-11-22: place the blinking line under the title
+   on games with a start button; remove it once play starts. */
+(function(){try{
+  if(document.querySelector('.insert-coin'))return;
+  var ids=['btnStart','startBtn','playBtn','btnPlay','newBtn','newGameBtn','btnNew'];
+  var start=null,i,b;
+  for(i=0;i<ids.length;i++){start=document.getElementById(ids[i]);if(start)break;}
+  if(!start){var btns=document.querySelectorAll('button');for(i=0;i<btns.length;i++){b=btns[i];if(/^(\u25b6\s*)?(start game|start|play|new game|begin)$/i.test((b.textContent||'').trim())){start=b;break;}}}
+  if(!start)return;
+  var h=document.querySelector('h1')||document.querySelector('h2');if(!h||!h.parentNode)return;
+  var p=document.createElement('p');p.className='insert-coin';p.setAttribute('aria-hidden','true');p.textContent='INSERT COIN TO CONTINUE';
+  h.parentNode.insertBefore(p,h.nextSibling);
+  start.addEventListener('click',function(){if(p.parentNode)p.parentNode.removeChild(p);});
+}catch(e){}})();
+</script>
+<script>
+/* BACK-TO-HUB-2026-11-23: every game gets a way back to the Arcade hub
+   when opened directly (dead-end fix). Hidden inside the hub iframe,
+   where the hub itself provides navigation. */
+(function(){try{
+  if(window.self!==window.top)return;
+  if(document.querySelector('a[href*="games-hub"]'))return;
+  var a=document.createElement('a');a.href='../games-hub/';a.textContent='\u2190 Back to the Arcade';
+  a.style.cssText='position:fixed;left:10px;bottom:10px;z-index:9990;background:rgba(20,16,60,.88);color:#fff;padding:7px 14px;border-radius:999px;font:600 13px system-ui,sans-serif;text-decoration:none;border:1px solid rgba(255,255,255,.4);box-shadow:0 2px 10px rgba(0,0,0,.35)';
+  document.body.appendChild(a);
+}catch(e){}})();
+</script>
+<!-- GAMEPAD-2026-11-23: shared gamepad helper — controller support; keyboard/touch/mouse unchanged. -->
+<script src="../shared/gamepad.js"></script>
+<script>
+try { if (window.HoloGamepad) HoloGamepad.bind({ keys: { up:'ArrowUp', down:'ArrowDown', left:'ArrowLeft', right:'ArrowRight', action:'Enter', action2:'Space', pause:'KeyP' } }); } catch (e) {}
+</script>
+</body>
+</html>
