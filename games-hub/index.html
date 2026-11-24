@@ -16603,7 +16603,25 @@ function renderTesterAuth(){
     { title:'The Library',
       text:'At the top of the Library you\u2019ll find today\u2019s Game of the Day and Challenge of the Day tiles. Below them is every game \u2014 tap one to open its Game Menu, with Practice, Rules and How to play before you play.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true, skipHash:true }); },
-      target:function(){ return firstShown(['#libraryDailyTiles', '#libGotdTile']); } },
+      target:function(){
+        /* TOUR-PHONE-2026-11-23: on a phone the two Daily tiles stack
+           into a section taller than the card can fit around (the card
+           would dock over its lower half). Point at the Game of the Day
+           tile instead so the card sits below it; the Challenge tile
+           sits right underneath. On wider screens the section is short
+           enough that the whole section stays the target. */
+        var sec = document.querySelector('#libraryDailyTiles');
+        if(sec && isShown(sec)){
+          var sh = sec.getBoundingClientRect().height;
+          var chh = 0; try { chh = card.offsetHeight || 0; } catch(e){}
+          if(chh > 0 && sh + chh + 16 > window.innerHeight - (headerOffset() + 8) - 12){
+            var t = document.querySelector('#libGotdTile');
+            if(t && isShown(t)) return t;
+          }
+          return sec;
+        }
+        return firstShown(['#libraryDailyTiles', '#libGotdTile']);
+      } },
     { title:'Duck a favourite',
       text:'Tap the duck on a game and it\u2019ll paddle over to your pond under Favourites, saved for next time.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true, skipHash:true }); },
@@ -16624,10 +16642,16 @@ function renderTesterAuth(){
       text:'Search a Code Name and send a friend request. It lands in their Inbox \u2014 when they accept, you\u2019re friends on every device.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('friends', { keepScroll:true, skipHash:true }); },
       target:function(){ return firstShown(['#friendAddForm']); } },
+    /* TOUR-PHONE-2026-11-23: point at the FIRST stamp, not the whole
+       stamp wall — #rvStamps renders one stamp per game (~200 rows,
+       ~10,000px tall), so the old target made the spotlight span the
+       whole viewport and the card dock over it. A new tester with no
+       reports yet has the same wall (grey stamps), so the first stamp
+       is always there after renderReviews(). */
     { title:'Trophy Case stamps',
       text:'Stamps are earned by reporting on a game \u2014 playing alone doesn\u2019t earn one. File a report, get the stamp.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('account', { keepScroll:true, skipHash:true }); if(typeof window.renderReviews === 'function'){ try { window.renderReviews(); } catch(e){} } },
-      target:function(){ return firstShown(['#rvStamps', '#reviewsTitle', '#reviewsView']); } },
+      target:function(){ return firstShown(['#rvStamps .stamp', '#reviewsTitle', '#reviewsView']); } },
     { title:'Report back', opensReview:true, plainTitle:true, noHighlight:true,
       text:'Tap the chips \u2014 happy face for fun, ladybug for bugs \u2014 add stars if you like, write a line, then tap Send my report. Not ready? Finish later saves your draft to your Inbox.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); if(typeof window.openFeedbackForm === 'function') window.openFeedbackForm(); },
@@ -16683,18 +16707,53 @@ function renderTesterAuth(){
        panel's own scroll area, scroll the PANEL so it shows. */
     var header = document.querySelector('header.topbar');
     if(header && header.contains(el)){
+      /* TOUR-PHONE-2026-11-23: the tour locks page scroll with
+         overflow:hidden on body, which un-sticks the sticky
+         topbar — after an earlier step scrolled the page (Library,
+         Trophy Case), the header and its menu panel sit above the
+         viewport and the spotlight points at nothing (the card
+         docks over a clamped gold box at the top). The header
+         lives at the top of the document, so scroll the page back
+         to the top before measuring a header target; programmatic
+         scrollTo still works while locked, and the tour restores
+         the pre-tour scroll when it ends. */
+      try { window.scrollTo({ top: 0, behavior: 'instant' }); }
+      catch(e){ try { window.scrollTo(0, 0); } catch(e2){} }
       var panel = byId('navPanel');
       if(panel && panel.contains(el)) scrollPanelTo(panel, el);
       return;
     }
     var r = el.getBoundingClientRect();
     var head = headerOffset() + 8;
-    if(r.top >= head && r.bottom <= window.innerHeight - 4) return; /* fully clear of the sticky bar: no re-scroll */
+    var ch = 0; try { ch = card.offsetHeight || 0; } catch(e){}
+    if(r.top >= head && r.bottom <= window.innerHeight - 4){
+      /* Fully clear of the sticky bar — but the card still has to
+         fit above or below the target; if it fits neither, fall
+         through and re-aim instead of docking over the target. */
+      if(r.bottom + 16 + ch <= window.innerHeight - 12 || r.top - 16 - ch >= 12) return;
+    }
     /* Aim the target just below the sticky bar (or ~18% down the
        screen, whichever is lower) so the bar never covers it.
        behavior:'instant' — 'auto' follows html{scroll-behavior:
        smooth} and the highlight chased the moving rect. */
     var want = Math.max(head, Math.min(window.innerHeight * 0.18, window.innerHeight - r.height - 12));
+    /* TOUR-PHONE-2026-11-23: tall target + tall card (stacked Daily
+       tiles on a phone) — the card fits neither below the target
+       aimed at 18% nor above it, so it would dock over the target.
+       If below is impossible even at the highest allowed top but
+       above fits, aim the target lower so the card goes above it. */
+    if(ch > 0 && head + r.height + 16 + ch > window.innerHeight - 12){
+      /* Below is impossible even at the highest allowed top. */
+      var aboveTop = 12 + ch + 16;
+      if(aboveTop > head && aboveTop + r.height <= window.innerHeight - 4 && window.scrollY >= aboveTop - r.top){
+        /* Above fits and the page can scroll up far enough to reach it. */
+        want = aboveTop;
+      } else {
+        /* Otherwise aim the target just below the bar: the card will
+           dock at the bottom, overlapping only the target's bottom sliver. */
+        want = head;
+      }
+    }
     var top = window.scrollY + r.top - want;
     try { window.scrollTo({ top: Math.max(0, top), behavior: 'instant' }); }
     catch(e){ window.scrollTo(0, Math.max(0, top)); }
