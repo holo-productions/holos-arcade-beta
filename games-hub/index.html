@@ -20373,7 +20373,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   var readingId = null;
   /* DEVICE-QUESTIONNAIRE-2026-11-23 (Holo 22:27): "What are you playing on?"
      One-tap chips inside the Inbox message reading view — NOT the Report
-     back form, which stays 4 inputs. All 7 questions from
+     back form, which stays 4 inputs. All 8 questions from
      ~/workspace/games/tester-device-questionnaire.md. Answers save to the
      tester's own RTDB record (/users/$uid/devices) and the message is
      marked answered so it shows as done on re-open. The message is type
@@ -20385,6 +20385,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   var DQ_REPORT_ID = 'device-questionnaire-v1';
   function dqIsQuestionnaire(n){ return !!n && n.type === 'system' && n.reportId === DQ_REPORT_ID; }
   var DQ_PLATFORMS = ['Phone — iPhone', 'Phone — Android', 'Tablet — iPad', 'Tablet — Android', 'Computer — Windows', 'Computer — Mac', 'Computer — Chromebook', 'Console', 'Smart TV', 'Other'];
+  var DQ_BROWSERS = ['Chrome', 'Safari', 'Firefox', 'Edge', 'Something else']; /* BROWSER-Q-2026-11-24: Holo asked to include browser in the questionnaire. */
   var DQ_CONSOLES = ['PlayStation 5', 'PlayStation 4', 'Xbox Series X / S', 'Xbox One', 'Nintendo Switch', 'Nintendo Switch 2', 'Steam Deck', 'Other', 'None'];
   var DQ_GAMEPADS = ['PlayStation controller', 'Xbox controller', 'Switch Pro controller', 'Generic Bluetooth controller', 'Other', 'None'];
   function dqChip(row, label, single){
@@ -20419,8 +20420,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       return out;
     }
     function field(name){ var el = form.querySelector('[data-dq-field="' + name + '"]'); return el ? String(el.value || '').slice(0, 120) : ''; }
-    var singles = multi('canPlugIn'); var browsers = multi('consoleBrowser'); var testing = multi('upForTesting');
-    return { platforms: multi('platforms'), model: field('model'), consoles: multi('consoles'), gamepads: multi('gamepads'), canPlugIn: singles.length ? singles[0] : '', consoleBrowser: browsers.length ? browsers[0] : '', upForTesting: testing.length ? testing[0] : '', other: field('other'), answeredAt: new Date().toISOString() };
+    var singles = multi('canPlugIn'); var browsers = multi('consoleBrowser'); var testing = multi('upForTesting'); var bws = multi('browsers');
+    return { platforms: multi('platforms'), browser: bws.length ? bws[0] : '', model: field('model'), consoles: multi('consoles'), gamepads: multi('gamepads'), canPlugIn: singles.length ? singles[0] : '', consoleBrowser: browsers.length ? browsers[0] : '', upForTesting: testing.length ? testing[0] : '', other: field('other'), answeredAt: new Date().toISOString() };
   }
   function dqFill(form, saved){
     if(!saved) return;
@@ -20431,7 +20432,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       for(var i = 0; i < chips.length; i++){ if(vals.indexOf(chips[i].textContent) >= 0){ chips[i].classList.add('on'); chips[i].setAttribute('aria-pressed', 'true'); } }
     }
     function field(name, v){ var el = form.querySelector('[data-dq-field="' + name + '"]'); if(el && v) el.value = v; }
-    multi('platforms', saved.platforms); multi('consoles', saved.consoles); multi('gamepads', saved.gamepads);
+    multi('platforms', saved.platforms); multi('browsers', saved.browser ? [saved.browser] : []); multi('consoles', saved.consoles); multi('gamepads', saved.gamepads);
     multi('canPlugIn', saved.canPlugIn ? [saved.canPlugIn] : []); multi('consoleBrowser', saved.consoleBrowser ? [saved.consoleBrowser] : []); multi('upForTesting', saved.upForTesting ? [saved.upForTesting] : []);
     field('model', saved.model); field('other', saved.other);
   }
@@ -20440,6 +20441,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var bits = [];
     if(d.platforms && d.platforms.length) bits.push('Plays on: ' + d.platforms.join(', '));
     if(d.model) bits.push('Model: ' + d.model);
+    if(d.browser) bits.push('Browser: ' + d.browser);
     if(d.consoles && d.consoles.length) bits.push('Consoles: ' + d.consoles.join(', '));
     if(d.gamepads && d.gamepads.length) bits.push('Gamepads: ' + d.gamepads.join(', '));
     if(d.canPlugIn) bits.push('Can plug in to test: ' + d.canPlugIn);
@@ -20476,19 +20478,21 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     }
     q('1', 'What do you usually play on?', 'Tick all that apply.');
     dqRow(form, 'platforms', DQ_PLATFORMS, false);
-    q('2', 'If phone or tablet, which model?', 'Optional.');
+    q('2', 'Which browser do you usually use?', 'Tick one.');
+    dqRow(form, 'browsers', DQ_BROWSERS, true);
+    q('3', 'If phone or tablet, which model?', 'Optional.');
     input('model', 'e.g. iPhone 13, Galaxy S25+', 80);
-    q('3', 'Do you have a games console?', 'Tick all that apply.');
+    q('4', 'Do you have a games console?', 'Tick all that apply.');
     dqRow(form, 'consoles', DQ_CONSOLES, false);
-    q('4', 'Do you have a gamepad or controller?', 'Tick all that apply.');
+    q('5', 'Do you have a gamepad or controller?', 'Tick all that apply.');
     dqRow(form, 'gamepads', DQ_GAMEPADS, false);
     q('', 'Could you plug it in or pair it to test with?', '');
     dqRow(form, 'canPlugIn', ['Yes', 'No'], true);
-    q('5', 'Can you open a website on your console or TV?', '');
+    q('6', 'Can you open a website on your console or TV?', '');
     dqRow(form, 'consoleBrowser', ['Yes', 'No', 'Not sure'], true);
-    q('6', 'Up for testing with a console or gamepad when that lands?', '');
+    q('7', 'Up for testing with a console or gamepad when that lands?', '');
     dqRow(form, 'upForTesting', ['Yes', 'No', 'Maybe'], true);
-    q('7', 'Anything else you play games on?', '');
+    q('8', 'Anything else you play games on?', '');
     input('other', 'Handhelds, an old laptop, a TV stick — anything that opens a browser', 120);
     var acts = document.createElement('div'); acts.className = 'dq-actions';
     var save = document.createElement('button'); save.type = 'button'; save.className = 'btn btn-light'; save.textContent = 'Save my answers';
@@ -20518,7 +20522,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     wrap.innerHTML = '<p class="dq-note">Loading your saved answers…</p>';
     api('GET', '/users/' + encodeURIComponent(a.uid)).then(function(rec){
       var d = rec && rec.devices;
-      if(d && (d.platforms || d.consoles || d.gamepads || d.model || d.other || d.canPlugIn || d.consoleBrowser || d.upForTesting)) dqShowSaved(wrap, n, d);
+      if(d && (d.platforms || d.browser || d.consoles || d.gamepads || d.model || d.other || d.canPlugIn || d.consoleBrowser || d.upForTesting)) dqShowSaved(wrap, n, d);
       else dqBuildForm(wrap, n, d || null);
     }).catch(function(){ dqBuildForm(wrap, n, null); });
   }
