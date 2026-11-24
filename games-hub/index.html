@@ -17028,6 +17028,99 @@ function renderTesterAuth(){
     }
     return { title: title, body: body };
   }
+  /* RECOVERY-2026-11-24: owner-only list of account-recovery requests
+     from /recoveryRequests (readable only by Holo's UID — see the rules
+     doc). Shows each request's code name, old and new email, invite
+     code and notes, with Mark done / Delete. Until the new rules
+     publish the read is denied and the card says so honestly. */
+  var REC_OWNER_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+  var recoveryRenderTries = 0;
+  function recoveryTime(ts){
+    try { var d = new Date(ts); if(!isNaN(d.getTime())) return d.toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }); } catch(e){}
+    return '';
+  }
+  function renderRecoveryRequests(){
+    var box = document.getElementById('recoveryRequestsCard');
+    if(!box || !canSeeOwnerDash()) return;
+    /* The intro + Refresh button render first and stay put, so Holo can
+       re-check after publishing the rules without reloading the page;
+       only the list body below changes. */
+    box.innerHTML =
+      '<p style="margin:0 0 8px;color:var(--muted);font-size:13.5px">Account-recovery requests \u2014 only you can see these. Check the code name, old email and invite code against the account, then update the email in Firebase Console and reply to the <strong>new</strong> email.</p>' +
+      '<p style="margin:0 0 8px"><button type="button" class="btn btn-light" id="recoveryRefreshBtn">Refresh</button></p>' +
+      '<div id="recoveryListBody"><p style="margin:0;color:var(--muted);font-size:13.5px">Checking\u2026</p></div>';
+    var rb = document.getElementById('recoveryRefreshBtn');
+    if(rb) rb.addEventListener('click', renderRecoveryRequests);
+    var body = document.getElementById('recoveryListBody');
+    if(typeof window.betaFreshToken !== 'function'){
+      /* The sign-in script runs after this dash script in the page, so
+         on a fresh load the token getter may not exist yet — retry a
+         few times before giving up honestly. */
+      if(recoveryRenderTries < 5){ recoveryRenderTries++; setTimeout(renderRecoveryRequests, 1000); return; }
+      if(body) body.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">Sign-in isn\u2019t loaded on this page \u2014 hard-refresh and try again.</p>';
+      return;
+    }
+    recoveryRenderTries = 0;
+    window.betaFreshToken().then(function(token){
+      if(!token){ if(body) body.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">Sign in as the owner to see recovery requests.</p>'; return; }
+      return fetch(REC_OWNER_RTDB + '/recoveryRequests.json?auth=' + encodeURIComponent(token), { cache:'no-store' })
+        .then(function(r){
+          if(r.status === 401 || r.status === 403) throw new Error('rules');
+          if(!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function(data){
+          var list = [];
+          if(data && typeof data === 'object'){
+            Object.keys(data).forEach(function(id){ var x = data[id] || {}; x.id = id; list.push(x); });
+            list.sort(function(a, b){ return (b.ts || 0) - (a.ts || 0); });
+          }
+          var b = document.getElementById('recoveryListBody');
+          if(!b) return;
+          if(!list.length){ b.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">No recovery requests yet.</p>'; return; }
+          var rows = list.map(function(x){
+            var done = x.status === 'done';
+            return '<li style="margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card)">' +
+              '<p style="margin:0 0 4px;font-weight:800;font-size:14px">' + escO(x.codeName || 'No code name') + (done ? ' \u2014 \u2705 done' : '') + ' <span style="color:var(--muted);font-weight:400;font-size:12.5px">' + escO(recoveryTime(x.ts)) + '</span></p>' +
+              '<p style="margin:0 0 4px;color:var(--muted);font-size:13.5px;line-height:1.6">Old email: ' + escO(x.oldEmail || '') + '<br>New email: ' + escO(x.newEmail || '') + '<br>Invite code: <strong>' + escO(x.inviteCode || 'not given') + '</strong>' + (x.notes ? '<br>Anything else: ' + escO(x.notes) : '') + '</p>' +
+              '<p style="margin:0">' + (done ? '' : '<button type="button" class="btn btn-dark" data-recovery-done="' + escO(x.id) + '">Mark done</button> ') + '<button type="button" class="btn btn-light" data-recovery-del="' + escO(x.id) + '">Delete</button></p>' +
+            '</li>';
+          }).join('');
+          b.innerHTML = '<ul style="margin:0;padding:0;list-style:none">' + rows + '</ul>';
+          b.querySelectorAll('[data-recovery-done]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var id = btn.getAttribute('data-recovery-done');
+              window.betaFreshToken().then(function(tok){
+                if(!tok) return;
+                fetch(REC_OWNER_RTDB + '/recoveryRequests/' + encodeURIComponent(id) + '.json?auth=' + encodeURIComponent(tok), { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ status:'done' }) }).then(function(){ renderRecoveryRequests(); }).catch(function(){});
+              });
+            });
+          });
+          b.querySelectorAll('[data-recovery-del]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var id = btn.getAttribute('data-recovery-del');
+              if(!window.confirm('Delete this recovery request?')) return;
+              window.betaFreshToken().then(function(tok){
+                if(!tok) return;
+                fetch(REC_OWNER_RTDB + '/recoveryRequests/' + encodeURIComponent(id) + '.json?auth=' + encodeURIComponent(tok), { method:'DELETE' }).then(function(){ renderRecoveryRequests(); }).catch(function(){});
+              });
+            });
+          });
+        })
+        .catch(function(err){
+          var b2 = document.getElementById('recoveryListBody');
+          if(!b2) return;
+          if(err && err.message === 'rules'){
+            b2.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">Recovery requests need the new Arcade rules published first \u2014 publish the recovery rules (rules doc, ~2 minutes), then tap Refresh above. Requests sent before then stay queued on each tester\u2019s device.</p>';
+          } else {
+            b2.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">Couldn\u2019t load recovery requests right now \u2014 check your internet and tap Refresh.</p>';
+          }
+        });
+    }).catch(function(){
+      var b3 = document.getElementById('recoveryListBody');
+      if(b3) b3.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">Couldn\u2019t load recovery requests right now \u2014 check your internet and tap Refresh.</p>';
+    });
+  }
   function renderThanksBacks(){
     var box = document.getElementById('thanksBacksCard');
     if(!box || !canSeeOwnerDash()) return;
@@ -17169,6 +17262,7 @@ function renderTesterAuth(){
           '<button type="button" data-owner-jump="ownerDashAccounts">\uD83D\uDC65 Accounts</button>' +
           '<button type="button" data-owner-jump="ownerDashSiteHealth">\uD83D\uDC9A Site health</button>' +
           '<button type="button" data-owner-jump="ownerDashThanks">\uD83D\uDC8C Report-backs</button>' +
+          '<button type="button" data-owner-jump="ownerDashRecovery">\uD83D\uDD11 Recovery</button>' +
           '<button type="button" data-owner-jump="liveInviteMount">\uD83C\uDF9F\uFE0F Invites</button>' +
         '</nav>' +
         '<details class="dash-cat" id="ownerDashTesterView" open>' +
@@ -17189,6 +17283,10 @@ function renderTesterAuth(){
         '<details class="dash-cat" id="ownerDashThanks">' +
           '<summary>\uD83D\uDC8C Report-backs</summary>' +
           '<div class="dash-cat-body"><div id="thanksBacksCard"></div></div>' +
+        '</details>' +
+        '<details class="dash-cat" id="ownerDashRecovery">' +
+          '<summary>\uD83D\uDD11 Recovery requests</summary>' +
+          '<div class="dash-cat-body"><div id="recoveryRequestsCard"></div></div>' +
         '</details>';
       var openBtn = document.getElementById('openTesterLiveBtn');
       if(openBtn) openBtn.addEventListener('click', openTesterLiveView);
@@ -17205,6 +17303,7 @@ function renderTesterAuth(){
     renderOwnerAccounts();
     renderSiteHealth();
     renderThanksBacks();
+    renderRecoveryRequests();
     if(liveMount.firstChild) { applySettings(); return; }
     liveMount.innerHTML =
       '<nav class="dash-jumpbar" aria-label="Jump to a dash section">' +
@@ -20076,7 +20175,7 @@ function renderTesterAuth(){
   function pushFeedback(){
     if(typeof fetch !== 'function') return Promise.resolve({ sent:0, queued:0 });
     var arr = loadFeedback();
-    var pending = arr.filter(function(r){ return !r.fbSent; });
+    var pending = arr.filter(function(r){ return !r.fbSent && r.tag !== 'account-recovery'; }); /* RECOVERY-2026-11-24: recovery records never flush to /feedback — they belong to the owner-only /recoveryRequests channel. The recovery module migrates old queued ones. */
     if(!pending.length) return Promise.resolve({ sent:0, queued:0 });
     return freshToken().then(function(token){
       if(token) return { token: token, anon: false };
@@ -20219,6 +20318,7 @@ function renderTesterAuth(){
     }).catch(function(){ return { ok:false, error:betaFriendlyError('') }; });
   };
   window.betaPushFeedback = pushFeedback;
+  window.betaFreshToken = freshToken; /* RECOVERY-2026-11-24: the recovery module and the Owner Dash recovery list read the owner-only /recoveryRequests node with a fresh token. */
   setTimeout(pushFeedback, 3000);
   setInterval(pushFeedback, 8000);
   setTimeout(checkSessionRevoked, 2500); /* SIGN-OUT-EVERYWHERE-2026-11-23: load-time revoke check */
@@ -21664,9 +21764,13 @@ function renderTesterAuth(){
 
 <script>
 /* ACCOUNT-RECOVERY-2026-11-22 wiring (Holo 2026-11-22 22:00).
-   Files a support report through the same feedback path as help
-   chat (localStorage queue + window.betaPushFeedback, signed-out
-   anonymous capture included). Never changes the account. */
+   RECOVERY-2026-11-24 (Holo: fix the account-recovery leak): requests
+   used to file through the shared /feedback path, where any signed-in
+   tester could read the invite code. They now go to the owner-only
+   /recoveryRequests node (localStorage queue + flushRecovery, signed-out
+   requests queue on-device and flush on sign-in). Until the new rules
+   publish, writes are denied and requests stay queued — they never fall
+   back to /feedback. Never changes the account. */
 (function(){
   "use strict";
   function $(id){ return document.getElementById(id); }
@@ -21701,6 +21805,78 @@ function renderTesterAuth(){
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && !overlay.hidden) closeRecovery(); });
   window.openRecoveryForm = openRecovery;
 
+  /* RECOVERY-2026-11-24: owner-only channel. Queue key is separate from
+     the shared feedback queue on purpose — a recovery record must never
+     sit in a queue that flushes to a tester-readable node. */
+  var REC_KEY = 'holos-arcade-recovery-queue';
+  var REC_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+  function loadRecoveryQueue(){
+    try { var v = JSON.parse(localStorage.getItem(REC_KEY)); if(Array.isArray(v)) return v; } catch(e){}
+    return [];
+  }
+  function saveRecoveryQueue(arr){
+    try { localStorage.setItem(REC_KEY, JSON.stringify(arr)); } catch(e){}
+  }
+  function removeRecoveryById(id){
+    try { saveRecoveryQueue(loadRecoveryQueue().filter(function(x){ return x && x.id !== id; })); } catch(e){}
+  }
+  function cleanRecoveryRec(r){
+    if(!r || typeof r !== 'object') return null;
+    var out = { id:String(r.id || (new Date().toISOString() + '-' + Math.random().toString(36).slice(2, 9))), kind:'recovery', tag:'account-recovery', codeName:String(r.codeName || '').slice(0, 60), oldEmail:String(r.oldEmail || '').slice(0, 120), newEmail:String(r.newEmail || '').slice(0, 120), inviteCode:String(r.inviteCode || '').slice(0, 40), notes:String(r.notes || '').slice(0, 500), ts:(typeof r.ts === 'number' ? r.ts : Date.now()), createdAt:String(r.createdAt || new Date().toISOString()), status:'new' };
+    if(!out.codeName || !out.oldEmail || !out.newEmail) return null;
+    return out;
+  }
+  /* Move any recovery request queued by the old hub (shared feedback
+     queue) into the owner-only queue, so it can never flush to
+     tester-readable /feedback. Runs once at load. */
+  function migrateOldRecoveryQueue(){
+    try {
+      var fb = [];
+      try { var v = JSON.parse(localStorage.getItem('holos-arcade-feedback')); if(Array.isArray(v)) fb = v; } catch(e){}
+      var kept = [], moved = [];
+      fb.forEach(function(r){
+        if(r && r.tag === 'account-recovery' && !r.fbSent){
+          var c = cleanRecoveryRec(r);
+          if(c) moved.push(c);
+        } else kept.push(r);
+      });
+      if(moved.length){
+        var q = loadRecoveryQueue();
+        moved.forEach(function(m){ q.push(m); });
+        saveRecoveryQueue(q);
+        try { localStorage.setItem('holos-arcade-feedback', JSON.stringify(kept)); } catch(e){}
+      }
+    } catch(e){}
+  }
+  /* Flush the recovery queue to the owner-only node. A denied write
+     (rules not published yet) or no sign-in just stays queued and
+     retries on the poller — never falls back to /feedback. */
+  function flushRecovery(){
+    if(typeof fetch !== 'function') return Promise.resolve({ sent:0, queued: loadRecoveryQueue().length });
+    var pending = loadRecoveryQueue();
+    if(!pending.length) return Promise.resolve({ sent:0, queued:0 });
+    if(typeof window.betaFreshToken !== 'function') return Promise.resolve({ sent:0, queued: pending.length });
+    return window.betaFreshToken().then(function(token){
+      if(!token) return { sent:0, queued: pending.length };
+      var sent = 0;
+      var chain = Promise.resolve();
+      pending.forEach(function(r){
+        chain = chain.then(function(){
+          var payload = cleanRecoveryRec(r);
+          if(!payload){ removeRecoveryById(r && r.id); return; }
+          return fetch(REC_RTDB + '/recoveryRequests/' + encodeURIComponent(payload.id) + '.json?auth=' + encodeURIComponent(token), { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
+            .then(function(res){ if(!res.ok) throw new Error('rtdb ' + res.status); sent++; removeRecoveryById(payload.id); })
+            .catch(function(){ /* stays queued, retried by the poller */ });
+        });
+      });
+      return chain.then(function(){ return { sent: sent, queued: loadRecoveryQueue().length }; });
+    }).catch(function(){ return { sent:0, queued: loadRecoveryQueue().length }; });
+  }
+  window.betaPushRecovery = flushRecovery;
+  migrateOldRecoveryQueue();
+  setTimeout(flushRecovery, 3000);
+  setInterval(flushRecovery, 8000);
+
   function val(id){ var el = $(id); return el ? String(el.value || '').trim() : ''; }
   function mark(el, badMsg){
     if(!el) return;
@@ -21721,13 +21897,14 @@ function renderTesterAuth(){
     okAll = check('rcNewEmail', !newEmail ? '⚠️ This field needs filling in, agent!' : (!validEmail(newEmail) ? '⚠️ That email looks off, agent.' : (oldEmail && newEmail.toLowerCase() === oldEmail.toLowerCase() ? '⚠️ That is the same as your old email, agent.' : ''))) && okAll;
     if(!okAll){ showMsg('A couple of fields need a look, agent — check the pink ones.'); if(firstBad) { try { firstBad.focus(); } catch(err){} } return; }
     var now = new Date();
-    var rec = { id: now.toISOString() + '-' + Math.random().toString(36).slice(2, 9), kind:'help', game:'games-hub', rating:0, tags:['account-recovery'], tag:'account-recovery', subject:'Account recovery request', problem:'Account recovery request', codeName:codeName, oldEmail:oldEmail, newEmail:newEmail, inviteCode:invite, notes:notes, text:'Account recovery request. Code Name: ' + codeName + '. Old email: ' + oldEmail + '. New email: ' + newEmail + '.' + (invite ? ' Invite code: ' + invite + '.' : '') + (notes ? ' Anything else: ' + notes : ''), device:(navigator.userAgent || ''), userAgent:(navigator.userAgent || ''), page:(location.pathname || ''), timestamp:now.toISOString(), ts:now.getTime(), testerName:codeName, username:codeName };
-    try { if(typeof window.holoMergeContext === 'function') window.holoMergeContext(rec, ['game', 'testerName']); } catch(e){}
+    /* RECOVERY-2026-11-24: fields only — no text summary repeating the
+       code, no auto-context — so nothing about the request can land in
+       a tester-readable store. */
+    var rec = { id: now.toISOString() + '-' + Math.random().toString(36).slice(2, 9), kind:'recovery', tag:'account-recovery', codeName:codeName, oldEmail:oldEmail, newEmail:newEmail, inviteCode:invite, notes:notes, ts:now.getTime(), createdAt:now.toISOString(), status:'new' };
     try {
-      var arr = [];
-      try { var v = JSON.parse(localStorage.getItem('holos-arcade-feedback')); if(Array.isArray(v)) arr = v; } catch(err){}
+      var arr = loadRecoveryQueue();
       arr.push(rec);
-      localStorage.setItem('holos-arcade-feedback', JSON.stringify(arr));
+      saveRecoveryQueue(arr);
     } catch(err){}
     if(submitBtn) submitBtn.disabled = true;
     function showDone(){
@@ -21735,13 +21912,7 @@ function renderTesterAuth(){
       if(doneBox) doneBox.hidden = false;
       var db = $('rcDoneBtn'); if(db) { try { db.focus(); } catch(err){} }
     }
-    if(typeof window.betaPushFeedback === 'function'){
-      try {
-        var p = window.betaPushFeedback();
-        if(p && typeof p.then === 'function'){ p.then(showDone).catch(showDone); }
-        else showDone();
-      } catch(err){ showDone(); }
-    } else showDone();
+    try { flushRecovery().then(showDone).catch(showDone); } catch(err){ showDone(); }
   });
 })();
 </script>
