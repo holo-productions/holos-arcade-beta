@@ -1,0 +1,1173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Zombie Outrun — RFF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#eef3ec;
+    --panel:#ffffff;
+    --ink:#22301f;
+    --ink-soft:#5a6b55;
+    --accent:#2f9be8;
+    --accent-dark:#1d7fb8;
+    --green:#4c9a3f;
+    --green-dark:#35702a;
+    --line:#d8e2d2;
+    --chip:#f2f6ee;
+    --shadow:0 10px 30px rgba(34,48,31,.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#141a13;
+      --panel:#1e271d;
+      --ink:#eef4e8;
+      --ink-soft:#a9bda2;
+      --accent:#5cc0f0;
+      --accent-dark:#7cc9f5;
+      --green:#63b455;
+      --green-dark:#7cc96f;
+      --line:#33402f;
+      --chip:#27331f;
+      --shadow:0 10px 30px rgba(0,0,0,.45);
+    }
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    font-family:"Nunito", system-ui, sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    -webkit-tap-highlight-color: transparent;
+  }
+  button, [role="button"], select, summary, input:not([type="checkbox"],[type="radio"]){ min-height:2.25rem; }
+  .wrap{ max-width:560px; margin:0 auto; padding:16px 14px 28px; }
+  /* ZOMBIE-FULLSCREEN-2026-11-24: on wide screens the 560px phone column
+     left big blank beige sides in fullscreen (Holo's photo). Wide play now
+     gets a night theme with road strips flanking the column; the game canvas
+     is never stretched — it only scales proportionally as the column widens
+     a little on desktop. */
+  @media (min-width:900px){
+    :root{
+      --bg:#141a13;
+      --panel:#1e271d;
+      --ink:#eef4e8;
+      --ink-soft:#a9bda2;
+      --accent:#5cc0f0;
+      --accent-dark:#7cc9f5;
+      --green:#63b455;
+      --green-dark:#7cc96f;
+      --line:#33402f;
+      --chip:#27331f;
+      --shadow:0 10px 30px rgba(0,0,0,.45);
+      --wrap-w:600px;
+    }
+    body{
+      background:
+        radial-gradient(circle 1.5px at 8% 14%, rgba(255,255,255,.55) 0 1.5px, transparent 2px),
+        radial-gradient(circle 1.5px at 92% 10%, rgba(255,255,255,.5) 0 1.5px, transparent 2px),
+        radial-gradient(circle 1px at 6% 42%, rgba(255,255,255,.4) 0 1px, transparent 1.5px),
+        radial-gradient(circle 1px at 94% 38%, rgba(255,255,255,.4) 0 1px, transparent 1.5px),
+        radial-gradient(circle 1.5px at 10% 68%, rgba(255,255,255,.35) 0 1.5px, transparent 2px),
+        radial-gradient(circle 1.5px at 90% 64%, rgba(255,255,255,.35) 0 1.5px, transparent 2px),
+        radial-gradient(ellipse 60% 42% at 50% 0%, rgba(99,180,85,.16), transparent 70%),
+        linear-gradient(180deg,#18241a 0%, #1b2438 55%, #10160f 100%);
+      background-attachment:fixed;
+    }
+    .wrap{ max-width:var(--wrap-w); position:relative; z-index:1; }
+    body::before, body::after{
+      content:""; position:fixed; top:0; bottom:0; z-index:0; pointer-events:none;
+      width:calc((100vw - var(--wrap-w)) / 2 - 10px);
+      background:
+        repeating-linear-gradient(180deg, rgba(255,209,102,.8) 0 30px, transparent 30px 80px) center / 8px 100% no-repeat,
+        linear-gradient(90deg, transparent calc(50% - 78px), rgba(255,255,255,.06) calc(50% - 78px), rgba(255,255,255,.06) calc(50% + 78px), transparent calc(50% + 78px)),
+        linear-gradient(90deg, rgba(0,0,0,.45), transparent 22%, transparent 78%, rgba(0,0,0,.45)),
+        linear-gradient(180deg,#232d22 0%, #1a241a 60%, #0f150e 100%);
+    }
+    body::before{ left:0; }
+    body::after{ right:0; }
+  }
+  @media (min-width:1400px){
+    :root{ --wrap-w:640px; }
+  }
+  h1{
+    font-family:"Fredoka", sans-serif; font-weight:700;
+    font-size:clamp(30px, 8vw, 42px); line-height:1.05; margin:6px 0 4px;
+    letter-spacing:.5px;
+  }
+  h1 .z{ color:var(--green-dark); }
+  .tagline{ margin:0 0 14px; color:var(--ink-soft); font-size:16px; font-weight:600; }
+
+  .hud{
+    display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;
+  }
+  .stat{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:6px 12px; font-weight:800; font-size:15px; box-shadow:var(--shadow);
+    display:flex; align-items:center; gap:6px;
+  }
+  .stat span{ color:var(--ink-soft); font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+  .stat.practice{ background:var(--chip); border-style:dashed; }
+  .stat[hidden]{ display:none; }
+
+  .stage{
+    position:relative; border-radius:18px; overflow:hidden;
+    box-shadow:var(--shadow); border:1px solid var(--line);
+    background:#1b2438;
+  }
+  canvas{ display:block; width:100%; height:auto; touch-action:none; }
+
+  .overlay{
+    position:absolute; inset:0; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center;
+    background:rgba(16,22,14,.72); color:#f4f8ee; padding:20px;
+  }
+  .overlay[hidden]{ display:none; }
+  .overlay h2{ font-family:"Fredoka",sans-serif; font-size:30px; margin:0 0 6px; }
+  .overlay p{ margin:0 0 14px; font-size:16px; max-width:340px; line-height:1.45; }
+  .overlay .big-score{ font-family:"Fredoka",sans-serif; font-size:44px; margin:2px 0 2px; color:#ffd166; }
+  .overlay .sub{ font-size:14px; opacity:.85; margin-bottom:14px; }
+
+  .btn{
+    font-family:"Fredoka",sans-serif; font-weight:600; font-size:17px;
+    border:none; border-radius:999px; padding:10px 26px; cursor:pointer;
+    background:var(--accent); color:#fff; min-height:48px;
+    box-shadow:0 4px 0 var(--accent-dark);
+  }
+  .btn:active{ transform:translateY(2px); box-shadow:0 2px 0 var(--accent-dark); }
+  .btn.green{ background:var(--green); box-shadow:0 4px 0 var(--green-dark); }
+  .btn.green:active{ box-shadow:0 2px 0 var(--green-dark); }
+  .btn.ghost{
+    background:transparent; color:var(--ink); border:2px solid var(--line);
+    box-shadow:none; font-size:15px; padding:8px 18px; min-height:44px;
+  }
+  .btn.ghost:active{ transform:none; }
+
+  .controls-bar{
+    display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;
+  }
+  .controls-bar .btn{ flex:1 1 auto; }
+  .row{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .row .btn{ flex:1 1 30%; }
+
+  .settings{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:12px 14px; margin-top:14px; box-shadow:var(--shadow);
+  }
+  .settings label{ font-weight:800; font-size:14px; display:block; margin-bottom:8px; }
+  .seg{ display:flex; gap:6px; }
+  .seg button{
+    flex:1; font-family:"Nunito",sans-serif; font-weight:800; font-size:15px;
+    border:2px solid var(--line); background:var(--chip); color:var(--ink);
+    border-radius:10px; padding:9px 4px; cursor:pointer; min-height:44px;
+  }
+  .seg button[aria-pressed="true"]{
+    background:var(--green); border-color:var(--green-dark); color:#fff;
+  }
+  .settings .note{ font-size:13px; color:var(--ink-soft); margin:8px 0 0; }
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:12px; }
+  .toggle-row .lbl{ font-weight:800; font-size:14px; }
+  .toggle-row .desc{ font-size:13px; color:var(--ink-soft); }
+  .switch{ flex:0 0 auto; display:inline-flex; }
+  .switch input{
+    -webkit-appearance:none; appearance:none;
+    width:56px; height:32px; border-radius:999px; margin:0; cursor:pointer;
+    background:var(--line); position:relative; transition:background .15s; flex:0 0 auto;
+  }
+  .switch input::after{
+    content:""; position:absolute; top:4px; left:4px; width:24px; height:24px;
+    border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.3); transition:left .15s;
+  }
+  .switch input:checked{ background:var(--green); }
+  .switch input:checked::after{ left:28px; }
+  .switch input:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+
+  .touch-pad{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:12px;
+  }
+  .touch-pad button{
+    font-family:"Fredoka",sans-serif; font-size:16px; font-weight:600;
+    background:var(--panel); color:var(--ink); border:2px solid var(--line);
+    border-radius:12px; min-height:56px; cursor:pointer; box-shadow:var(--shadow);
+  }
+  .touch-pad button:active{ background:var(--chip); }
+  .hint{ text-align:center; color:var(--ink-soft); font-size:13px; margin:10px 0 0; font-weight:600; }
+
+  .sheet{
+    background:var(--panel); border:1px solid var(--line); border-radius:14px;
+    padding:16px 18px; margin-top:14px; box-shadow:var(--shadow);
+  }
+  .sheet[hidden]{ display:none; }
+  .sheet h2{ font-family:"Fredoka",sans-serif; margin:0 0 8px; font-size:22px; }
+  .sheet h3{ font-family:"Fredoka",sans-serif; margin:14px 0 4px; font-size:17px; }
+  .sheet p, .sheet li{ font-size:15px; line-height:1.5; }
+  .sheet ul{ margin:4px 0 8px; padding-left:20px; }
+  .sheet textarea{
+    width:100%; min-height:90px; border:2px solid var(--line); border-radius:10px;
+    padding:10px; font-family:"Nunito",sans-serif; font-size:15px;
+    background:var(--bg); color:var(--ink); resize:vertical;
+  }
+  .sheet .fb-status{ font-size:14px; font-weight:700; color:var(--green-dark); min-height:20px; margin-top:6px; }
+  .sheet .fb-terms{ font-size:13px; color:var(--ink-soft); margin:8px 0 0; }
+
+  footer{
+    margin-top:22px; text-align:center; color:var(--ink-soft); font-size:14px; font-weight:600;
+  }
+  footer a{ color:var(--green-dark); font-weight:800; text-decoration:none; padding:8px 4px; display:inline-block; }
+  footer a:hover{ text-decoration:underline; }
+/* vtut visual steps */
+.vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
+@media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
+.vtut-card{position:relative;border-radius:14px;padding:12px 10px 10px;text-align:center;background:rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.12)}
+@media (prefers-color-scheme: dark){.vtut-card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18)}}
+.vtut-num{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;background:#ff5fa2;color:#fff;font-size:12px;font-weight:800;line-height:20px}
+.vtut-pic{height:52px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.vtut-pic svg{width:44px;height:44px}
+.vtut-card b{display:block;font-size:.92rem;margin-bottom:2px}
+.vtut-card p{margin:0;font-size:.85rem;line-height:1.35;opacity:.92}
+
+/* ================= GAME-THEME-2026-11-22 =================
+   Holo 2026-11-22 21:18: games themed too - shared Arcade
+   theme layer on every standalone game. Unique per game
+   (own colours, art and board untouched) inside the Arcade
+   theme family: navy cabinet frame, pixel gradient title,
+   cyan accents, 3-tier chrome buttons, console-framed stage.
+   CSS only - no JS or gameplay changes. */
+:root{--ha-navy:#0a0620;--ha-pink:#ff3ec8;--ha-violet:#8b5cff;--ha-blue:#3b82f6;--ha-cyan:#38e1ff;--ha-gold:#ffb020;--ha-grad:linear-gradient(92deg,#ff3ec8 0%,#ff7ad9 22%,#8b5cff 52%,#3b82f6 82%,#38e1ff 100%);--ha-pixel:"Press Start 2P","Courier New",monospace}
+html{background:#0a0620}
+h1{font-family:var(--ha-pixel);font-size:clamp(15px,4.5vw,24px);line-height:1.7;letter-spacing:0;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(2px 2px 0 rgba(139,92,255,.45))}
+canvas{outline:3px solid var(--ha-violet);box-shadow:0 0 0 3px #0a0620,0 0 26px rgba(139,92,255,.4);border-radius:10px}
+#btnStart,#startBtn,#playBtn,#btnPlay,#newBtn,#newGameBtn,#btnNew,#againBtn,#btnAgain,#btnPlayAgain,#fbSave,#btnSaveFeedback{background:linear-gradient(92deg,#ffb020 0%,#ffd43b 50%,#ffb020 100%);color:#140b33;border:3px solid #fff;border-radius:12px;font-family:var(--ha-pixel);font-size:11px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #b45309,0 0 18px rgba(255,176,32,.5);cursor:pointer}
+#btnRules,#rulesBtn,#btnFeedback,#feedbackBtn,#btnFeedbackFooter,#btnTutorial,#tutorialBtn,#howBtn,#btnHow,#ovHow,#btnPractice,#practiceBtn{background:var(--ha-grad);color:#fff;border:none;border-radius:10px;font-family:var(--ha-pixel);font-size:10px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #4c1d95,0 8px 20px rgba(255,62,200,.3);cursor:pointer}
+.vtut-card{border:2px solid rgba(139,92,255,.55);background:linear-gradient(180deg,#1e1247,#140b33);color:#e9e4ff;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+.vtut-num{background:var(--ha-grad)}
+a{color:var(--ha-cyan)}
+
+/* TUT-POPUP-2026-11-22 (Holo 22:24): How to play popup sized for
+   the device + pixel title header bar. CSS only. */
+.modal:has(.vtut-grid),.sheet:has(.vtut-grid),.card:has(.vtut-grid),.box:has(.vtut-grid),.panel:has(.vtut-grid),.tut-card,.tutorial-backdrop{max-width:min(92vw,560px);max-height:88dvh;overflow-y:auto;box-sizing:border-box}
+.vtut-grid{grid-template-columns:1fr}
+@media (min-width:521px){.vtut-grid{grid-template-columns:1fr 1fr}}
+.modal:has(.vtut-grid) :is(h2,h3),.sheet:has(.vtut-grid) :is(h2,h3),.card:has(.vtut-grid) :is(h2,h3),.box:has(.vtut-grid) :is(h2,h3),.panel:has(.vtut-grid) :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;color:#fff;background:#0a0620;border:2px solid rgba(139,92,255,.65);border-radius:10px;padding:10px 12px;margin:0 0 12px}
+.modal:has(.vtut-grid) :is(h2,h3)::before,.sheet:has(.vtut-grid) :is(h2,h3)::before,.card:has(.vtut-grid) :is(h2,h3)::before,.box:has(.vtut-grid) :is(h2,h3)::before,.panel:has(.vtut-grid) :is(h2,h3)::before{content:"Zombie Outrun — RFF — ";background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tut-card .tut-head{background:#0a0620}
+.tut-card .tut-head :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* INSERT-COIN-2026-11-22 (Holo 23:13): old-school title-screen
+   blink line on game start/title areas. Same blink as the 404
+   page .coin. CSS + one tiny guarded script; no gameplay change. */
+@keyframes haCoinBlink{50%{opacity:.25}}
+.insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
+@media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+
+/* ZOMBIE-RFF-2026-11-24: RFF variant (VARIANT — counts toward the 1,000 catalog, never toward the 300 unique). Maddy in workout gear, healthy snacks (apple/water/carrot), junk-food zombies (donut/pizza/couch-potato), chunky pixel art. Gameplay, scoring, lanes, canvas and rules identical to base Zombie Outrun. */
+.game-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.game-head h1{ margin:0; }
+.game-logo{ flex:0 0 auto; line-height:0; }
+.game-head .insert-coin{ flex:1 1 100%; margin:2px 0 0; }
+h1 .z, h1 .rff{ color:#38bdf8; }
+footer{ margin-top:14px; line-height:1.5; }
+</style>
+</head>
+<body>
+<!-- ZOMBIE-RFF-2026-11-24: RFF variant of Zombie Outrun. VARIANT — counts toward the 1,000 catalog, never toward the 300 unique. -->
+<div class="wrap">
+  <div class="game-head">
+    <span class="game-logo" aria-hidden="true"><svg viewBox="0 0 32 32" width="30" height="30" role="img"><rect x="8" y="0" width="16" height="8" fill="#5b3a29"/><rect x="8" y="8" width="16" height="4" fill="#38bdf8"/><rect x="8" y="12" width="16" height="8" fill="#f2b183"/><rect x="12" y="14" width="2" height="2" fill="#22301f"/><rect x="20" y="14" width="2" height="2" fill="#22301f"/><rect x="6" y="20" width="20" height="8" fill="#38bdf8"/><rect x="10" y="28" width="4" height="4" fill="#2b3a55"/><rect x="18" y="28" width="4" height="4" fill="#2b3a55"/></svg></span>
+    <h1>Zombie <span class="z">Outrun</span> <span class="rff">— RFF</span></h1>
+  </div>
+  <p class="tagline">The junk-food zombies are after your snack stash. Grab the good stuff, dodge the horde — one idea at a time!</p>
+
+  <div class="hud" aria-live="polite">
+    <div class="stat"><span>Score</span> <b id="hudScore">0</b></div>
+    <div class="stat"><span>Snacks</span> <b id="hudSupplies">0</b></div>
+    <div class="stat"><span>Best</span> <b id="hudBest">0</b></div>
+    <div class="stat practice" id="hudMode" hidden><span>Mode</span> <b>Practice</b></div>
+  </div>
+
+  <div class="stage">
+    <canvas id="game" width="480" height="560" aria-label="Zombie Outrun — RFF game area"></canvas>
+
+    <div class="overlay" id="startOverlay">
+      <h2>Ready to run?</h2>
+      <p>Maddy's out for a run — one idea at a time! Leap the junk-food zombies and grab the good snacks: water, apples and carrots.</p>
+      <button class="btn green" id="startBtn">Start running</button>
+    </div>
+
+    <div class="overlay" id="overOverlay" hidden>
+      <h2 id="overTitle">Caught!</h2>
+      <div class="big-score" id="finalScore">0</div>
+      <div class="sub" id="finalDetail">The junk-food zombies got your snacks.</div>
+      <button class="btn green" id="againBtn">Run again</button>
+    </div>
+
+    <div class="overlay" id="pauseOverlay" hidden>
+      <h2>Paused</h2>
+      <p>Catch your breath — one idea at a time. The zombies are… slowly shuffling in place.</p>
+      <button class="btn green" id="resumeBtn">Keep running</button>
+    </div>
+  </div>
+
+  <div class="controls-bar">
+    <button class="btn" id="pauseBtn">Pause</button>
+    <button class="btn ghost" id="restartBtn">Restart</button>
+  </div>
+
+  <div class="touch-pad" aria-label="Touch controls">
+    <button id="btnLeft" aria-label="Move left">◀ Left</button>
+    <button id="btnJump" aria-label="Jump">Jump ▲</button>
+    <button id="btnRight" aria-label="Move right">Right ▶</button>
+  </div>
+  <p class="hint">Keyboard: ← → to switch lanes, ↑ or Space to jump. On touch screens you can also swipe. 🎮 Controller: D-pad / stick to switch lanes, A to jump, Start to pause.</p>
+
+  <div class="settings">
+    <label id="diffLabel">Difficulty</label>
+    <div class="seg" role="group" aria-labelledby="diffLabel">
+      <button data-diff="easy" aria-pressed="false">Easy<br /><small>a gentle warm-up</small></button>
+      <button data-diff="normal" aria-pressed="false">Normal<br /><small>a steady pace</small></button>
+      <button data-diff="hard" aria-pressed="false">Hard<br /><small>full sprint</small></button>
+    </div>
+    <p class="note">Your difficulty choice is saved on this device.</p>
+    <div class="toggle-row">
+      <div>
+        <div class="lbl">Practice mode</div>
+        <div class="desc">No getting caught — zombies bonk off you and you keep running. Scores aren't saved.</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="practiceToggle" />
+        <span class="track"></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="btn ghost" id="tutorialBtn">How to play</button>
+    <button class="btn ghost" id="rulesBtn">Rules</button>
+    <button class="btn ghost" id="feedbackBtn">Feedback</button>
+  </div>
+
+  <section class="sheet" id="tutorialSheet" hidden>
+    <h2>How to play</h2>
+    <div class="vtut-grid">
+<div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#a78bfa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 24h26M28 14l10 10-10 10"/></svg></div><b>Switch lanes</b><p>Tap Left or Right, swipe, or use the arrow keys.</p></div>
+<div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#facc15" stroke="#eab308" stroke-width="2" stroke-linejoin="round"><path d="M27 4L10 28h11l-3 16 18-25H24z"/></svg></div><b>Jump the junk-food zombies</b><p>Tap Jump or press Space to leap clean over one.</p></div>
+<div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#fbbf24" stroke="#f59e0b" stroke-width="2" stroke-linejoin="round"><path d="M24 6l5.5 11.5L42 19l-9.5 8.5L35 40 24 33.5 13 40l2.5-12.5L6 19l12.5-1.5z"/></svg></div><b>Grab the good snacks</b><p>Run through water, apples and carrots for points.</p></div>
+<div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="26" r="15"/><path d="M24 18v8l6 4M18 6h12"/></svg></div><b>Survive the speed-up</b><p>It gets faster the longer you run.</p></div>
+<div class="vtut-card"><span class="vtut-num">5</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#fb7185" stroke="#e11d48" stroke-width="2"><path d="M24 40S7 29 7 17a9 9 0 0 1 17-4 9 9 0 0 1 17 4c0 12-17 23-17 23z"/></svg></div><b>Don't get tagged</b><p>A zombie tag ends the run — Practice keeps you going.</p></div>
+</div>
+    <button class="btn ghost" data-close="tutorialSheet">Close</button>
+  </section>
+
+  <section class="sheet" id="rulesSheet" hidden>
+    <h2>Rules</h2>
+    <ul>
+      <li><b>Goal:</b> run as far as you can and collect as many healthy snacks as possible.</li>
+      <li><b>Scoring:</b> +1 point for every moment you stay ahead of the horde, +25 points per healthy snack collected.</li>
+      <li><b>Getting caught:</b> running into a junk-food zombie (same lane, feet on the ground) ends the run.</li>
+      <li><b>Jumping:</b> while you're in the air, zombies pass right under you.</li>
+      <li><b>Difficulty:</b> Easy, Normal and Hard change zombie speed and how often they appear. Your pick is saved.</li>
+      <li><b>Practice mode:</b> zombies can't catch you and the score doesn't count toward your best — it's just for learning the ropes.</li>
+      <li><b>Best score:</b> your best non-practice run is saved on this device.</li>
+    </ul>
+    <button class="btn ghost" data-close="rulesSheet">Close</button>
+  </section>
+
+  <section class="sheet" id="feedbackSheet" hidden>
+    <h2>Feedback</h2>
+    <p>Tell us what you loved, what tripped you up, or what ridiculous snack we should add next. Copy your note and send it our way on Instagram.</p>
+    <textarea id="feedbackText" placeholder="Type your feedback here…"></textarea>
+    <p class="fb-terms">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+    <div class="row">
+      <button class="btn green" id="copyFeedbackBtn">Copy feedback</button>
+      <button class="btn ghost" data-close="feedbackSheet">Close</button>
+    </div>
+    <div class="fb-status" id="feedbackStatus" aria-live="polite"></div>
+  </section>
+
+  <footer>
+    Zombie Outrun — RFF · An RFF game<br />
+    More games at <a href="../games-hub/">Holo's Arcade</a>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var canvas = document.getElementById("game");
+  var ctx = canvas.getContext("2d");
+  var W = canvas.width, H = canvas.height;
+
+  var LS_DIFF = "zombieOutrunRff.difficulty";
+  var LS_BEST = "zombieOutrunRff.best";
+
+  var DIFFS = {
+    easy:   { speed: 3.0, spawn: 95, label: "Easy" },
+    normal: { speed: 4.2, spawn: 72, label: "Normal" },
+    hard:   { speed: 5.6, spawn: 54, label: "Hard" }
+  };
+
+  var difficulty = "normal";
+  try {
+    var saved = localStorage.getItem(LS_DIFF);
+    if (saved && DIFFS[saved]) difficulty = saved;
+  } catch(e){}
+  var best = 0;
+  try { best = parseInt(localStorage.getItem(LS_BEST) || "0", 10) || 0; } catch(e){}
+
+  var practice = false;
+
+  // --- Game state ---
+  var LANE_X = [110, 240, 370];
+  var GROUND_Y = 470;
+  var state = "ready"; // ready | running | paused | over
+  var player, zombies, supplies, score, supplyCount, frame, speedNow, spawnTimer, shake;
+
+  function reset(){
+    player = { lane: 1, x: LANE_X[1], jumpT: 0, runPhase: 0 };
+    zombies = [];
+    supplies = [];
+    score = 0;
+    supplyCount = 0;
+    frame = 0;
+    speedNow = DIFFS[difficulty].speed;
+    spawnTimer = 40;
+    shake = 0;
+    updateHud();
+  }
+
+  function updateHud(){
+    document.getElementById("hudScore").textContent = Math.floor(score);
+    document.getElementById("hudSupplies").textContent = supplyCount;
+    document.getElementById("hudBest").textContent = best;
+    document.getElementById("hudMode").hidden = !practice;
+  }
+
+  // --- Input ---
+  function moveLeft(){ if (player.lane > 0){ player.lane--; } }
+  function moveRight(){ if (player.lane < 2){ player.lane++; } }
+  function jump(){ if (player.jumpT === 0) player.jumpT = 1; }
+
+  document.addEventListener("keydown", function(e){
+    if (state === "running"){
+      if (e.key === "ArrowLeft"){ moveLeft(); e.preventDefault(); }
+      else if (e.key === "ArrowRight"){ moveRight(); e.preventDefault(); }
+      else if (e.key === "ArrowUp" || e.key === " "){ jump(); e.preventDefault(); }
+      else if (e.key === "p" || e.key === "P"){ pauseGame(); }
+    } else if (state === "paused" && (e.key === "p" || e.key === "P" || e.key === " ")){
+      resumeGame(); e.preventDefault();
+    }
+  });
+
+  function bindHold(id, fn){
+    var el = document.getElementById(id);
+    el.addEventListener("pointerdown", function(e){ e.preventDefault(); fn(); });
+    el.addEventListener("click", function(e){ e.preventDefault(); });
+  }
+  bindHold("btnLeft", moveLeft);
+  bindHold("btnRight", moveRight);
+  bindHold("btnJump", jump);
+
+  var touchStartX = null, touchStartY = null;
+  canvas.addEventListener("touchstart", function(e){
+    var t = e.changedTouches[0];
+    touchStartX = t.clientX; touchStartY = t.clientY;
+  }, {passive:true});
+  canvas.addEventListener("touchend", function(e){
+    if (touchStartX === null) return;
+    var t = e.changedTouches[0];
+    var dx = t.clientX - touchStartX, dy = t.clientY - touchStartY;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 24){
+      if (dx < 0) moveLeft(); else moveRight();
+    } else if (dy < -24){
+      jump();
+    } else if (Math.abs(dx) < 12 && Math.abs(dy) < 12){
+      jump();
+    }
+    touchStartX = null; touchStartY = null;
+  }, {passive:true});
+
+  // --- Flow ---
+  var startOverlay = document.getElementById("startOverlay");
+  var overOverlay = document.getElementById("overOverlay");
+  var pauseOverlay = document.getElementById("pauseOverlay");
+
+  function startGame(){
+    reset();
+    state = "running";
+    startOverlay.hidden = true;
+    overOverlay.hidden = true;
+    pauseOverlay.hidden = true;
+  }
+  function pauseGame(){
+    if (state !== "running") return;
+    state = "paused";
+    pauseOverlay.hidden = false;
+  }
+  function resumeGame(){
+    if (state !== "paused") return;
+    state = "running";
+    pauseOverlay.hidden = true;
+  }
+  function gameOver(){
+    state = "over";
+    var finalScore = Math.floor(score);
+    var isBest = false;
+    if (!practice && finalScore > best){
+      best = finalScore; isBest = true;
+      try { localStorage.setItem(LS_BEST, String(best)); } catch(e){}
+    }
+    document.getElementById("overTitle").textContent = "Caught!";
+    document.getElementById("finalScore").textContent = finalScore;
+    document.getElementById("finalDetail").textContent =
+      "You grabbed " + supplyCount + (supplyCount === 1 ? " healthy snack" : " healthy snacks") + " before the junk-food horde caught you." +
+      (isBest ? " New best score!" : "");
+    overOverlay.hidden = false;
+    updateHud();
+  }
+
+  document.getElementById("startBtn").addEventListener("click", startGame);
+  document.getElementById("againBtn").addEventListener("click", startGame);
+  document.getElementById("resumeBtn").addEventListener("click", resumeGame);
+  document.getElementById("pauseBtn").addEventListener("click", function(){
+    if (state === "running") pauseGame();
+    else if (state === "paused") resumeGame();
+  });
+  document.getElementById("restartBtn").addEventListener("click", function(){
+    if (state === "running" || state === "paused" || state === "over") startGame();
+  });
+
+  // --- Settings ---
+  var segBtns = document.querySelectorAll(".seg button[data-diff]");
+  function paintSeg(){
+    segBtns.forEach(function(b){
+      b.setAttribute("aria-pressed", b.getAttribute("data-diff") === difficulty ? "true" : "false");
+    });
+  }
+  segBtns.forEach(function(b){
+    b.addEventListener("click", function(){
+      difficulty = b.getAttribute("data-diff");
+      try { localStorage.setItem(LS_DIFF, difficulty); } catch(e){}
+      paintSeg();
+      if (state === "ready") reset();
+    });
+  });
+  paintSeg();
+
+  document.getElementById("practiceToggle").addEventListener("change", function(e){
+    practice = e.target.checked;
+    updateHud();
+  });
+
+  // --- Sheets ---
+  function toggleSheet(id, btn){
+    var sheet = document.getElementById(id);
+    var willShow = sheet.hidden;
+    ["tutorialSheet","rulesSheet","feedbackSheet"].forEach(function(s){
+      document.getElementById(s).hidden = true;
+    });
+    sheet.hidden = !willShow;
+    if (willShow) sheet.scrollIntoView({behavior:"smooth", block:"nearest"});
+  }
+  document.getElementById("tutorialBtn").addEventListener("click", function(){ toggleSheet("tutorialSheet"); });
+  document.getElementById("rulesBtn").addEventListener("click", function(){ toggleSheet("rulesSheet"); });
+  document.getElementById("feedbackBtn").addEventListener("click", function(){ toggleSheet("feedbackSheet"); });
+  document.querySelectorAll("[data-close]").forEach(function(b){
+    b.addEventListener("click", function(){
+      document.getElementById(b.getAttribute("data-close")).hidden = true;
+    });
+  });
+  document.getElementById("copyFeedbackBtn").addEventListener("click", function(){
+    var txt = document.getElementById("feedbackText").value.trim();
+    var status = document.getElementById("feedbackStatus");
+    if (!txt){ status.textContent = "Write a little something first!"; return; }
+    /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+    try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "zombie-outrun-rff", rating: (typeof fbRating!=="undefined"?fbRating:0), text: txt||"", tag: "", mode: "real", level: "", difficulty: "", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+    function done(){ status.textContent = "Copied! Paste it into an Instagram message to @ridiculouslyfitandfed."; }
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(done, function(){ fallback(); });
+    } else { fallback(); }
+    function fallback(){
+      var ta = document.getElementById("feedbackText");
+      ta.select();
+      try { document.execCommand("copy"); done(); }
+      catch(e){ status.textContent = "Couldn't copy automatically — long-press the text to copy it."; }
+    }
+  });
+
+  // --- Spawning ---
+  function spawnZombie(){
+    var lane = Math.floor(Math.random() * 3);
+    // Avoid an impossible wall: never fill all 3 lanes at the same depth.
+    var nearTop = zombies.filter(function(z){ return z.y < 130; });
+    var lanesUsed = {};
+    nearTop.forEach(function(z){ lanesUsed[z.lane] = true; });
+    if (Object.keys(lanesUsed).length >= 2 && lanesUsed[lane]) {
+      lane = [0,1,2].filter(function(l){ return !lanesUsed[l]; })[0];
+    }
+    zombies.push({ lane: lane, y: -60, wob: Math.random() * Math.PI * 2, passed: false, kind: ["donut", "pizza", "couch"][Math.floor(Math.random() * 3)] });
+  }
+  function spawnSupply(){
+    var lane = Math.floor(Math.random() * 3);
+    var kinds = ["water", "apple", "carrot"];
+    supplies.push({ lane: lane, y: -40, kind: kinds[Math.floor(Math.random()*kinds.length)], spin: Math.random()*Math.PI*2 });
+  }
+
+  // --- Update ---
+  function update(){
+    frame++;
+    speedNow = DIFFS[difficulty].speed + Math.min(3.2, frame / 1400);
+    score += speedNow * 0.06;
+
+    // Player lane easing
+    var targetX = LANE_X[player.lane];
+    player.x += (targetX - player.x) * 0.3;
+    player.runPhase += speedNow * 0.09;
+
+    // Jump arc
+    if (player.jumpT > 0){
+      player.jumpT += 0.045;
+      if (player.jumpT >= Math.PI){ player.jumpT = 0; }
+    }
+
+    spawnTimer--;
+    if (spawnTimer <= 0){
+      spawnZombie();
+      if (Math.random() < 0.45) spawnSupply();
+      spawnTimer = DIFFS[difficulty].spawn * (0.75 + Math.random() * 0.5);
+    }
+
+    var airborne = player.jumpT > 0 && Math.sin(player.jumpT) > 0.35;
+
+    zombies = zombies.filter(function(z){
+      z.y += speedNow;
+      z.wob += 0.08;
+      if (z.y > H + 70) return false;
+      // Collision: same lane, close to player, player on ground
+      if (!z.passed && Math.abs(z.y - GROUND_Y) < 46 && Math.abs(LANE_X[z.lane] - player.x) < 44){
+        if (airborne){
+          z.passed = true;
+        } else if (practice){
+          z.passed = true;
+          shake = 6;
+          score = Math.max(0, score - 10);
+        } else {
+          gameOver();
+        }
+      }
+      return true;
+    });
+    if (state !== "running") return;
+
+    supplies = supplies.filter(function(s){
+      s.y += speedNow;
+      s.spin += 0.05;
+      if (s.y > H + 50) return false;
+      if (Math.abs(s.y - GROUND_Y) < 44 && Math.abs(LANE_X[s.lane] - player.x) < 46){
+        supplyCount++;
+        score += 25;
+        floaters.push({ x: LANE_X[s.lane], y: GROUND_Y - 70, t: 0, text: "+25" });
+        return false;
+      }
+      return true;
+    });
+
+    floaters = floaters.filter(function(f){ f.t += 0.02; f.y -= 1.1; return f.t < 1; });
+    if (shake > 0) shake *= 0.85;
+    updateHud();
+  }
+
+  var floaters = [];
+
+  // --- Drawing ---
+  function roundRect(x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawBackground(){
+    // Night sky
+    var sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, "#141c30");
+    sky.addColorStop(0.6, "#232f47");
+    sky.addColorStop(1, "#2e4038");
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    // Moon
+    ctx.fillStyle = "#ffd166";
+    ctx.beginPath(); ctx.arc(408, 62, 30, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(20,28,48,0.9)";
+    ctx.beginPath(); ctx.arc(394, 52, 26, 0, Math.PI * 2); ctx.fill();
+
+    // Stars
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    var starSeed = [40,90,150,205,265,330,60,120,300,180,380,25];
+    for (var i = 0; i < starSeed.length; i++){
+      var sx = (starSeed[i] * 37) % W, sy = (starSeed[i] * 13) % 130 + 8;
+      ctx.fillRect(sx, sy, 2.5, 2.5);
+    }
+
+    // Distant crooked fence + tombstones silhouettes
+    ctx.fillStyle = "#1a2436";
+    ctx.fillRect(0, 300, W, 10);
+    for (var f = 0; f < W; f += 46){ ctx.fillRect(f, 282, 7, 30); }
+    ctx.fillStyle = "#202c3f";
+    roundRect(28, 268, 26, 40, 12); ctx.fill();
+    roundRect(428, 258, 30, 50, 14); ctx.fill();
+
+    // Ground / track
+    ctx.fillStyle = "#31473a";
+    ctx.fillRect(0, 316, W, H - 316);
+    // Lane stripes scrolling
+    ctx.fillStyle = "rgba(255,255,255,0.28)";
+    var off = (frame * speedNow) % 64;
+    [175, 305].forEach(function(x){
+      for (var y = 316 - 64 + off; y < H; y += 64){
+        ctx.fillRect(x - 3, y, 6, 34);
+      }
+    });
+    // Lane glow edges
+    ctx.fillStyle = "rgba(255,209,102,0.16)";
+    ctx.fillRect(42, 316, 4, H - 316);
+    ctx.fillRect(W - 46, 316, 4, H - 316);
+  }
+
+  // --- Pixel-art sprites (ZOMBIE-RFF-2026-11-24) ---
+  // Chunky 16-bit style: sprites are string maps, one char per pixel cell.
+  // drawPixels first outlines the silhouette in dark, then fills the cells.
+  function drawPixels(map, pal, cell, ox, oy){
+    var r, c, ch, edge;
+    ctx.fillStyle = "#22301f";
+    for (r = 0; r < map.length; r++){
+      for (c = 0; c < map[r].length; c++){
+        ch = map[r].charAt(c);
+        if (ch === "." || ch === " ") continue;
+        edge = r === 0 || r === map.length - 1 || c === 0 || c === map[r].length - 1 ||
+          map[r].charAt(c - 1) === "." || map[r].charAt(c + 1) === "." ||
+          (map[r - 1] && map[r - 1].charAt(c) === ".") || (map[r + 1] && map[r + 1].charAt(c) === ".");
+        if (edge) ctx.fillRect(ox + c * cell - 1, oy + r * cell - 1, cell + 2, cell + 2);
+      }
+    }
+    for (r = 0; r < map.length; r++){
+      for (c = 0; c < map[r].length; c++){
+        ch = map[r].charAt(c);
+        if (ch === "." || ch === " " || !pal[ch]) continue;
+        ctx.fillStyle = pal[ch];
+        ctx.fillRect(ox + c * cell, oy + r * cell, cell, cell);
+      }
+    }
+  }
+
+  var SUPPLY_MAPS = {
+    water: ["...CC...", "...CC...", ".BBBBBB.", ".BBBBBB.", ".BWWWWB.", ".BBBBBB.", ".BBBBBB.", "..BBBB.."],
+    apple: ["...SS...", "..GGGG..", ".RRRRRR.", "RRRRRRRR", "RRRRRRRR", "RRRRRRRR", ".RRRRRR.", "..RRRR.."],
+    carrot: ["..GGGG..", ".GGGGGG.", "..OOOO..", ".OOOOOO.", ".OOOOOO.", "..OOOO..", "...OO...", "...OO..."]
+  };
+  var SUPPLY_PAL = { C:"#2f7fb8", B:"#57b7e8", W:"#ffffff", S:"#7a4a21", G:"#5da24a", R:"#e8483f", O:"#ff8c42" };
+
+  function drawSupply(s){
+    var x = LANE_X[s.lane], y = s.y;
+    var bob = Math.sin(s.spin * 2) * 3;
+    ctx.save();
+    ctx.translate(x, y + bob);
+    // glow ring
+    ctx.strokeStyle = "rgba(255,209,102,0.85)";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(0, 0, 24, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "rgba(255,209,102,0.18)";
+    ctx.beginPath(); ctx.arc(0, 0, 24, 0, Math.PI * 2); ctx.fill();
+    drawPixels(SUPPLY_MAPS[s.kind] || SUPPLY_MAPS.apple, SUPPLY_PAL, 3, -12, -12);
+    ctx.restore();
+  }
+
+  var ZOMBIE_BASE = [
+    ".....HHHHHH.....",
+    "..HHHHHHHHHHHH..",
+    "..HHHHHHHHHHHH..",
+    "..GGGGGGGGGGGG..",
+    "..GGGGGGGGGGGG..",
+    "...GGGGGGGGGG...",
+    "...GEGGGGGGEG...",
+    "....GGMMMMGG....",
+    ".....GGGGGG.....",
+    "..CCCCCCCCCCCC..",
+    ".GCCCCCCCCCCCCG.",
+    ".GCCCCCCCCCCCCG.",
+    "..CCCCCCCCCCCC..",
+    "..CCCCCCCCCCCC..",
+    "...PPPPPPPPPP...",
+    "...PPPP..PPPP...",
+    "...PPPP..PPPP...",
+    "..SSSSSS..SSSSSS",
+    "..SSSSSS..SSSSSS"
+  ];
+  // Junk-food zombies: same silhouette, different coat + food hat per kind.
+  var ZOMBIE_KINDS = {
+    donut: { hat: [".....HHHHHH.....", "..HHWHHHHHHWHH..", "..HHHHHHHHHHHH.."],
+             pal: { H:"#f9a8d4", W:"#ffffff", G:"#7ec850", E:"#22301f", M:"#22301f", C:"#ec4899", P:"#4a3f63", S:"#3f3a4a" } },
+    pizza: { hat: ["......YYYY......", ".....YYYYYY.....", "....YYYRYYYY...."],
+             pal: { H:"#facc15", Y:"#facc15", R:"#e8483f", G:"#7ec850", E:"#22301f", M:"#22301f", C:"#e86a2c", P:"#4a3f63", S:"#3f3a4a" } },
+    couch: { hat: [".....BBBBBB.....", "..BBBBBBBBBBBB..", "..BBBBBBBBBBBB.."],
+             pal: { H:"#8b5a2b", B:"#8b5a2b", G:"#7ec850", E:"#22301f", M:"#22301f", C:"#8b5a2b", P:"#4a3f63", S:"#3f3a4a" } }
+  };
+
+  function drawZombie(z){
+    var x = LANE_X[z.lane] + Math.sin(z.wob) * 5;
+    var y = z.y;
+    var s = 0.55 + (y / H) * 0.55; // grow as it approaches
+    var kind = ZOMBIE_KINDS[z.kind] || ZOMBIE_KINDS.donut;
+    var map = kind.hat.concat(ZOMBIE_BASE.slice(3));
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(s, s);
+    // shadow
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.beginPath(); ctx.ellipse(0, 36, 22, 6, 0, 0, Math.PI * 2); ctx.fill();
+    drawPixels(map, kind.pal, 4, -32, -42);
+    ctx.restore();
+  }
+
+  // Maddy in workout gear: RFF-blue top + headband, dark leggings, white trainers.
+  var MADDY_TOP = [
+    ".....KKKKKK.....",
+    "..KKKKKKKKKKKK..",
+    "..KKKKKKKKKKKK..",
+    "..KBBBBBBBBBBK..",
+    "..KSSSSSSSSSSK..",
+    "...SSSSSSSSSS...",
+    "...SSESSSSESS...",
+    "....SSMMMMSS....",
+    ".....SSSSSS.....",
+    "..TTTTTTTTTTTT..",
+    ".STTTTTTTTTTTTS.",
+    ".STTDTTTTTTTDTS.",
+    ".STTTTTTTTTTTTS.",
+    "..TTTTTTTTTTTT..",
+    "...DDDDDDDDDD..."
+  ];
+  var MADDY_LEGS_A = [
+    "...LLLL..LLLL...",
+    "..LLLL....LLLL..",
+    "..LLLL....LLLL..",
+    ".WWWWW....WWWWW.",
+    ".WWWOOW...OWWWW."
+  ];
+  var MADDY_LEGS_B = [
+    "....LLLLLLLL....",
+    "....LLLLLLLL....",
+    "....LLLLLLLL....",
+    "....WWWWWWWW....",
+    "....WWWWOWWW...."
+  ];
+  var MADDY_PAL = { K:"#5b3a29", B:"#38bdf8", S:"#f2b183", E:"#22301f", M:"#5b3a29", T:"#38bdf8", D:"#1d7fb8", L:"#2b3a55", W:"#f8fafc", O:"#ff8c42" };
+
+  function drawPlayer(){
+    var jumpH = player.jumpT > 0 ? Math.sin(player.jumpT) * 95 : 0;
+    var x = player.x, y = GROUND_Y - jumpH;
+    ctx.save();
+    ctx.translate(x, y);
+    // shadow (stays on ground)
+    ctx.fillStyle = "rgba(0,0,0,0.3)";
+    var shScale = 1 - (jumpH / 220);
+    ctx.beginPath(); ctx.ellipse(0, jumpH + 36, 22 * shScale + 6, 6, 0, 0, Math.PI * 2); ctx.fill();
+    var legs = Math.sin(player.runPhase) > 0 ? MADDY_LEGS_A : MADDY_LEGS_B;
+    var map = MADDY_TOP.concat(legs);
+    var bob = jumpH > 4 ? 0 : Math.abs(Math.sin(player.runPhase)) * 2;
+    drawPixels(map, MADDY_PAL, 4, -32, -42 - bob);
+    ctx.restore();
+  }
+
+  function draw(){
+    ctx.save();
+    if (shake > 0.4){
+      ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+    }
+    drawBackground();
+    // Draw far-to-near: supplies, zombies sorted by y, then player
+    supplies.slice().sort(function(a,b){ return a.y - b.y; }).forEach(drawSupply);
+    zombies.slice().sort(function(a,b){ return a.y - b.y; }).forEach(drawZombie);
+    drawPlayer();
+    // floaters
+    ctx.font = "700 20px Fredoka, sans-serif";
+    ctx.textAlign = "center";
+    floaters.forEach(function(f){
+      ctx.fillStyle = "rgba(255,209,102," + (1 - f.t) + ")";
+      ctx.fillText(f.text, f.x, f.y);
+    });
+    ctx.restore();
+  }
+
+  function loop(){
+    if (state === "running") update();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+
+<script>
+/* INSERT-COIN-2026-11-22: place the blinking line under the title
+   on games with a start button; remove it once play starts. */
+(function(){try{
+  if(document.querySelector('.insert-coin'))return;
+  var ids=['btnStart','startBtn','playBtn','btnPlay','newBtn','newGameBtn','btnNew'];
+  var start=null,i,b;
+  for(i=0;i<ids.length;i++){start=document.getElementById(ids[i]);if(start)break;}
+  if(!start){var btns=document.querySelectorAll('button');for(i=0;i<btns.length;i++){b=btns[i];if(/^(\u25b6\s*)?(start game|start|play|new game|begin)$/i.test((b.textContent||'').trim())){start=b;break;}}}
+  if(!start)return;
+  var h=document.querySelector('h1')||document.querySelector('h2');if(!h||!h.parentNode)return;
+  var p=document.createElement('p');p.className='insert-coin';p.setAttribute('aria-hidden','true');p.textContent='INSERT COIN TO CONTINUE';
+  h.parentNode.insertBefore(p,h.nextSibling);
+  start.addEventListener('click',function(){if(p.parentNode)p.parentNode.removeChild(p);});
+}catch(e){}})();
+</script>
+<!-- GAMEPAD-2026-11-23: shared gamepad helper — controller support; keyboard/touch/mouse unchanged. -->
+<script src="../shared/gamepad.js"></script>
+<script>
+if (window.HoloGamepad) HoloGamepad.bind({ keys: { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', action: 'Space', pause: 'KeyP' } });
+</script>
+</body>
+</html>
