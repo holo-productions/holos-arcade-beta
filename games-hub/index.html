@@ -2180,6 +2180,14 @@ body.in-game #takeTourHubBtn{display:none!important}
 /* FAV-PRETTY-TEXT-2026-11-24 (Holo): Favourites intro + empty-pond
    text in the pretty heading font, softer and easier to read. */
 #favorites>p,#favEmpty p{font-family:"Bricolage Grotesque",sans-serif;font-size:17px;line-height:1.65;letter-spacing:-.01em}
+/* RECENT-SHELF-2026-11-24 (Holo 2026-11-24: "Fix what we can in ha hp rff" — scores/XP per device): a visible Recently Played shelf on the home view, newest first, tap a tile to resume. The Library "Recently Played" pill keeps the full list (last 20). */
+#recentShelf .recent-row{display:flex;gap:10px;overflow-x:auto;padding:6px 2px 10px;-webkit-overflow-scrolling:touch}
+#recentShelf .recent-tile{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:150px;max-width:196px;text-align:left;background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:12px 13px;cursor:pointer;font-family:inherit;color:var(--ink)}
+#recentShelf .recent-tile:hover{border-color:var(--gold)}
+#recentShelf .recent-tile b{font-size:14.5px;line-height:1.35}
+#recentShelf .recent-tile span{font-size:12.5px;color:var(--muted);line-height:1.4}
+#recentShelf .recent-tile .recent-play{font-size:13px;font-weight:800;color:var(--ink)}
+#recentShelf .recent-note{margin:6px 0 0;color:var(--muted);font-size:13.5px}
 #favorites .fav-grid{max-width:900px;margin-left:auto;margin-right:auto}
 
 /* SUBNAV-CENTER-2026-11-22 (Holo 21:48): subNav row centred on
@@ -2723,6 +2731,17 @@ setTimeout(function(){
 
   </section>
 
+  <!-- ================= RECENTLY PLAYED (CLOUD-SAVES-2026-11-24) ================= -->
+  <!-- Newest first, tap a tile to resume. Hidden when signed out or when
+       nothing has been played yet; filled in by the cloud-saves module. -->
+  <section class="hub-panel" id="recentShelf" hidden aria-label="Recently played">
+    <span class="kicker personal">Your Arcade</span>
+    <h2><svg class="runner-duck runner-duck-sm" aria-hidden="true"><use href="#runnerDuck"></use></svg> Recently Played</h2>
+    <p style="margin:0;color:var(--muted);max-width:640px">Pick up where you left off — tap a game to play it again.</p>
+    <div class="recent-row" id="recentRow" style="margin-top:12px"></div>
+    <p class="recent-note">Your recent games, scores, Glitch XP and favourites follow your account — sign in on another device and they are there.</p>
+  </section>
+
   <!-- ================= OWNER INVITE — LIVE PAGE (owner only) ================= -->
   <!-- Filled in by JS only in owner mode; stays hidden and empty for visitors. -->
   <section class="hub-panel" id="liveInviteMount" hidden aria-label="Invite a tester — owner only"></section>
@@ -2815,7 +2834,7 @@ setTimeout(function(){
         </div>
       </div>
     </div>
-    <p class="gotd-note">A new game is featured every day. Your streak is saved on this device.</p>
+    <p class="gotd-note">A new game is featured every day. Your streak follows your account across devices.</p>
     
   </section>
 
@@ -2852,7 +2871,7 @@ setTimeout(function(){
   <section class="hub-panel" id="yourArcadePanel" aria-label="Your Arcade — badges and stats">
     <span class="kicker personal">Your Arcade</span>
     <h2>Badges &amp; Bragging Rights</h2>
-    <p style="margin:0;color:var(--muted);max-width:640px">Your progress is saved on this device. Keep a streak going and collect badges as you explore. All optional.</p>
+    <p style="margin:0;color:var(--muted);max-width:640px">Your progress is saved to your account and follows you across devices when you sign in. Keep a streak going and collect badges as you explore. All optional.</p>
     <div class="hub-box" id="acctStatsPanel">
       <h3>Your stats</h3>
       <div class="xp-level-box" id="xpLevelBox">
@@ -8358,7 +8377,9 @@ setTimeout(function(){
      are recorded with timestamps in localStorage by the recorder
      script at the bottom of this file; this pill shows those
      games newest first so a tester can find a game again and
-     tap its duck to favourite it. Per device, like scores. */
+     tap its duck to favourite it. The list also syncs to the
+     player's cloud save (CLOUD-SAVES-2026-11-24), so it follows
+     the account across devices. */
   var RECENT_KEY = 'holos-arcade-recent-plays';
   function loadRecents(){
     try { var v = JSON.parse(localStorage.getItem(RECENT_KEY)); if(Array.isArray(v)) return v.filter(function(r){ return r && r.slug; }); } catch(e){}
@@ -12022,6 +12043,20 @@ window.holoDaily = (function(){
     return { lastPlayed: '', streak: 0, best: 0 };
   }
   function saveState(){ try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){} }
+  /* CLOUD-SAVES-2026-11-24: apply a merged Game-of-the-Day record to
+     the live in-memory GOTD state (same reason as holoApplyCloudHub:
+     `state` is IIFE-private; a bare localStorage write would be
+     clobbered by the next saveState()). */
+  window.holoApplyCloudGotd = function(g){
+    try {
+      if(!g || typeof g !== 'object') return false;
+      if(typeof g.lastPlayed === 'string') state.lastPlayed = g.lastPlayed;
+      if(typeof g.streak === 'number') state.streak = Math.max(0, g.streak);
+      if(typeof g.best === 'number') state.best = Math.max(0, g.best);
+      saveState(); renderGotd();
+      return true;
+    } catch(e){ return false; }
+  };
   var state = loadState();
   /* GOTD-LOCALDAY-2026-11-23 one-time cleanup (same fix): a flag
      written under the old UTC day can't be trusted — it may be
@@ -12342,7 +12377,7 @@ window.holoDaily = (function(){
     <details class="legal-section">
       <summary>Which devices can I play on?</summary>
       <div class="legal-content">
-        <p>Any phone, tablet, or computer with a browser. Sign in with your email and password on up to 5 devices. Your scores and Glitch XP stay on the device you played on.</p>
+        <p>Any phone, tablet, or computer with a browser. Sign in with your email and password on up to 5 devices. Your scores, Glitch XP, favourites and recently played games follow your account — sign in on another device and they are there.</p>
       </div>
     </details>
 
@@ -12387,7 +12422,7 @@ window.holoDaily = (function(){
     <details class="legal-section">
       <summary>Is my progress saved if I switch phones?</summary>
       <div class="legal-content">
-        <p>Your account works on any device. Your scores and Glitch XP stay on the device you played on.</p>
+        <p>Your account works on any device. Sign in with the same email and password and your scores, Glitch XP, favourites and recently played games come with you.</p>
       </div>
     </details>
 
@@ -12395,7 +12430,7 @@ window.holoDaily = (function(){
     <details class="legal-section">
       <summary>Does my Glitch XP follow me to another device?</summary>
       <div class="legal-content">
-        <p>Not yet — it saves on each device for now. One shared bank is <strong>coming in the future</strong>. Don't worry, you won't lose them.</p>
+        <p>Yes — sign in with the same email and password on your other device and your Glitch XP, best scores, favourites, badges and recently played games come with you.</p>
       </div>
     </details>
 
@@ -12403,7 +12438,7 @@ window.holoDaily = (function(){
     <details class="legal-section">
       <summary>Can I merge my phone and laptop progress?</summary>
       <div class="legal-content">
-        <p>Coming in the future — when the shared bank arrives, your devices merge into one account. Don't worry, you won't lose your Glitch XP or progress.</p>
+        <p>Yes — your devices already share one account. Play on your phone, sign in on your laptop, and your Glitch XP, scores, favourites and recently played games are there. If both devices played while offline, the best score on each side wins and nothing is lost.</p>
       </div>
     </details>
 
@@ -12596,7 +12631,7 @@ window.holoDaily = (function(){
     <details class="legal-section">
       <summary>Can't remember a game you played?</summary>
       <div class="legal-content">
-        <p>Open the Library and tap the Recently Played pill. Your last 20 games show up there, newest first, so you can find the one you mean and tap its duck to favourite it. The list lives on this device.</p>
+        <p>Your recent games sit right at the top of the home page in Recently Played — tap one to jump back in. The full list (your last 20 games, newest first) is in the Library under the Recently Played pill. The list follows your account, so it is the same on your phone and laptop.</p>
       <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="library">Go to Library &#8594;</button></p>
         </div>
     </details>
@@ -12858,6 +12893,27 @@ window.holoDaily = (function(){
   H.playDays = Array.isArray(H.playDays) ? H.playDays : []; /* EASY-ADDS-2026-11-23: play-day history for the Trophy Case calendar */
   Object.keys(H.dayPlays).forEach(function(k){ if(k !== todayK && k !== yK) delete H.dayPlays[k]; });
   function saveHub(){ try { localStorage.setItem(HUB_KEY, JSON.stringify(H)); } catch(e){} }
+  /* CLOUD-SAVES-2026-11-24: apply a merged cloud save to the live
+     in-memory hub state + tell the cloud module whenever hub state
+     saves (a real play, a setting, a challenge). H is IIFE-private,
+     so the cloud module cannot touch it directly; this bridge is the
+     only way a merge from another device reaches the live display
+     (writing localStorage alone would be overwritten by the next
+     saveHub() with the stale in-memory values). */
+  window.holoApplyCloudHub = function(m){
+    try {
+      if(!m || typeof m !== 'object') return false;
+      if(m.xp){ H.points = Math.max(0, +m.xp.points || 0); H.totalEarned = Math.max(0, +m.xp.totalEarned || 0); }
+      if(m.plays && typeof m.plays === 'object') H.plays = m.plays;
+      if(Array.isArray(m.playDays)) H.playDays = m.playDays;
+      saveHub(); renderPoints();
+      return true;
+    } catch(e){ return false; }
+  };
+  (function(){
+    var _cloudSaveHub = saveHub;
+    saveHub = function(){ var r = _cloudSaveHub.apply(this, arguments); try { if(window.holoCloudSaves && window.holoCloudSaves.pushSoon) window.holoCloudSaves.pushSoon(); } catch(e){} return r; };
+  })();
   function gotdState(){
     try { var s = JSON.parse(localStorage.getItem(GOTD_KEY)); if(s && typeof s === 'object') return { lastPlayed: s.lastPlayed || '', streak: s.streak || 0, best: s.best || 0 }; } catch(e){}
     return { lastPlayed: '', streak: 0, best: 0 };
@@ -17436,7 +17492,9 @@ function renderTesterAuth(){
    card tap only opens the Game Menu, so only direct starts and
    in-player taps count) with timestamps in localStorage, newest
    first, one entry per game, capped at 20. The Library
-   "Recently Played" pill reads this list. Per device, like scores. */
+   "Recently Played" pill reads this list. The cloud-saves module
+   (CLOUD-SAVES-2026-11-24) also syncs this list to the player's
+   /users/<uid>/cloudSaves node, so it follows the account. */
 (function(){
   var RECENT_KEY = 'holos-arcade-recent-plays';
   var CAP = 20;
@@ -17461,6 +17519,482 @@ function renderTesterAuth(){
       } catch(e){}
     }, true);
   } catch(e){}
+})();
+</script>
+
+<script>
+/* ================= Cloud saves + Recently Played shelf (CLOUD-SAVES-2026-11-24) =================
+   Holo 2026-11-24 ("Fix what we can in ha hp rff"): scores / Glitch XP /
+   favourites lived on one device only — testers play on phone + laptop
+   and lost progress. This module syncs the hub's own saves to Firebase
+   under the signed-in player's own /users/<uid>/cloudSaves node, and
+   puts a visible Recently Played shelf on the home view (newest first,
+   tap a tile to resume — it clicks that game's own Play button, so a
+   resume is a real play exactly like tapping the card).
+
+   WHAT SYNCES (all best-wins / union merges, so two devices can both
+   play offline and neither side loses anything):
+     - Glitch XP: holoArcade_v1_hub points + totalEarned (max wins)
+     - Play counts: hub plays {slug: n} (max per game) + playDays (union)
+     - Game of the Day: holoArcade_v1_gotd streak + best streak
+     - Recently played: holos-arcade-recent-plays (union by game, newest wins, cap 20)
+     - Favourites: account record `favorites` {slug: favouritedAt} (union)
+     - Badges, two systems, both synced:
+       a) reviewer badges: account record `badges` {badgeId: earnedAt} (union)
+       b) achievement badges (BADGES-2026-11-24 framework): the ONE key
+          `holoArcade_v1_badges` {earned:{id:'YYYY-MM-DD'}, finishes, hardWins}
+          (union on earned, max on the counters). The framework's own note
+          says badges are private — "yours only, nobody else can see them"
+          — and this sync keeps that promise: the payload lives only under
+          the player's own /users/<uid> node (self-only rules), never on
+          a leaderboard or another player's screen. A badge merged in from
+          another device never pays XP twice: it arrives already in
+          `earned`, so checkBadges() skips it; its XP already rode in
+          with the merged totalEarned.
+     - Progress: account record played / reviewed / tested (union, latest wins)
+     - Best scores: holoArcade_v1_best_<game> {mode: score} (max per mode)
+       + holoArcade_v1_streak_<game> (latest day wins)
+   NOT synced (seams, owned elsewhere): per-game in-game saves inside
+   standalone game frames (each game keeps its own scores/progress inside
+   the game — the hub cannot see them); the weekly-tournament leaderboard
+   bests (holos-arcade-leaderboard-best — its own cloud queue already
+   ships those to /leaderboards); friend DMs / notifications (their own
+   modules). Practice rounds never earn or save anything (standing rule),
+   so nothing practice-related ever enters a cloud payload.
+
+   RULES: the live published rules already allow a signed-in player to
+   read/write ONLY their own /users/<uid> node (verified 2026-11-24 with
+   ephemeral accounts: own PATCH 200 + read-back match; another player's
+   PATCH/GET to the same node 401 Permission denied). NO rules publish
+   is needed for this feature. Writes go through the same fail-soft
+   REST pattern as the Inbox / leaderboard modules (fetch + idToken,
+   null on any failure, never throws, never blocks play).
+
+   OFFLINE: every local change schedules a push (2 s debounce). If the
+   push fails or the device is offline, a pending flag is kept and the
+   push retries on sign-in, on `online`, when the tab hides, and once a
+   minute while signed in. Sync runs on sign-in (pull + merge + push),
+   so the same login on phone + laptop sees the same saves.
+   BRIDGES: the hub's XP/play state (H) and the GOTD state live inside
+   IIFEs, so this module cannot update them directly — two tiny bridges
+   (window.holoApplyCloudHub next to saveHub, window.holoApplyCloudGotd
+   next to saveState) apply a merge to the live in-memory state, and
+   saveHub notifies this module on every save. Without them a merge
+   would be overwritten by the next local save with stale values.
+   Un-favouriting on one device can reappear from the other device until
+   that device syncs (union merge) — accepted beta behaviour, same as
+   the Download-my-data import. Signed-out / local-only accounts (no
+   Firebase uid) stay local-only, silently. */
+(function(){
+  var FB_API_KEY = 'AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak';
+  var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+  var AUTH_KEY = 'holos-firebase-auth';
+  var HUB_KEY = 'holoArcade_v1_hub', GOTD_KEY = 'holoArcade_v1_gotd';
+  var RECENT_KEY = 'holos-arcade-recent-plays';
+  var BEST_PREFIX = 'holoArcade_v1_best_', STREAK_PREFIX = 'holoArcade_v1_streak_';
+  var BADGE_KEY = 'holoArcade_v1_badges';
+  var PENDING_KEY = 'holos-arcade-cloudsaves-pending';
+  var NODE = 'cloudSaves';
+  var RECENT_CAP = 20, SHELF_MAX = 10;
+  var _inFlight = false, _pushTimer = null, _lastPushAt = 0, _lastCloudJson = '';
+
+  function isObj(v){ return v && typeof v === 'object' && !Array.isArray(v); }
+  function readJSON(k, dflt){ try { var v = JSON.parse(localStorage.getItem(k)); return (v === null || v === undefined) ? dflt : v; } catch(e){ return dflt; } }
+  function writeJSON(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+  function num(v, dflt){ var n = +v; return isFinite(n) ? n : dflt; }
+  function esc(s){ var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+
+  /* ---- auth (same pattern + stale-session cross-check as the Inbox module) ---- */
+  function loadAuth(){
+    try {
+      var v = JSON.parse(localStorage.getItem(AUTH_KEY));
+      if(v && v.idToken && v.uid){
+        try {
+          var t = (typeof getTester === 'function') ? getTester() : null;
+          if(t){
+            var tem = String(t.email || '').trim().toLowerCase();
+            var vem = String(v.email || '').trim().toLowerCase();
+            var tuid = String(t.uid || '');
+            if((tem && vem && tem !== vem) || (tuid && tuid !== String(v.uid || ''))) return null;
+          }
+        } catch(e0){}
+        return v;
+      }
+    } catch(e){}
+    return null;
+  }
+  function myUid(){
+    try { var a = loadAuth(); if(a && a.uid) return String(a.uid); } catch(e){}
+    try { var t = getTester(); if(t && t.uid) return String(t.uid); } catch(e){}
+    return null;
+  }
+  function freshToken(){
+    var a = loadAuth(); if(!a) return Promise.resolve(null);
+    if(a.exp && a.exp > Date.now() + 60000) return Promise.resolve(a.idToken);
+    if(!a.refreshToken) return Promise.resolve(null);
+    return fetch('https://securetoken.googleapis.com/v1/token?key=' + FB_API_KEY, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:'grant_type=refresh_token&refresh_token=' + encodeURIComponent(a.refreshToken) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(j && j.id_token){ a.idToken = j.id_token; a.refreshToken = j.refresh_token || a.refreshToken; a.exp = Date.now() + ((parseInt(j.expires_in,10)||3600)*1000); try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e){} return a.idToken; } return null; })
+      .catch(function(){ return null; });
+  }
+  function api(method, path, body, keepalive){
+    return freshToken().then(function(tok){
+      if(!tok) return null;
+      var opts = { method:method, headers:{ 'Content-Type':'application/json' } };
+      if(body !== undefined) opts.body = JSON.stringify(body);
+      if(keepalive) opts.keepalive = true;
+      return fetch(FB_RTDB + path + '.json?auth=' + encodeURIComponent(tok), opts)
+        .then(function(r){ return r.ok ? r.json().catch(function(){ return true; }) : null; }).catch(function(){ return null; });
+    }).catch(function(){ return null; });
+  }
+  /* GET that tells "no cloud yet" (200 + null) apart from a failed read:
+     a missing node is a first sync, not an error — it must still push. */
+  function getCloud(uid){
+    return freshToken().then(function(tok){
+      if(!tok) return { ok:false, data:null };
+      return fetch(FB_RTDB + '/users/' + encodeURIComponent(uid) + '/' + NODE + '.json?auth=' + encodeURIComponent(tok), { method:'GET' })
+        .then(function(r){ if(!r.ok) return { ok:false, data:null }; return r.json().then(function(d){ return { ok:true, data:d }; }).catch(function(){ return { ok:true, data:null }; }); })
+        .catch(function(){ return { ok:false, data:null }; });
+    }).catch(function(){ return { ok:false, data:null }; });
+  }
+
+  /* ---- collect local state (fresh read every time) ---- */
+  function collectLocal(){
+    var hub = readJSON(HUB_KEY, {}); if(!isObj(hub)) hub = {};
+    var gotd = readJSON(GOTD_KEY, {}); if(!isObj(gotd)) gotd = {};
+    var recents = readJSON(RECENT_KEY, []); if(!Array.isArray(recents)) recents = [];
+    recents = recents.filter(function(r){ return r && r.slug; }).map(function(r){ return { slug:String(r.slug), ts:num(r.ts, 0) }; });
+    var acct = {};
+    try { if(typeof loadAccountState === 'function') acct = loadAccountState() || {}; } catch(e){ acct = {}; }
+    var bests = {}, streaks = {};
+    try {
+      for(var i = 0; i < localStorage.length; i++){
+        var k = localStorage.key(i); if(!k) continue;
+        if(k.indexOf(BEST_PREFIX) === 0){ var b = readJSON(k, {}); if(isObj(b)) bests[k.slice(BEST_PREFIX.length)] = b; }
+        else if(k.indexOf(STREAK_PREFIX) === 0){ var s = readJSON(k, {}); if(isObj(s)) streaks[k.slice(STREAK_PREFIX.length)] = s; }
+      }
+    } catch(e){}
+    var plays = {};
+    if(isObj(hub.plays)) Object.keys(hub.plays).forEach(function(slug){ var n = num(hub.plays[slug], 0); if(n > 0) plays[slug] = n; });
+    var playDays = Array.isArray(hub.playDays) ? hub.playDays.filter(function(d){ return typeof d === 'string'; }) : [];
+    var hubBadges = readJSON(BADGE_KEY, {}); if(!isObj(hubBadges)) hubBadges = {};
+    var hbEarned = isObj(hubBadges.earned) ? hubBadges.earned : {};
+    return {
+      v: 1,
+      xp: { points: Math.max(0, num(hub.points, 0)), totalEarned: Math.max(0, num(hub.totalEarned, 0)) },
+      plays: plays, playDays: playDays,
+      hubBadges: { earned: hbEarned, finishes: Math.max(0, num(hubBadges.finishes, 0)), hardWins: Math.max(0, num(hubBadges.hardWins, 0)) },
+      gotd: { lastPlayed: String(gotd.lastPlayed || ''), streak: Math.max(0, num(gotd.streak, 0)), best: Math.max(0, num(gotd.best, 0)) },
+      recents: recents,
+      favorites: isObj(acct.favorites) ? acct.favorites : {},
+      badges: isObj(acct.badges) ? acct.badges : {},
+      played: isObj(acct.played) ? acct.played : {},
+      reviewed: isObj(acct.reviewed) ? acct.reviewed : {},
+      tested: isObj(acct.tested) ? acct.tested : {},
+      lastGame: String(acct.lastGame || ''), lastActivity: String(acct.lastActivity || ''),
+      bests: bests, streaks: streaks
+    };
+  }
+
+  /* ---- merge: best-wins / union. Deterministic + idempotent. ---- */
+  function mergeIsoUnion(a, b, earliest){
+    var out = {}, k;
+    if(isObj(a)) Object.keys(a).forEach(function(k){ out[k] = a[k]; });
+    if(isObj(b)) Object.keys(b).forEach(function(k){
+      var bv = b[k];
+      if(out[k] === undefined || out[k] === null || out[k] === ''){ out[k] = bv; return; }
+      if(bv === undefined || bv === null || bv === '') return;
+      out[k] = earliest ? (String(bv) < String(out[k]) ? bv : out[k]) : (String(bv) > String(out[k]) ? bv : out[k]);
+    });
+    return out;
+  }
+  function mergeMaxMap(a, b){
+    var out = {};
+    if(isObj(a)) Object.keys(a).forEach(function(k){ out[k] = Math.max(0, num(a[k], 0)); });
+    if(isObj(b)) Object.keys(b).forEach(function(k){ out[k] = Math.max(out[k] || 0, Math.max(0, num(b[k], 0))); });
+    return out;
+  }
+  function mergeBests(a, b){
+    var out = {}, g, k;
+    [a, b].forEach(function(side){
+      if(!isObj(side)) return;
+      Object.keys(side).forEach(function(g){
+        if(!isObj(side[g])) return;
+        out[g] = out[g] || {};
+        Object.keys(side[g]).forEach(function(k){ out[g][k] = Math.max(out[g][k] || 0, Math.max(0, num(side[g][k], 0))); });
+      });
+    });
+    return out;
+  }
+  function mergeStreaks(a, b){
+    var out = {};
+    [a, b].forEach(function(side){
+      if(!isObj(side)) return;
+      Object.keys(side).forEach(function(g){
+        var s = side[g]; if(!isObj(s)) return;
+        var cur = out[g];
+        if(!cur){ out[g] = { last:String(s.last || ''), count:Math.max(0, num(s.count, 0)) }; return; }
+        if(String(s.last || '') > String(cur.last || '')) out[g] = { last:String(s.last || ''), count:Math.max(0, num(s.count, 0)) };
+        else if(String(s.last || '') === String(cur.last || '')) cur.count = Math.max(cur.count, Math.max(0, num(s.count, 0)));
+      });
+    });
+    return out;
+  }
+  function mergeSaves(local, cloud){
+    if(!isObj(cloud)) return local;
+    var out = {
+      v: 1,
+      xp: { points: Math.max(num(local.xp.points, 0), num(cloud.xp && cloud.xp.points, 0)),
+            totalEarned: Math.max(num(local.xp.totalEarned, 0), num(cloud.xp && cloud.xp.totalEarned, 0)) },
+      plays: mergeMaxMap(local.plays, cloud.plays),
+      playDays: [],
+      hubBadges: {
+        earned: mergeIsoUnion(local.hubBadges && local.hubBadges.earned, cloud.hubBadges && cloud.hubBadges.earned, true),
+        finishes: Math.max(num(local.hubBadges && local.hubBadges.finishes, 0), num(cloud.hubBadges && cloud.hubBadges.finishes, 0)),
+        hardWins: Math.max(num(local.hubBadges && local.hubBadges.hardWins, 0), num(cloud.hubBadges && cloud.hubBadges.hardWins, 0))
+      },
+      gotd: { lastPlayed:'', streak:0, best:0 },
+      recents: [], favorites: {}, badges: {}, played: {}, reviewed: {}, tested: {},
+      lastGame: local.lastGame || '', lastActivity: local.lastActivity || '',
+      bests: mergeBests(local.bests, cloud.bests),
+      streaks: mergeStreaks(local.streaks, cloud.streaks)
+    };
+    var days = {};
+    (local.playDays || []).concat(cloud.playDays || []).forEach(function(d){ if(typeof d === 'string' && d) days[d] = 1; });
+    out.playDays = Object.keys(days).sort().slice(-400);
+    var lg = String(local.gotd.lastPlayed || ''), cg = String(cloud.gotd && cloud.gotd.lastPlayed || '');
+    if(cg > lg){ out.gotd = { lastPlayed: cg, streak: Math.max(0, num(cloud.gotd.streak, 0)), best: 0 }; }
+    else if(lg){ out.gotd = { lastPlayed: lg, streak: Math.max(0, num(local.gotd.streak, 0)), best: 0 }; }
+    else { out.gotd = { lastPlayed:'', streak:0, best:0 }; }
+    out.gotd.best = Math.max(num(local.gotd.best, 0), num(cloud.gotd && cloud.gotd.best, 0));
+    var bySlug = {};
+    (local.recents || []).concat(cloud.recents || []).forEach(function(r){
+      if(!r || !r.slug) return;
+      var ts = num(r.ts, 0);
+      if(!bySlug[r.slug] || ts > bySlug[r.slug].ts) bySlug[r.slug] = { slug:String(r.slug), ts:ts };
+    });
+    out.recents = Object.keys(bySlug).map(function(k){ return bySlug[k]; }).sort(function(a, b){ return b.ts - a.ts; }).slice(0, RECENT_CAP);
+    out.favorites = mergeIsoUnion(local.favorites, cloud.favorites, true);
+    out.badges = mergeIsoUnion(local.badges, cloud.badges, true);
+    out.played = mergeIsoUnion(local.played, cloud.played, false);
+    out.reviewed = mergeIsoUnion(local.reviewed, cloud.reviewed, false);
+    out.tested = mergeIsoUnion(local.tested, cloud.tested, false);
+    if(String(cloud.lastActivity || '') > String(local.lastActivity || '')){ out.lastGame = String(cloud.lastGame || ''); out.lastActivity = String(cloud.lastActivity || ''); }
+    return out;
+  }
+
+  /* ---- apply merged state back to this device.
+     Hub XP/plays and the GOTD record go through the bridges
+     (window.holoApplyCloudHub / window.holoApplyCloudGotd, defined
+     inside their IIFEs next to saveHub/saveState): H and the GOTD
+     `state` are IIFE-private, and a bare localStorage write would be
+     clobbered by the next saveHub()/saveState() with stale in-memory
+     values. Everything else (account record, recents, bests, streaks)
+     is read fresh from localStorage by its owner, so a direct write
+     is enough there. ---- */
+  function applyLocal(merged){
+    try {
+      var hubApplied = false;
+      try { if(typeof window.holoApplyCloudHub === 'function') hubApplied = !!window.holoApplyCloudHub({ xp: merged.xp, plays: merged.plays, playDays: merged.playDays }); } catch(e){}
+      if(!hubApplied){
+        var hub = readJSON(HUB_KEY, {}); if(!isObj(hub)) hub = {};
+        hub.points = merged.xp.points; hub.totalEarned = merged.xp.totalEarned;
+        hub.plays = merged.plays; hub.playDays = merged.playDays;
+        writeJSON(HUB_KEY, hub);
+      }
+      var gotdApplied = false;
+      try { if(typeof window.holoApplyCloudGotd === 'function') gotdApplied = !!window.holoApplyCloudGotd(merged.gotd); } catch(e){}
+      if(!gotdApplied) writeJSON(GOTD_KEY, merged.gotd);
+      /* Achievement badges: persist, then update the LIVE badge state
+         (window.holoBadges.state() returns the live object, so mutating
+         it updates the Trophy Case without a reload). checkBadges()
+         then re-tests: badges already in `earned` are skipped (no
+         double XP), while anything newly satisfied by the merged
+         progress unlocks normally, with its XP. */
+      try {
+        writeJSON(BADGE_KEY, merged.hubBadges || { earned:{}, finishes:0, hardWins:0 });
+        if(window.holoBadges && typeof window.holoBadges.state === 'function'){
+          var bst = window.holoBadges.state();
+          if(bst && typeof bst === 'object'){
+            bst.earned = (merged.hubBadges && merged.hubBadges.earned) || {};
+            bst.finishes = (merged.hubBadges && merged.hubBadges.finishes) || 0;
+            bst.hardWins = (merged.hubBadges && merged.hubBadges.hardWins) || 0;
+          }
+          if(typeof window.holoBadges.checkBadges === 'function') window.holoBadges.checkBadges();
+        }
+      } catch(e){}
+      writeJSON(RECENT_KEY, merged.recents);
+      try {
+        if(typeof loadAccountState === 'function'){
+          var s = loadAccountState() || {};
+          s.favorites = merged.favorites; s.badges = merged.badges;
+          s.played = merged.played; s.reviewed = merged.reviewed; s.tested = merged.tested;
+          s.lastGame = merged.lastGame; s.lastActivity = merged.lastActivity || s.lastActivity;
+          if(_origSaveAccountState) _origSaveAccountState(s);
+          else if(typeof saveAccountState === 'function') saveAccountState(s);
+        }
+      } catch(e){}
+      Object.keys(merged.bests).forEach(function(g){ writeJSON(BEST_PREFIX + g, merged.bests[g]); });
+      Object.keys(merged.streaks).forEach(function(g){ writeJSON(STREAK_PREFIX + g, merged.streaks[g]); });
+    } catch(e){}
+    try { if(typeof window.holoRefreshFavourites === 'function') window.holoRefreshFavourites(); } catch(e){}
+    try { if(typeof window.holoRefreshLibrary === 'function') window.holoRefreshLibrary(); } catch(e){}
+    try { if(typeof window.holoRefreshGotd === 'function') window.holoRefreshGotd(); } catch(e){}
+    renderShelf();
+  }
+
+  /* ---- push: pull cloud, merge, apply, push back. Fail-soft, queued offline. ---- */
+  function setPending(on){ try { if(on) localStorage.setItem(PENDING_KEY, '1'); else localStorage.removeItem(PENDING_KEY); } catch(e){} }
+  function pushNow(opts){
+    opts = opts || {};
+    if(_inFlight) return Promise.resolve(false);
+    if(!opts.force && Date.now() - _lastPushAt < 5000) return Promise.resolve(false);
+    var uid = myUid();
+    if(!uid) return Promise.resolve(false);
+    if(typeof navigator !== 'undefined' && navigator.onLine === false){ setPending(true); return Promise.resolve(false); }
+    _inFlight = true;
+    var local = collectLocal();
+    return getCloud(uid).then(function(res){
+      if(!res.ok){ setPending(true); return false; }
+      var cloud = res.data;
+      var merged = mergeSaves(local, isObj(cloud) ? cloud : null);
+      merged.updatedAt = Date.now();
+      var mergedJson = JSON.stringify(merged);
+      if(mergedJson !== JSON.stringify(local)) { try { applyLocal(merged); } catch(e){} }
+      if(mergedJson === _lastCloudJson && isObj(cloud)){ _lastPushAt = Date.now(); return true; }
+      return api('PATCH', '/users/' + encodeURIComponent(uid) + '/' + NODE, merged, !!opts.keepalive).then(function(ok){
+        if(ok === null){ setPending(true); return false; }
+        _lastCloudJson = mergedJson; _lastPushAt = Date.now(); setPending(false);
+        return true;
+      });
+    }).catch(function(){ setPending(true); return false; }).then(function(r){ _inFlight = false; return r; });
+  }
+  function pushSoon(){
+    if(_pushTimer) clearTimeout(_pushTimer);
+    _pushTimer = setTimeout(function(){ _pushTimer = null; try { pushNow(); } catch(e){} }, 2000);
+  }
+
+  /* ---- Recently Played shelf (home view, newest first, tap to resume) ---- */
+  var NAME_FALLBACK = { trivia:'Trivia', werewolf:'Capture the Werewolf', madcow:'Mad Cow', dj:'DJ Game', edm:'Popular Radio Music Trivia', rhythm:'Tap to the Beat', gizmo:"Gizmo's Pom Pom Adventure" };
+  function cardName(slug){
+    try {
+      var b = document.querySelector('.game-card [data-game="' + slug + '"]');
+      if(b){ var card = b.closest('.game-card'); var h = card && card.querySelector('h3'); if(h && h.textContent.trim()) return h.textContent.trim(); }
+    } catch(e){}
+    return NAME_FALLBACK[slug] || String(slug).replace(/-/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+  }
+  function bestOf(slug){
+    try { var v = readJSON(BEST_PREFIX + slug, {}); if(!isObj(v)) return 0; var m = 0; Object.keys(v).forEach(function(k){ m = Math.max(m, num(v[k], 0)); }); return m; } catch(e){ return 0; }
+  }
+  function whenLabel(ts){
+    try {
+      if(!ts) return '';
+      var d = new Date(ts), now = new Date();
+      var day = function(x){ return x.getFullYear() + '-' + (x.getMonth() + 1) + '-' + x.getDate(); };
+      if(day(d) === day(now)) return 'Played today';
+      var y = new Date(now); y.setDate(y.getDate() - 1);
+      if(day(d) === day(y)) return 'Played yesterday';
+      return 'Played ' + d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+    } catch(e){ return ''; }
+  }
+  function signedIn(){ try { return (typeof getTester === 'function') && !!getTester(); } catch(e){ return false; } }
+  function renderShelf(){
+    try {
+      var sec = document.getElementById('recentShelf'); if(!sec) return;
+      var row = document.getElementById('recentRow'); if(!row) return;
+      if(!signedIn()){ sec.hidden = true; return; }
+      var recents = readJSON(RECENT_KEY, []);
+      if(!Array.isArray(recents)) recents = [];
+      var seen = {}, items = [];
+      recents.forEach(function(r){
+        if(!r || !r.slug || seen[r.slug]) return;
+        seen[r.slug] = 1;
+        if(window.holoAge18 && window.holoAge18.isAdultSlug && window.holoAge18.isAdultSlug(r.slug) && window.holoAge18.adultGamesVisible && !window.holoAge18.adultGamesVisible()) return;
+        items.push(r);
+      });
+      items = items.slice(0, SHELF_MAX);
+      if(!items.length){ sec.hidden = true; row.innerHTML = ''; return; }
+      sec.hidden = false;
+      var html = '';
+      items.forEach(function(r){
+        var best = bestOf(r.slug);
+        html += '<button type="button" class="recent-tile" data-recent-slug="' + esc(r.slug) + '"><b>' + esc(cardName(r.slug)) + '</b><span>' + esc(whenLabel(r.ts)) + (best ? ' · 🏆 Best ' + best.toLocaleString() : '') + '</span><span class="recent-play">▶ Play</span></button>';
+      });
+      row.innerHTML = html;
+      row.querySelectorAll('[data-recent-slug]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var slug = btn.getAttribute('data-recent-slug');
+          /* Resume = a real start, like the "Jump back in" banner:
+             set __holoDirectStart first so the Game Menu interceptor
+             (capture phase: card Play taps open the menu) passes the
+             click through to the game's own Play button, which opens
+             the game directly. Without the flag the tap would only
+             open the menu. Fallback opens the menu itself. */
+          var orig = document.querySelector('.game-card [data-game="' + slug + '"]') || document.querySelector('[data-game="' + slug + '"]');
+          if(orig){ window.__holoDirectStart = true; orig.click(); return; }
+          if(typeof window.holoOpenGameMenu === 'function') window.holoOpenGameMenu(slug);
+        });
+      });
+    } catch(e){}
+  }
+  window.holoRenderRecentShelf = renderShelf;
+  window.holoCloudSaves = {
+    collect: collectLocal, merge: mergeSaves, pushNow: pushNow, pushSoon: pushSoon,
+    renderShelf: renderShelf,
+    state: function(){ try { return { pending: !!localStorage.getItem(PENDING_KEY), lastPushAt: _lastPushAt }; } catch(e){ return { pending:false, lastPushAt:_lastPushAt }; } }
+  };
+
+  /* ---- hooks: sync on sign-in, on every local save, on resume; queue offline ----
+     NOTE: saveHub lives inside the games IIFE (not on window), so the
+     hub notifies this module itself (the notify wrap next to saveHub
+     calls window.holoCloudSaves.pushSoon). saveAccountState IS a
+     top-level global (auth script), so it is wrapped here. */
+  var _origSaveAccountState = null;
+  try {
+    if(typeof window.saveAccountState === 'function' && !window.saveAccountState.__cloudWrapped){
+      _origSaveAccountState = window.saveAccountState;
+      var wrappedAcct = function(s){ var r = _origSaveAccountState.apply(this, arguments); pushSoon(); return r; };
+      wrappedAcct.__cloudWrapped = true;
+      window.saveAccountState = wrappedAcct;
+    }
+    if(typeof window.holoRecordRecentPlay === 'function' && !window.holoRecordRecentPlay.__cloudWrapped){
+      var _origRecent = window.holoRecordRecentPlay;
+      var wrappedRecent = function(slug){ var r = _origRecent.apply(this, arguments); renderShelf(); pushSoon(); return r; };
+      wrappedRecent.__cloudWrapped = true;
+      window.holoRecordRecentPlay = wrappedRecent;
+    }
+    /* Achievement badges change through window.holoBadges (the
+       framework's own bridge): schedule a push when one is recorded,
+       so badge unlocks ride to the cloud with their XP. (checkBadges
+       is deliberately NOT wrapped: applyLocal calls it after a merge,
+       and wrapping it would re-schedule a push on every render.) */
+    try {
+      if(window.holoBadges && typeof window.holoBadges === 'object'){
+        ['recordFinish', 'recordEvent'].forEach(function(fn){
+          if(typeof window.holoBadges[fn] === 'function' && !window.holoBadges[fn].__cloudWrapped){
+            var _orig = window.holoBadges[fn];
+            var _wrapped = function(){ var r = _orig.apply(this, arguments); pushSoon(); return r; };
+            _wrapped.__cloudWrapped = true;
+            window.holoBadges[fn] = _wrapped;
+          }
+        });
+      }
+    } catch(e){}
+    if(typeof window.renderTesterAuth === 'function' && !window.renderTesterAuth.__cloudWrapped){
+      var _origAuth = window.renderTesterAuth;
+      var wrappedAuth = function(){ var r = _origAuth.apply(this, arguments); renderShelf(); try { pushNow({ force:true }); } catch(e){} return r; };
+      wrappedAuth.__cloudWrapped = true;
+      window.renderTesterAuth = wrappedAuth;
+    }
+  } catch(e){}
+  try { window.addEventListener('online', function(){ pushNow({ force:true }); }); } catch(e){}
+  try {
+    document.addEventListener('visibilitychange', function(){ if(document.hidden){ try { pushNow({ force:true, keepalive:true }); } catch(e){} } });
+    window.addEventListener('pagehide', function(){ try { pushNow({ force:true, keepalive:true }); } catch(e){} });
+  } catch(e){}
+  try { setInterval(function(){ if(signedIn()) pushNow(); }, 60000); } catch(e){}
+  renderShelf();
+  try { pushNow({ force:true }); } catch(e){}
 })();
 </script>
 
