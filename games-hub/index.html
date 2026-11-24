@@ -16229,6 +16229,24 @@ function renderTesterAuth(){
     var body = (w && w.body) || 'We looked into your report about {game}. Fixed. Thank you for helping make the Arcade better! Please give it another play and tell us if it feels right now.';
     return { title: title, body: body.split('{game}').join(gameName || 'a game') };
   }
+  function thanksPreviewTextMany(gameNames){
+    var w = null;
+    try { w = (window.holoInbox && window.holoInbox.thankYouWording) || null; } catch(e){}
+    var title = (w && w.title) || 'Fixed \u2014 thank you, agent!';
+    var body = null;
+    try { if(window.holoInbox && typeof window.holoInbox.pluralThanksBody === 'function') body = window.holoInbox.pluralThanksBody(gameNames); } catch(e){}
+    if(body == null){
+      var names = (gameNames || []).map(function(n){ return String(n || '').trim(); }).filter(function(n){ return !!n; });
+      var list = names.length > 2 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names.join(' and ');
+      var raw = (w && w.body) || 'We looked into your report about {game}. Fixed. Thank you for helping make the Arcade better! Please give it another play and tell us if it feels right now.';
+      if(raw.indexOf('{game} is fixed') !== -1 && raw.indexOf('Give it another spin') !== -1 && raw.indexOf('if it behaves now') !== -1){
+        body = raw.split('{game} is fixed').join((list || 'a game') + ' are fixed').split('Give it another spin').join('Give them another spin').split('if it behaves now').join('if they behave now');
+      } else {
+        body = raw.split('{game}').join(list || 'a game');
+      }
+    }
+    return { title: title, body: body };
+  }
   function renderThanksBacks(){
     var box = document.getElementById('thanksBacksCard');
     if(!box || !canSeeOwnerDash()) return;
@@ -16245,7 +16263,7 @@ function renderTesterAuth(){
     box.innerHTML =
       '<p style="margin:0 0 8px;color:var(--muted);font-size:13.5px">Send a thank-you to a tester whose report got fixed. They get it in their Inbox, with a link back to the game.</p>' +
       '<div class="login-field"><label for="thanksTesterName">Tester code name (as on their report)</label><input id="thanksTesterName" type="text" autocomplete="off" placeholder="e.g. SummerOf69" /></div>' +
-      '<div class="login-field"><label for="thanksGame">Game</label><input id="thanksGame" type="text" autocomplete="off" list="thanksGameList" placeholder="e.g. 8-ball-pool" /><datalist id="thanksGameList">' + opts + '</datalist></div>' +
+      '<div class="login-field"><label for="thanksGame">Game</label><div id="thanksGamesWrap"><input id="thanksGame" class="thanks-game-input" type="text" autocomplete="off" list="thanksGameList" placeholder="e.g. 8-ball-pool" /></div><datalist id="thanksGameList">' + opts + '</datalist><p style="margin:6px 0 0"><button type="button" class="btn btn-light" id="thanksAddGameBtn">+ Add another game</button></p><p style="margin:4px 0 0;color:var(--muted);font-size:12.5px">One message per tester, not one per game \u2014 add every fixed game here and they get a single thank-you listing them all.</p></div>' +
       '<p style="margin:0 0 8px"><button type="button" class="btn btn-dark" id="thanksPreviewBtn">Preview &amp; send</button></p>' +
       '<div id="thanksConfirm" hidden style="margin:0 0 8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card)"><p style="margin:0 0 6px;font-weight:800;font-size:14px">This is what they will get:</p><p id="thanksPreviewText" style="margin:0 0 8px;color:var(--muted);font-size:13.5px;line-height:1.6"></p><p style="margin:0"><button type="button" class="btn btn-dark" id="thanksConfirmBtn">Confirm send</button> <button type="button" class="btn btn-light" id="thanksCancelBtn">Cancel</button></p></div>' +
       '<p class="dash-status" id="thanksStatus" role="status"></p>' +
@@ -16254,14 +16272,44 @@ function renderTesterAuth(){
     var pending = null;
     var statusEl = document.getElementById('thanksStatus');
     function say(msg){ if(statusEl) statusEl.textContent = msg; }
+    var addGameBtn = document.getElementById('thanksAddGameBtn');
+    if(addGameBtn) addGameBtn.addEventListener('click', function(){
+      var wrap = document.getElementById('thanksGamesWrap');
+      if(!wrap) return;
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;gap:6px;margin-top:6px';
+      var inp = document.createElement('input');
+      inp.type = 'text'; inp.className = 'thanks-game-input'; inp.setAttribute('autocomplete', 'off');
+      inp.setAttribute('list', 'thanksGameList'); inp.placeholder = 'Another game';
+      inp.style.cssText = 'flex:1;min-width:0';
+      var rm = document.createElement('button');
+      rm.type = 'button'; rm.className = 'btn btn-light'; rm.textContent = '\u00d7';
+      rm.setAttribute('aria-label', 'Remove this game');
+      rm.addEventListener('click', function(){ row.remove(); });
+      row.appendChild(inp); row.appendChild(rm); wrap.appendChild(row);
+      try { inp.focus(); } catch(e){}
+    });
+    function thanksCollectGames(){
+      var out = []; var seen = {};
+      try {
+        document.querySelectorAll('#thanksGamesWrap .thanks-game-input').forEach(function(el){
+          var raw = String((el && el.value) || '').trim();
+          if(!raw) return;
+          var g = thanksResolveGame(raw);
+          var key = String(g.slug || g.gameName || '').toLowerCase();
+          if(key && seen[key]) return; seen[key] = 1;
+          out.push(g);
+        });
+      } catch(e){}
+      return out;
+    }
     var prevBtn = document.getElementById('thanksPreviewBtn');
     if(prevBtn) prevBtn.addEventListener('click', function(){
       var nameEl = document.getElementById('thanksTesterName');
-      var gameEl = document.getElementById('thanksGame');
       var name = String((nameEl && nameEl.value) || '').trim();
-      var gameRaw = String((gameEl && gameEl.value) || '').trim();
+      var games = thanksCollectGames();
       if(!name){ say('Pop the tester\u2019s code name in first \u2014 it\u2019s the name on their report.'); return; }
-      if(!gameRaw){ say('Pop the game in first.'); return; }
+      if(!games.length){ say('Pop the game in first.'); return; }
       if(!(window.holoFriends && typeof window.holoFriends.searchCloud === 'function')){ say('Tester lookup isn\u2019t loaded on this page \u2014 hard-refresh and try again.'); return; }
       say('Looking up ' + name + '\u2026');
       window.holoFriends.searchCloud(name).then(function(found){
@@ -16270,9 +16318,14 @@ function renderTesterAuth(){
         found.forEach(function(f){ if(!hit && String(f.name || '').toLowerCase() === lower) hit = f; });
         if(!hit) hit = found[0] || null;
         if(!hit){ say('Couldn\u2019t find a tester called ' + name + ' \u2014 check the code name on their report.'); return; }
-        var g = thanksResolveGame(gameRaw);
-        var pv = thanksPreviewText(g.gameName);
-        pending = { uid: hit.uid, name: hit.name || name, gameName: g.gameName, slug: g.slug };
+        var pv;
+        if(games.length === 1){
+          pv = thanksPreviewText(games[0].gameName);
+          pending = { uid: hit.uid, name: hit.name || name, gameName: games[0].gameName, slug: games[0].slug };
+        } else {
+          pv = thanksPreviewTextMany(games.map(function(g){ return g.gameName; }));
+          pending = { uid: hit.uid, name: hit.name || name, games: games };
+        }
         var cf = document.getElementById('thanksConfirm');
         var tx = document.getElementById('thanksPreviewText');
         if(tx) tx.textContent = 'To: ' + pending.name + ' \u00B7 ' + pv.title + ' \u2014 ' + pv.body;
@@ -16292,14 +16345,23 @@ function renderTesterAuth(){
       if(!(window.holoInbox && typeof window.holoInbox.thankTester === 'function')){ say('The thank-you sender isn\u2019t loaded on this page \u2014 hard-refresh and try again.'); return; }
       var p = pending; pending = null;
       var cf = document.getElementById('thanksConfirm'); if(cf) cf.hidden = true;
+      var sendP = null;
+      var sentGameLabel = p.gameName;
+      if(p.games && p.games.length > 1){
+        if(!(window.holoInbox && typeof window.holoInbox.thankTesterMany === 'function')){ say('The multi-game sender isn\u2019t loaded on this page \u2014 hard-refresh and try again.'); return; }
+        sentGameLabel = p.games.map(function(g){ return g.gameName; }).join(', ');
+        sendP = window.holoInbox.thankTesterMany(p.uid, p.games);
+      } else {
+        sendP = window.holoInbox.thankTester(p.uid, p.gameName, p.slug);
+      }
       say('Sending to ' + p.name + '\u2026');
-      window.holoInbox.thankTester(p.uid, p.gameName, p.slug).then(function(r){
+      sendP.then(function(r){
         if(r === null || r === undefined){
           say('Not sent \u2014 something went wrong sending. Nothing was sent \u2014 try again.');
           return;
         }
         var list = thanksSentLoad();
-        list.unshift({ name: p.name, game: p.gameName, at: new Date().toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) });
+        list.unshift({ name: p.name, game: sentGameLabel, at: new Date().toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) });
         thanksSentSave(list);
         renderThanksBacks();
         var stNew = document.getElementById('thanksStatus');
@@ -20891,6 +20953,36 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var body = THANK_YOU_WORDING.body.split('{game}').join(gameName || 'a game');
     return sendNotice(uid, { type:'review-fixed', title: THANK_YOU_WORDING.title, body: body, link: slug ? ('game:' + slug) : '' });
   }
+  /* COMBINED-THANKS-2026-11-24 (Holo 2026-11-24 08:33): one thank-you
+     per tester covering several fixed reports, instead of one message
+     per game — SummerOf69 alone filed ten reports in one morning.
+     The plural body is derived from the SAME THANK_YOU_WORDING
+     constant, so a wording swap still only touches one place. */
+  function thanksJoinNames(names){
+    var list = (names || []).map(function(n){ return String(n || '').trim(); }).filter(function(n){ return !!n; });
+    if(list.length === 0) return 'a game';
+    if(list.length === 1) return list[0];
+    if(list.length === 2) return list[0] + ' and ' + list[1];
+    return list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1];
+  }
+  function thanksPluralBody(names){
+    var list = thanksJoinNames(names);
+    var body = THANK_YOU_WORDING.body;
+    if(body.indexOf('{game} is fixed') !== -1 && body.indexOf('Give it another spin') !== -1 && body.indexOf('if it behaves now') !== -1){
+      return body.split('{game} is fixed').join(list + ' are fixed').split('Give it another spin').join('Give them another spin').split('if it behaves now').join('if they behave now');
+    }
+    return 'Thanks to your report, ' + list + ' are fixed. Give them another spin and let us know if they behave now.';
+  }
+  function thankTesterMany(uid, games){
+    /* One review-fixed notice for several games. Link = the FIRST game
+       in the list, so the Open button has somewhere to go. Exactly one
+       sendNotice call — the tester gets one message, one squash. */
+    var list = (games || []).filter(function(g){ return g && (g.gameName || g.slug); });
+    if(!list.length) return Promise.resolve(null);
+    var body = thanksPluralBody(list.map(function(g){ return g.gameName || g.slug; }));
+    var first = list[0];
+    return sendNotice(uid, { type:'review-fixed', title: THANK_YOU_WORDING.title, body: body, link: first.slug ? ('game:' + first.slug) : '' });
+  }
   /* INBOX-EMAIL-2026-11-23: chat-style reading view */
   var readingId = null;
   /* DEVICE-QUESTIONNAIRE-2026-11-23 (Holo 22:27): "What are you playing on?"
@@ -21166,7 +21258,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   try { new MutationObserver(function(){ var v = document.body.getAttribute('data-view'); if(v === 'inbox') refresh(); else if(readingId) closeMessage(false); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] }); } catch(e){}
   setInterval(tick, 60000);
   setTimeout(tick, 2500);
-  window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, archiveItem:archiveItem, openMessage:openMessage, closeMessage:closeMessage, section:function(){ return section; }, setSection:setSection, filter:inboxFilter, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, thankYouWording:THANK_YOU_WORDING, unreadCount:unreadCount, items:function(){ return items.slice(); } };
+  window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, archiveItem:archiveItem, openMessage:openMessage, closeMessage:closeMessage, section:function(){ return section; }, setSection:setSection, filter:inboxFilter, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, thankTesterMany:thankTesterMany, pluralThanksBody:thanksPluralBody, thankYouWording:THANK_YOU_WORDING, unreadCount:unreadCount, items:function(){ return items.slice(); } };
 })();
 </script>
 <!-- FRIEND-REQUESTS-2026-11-22 (Holo 23:32): cross-device friend
