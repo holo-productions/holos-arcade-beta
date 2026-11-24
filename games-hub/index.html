@@ -980,6 +980,29 @@ body.login-faq-open .login-faq-nav-title{display:block;position:absolute;left:50
 .friend-status.on{color:var(--good)} .friend-status.off{color:var(--muted)}
 .friend-remove{flex:0 0 auto;width:40px;height:40px;border-radius:50%;border:1.5px solid var(--line);background:var(--card);color:var(--muted);font-size:16px;cursor:pointer;display:grid;place-items:center;padding:0}
 .friend-remove:hover{border-color:var(--bad);color:var(--bad)}
+/* BLOCK-REPORT-2026-11-24 (Holo 2026-11-24 17:08): Block & Report on
+   friend rows + the DM thread header. Small text buttons beside the
+   existing Message / Remove buttons; a Blocked list in Friends; the
+   report overlay reuses the recovery card styles. */
+.friend-card{flex-wrap:wrap}
+.br-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.br-btn{flex:0 0 auto;padding:8px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--card);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;min-height:40px}
+.br-btn:hover{border-color:var(--pink);color:var(--pink)}
+.br-btn.br-block:hover{border-color:var(--bad);color:var(--bad)}
+#brBlockedSection{margin-top:16px}
+#brBlockedSection h3{margin:0 0 4px;font-family:"Bricolage Grotesque",sans-serif;font-size:17px}
+.br-blocked-row{display:flex;gap:12px;align-items:center;background:var(--bg2);border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;margin-top:8px}
+.br-blocked-row b{flex:1;min-width:0;overflow-wrap:anywhere}
+#brReportOverlay{position:fixed;inset:0;z-index:135;background:rgba(6,3,20,.72);display:flex;align-items:center;justify-content:center;padding:18px}
+#brReportOverlay[hidden]{display:none!important}
+#brReportOverlay .tier3-link{color:#38e1ff}
+#brReportOverlay .login-field label{font-family:var(--pixel);font-size:10px;line-height:1.7;color:var(--cyan);text-shadow:2px 2px 0 rgba(139,92,255,.45)}
+#brReportOverlay .login-field textarea{width:100%;padding:13px 16px;border-radius:10px;border:2px solid #3b2a7a;background:#0a0620;color:#f4f1ff;font-size:16px;min-height:76px;resize:vertical;font-family:inherit;box-shadow:inset 0 3px 0 rgba(0,0,0,.5)}
+#brReportOverlay .login-field textarea::placeholder{color:#7a6fb0}
+#brReportOverlay .login-field textarea:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 3px rgba(56,225,255,.32),inset 0 3px 0 rgba(0,0,0,.5)}
+#brReportOverlay .login-error{background:#3a0f2e;color:#ffb3e2;border:1.5px solid var(--pink);border-radius:10px}
+.br-reason{display:flex;gap:10px;align-items:center;padding:11px 12px;border:2px solid #3b2a7a;border-radius:10px;background:#0a0620;color:#f4f1ff;font-size:15px;margin:0 0 8px;cursor:pointer}
+.br-reason input{accent-color:#ff3ec8;width:18px;height:18px;flex:0 0 auto}
 .friend-suggest{margin-top:18px;border-top:1px solid var(--line);padding-top:14px}
 .friend-suggest h3{margin:0 0 4px;font-family:"Bricolage Grotesque",sans-serif;font-size:18px}
 .friend-suggest-list{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
@@ -16246,22 +16269,21 @@ function renderTesterAuth(){
         if(pwField) pwField.focus(); else nameField.focus();
       }
     });
-    /* ---- Owner invite tools ---- INVITE-FIX-2026-11-24
-       Generate a parked invite code (or type your own),
-       copy/share the full invite link, or open a prefilled
-       Gmail compose addressed to one tester's email. Codes
-       are NOT validated (parked for now) — the UI says so.
-       Owner-only: this panel is built inside buildOwnerUI,
-       so visitors never see it. */
-    var INVITE_BASE_URL = 'https://beta.holosarcade.ca/games-hub/';
+    /* ---- Owner invite tools ----
+       Generate a parked invite code, copy/share the
+       ?invite=CODE link, or open a prefilled Gmail compose
+       addressed to one tester's email. Codes are NOT validated
+       (parked for now) — the UI says so. Owner-only:
+       this panel is built inside buildOwnerUI, so visitors
+       never see it. */
     var invitePanel = document.createElement('div');
     invitePanel.className = 'invite-tools';
     invitePanel.id = 'inviteTools';
     invitePanel.innerHTML =
       '<h3 class="invite-tools-title">\uD83C\uDF9F\uFE0F Invite a tester</h3>' +
       '<p class="login-helper" style="margin:0 0 10px">Share this link to bring a friend into the tester club. Invite codes activate soon \u2014 the link opens sign-up with the code filled in, but codes aren\u2019t checked yet.</p>' +
+      '<p class="login-helper" style="margin:0 0 10px">Heads up: this link will update soon to holosarcade.ca \u2014 and I\u2019ll be making more updates, so check back to see new updates!</p>' +
       '<div class="login-field"><label for="inviteLink">Your invite link</label><input id="inviteLink" type="text" readonly /></div>' +
-      '<div class="login-field"><label for="inviteCodeInput">Invite code</label><input id="inviteCodeInput" type="text" autocomplete="off" maxlength="40" placeholder="e.g. ZOOM" /><p class="login-helper" style="margin:6px 0 0">Type your own code, or tap New code for a random one. Codes aren\u2019t checked yet.</p></div>' +
       '<div class="invite-actions">' +
       '<button type="button" class="btn btn-light login-switch" id="inviteGenBtn">\uD83C\uDFB2 New code</button>' +
       '<button type="button" class="btn btn-light login-switch" id="inviteCopyBtn">\uD83D\uDCCB Copy invite link</button>' +
@@ -16282,9 +16304,11 @@ function renderTesterAuth(){
       return 'TESTER-' + c;
     }
     function currentInviteLink(){
-      /* INVITE-FIX-2026-11-24: full beta link, so the emailed
-         "secret link" works pasted on its own. */
-      return INVITE_BASE_URL + '?invite=' + encodeURIComponent(inviteState.code);
+      /* Relative invite link only — the page's own address is
+         never read into it (the shell owns the shareable URL);
+         Gizmo adds the invite code to the real link in the
+         Gmail draft, as the helper text below says. */
+      return '?invite=' + encodeURIComponent(inviteState.code);
     }
     function inviteStatus(msg){
       var s = document.getElementById('inviteStatus');
@@ -16294,22 +16318,6 @@ function renderTesterAuth(){
       var inp = document.getElementById('inviteLink');
       if(inp) inp.value = currentInviteLink();
       refreshGmailTry();
-    }
-    function cleanInviteCode(v){
-      return String(v || '').toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 40);
-    }
-    function bindInviteCodeInput(inputId, getCode, setCode, refreshFn){
-      var ci = document.getElementById(inputId);
-      if(!ci) return;
-      ci.value = getCode();
-      ci.addEventListener('input', function(){
-        var cleaned = cleanInviteCode(ci.value);
-        ci.value = cleaned;
-        if(cleaned){ setCode(cleaned); refreshFn(); }
-      });
-      ci.addEventListener('change', function(){
-        if(!cleanInviteCode(ci.value)) ci.value = getCode();
-      });
     }
     function copyInviteLink(){
       var link = currentInviteLink();
@@ -16326,8 +16334,8 @@ function renderTesterAuth(){
         done();
       }
     }
-    var INVITE_FROM = 'play@holosarcade.ca';
-    var INVITE_GMAIL_STATUS = 'Gmail opened ready to send from play@holosarcade.ca \u2014 just tap Send there. If Gmail asks you to sign in, sign in as myairecord@gmail.com. Invite also copied, so you can paste it anywhere.';
+    var INVITE_FROM = 'myairecord@gmail.com';
+    var INVITE_GMAIL_STATUS = 'Gmail opened ready to send from myairecord@gmail.com \u2014 just tap Send there. If Gmail asks you to sign in, sign in as myairecord@gmail.com. Invite also copied, so you can paste it anywhere.';
     function inviteSubject(){
       /* Exact invite wording approved by Holo — do not reword. */
       return '\uD83C\uDFAE TOP SECRET MISSION: Tester Wanted!';
@@ -16473,12 +16481,9 @@ function renderTesterAuth(){
     }
     inviteState.code = makeInviteCode();
     refreshInviteLink();
-    bindInviteCodeInput('inviteCodeInput', function(){ return inviteState.code; }, function(c){ inviteState.code = c; }, refreshInviteLink);
     var genBtn = document.getElementById('inviteGenBtn');
     if(genBtn) genBtn.addEventListener('click', function(){
       inviteState.code = makeInviteCode();
-      var ci = document.getElementById('inviteCodeInput');
-      if(ci) ci.value = inviteState.code;
       refreshInviteLink();
       inviteStatus('New invite code ready: ' + inviteState.code + ' \uD83C\uDF9F\uFE0F');
     });
@@ -16522,14 +16527,13 @@ function renderTesterAuth(){
       liveMount.innerHTML =
         '<span class="kicker personal">Owner only · Invite a tester</span>' +
         '<h2>\uD83C\uDF9F\uFE0F Send a tester invite</h2>' +
-        '<p style="margin:0;color:var(--muted);max-width:640px">Type a tester\u2019s email and hit Save draft request \u2014 the invite is saved here and copied, and Gizmo will add it to your Gmail drafts (from play@holosarcade.ca) for you to review and send. Or copy / share the invite link instead. Invite codes activate soon \u2014 the code in the link isn\u2019t checked yet.</p>' +
+        '<p style="margin:0;color:var(--muted);max-width:640px">Type a tester\u2019s email and hit Save draft request \u2014 the invite is saved here and copied, and Gizmo will add it to your Gmail drafts (from myairecord@gmail.com) for you to review and send. Or copy / share the invite link instead. Invite codes activate soon \u2014 the code in the link isn\u2019t checked yet.</p>' +
         '<div class="live-invite-grid">' +
         '<div class="login-field"><label for="liveInviteEmail">Tester\u2019s email</label><input id="liveInviteEmail" type="email" autocomplete="email" placeholder="friend@example.com" /></div>' +
         '<button type="button" class="btn btn-dark live-invite-send" id="liveInviteSendBtn">Save draft request \u2709\uFE0F</button>' +
         '</div>' +
         '<p class="login-helper" style="margin:8px 0 0">Arcade can\u2019t create Gmail drafts itself \u2014 Gizmo does that from chat. This saves your list here.</p>' +
         '<div class="login-field" style="margin-top:12px"><label for="liveInviteLink">Your invite link</label><input id="liveInviteLink" type="text" readonly /></div>' +
-        '<div class="login-field"><label for="liveInviteCodeInput">Invite code</label><input id="liveInviteCodeInput" type="text" autocomplete="off" maxlength="40" placeholder="e.g. ZOOM" /><p class="login-helper" style="margin:6px 0 0">Type your own code, or tap New code for a random one. Codes aren\u2019t checked yet.</p></div>' +
         '<div class="live-invite-actions">' +
         '<button type="button" class="btn btn-light" id="liveInviteGenBtn">\uD83C\uDFB2 New code</button>' +
         '<button type="button" class="btn btn-light" id="liveInviteCopyBtn">\uD83D\uDCCB Copy invite link</button>' +
@@ -16541,9 +16545,11 @@ function renderTesterAuth(){
         '<div class="draft-box"><h3 class="draft-title">Pending draft requests</h3><div class="draft-list" id="liveInviteDraftList"></div><p class="login-helper" id="liveInviteDraftEmpty" style="margin:6px 0 0">No pending drafts yet.</p></div>';
       var liveState = { code: makeInviteCode() };
       function liveInviteLink(){
-        /* INVITE-FIX-2026-11-24: full beta link, so the emailed
-           "secret link" works pasted on its own. */
-        return INVITE_BASE_URL + '?invite=' + encodeURIComponent(liveState.code);
+        /* Relative invite link only — never built from the
+           page's own address (the shell owns the shareable
+           URL); Gizmo adds the code to the real link in the
+           Gmail draft. */
+        return '?invite=' + encodeURIComponent(liveState.code);
       }
       function liveStatus(msg){
         var s = document.getElementById('liveInviteStatus');
@@ -16575,12 +16581,9 @@ function renderTesterAuth(){
         }
       }
       liveRefresh();
-      bindInviteCodeInput('liveInviteCodeInput', function(){ return liveState.code; }, function(c){ liveState.code = c; }, liveRefresh);
       var lGen = document.getElementById('liveInviteGenBtn');
       if(lGen) lGen.addEventListener('click', function(){
         liveState.code = makeInviteCode();
-        var lci = document.getElementById('liveInviteCodeInput');
-        if(lci) lci.value = liveState.code;
         liveRefresh();
         liveStatus('New invite code ready: ' + liveState.code + ' \uD83C\uDF9F\uFE0F');
       });
@@ -17234,6 +17237,88 @@ function renderTesterAuth(){
       if(b3) b3.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">Couldn\u2019t load recovery requests right now \u2014 check your internet and tap Refresh.</p>';
     });
   }
+  /* BLOCK-REPORT-2026-11-24: owner-only list of user reports from
+     /userReports (readable only by Holo's UID — see the rules doc).
+     Shows the reported Code Name, reason, note and date, with Mark
+     done / Delete. Until the new rules publish the read is denied
+     and the card says so honestly — same pattern as Recovery. */
+  var userReportsRenderTries = 0;
+  function renderUserReports(){
+    var box = document.getElementById('userReportsCard');
+    if(!box || !canSeeOwnerDash()) return;
+    box.innerHTML =
+      '<p style="margin:0 0 8px;color:var(--muted);font-size:13.5px">Reports from testers about other testers \u2014 only you can see these. A report never names the reporter to anyone else, and the reported tester is never told.</p>' +
+      '<p style="margin:0 0 8px"><button type="button" class="btn btn-light" id="userReportsRefreshBtn">Refresh</button></p>' +
+      '<div id="userReportsListBody"><p style="margin:0;color:var(--muted);font-size:13.5px">Checking\u2026</p></div>';
+    var rb = document.getElementById('userReportsRefreshBtn');
+    if(rb) rb.addEventListener('click', renderUserReports);
+    var body = document.getElementById('userReportsListBody');
+    if(typeof window.betaFreshToken !== 'function'){
+      if(userReportsRenderTries < 5){ userReportsRenderTries++; setTimeout(renderUserReports, 1000); return; }
+      if(body) body.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">Sign-in isn\u2019t loaded on this page \u2014 hard-refresh and try again.</p>';
+      return;
+    }
+    userReportsRenderTries = 0;
+    window.betaFreshToken().then(function(token){
+      if(!token){ if(body) body.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">Sign in as the owner to see user reports.</p>'; return; }
+      return fetch(REC_OWNER_RTDB + '/userReports.json?auth=' + encodeURIComponent(token), { cache:'no-store' })
+        .then(function(r){
+          if(r.status === 401 || r.status === 403) throw new Error('rules');
+          if(!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function(data){
+          var list = [];
+          if(data && typeof data === 'object'){
+            Object.keys(data).forEach(function(id){ var x = data[id] || {}; x.id = id; list.push(x); });
+            list.sort(function(a, b){ return (b.ts || 0) - (a.ts || 0); });
+          }
+          var b = document.getElementById('userReportsListBody');
+          if(!b) return;
+          if(!list.length){ b.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">No user reports yet.</p>'; return; }
+          var rows = list.map(function(x){
+            var done = x.status === 'done';
+            return '<li style="margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card)">' +
+              '<p style="margin:0 0 4px;font-weight:800;font-size:14px">' + escO(x.reportedName || 'A tester') + (done ? ' \u2014 \u2705 done' : '') + ' <span style="color:var(--muted);font-weight:400;font-size:12.5px">' + escO(recoveryTime(x.ts)) + '</span></p>' +
+              '<p style="margin:0 0 4px;color:var(--muted);font-size:13.5px;line-height:1.6">Reason: <strong>' + escO(x.reason || 'not given') + '</strong>' + (x.note ? '<br>' + escO(x.note) : '') + '<br>Reported by UID: ' + escO(x.reporterUid || '') + '</p>' +
+              '<p style="margin:0">' + (done ? '' : '<button type="button" class="btn btn-dark" data-reports-done="' + escO(x.id) + '">Mark done</button> ') + '<button type="button" class="btn btn-light" data-reports-del="' + escO(x.id) + '">Delete</button></p>' +
+            '</li>';
+          }).join('');
+          b.innerHTML = '<ul style="margin:0;padding:0;list-style:none">' + rows + '</ul>';
+          b.querySelectorAll('[data-reports-done]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var id = btn.getAttribute('data-reports-done');
+              window.betaFreshToken().then(function(tok){
+                if(!tok) return;
+                fetch(REC_OWNER_RTDB + '/userReports/' + encodeURIComponent(id) + '.json?auth=' + encodeURIComponent(tok), { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ status:'done' }) }).then(function(){ renderUserReports(); }).catch(function(){});
+              });
+            });
+          });
+          b.querySelectorAll('[data-reports-del]').forEach(function(btn){
+            btn.addEventListener('click', function(){
+              var id = btn.getAttribute('data-reports-del');
+              if(!window.confirm('Delete this user report?')) return;
+              window.betaFreshToken().then(function(tok){
+                if(!tok) return;
+                fetch(REC_OWNER_RTDB + '/userReports/' + encodeURIComponent(id) + '.json?auth=' + encodeURIComponent(tok), { method:'DELETE' }).then(function(){ renderUserReports(); }).catch(function(){});
+              });
+            });
+          });
+        })
+        .catch(function(err){
+          var b2 = document.getElementById('userReportsListBody');
+          if(!b2) return;
+          if(err && err.message === 'rules'){
+            b2.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">User reports need the new Arcade rules published first \u2014 publish the user-reports rules (rules doc, ~2 minutes), then tap Refresh above. Reports sent before then stay queued on each tester\u2019s device.</p>';
+          } else {
+            b2.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">Couldn\u2019t load user reports right now \u2014 check your internet and tap Refresh.</p>';
+          }
+        });
+    }).catch(function(){
+      var b3 = document.getElementById('userReportsListBody');
+      if(b3) b3.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">Couldn\u2019t load user reports right now \u2014 check your internet and tap Refresh.</p>';
+    });
+  }
   function renderThanksBacks(){
     var box = document.getElementById('thanksBacksCard');
     if(!box || !canSeeOwnerDash()) return;
@@ -17377,6 +17462,7 @@ function renderTesterAuth(){
           '<button type="button" data-owner-jump="ownerDashSiteHealth">\uD83D\uDC9A Site health</button>' +
           '<button type="button" data-owner-jump="ownerDashThanks">\uD83D\uDC8C Report-backs</button>' +
           '<button type="button" data-owner-jump="ownerDashRecovery">\uD83D\uDD11 Recovery</button>' +
+          '<button type="button" data-owner-jump="ownerDashReports">\uD83D\uDEA9 Reports</button>' +
           '<button type="button" data-owner-jump="liveInviteMount">\uD83C\uDF9F\uFE0F Invites</button>' +
         '</nav>' +
         '<details class="dash-cat" id="ownerDashTesterView" open>' +
@@ -17405,6 +17491,10 @@ function renderTesterAuth(){
         '<details class="dash-cat" id="ownerDashRecovery">' +
           '<summary>\uD83D\uDD11 Recovery requests</summary>' +
           '<div class="dash-cat-body"><div id="recoveryRequestsCard"></div></div>' +
+        '</details>' +
+        '<details class="dash-cat" id="ownerDashReports">' +
+          '<summary>\uD83D\uDEA9 User reports</summary>' +
+          '<div class="dash-cat-body"><div id="userReportsCard"></div></div>' +
         '</details>';
       var openBtn = document.getElementById('openTesterLiveBtn');
       if(openBtn) openBtn.addEventListener('click', openTesterLiveView);
@@ -17427,6 +17517,7 @@ function renderTesterAuth(){
     renderSiteHealth();
     renderThanksBacks();
     renderRecoveryRequests();
+    renderUserReports();
     if(liveMount.firstChild) { applySettings(); return; }
     liveMount.innerHTML =
       '<nav class="dash-jumpbar" aria-label="Jump to a dash section">' +
@@ -21238,6 +21329,33 @@ function renderTesterAuth(){
   </div>
 </div>
 
+<!-- BLOCK-REPORT-2026-11-24: report a tester — reason picker + optional
+     note. Reports queue to the owner-only /userReports node, never to
+     /feedback. Only Holo sees them; the reported tester is never told. -->
+<div id="brReportOverlay" hidden role="dialog" aria-modal="true" aria-labelledby="brReportTitle">
+  <div class="rc-card">
+    <button class="pop-x" id="brReportCloseX" type="button" aria-label="Close">×</button>
+    <h2 class="rc-title" id="brReportTitle">Report <span id="brReportName">a tester</span></h2>
+    <p class="rc-desc">Tell Holo what happened. Only Holo sees reports — the tester is never told.</p>
+    <div id="brReasonList" role="radiogroup" aria-label="Reason for report">
+      <label class="br-reason"><input type="radio" name="brReason" value="Spam"> Spam</label>
+      <label class="br-reason"><input type="radio" name="brReason" value="Harassment or mean messages"> Harassment or mean messages</label>
+      <label class="br-reason"><input type="radio" name="brReason" value="Cheating"> Cheating</label>
+      <label class="br-reason"><input type="radio" name="brReason" value="Something else"> Something else</label>
+    </div>
+    <div class="login-field"><label for="brNote">Anything else? (optional)</label><textarea id="brNote" rows="3" maxlength="500" placeholder="What happened, in your own words"></textarea></div>
+    <p class="login-error" id="brReportMsg" role="alert" hidden></p>
+    <button class="rc-submit" id="brReportSendBtn" type="button">Send report</button>
+    <div class="gm-tier3-row">
+      <button class="tier3-link" id="brReportCancelBtn" type="button">Cancel</button>
+    </div>
+    <div id="brReportDone" hidden>
+      <p class="rc-ok">Report sent — thanks, Holo will look into it.</p>
+      <button class="rc-submit" id="brReportDoneBtn" type="button">Done</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* GAME-MENU-2026-11-22 (Holo 2026-11-22 19:56): tapping a game
    card or Play button opens this simple menu first. Start game
@@ -22428,6 +22546,19 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     m = b.match(/^(\S+) accepted your friend request/); if(m) return m[1];
     return "Holo's Arcade";
   }
+  /* BLOCK-REPORT-2026-11-24: the sender UID behind a side-quest invite
+     — from the notice itself when present, else by matching the
+     sender's name against live incoming requests. Returns '' unless
+     the request is still live, so acted-on invites show no buttons. */
+  function friendRequestUid(n){
+    var inc = {};
+    try { inc = (window.holoFriends && window.holoFriends.incoming) ? window.holoFriends.incoming() : {}; } catch(e){}
+    if(n.fromUid && inc[String(n.fromUid)]) return String(n.fromUid);
+    var from = senderOf(n);
+    var keys = Object.keys(inc || {});
+    for(var i = 0; i < keys.length; i++){ var r = inc[keys[i]] || {}; if(String(r.fromName || '') === from) return keys[i]; }
+    return '';
+  }
   function previewOf(n){ var b = String(n.body || '').replace(/\s+/g, ' ').trim(); return b.length > 90 ? b.slice(0, 90) + '…' : b; }
   function whenShort(ts){
     try {
@@ -22518,9 +22649,58 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         Object.keys(data).forEach(function(id){ var n = data[id] || {}; n.id = id; items.push(n); });
         items.sort(function(x, y){ return (y.createdAt || 0) - (x.createdAt || 0); });
       }
+      sweepStaleFriendRequests(a.uid);
       renderBadge(); renderList();
       return items;
     });
+  }
+  /* BLOCK-REPORT-2026-11-24: a side-quest notice whose request is gone
+     (cancelled or declined, maybe on another device) is stale — delete
+     it so no invite notice lingers. Only a successful read that
+     returns nothing deletes: any read failure leaves the notice
+     alone, so a hiccup can never eat a live invite. Notices sent
+     before this change carry no sender UID — those resolve through
+     the /usernames index by the sender's name. */
+  function sweepStaleFriendRequests(myUid){
+    if(typeof window.betaFreshToken !== 'function' || typeof fetch !== 'function') return;
+    var cands = [];
+    try {
+      var inc = (window.holoFriends && window.holoFriends.incoming) ? window.holoFriends.incoming() : {};
+      items.forEach(function(n){
+        if(n.type !== 'friend-request') return;
+        var fromUid = n.fromUid ? String(n.fromUid) : '';
+        var fromName = '';
+        if(!fromUid){
+          fromName = senderOf(n);
+          Object.keys(inc || {}).forEach(function(u){ var r = inc[u] || {}; if(String(r.fromName || '') === fromName) fromUid = u; });
+        }
+        if(!fromUid && !fromName) return;
+        if(fromUid && inc && inc[fromUid]) return;
+        cands.push({ id:n.id, fromUid:fromUid, fromName:fromName });
+      });
+    } catch(e){ return; }
+    if(!cands.length) return;
+    window.betaFreshToken().then(function(tok){
+      if(!tok) return;
+      cands.forEach(function(c){
+        var uidP = c.fromUid ? Promise.resolve(c.fromUid)
+          : fetch(FB_RTDB + '/usernames/' + encodeURIComponent(String(c.fromName || '').trim().toLowerCase()) + '.json?auth=' + encodeURIComponent(tok))
+              .then(function(r){ if(!r.ok) return ''; return r.json(); })
+              .then(function(v){ return (typeof v === 'string') ? v : ''; })
+              .catch(function(){ return ''; });
+        uidP.then(function(fromUid){
+          if(!fromUid) return;
+          return fetch(FB_RTDB + '/friendRequests/' + encodeURIComponent(myUid) + '/' + encodeURIComponent(fromUid) + '.json?auth=' + encodeURIComponent(tok))
+            .then(function(r){ if(!r.ok) return 'error'; return r.json(); })
+            .then(function(row){
+              if(row === 'error' || row != null) return;
+              fetch(FB_RTDB + '/users/' + encodeURIComponent(myUid) + '/notifications/' + encodeURIComponent(c.id) + '.json?auth=' + encodeURIComponent(tok), { method:'DELETE' }).catch(function(){});
+              items = items.filter(function(x){ return x.id !== c.id; });
+              renderBadge(); renderList();
+            });
+        }).catch(function(){});
+      });
+    }).catch(function(){});
   }
   function markRead(id){
     var a = loadAuth(); if(!a || !id) return Promise.resolve(false);
@@ -22550,6 +22730,11 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var body = { type: String(notice.type || 'system').slice(0, 40), title: String(notice.title || '').slice(0, 120), body: String(notice.body || '').slice(0, 600), createdAt: Date.now(), read: false };
     if(notice.link) body.link = String(notice.link).slice(0, 120);
     if(notice.fromName) body.fromName = String(notice.fromName).slice(0, 60);
+    /* BLOCK-REPORT-2026-11-24: the sender UID rides on the notice so
+       the recipient can match it to the request row (accept/decline
+       buttons in the message, stale-notice sweep). Extra children are
+       allowed by the notification .validate, like fromName. */
+    if(notice.fromUid) body.fromUid = String(notice.fromUid).slice(0, 80);
     if(notice.reportId) body.reportId = String(notice.reportId).slice(0, 80);
     return api('POST', '/users/' + encodeURIComponent(toUid) + '/notifications', body);
   }
@@ -22836,6 +23021,41 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     }
     if(dqIsQuestionnaire(n)) renderDeviceQuestionnaire(thread, n); /* DEVICE-QUESTIONNAIRE-2026-11-23: the chips + form render under the bubble. */
     var acts = rd.querySelector('.read-actions'); acts.innerHTML = '';
+    /* BLOCK-REPORT-2026-11-24 + friend-invite message: a side-quest
+       invite carries inline Accept / Decline right in the message —
+       same effect as the Friends incoming card. Buttons only render
+       while the request is still live. Accept deletes the fulfilled
+       notice afterwards; decline deletes it by its stored key (see
+       declineRequest) — either way the message closes and the Inbox
+       refreshes, so no stale invite is left behind. */
+    if(n.type === 'friend-request'){
+      var fuid = friendRequestUid(n);
+      if(fuid){
+        var accBtn = document.createElement('button'); accBtn.type = 'button'; accBtn.className = 'btn btn-dark'; accBtn.textContent = '\u2705 Accept quest';
+        accBtn.addEventListener('click', function(){
+          if(!(window.holoFriends && window.holoFriends.acceptRequest)) return;
+          accBtn.disabled = true;
+          window.holoFriends.acceptRequest(fuid).then(function(ok){
+            if(!ok){ accBtn.disabled = false; return; }
+            var au = loadAuth();
+            if(au) api('DELETE', '/users/' + encodeURIComponent(au.uid) + '/notifications/' + encodeURIComponent(n.id));
+            closeMessage(false);
+            refresh();
+          });
+        });
+        acts.appendChild(accBtn);
+        var decBtn = document.createElement('button'); decBtn.type = 'button'; decBtn.className = 'btn btn-light'; decBtn.textContent = 'Decline';
+        decBtn.addEventListener('click', function(){
+          if(!(window.holoFriends && window.holoFriends.declineRequest)) return;
+          decBtn.disabled = true;
+          window.holoFriends.declineRequest(fuid).then(function(){
+            closeMessage(false);
+            refresh();
+          });
+        });
+        acts.appendChild(decBtn);
+      }
+    }
     if(n.link){
       var ob = document.createElement('button'); ob.type = 'button'; ob.className = 'btn btn-light'; ob.textContent = 'Open';
       ob.addEventListener('click', function(){
@@ -23034,26 +23254,54 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         return false;
       }
       return myName().then(function(name){
-        return api('PUT', '/friendRequests/' + encodeURIComponent(toUid) + '/' + encodeURIComponent(uid), { fromName:name, ts:Date.now() }).then(function(r){
-          if(r === null) return false;
-          outgoing[toUid] = { name: toName || 'Tester', ts: Date.now() }; saveOut(outgoing);
-          if(window.holoInbox && window.holoInbox.sendNotice){
-            try { window.holoInbox.sendNotice(toUid, { type:'friend-request', title:'Friend request', body:name + ' wants to be your friend. Open your Inbox or Friends to accept.', link:'friends' }); } catch(e){}
-          }
-          renderAll();
-          return true;
+        /* BLOCK-REPORT-2026-11-24 + friend-invite message (Holo
+           2026-11-24 17:19): the invite lands as a fun "New side
+           quest!" message with Accept / Decline buttons right in it.
+           The notice goes first so its key can be stored with the
+           request row (and the sender's outgoing record) — that key
+           is how both sides clean the notice up on cancel/decline.
+           If the row PUT then fails, the recipient's Inbox sweep
+           removes the orphaned notice on their next refresh. */
+        var noticeP = (window.holoInbox && window.holoInbox.sendNotice)
+          ? window.holoInbox.sendNotice(toUid, { type:'friend-request', title:'New side quest!', body:name + ' wants to team up \u2014 accept the quest to become friends, or decline and it vanishes quietly. No pressure, agent.', link:'friends', fromName:name, fromUid:uid })
+          : Promise.resolve(null);
+        return Promise.resolve(noticeP).catch(function(){ return null; }).then(function(nr){
+          var noticeKey = (nr && nr.name) ? String(nr.name) : '';
+          return api('PUT', '/friendRequests/' + encodeURIComponent(toUid) + '/' + encodeURIComponent(uid), { fromName:name, ts:Date.now(), noticeKey:noticeKey }).then(function(r){
+            if(r === null) return false;
+            outgoing[toUid] = { name: toName || 'Tester', ts: Date.now(), noticeKey:noticeKey }; saveOut(outgoing);
+            renderAll();
+            return true;
+          });
         });
       });
     }).catch(function(){ return false; });
   }
   function cancelRequest(toUid){
     var uid = myUid(); if(!uid || !toUid) return Promise.resolve(false);
+    var nk = (outgoing[toUid] && outgoing[toUid].noticeKey) || '';
     return api('DELETE', '/friendRequests/' + encodeURIComponent(toUid) + '/' + encodeURIComponent(uid)).then(function(r){
-      delete outgoing[toUid]; saveOut(outgoing); renderAll(); return r !== null;
+      delete outgoing[toUid]; saveOut(outgoing); renderAll();
+      /* BLOCK-REPORT-2026-11-24: the recipient's side-quest notice
+         must go too. Only the inbox owner can delete their own
+         notification under the live rules, so a direct delete from
+         here is denied — tried best-effort anyway (instant if the
+         rules ever allow it); what actually clears it is the
+         recipient's Inbox sweep on their next refresh, which finds
+         the request row gone and deletes the notice by its key. */
+      if(nk) api('DELETE', '/users/' + encodeURIComponent(toUid) + '/notifications/' + encodeURIComponent(nk));
+      return r !== null;
     });
   }
   function acceptRequest(fromUid){
     var uid = myUid(); if(!uid || !fromUid) return Promise.resolve(false);
+    /* BLOCK-REPORT-2026-11-24: a blocked tester cannot be accepted —
+       their request should already be gone (see refresh), this is the
+       backstop if one slips through. */
+    if(window.holoBlockReport && window.holoBlockReport.isBlocked(fromUid)){
+      try { if(typeof showBadgeToast === 'function') showBadgeToast('That tester is blocked — unblock them in Friends first.'); } catch(e){}
+      return Promise.resolve(false);
+    }
     var fromName = (incoming[fromUid] && incoming[fromUid].fromName) || 'Tester';
     return myName().then(function(name){
       var now = Date.now();
@@ -23064,7 +23312,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           return api('DELETE', '/friendRequests/' + encodeURIComponent(uid) + '/' + encodeURIComponent(fromUid)).then(function(){
             delete incoming[fromUid];
             if(window.holoInbox && window.holoInbox.sendNotice){
-              try { window.holoInbox.sendNotice(fromUid, { type:'friend-accepted', title:'Friend request accepted', body:name + ' accepted your friend request. You are friends now!', link:'friends' }); } catch(e){}
+              try { window.holoInbox.sendNotice(fromUid, { type:'friend-accepted', title:'Quest accepted!', body:name + ' accepted your quest \u2014 you\u2019re friends now!', link:'friends' }); } catch(e){}
             }
             try { if(typeof showBadgeToast === 'function') showBadgeToast('🤝 ' + fromName + ' is now your friend!'); } catch(e){}
             return refresh().then(function(){ return true; });
@@ -23075,8 +23323,33 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   }
   function declineRequest(fromUid){
     var uid = myUid(); if(!uid || !fromUid) return Promise.resolve(false);
+    /* BLOCK-REPORT-2026-11-24: the notice key stored with the request
+       row at send time deletes my own side-quest notice with it, so
+       nothing stale is left behind. Requests sent before this change
+       carry no key — those notices are found by sender instead. The
+       sender's side clears itself: their client drops the outgoing
+       record when its refresh finds the request row gone. Quiet by
+       design — decline sends no message to the sender. */
+    var fromName = (incoming[fromUid] && incoming[fromUid].fromName) || '';
+    var nk = (incoming[fromUid] && incoming[fromUid].noticeKey) || '';
     return api('DELETE', '/friendRequests/' + encodeURIComponent(uid) + '/' + encodeURIComponent(fromUid)).then(function(r){
-      delete incoming[fromUid]; renderAll(); return r !== null;
+      delete incoming[fromUid]; renderAll();
+      if(nk){
+        api('DELETE', '/users/' + encodeURIComponent(uid) + '/notifications/' + encodeURIComponent(nk));
+      } else {
+        api('GET', '/users/' + encodeURIComponent(uid) + '/notifications').then(function(data){
+          if(!data || typeof data !== 'object') return;
+          Object.keys(data).forEach(function(id){
+            var n = data[id] || {};
+            if(n.type !== 'friend-request') return;
+            if((n.fromUid && String(n.fromUid) === String(fromUid)) || (fromName && String(n.body || '').indexOf(fromName + ' wants to') === 0)){
+              api('DELETE', '/users/' + encodeURIComponent(uid) + '/notifications/' + encodeURIComponent(id));
+            }
+          });
+        });
+      }
+      if(window.holoInbox && typeof window.holoInbox.refresh === 'function'){ try { window.holoInbox.refresh(); } catch(e){} }
+      return r !== null;
     });
   }
   function removeCloudFriend(friendUid){
@@ -23092,6 +23365,17 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(!uid){ incoming = {}; cloudFriends = {}; renderAll(); return Promise.resolve(false); }
     return api('GET', '/friendRequests/' + encodeURIComponent(uid)).then(function(reqs){
       incoming = (reqs && typeof reqs === 'object') ? reqs : {};
+      /* BLOCK-REPORT-2026-11-24: a request from a blocked tester is
+         rejected on sight — delete the record so it can never be
+         accepted later, then drop it from the list. */
+      if(window.holoBlockReport){
+        Object.keys(incoming).forEach(function(fromUid){
+          if(window.holoBlockReport.isBlocked(fromUid)){
+            api('DELETE', '/friendRequests/' + encodeURIComponent(uid) + '/' + encodeURIComponent(fromUid));
+            delete incoming[fromUid];
+          }
+        });
+      }
       return api('GET', '/friends/' + encodeURIComponent(uid));
     }).then(function(fr){
       cloudFriends = (fr && typeof fr === 'object') ? fr : {};
@@ -23099,6 +23383,26 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       var changed = false;
       Object.keys(outgoing).forEach(function(toUid){ if(cloudFriends[toUid]){ delete outgoing[toUid]; changed = true; } });
       if(changed) saveOut(outgoing);
+      /* BLOCK-REPORT-2026-11-24: a sent request that is gone without
+         becoming a friend was declined or cancelled (possibly on
+         another device) — drop the stale "Waiting…" card. Only a
+         successful read that returns nothing drops it: any read
+         failure leaves the record alone. */
+      var gone = Object.keys(outgoing).filter(function(toUid){ return !cloudFriends[toUid]; });
+      if(gone.length && typeof window.betaFreshToken === 'function' && typeof fetch === 'function'){
+        return window.betaFreshToken().then(function(tok){
+          if(!tok){ renderAll(); return true; }
+          return Promise.all(gone.map(function(toUid){
+            return fetch(FB_RTDB + '/friendRequests/' + encodeURIComponent(toUid) + '/' + encodeURIComponent(uid) + '.json?auth=' + encodeURIComponent(tok))
+              .then(function(r){ if(!r.ok) return 'error'; return r.json(); })
+              .then(function(row){ if(row === 'error' || row != null) return false; delete outgoing[toUid]; return true; })
+              .catch(function(){ return false; });
+          })).then(function(results){
+            if(results.indexOf(true) !== -1){ saveOut(outgoing); renderAll(); }
+            return true;
+          });
+        }).catch(function(){ renderAll(); return true; });
+      }
       renderAll();
       return true;
     });
@@ -23115,10 +23419,19 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     box.querySelectorAll('[data-freq-decline]').forEach(function(b){ b.addEventListener('click', function(){ declineRequest(b.getAttribute('data-freq-decline')); }); });
     box.querySelectorAll('[data-freq-cancel]').forEach(function(b){ b.addEventListener('click', function(){ cancelRequest(b.getAttribute('data-freq-cancel')); }); });
     box.querySelectorAll('[data-freq-remove]').forEach(function(b){ b.addEventListener('click', function(){ removeCloudFriend(b.getAttribute('data-freq-remove')); }); });
+    /* BLOCK-REPORT-2026-11-24: friend-row Block / Report. The module
+       loads after this one, so the calls go through the window handle
+       at click time. */
+    box.querySelectorAll('[data-br-block]').forEach(function(b){ b.addEventListener('click', function(){ if(window.holoBlockReport) window.holoBlockReport.blockUser(b.getAttribute('data-br-block'), b.getAttribute('data-br-name') || 'Tester'); }); });
+    box.querySelectorAll('[data-br-report]').forEach(function(b){ b.addEventListener('click', function(){ if(window.holoBlockReport) window.holoBlockReport.reportUser(b.getAttribute('data-br-report'), b.getAttribute('data-br-name') || 'Tester'); }); });
+    box.querySelectorAll('[data-br-unblock]').forEach(function(b){ b.addEventListener('click', function(){ if(window.holoBlockReport) window.holoBlockReport.unblockUser(b.getAttribute('data-br-unblock'), b.getAttribute('data-br-name') || 'Tester'); }); });
     box.querySelectorAll('[data-freq-send]').forEach(function(b){ b.addEventListener('click', function(){ sendRequest(b.getAttribute('data-freq-send'), b.getAttribute('data-freq-name') || ''); }); });
   }
   function renderAll(){
     var incKeys = Object.keys(incoming);
+    /* BLOCK-REPORT-2026-11-24: requests from a tester you blocked never
+       render — here, in the Inbox copy, or anywhere else. */
+    if(window.holoBlockReport){ incKeys = incKeys.filter(function(u){ return !window.holoBlockReport.isBlocked(u); }); }
     /* Friends panel: incoming + outgoing */
     var panel = document.getElementById('friendReqPanel');
     if(panel){
@@ -23154,7 +23467,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         return '<div class="friend-card"><span class="friend-avatar" aria-hidden="true">🦆</span>' +
           '<div class="friend-main"><b>' + esc(f.name || 'Tester') + '</b>' +
           '<p class="friend-status on">☁️ Friends across devices</p></div>' +
-          '<button type="button" class="friend-remove" data-freq-remove="' + esc(u) + '" aria-label="Remove ' + esc(f.name || 'friend') + ' from friends" title="Remove friend">✕</button></div>';
+          '<button type="button" class="friend-remove" data-freq-remove="' + esc(u) + '" aria-label="Remove ' + esc(f.name || 'friend') + ' from friends" title="Remove friend">✕</button>' +
+          '<span class="br-actions"><button type="button" class="br-btn br-block" data-br-block="' + esc(u) + '" data-br-name="' + esc(f.name || 'Tester') + '">Block</button>' +
+          '<button type="button" class="br-btn" data-br-report="' + esc(u) + '" data-br-name="' + esc(f.name || 'Tester') + '">Report</button></span></div>';
       }).join('');
       wireCards(grid);
       var head = document.getElementById('cloudFriendHead');
@@ -23476,6 +23791,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         '<div class="dm-head"><h3 id="dmThreadTitle">Chat</h3>' +
         '<button type="button" class="btn btn-light dm-mini" id="dmMuteBtn">Mute</button>' +
         '<button type="button" class="btn btn-light dm-mini" id="dmBlockBtn">Block</button>' +
+        '<button type="button" class="btn btn-light dm-mini" id="dmReportBtn">Report</button>' +
         '<button type="button" class="btn btn-light dm-mini" id="dmArchiveBtn">Archive</button>' +
         '<button type="button" class="btn btn-light dm-mini" id="dmCloseBtn">Back</button></div>' +
         '<p class="dm-note">Friends only — just the two of you. No voice or camera here.</p>' +
@@ -23513,7 +23829,17 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       var mb = document.getElementById('dmMuteBtn');
       if(mb) mb.addEventListener('click', function(){ toggleMute(); });
       var bb = document.getElementById('dmBlockBtn');
-      if(bb) bb.addEventListener('click', function(){ if(openBlockedByMe) unblockThread(); else blockThread(); });
+      /* BLOCK-REPORT-2026-11-24: the header Block now runs the same
+         confirm flow as the friend rows (removes the friend, stores
+         the own-only block, hides the thread). Falls back to the old
+         per-thread block only if the module has not loaded. */
+      if(bb) bb.addEventListener('click', function(){
+        if(openBlockedByMe){ if(window.holoBlockReport) window.holoBlockReport.unblockUser(openWith, openName); else unblockThread(); }
+        else if(window.holoBlockReport){ window.holoBlockReport.blockUser(openWith, openName); }
+        else blockThread();
+      });
+      var rb2 = document.getElementById('dmReportBtn');
+      if(rb2) rb2.addEventListener('click', function(){ if(window.holoBlockReport) window.holoBlockReport.reportUser(openWith, openName); });
       var ab2 = document.getElementById('dmArchiveBtn');
       if(ab2) ab2.addEventListener('click', function(){ if(openTid) toggleArchive(openTid, !archived[openTid]); });
       var cb = document.getElementById('dmCloseBtn');
@@ -23812,6 +24138,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var h = document.querySelector('#dmList h3'); if(h) h.textContent = inArchive ? 'Archived chats' : 'Direct messages';
     var keys = Object.keys(threads).sort(function(a, b){ return (threads[b].lastMessageAt || 0) - (threads[a].lastMessageAt || 0); });
     keys = keys.filter(function(tid){ return !!archived[tid] === inArchive; });
+    /* BLOCK-REPORT-2026-11-24: a blocked tester's thread never shows —
+       not in Messages, not in Archive. */
+    if(window.holoBlockReport){ keys = keys.filter(function(tid){ var t = threads[tid] || {}; return !window.holoBlockReport.isBlocked(t.withUid); }); }
     if(!keys.length){
       rows.innerHTML = inArchive ? '<p class="dm-empty">No archived chats yet, agent.</p>' : '<p class="dm-empty">No chats yet — tap Message on a friend to start one.</p>';
       return;
@@ -23853,6 +24182,20 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(!uid){ threads = {}; muted = {}; archived = {}; renderList(); syncBadge(); return Promise.resolve(false); }
     return api('GET', '/users/' + encodeURIComponent(uid) + '/dmInbox').then(function(data){
       threads = (data && typeof data === 'object') ? data : {};
+      /* BLOCK-REPORT-2026-11-24: a blocked tester cannot reach you by
+         DM — drop their thread from your inbox (and the unread badge
+         with it) and delete the stale inbox record. If they message
+         again their client re-creates the record and this purges it
+         again on the next refresh. */
+      if(window.holoBlockReport){
+        Object.keys(threads).forEach(function(tid){
+          var t = threads[tid] || {};
+          if(t.withUid && window.holoBlockReport.isBlocked(t.withUid)){
+            delete threads[tid];
+            api('DELETE', '/users/' + encodeURIComponent(uid) + '/dmInbox/' + encodeURIComponent(tid));
+          }
+        });
+      }
       return api('GET', '/users/' + encodeURIComponent(uid) + '/dmMuted');
     }).then(function(m){
       muted = (m && typeof m === 'object') ? m : {};
@@ -23884,6 +24227,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(!uid){ toast('Sign in to send direct messages, agent.'); return; }
     if(withUid === uid){ toast('That is you — pick a friend to message.'); return; }
     if(!isMutualFriend(withUid)){ toast('You can only message friends — send them a friend request first.'); return; }
+    /* BLOCK-REPORT-2026-11-24: blocking already removes the friend, so
+       the check above usually stops this — this is the clearer message
+       if a stale link is tapped anyway. */
+    if(window.holoBlockReport && window.holoBlockReport.isBlocked(withUid)){ toast('You blocked this tester — unblock them in Friends to chat again.'); return; }
     var parts = pairParts(uid, withUid);
     openA = parts[0]; openB = parts[1];
     openTid = pairKey(uid, withUid);
@@ -24131,6 +24478,262 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   window.holoDMs = { open: openThread, close: closeThread, refresh: refresh, unreadCount: unreadCount, stickers: STICKERS, emojis: EMOJIS, keyboard: toggleKeyboard };
 })();
 </script>
+<script>
+/* BLOCK-REPORT-2026-11-24 (Holo 2026-11-24 17:08 "Need to add ability
+   to block and report" + 17:09 "Friend" + DM thread scope): Block &
+   Report on friend rows (cloud friends) and on the DM thread header,
+   same behaviour in both places.
+   - Block (confirm first): removes the friend, stores the block
+     own-only at /users/<uid>/blocked/<targetUid> (code name + ts),
+     writes the thread blockedBy too (existing DM enforcement), hides
+     the DM thread from your Inbox, deletes any pending friend request
+     from them. Their future DMs/requests are purged on sight by the
+     DM + friends refresh hooks. Blocked list lives in Friends with
+     an Unblock button each. The blocked tester is never told.
+   - Report: reason picker (Spam / Harassment or mean messages /
+     Cheating / Something else) + optional note. Reports go to the
+     owner-only /userReports node — NEVER to /feedback (tester-
+     readable). Until the user-reports rules publish, writes are
+     denied and reports stay queued on-device in their own queue
+     (never the shared feedback queue) and flush on the poller.
+   - Privacy: code names only, never emails. Blocks and reports are
+     own-only; nobody else sees who you blocked or reported.
+   - Blocks work under the already-live rules (/users/$uid self-write
+     + dmThreads blockedBy). Only /userReports needs the new publish.
+   - The per-message "Report this message" in DMs still files to
+     /feedback (pre-existing, out of this change's scope) — see the
+     rules doc for the follow-up. */
+(function(){
+  "use strict";
+  var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+  var AUTH_KEY = 'holos-firebase-auth';
+  var BLOCK_KEY = 'holos-arcade-blocked';
+  var REPORT_KEY = 'holos-arcade-user-reports-queue';
+  function esc(s){ var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+  function toast(m){ try { if(typeof showBadgeToast === 'function') showBadgeToast(m); } catch(e){} }
+  function myUid(){ try { var a = JSON.parse(localStorage.getItem(AUTH_KEY)); return (a && a.uid) ? a.uid : null; } catch(e){ return null; } }
+  function api(method, path, body){
+    if(typeof window.betaFreshToken !== 'function') return Promise.resolve(null);
+    return window.betaFreshToken().then(function(tok){
+      if(!tok) return null;
+      var q = '', p = path, qi = path.indexOf('?');
+      if(qi !== -1){ p = path.slice(0, qi); q = path.slice(qi + 1); }
+      return fetch(FB_RTDB + p + '.json?auth=' + encodeURIComponent(tok) + (q ? '&' + q : ''), { method:method, headers:{ 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined })
+        .then(function(r){ if(!r.ok) return null; if(method === 'DELETE') return true; return r.json().catch(function(){ return true; }); }).catch(function(){ return null; });
+    }).catch(function(){ return null; });
+  }
+
+  /* ---------- blocked list: local cache + own-only RTDB ---------- */
+  var blocked = {};
+  try { blocked = JSON.parse(localStorage.getItem(BLOCK_KEY) || '{}') || {}; } catch(e){ blocked = {}; }
+  function saveBlocked(){ try { localStorage.setItem(BLOCK_KEY, JSON.stringify(blocked)); } catch(e){} }
+  function isBlocked(uid){ return !!(uid && blocked[uid]); }
+  function blockedList(){
+    return Object.keys(blocked).map(function(u){ var b = blocked[u] || {}; return { uid:u, name:String(b.name || 'Tester'), ts:(typeof b.ts === 'number' ? b.ts : 0) }; })
+      .sort(function(a, b){ return (b.ts || 0) - (a.ts || 0); });
+  }
+  function loadBlocked(){
+    var uid = myUid(); if(!uid) return Promise.resolve(false);
+    return api('GET', '/users/' + encodeURIComponent(uid) + '/blocked').then(function(data){
+      if(data && typeof data === 'object'){
+        blocked = {};
+        Object.keys(data).forEach(function(u){ var b = data[u] || {}; blocked[u] = { name:String(b.name || 'Tester').slice(0, 60), ts:(typeof b.ts === 'number' ? b.ts : 0) }; });
+        saveBlocked(); renderBlockedList();
+      }
+      return true;
+    });
+  }
+  function pairParts(a, b){ return [String(a), String(b)].sort(); }
+
+  function blockUser(uid, name){
+    var me = myUid();
+    if(!me){ toast('Sign in to block a tester.'); return; }
+    if(!uid) return;
+    if(uid === me){ toast('That is you — no need to block yourself.'); return; }
+    var label = String(name || 'Tester');
+    if(isBlocked(uid)){ toast(label + ' is already blocked.'); return; }
+    if(!window.confirm('Block ' + label + '? They won\'t be able to message you, send friend requests, or see you on leaderboards. They won\'t be told.')) return;
+    var rec = { name: label.slice(0, 60), ts: Date.now() };
+    blocked[uid] = rec; saveBlocked(); renderBlockedList();
+    api('PUT', '/users/' + encodeURIComponent(me) + '/blocked/' + encodeURIComponent(uid), rec);
+    var p = pairParts(me, uid);
+    api('PUT', '/dmThreads/' + encodeURIComponent(p[0]) + '/' + encodeURIComponent(p[1]) + '/blockedBy/' + encodeURIComponent(uid), true);
+    api('GET', '/users/' + encodeURIComponent(me) + '/dmInbox').then(function(inb){
+      if(!inb || typeof inb !== 'object') return;
+      Object.keys(inb).forEach(function(tid){ var t = inb[tid] || {}; if(t.withUid === uid) api('DELETE', '/users/' + encodeURIComponent(me) + '/dmInbox/' + encodeURIComponent(tid)); });
+    });
+    api('DELETE', '/friendRequests/' + encodeURIComponent(me) + '/' + encodeURIComponent(uid));
+    try { if(window.holoFriends && typeof window.holoFriends.removeCloudFriend === 'function') window.holoFriends.removeCloudFriend(uid); } catch(e){}
+    try { if(window.holoDMs && typeof window.holoDMs.close === 'function') window.holoDMs.close(); } catch(e){}
+    try { if(window.holoDMs && typeof window.holoDMs.refresh === 'function') window.holoDMs.refresh(); } catch(e){}
+    try { if(window.holoFriends && typeof window.holoFriends.refresh === 'function') window.holoFriends.refresh(); } catch(e){}
+    toast('Blocked ' + label + ' — they can no longer message you.');
+  }
+  function unblockUser(uid, name){
+    var me = myUid(); if(!me || !uid) return;
+    var label = String(name || (blocked[uid] && blocked[uid].name) || 'Tester');
+    delete blocked[uid]; saveBlocked(); renderBlockedList();
+    api('DELETE', '/users/' + encodeURIComponent(me) + '/blocked/' + encodeURIComponent(uid));
+    var p = pairParts(me, uid);
+    api('DELETE', '/dmThreads/' + encodeURIComponent(p[0]) + '/' + encodeURIComponent(p[1]) + '/blockedBy/' + encodeURIComponent(uid));
+    try { if(window.holoDMs && typeof window.holoDMs.refresh === 'function') window.holoDMs.refresh(); } catch(e){}
+    try { if(window.holoFriends && typeof window.holoFriends.refresh === 'function') window.holoFriends.refresh(); } catch(e){}
+    toast('Unblocked ' + label + ' — you can chat again.');
+  }
+
+  /* ---------- Blocked section in Friends ---------- */
+  function renderBlockedList(){
+    var host = document.getElementById('brBlockedSection');
+    if(!host){
+      var grid = document.getElementById('cloudFriendGrid') || document.getElementById('friendGrid');
+      if(!grid || !grid.parentNode) return;
+      host = document.createElement('div');
+      host.id = 'brBlockedSection';
+      grid.parentNode.insertBefore(host, grid.nextSibling);
+    }
+    var list = blockedList();
+    if(!list.length){ host.innerHTML = ''; host.hidden = true; return; }
+    host.hidden = false;
+    host.innerHTML = '<h3>Blocked testers</h3>' +
+      '<p style="margin:0;color:var(--muted);font-size:13.5px">They can\'t message you or send friend requests. They are not told.</p>' +
+      list.map(function(b){
+        return '<div class="br-blocked-row"><span class="friend-avatar" aria-hidden="true">🦆</span><b>' + esc(b.name) + '</b>' +
+          '<button type="button" class="btn btn-light" data-br-unblock="' + esc(b.uid) + '" data-br-name="' + esc(b.name) + '">Unblock</button></div>';
+      }).join('');
+    host.querySelectorAll('[data-br-unblock]').forEach(function(btn){
+      btn.addEventListener('click', function(){ unblockUser(btn.getAttribute('data-br-unblock'), btn.getAttribute('data-br-name') || 'Tester'); });
+    });
+  }
+
+  /* ---------- reports: own queue + fail-closed flush to /userReports ---------- */
+  function loadReportQueue(){
+    try { var v = JSON.parse(localStorage.getItem(REPORT_KEY)); if(Array.isArray(v)) return v; } catch(e){}
+    return [];
+  }
+  function saveReportQueue(arr){ try { localStorage.setItem(REPORT_KEY, JSON.stringify(arr)); } catch(e){} }
+  function removeReportById(id){ try { saveReportQueue(loadReportQueue().filter(function(x){ return x && x.id !== id; })); } catch(e){} }
+  function cleanReportRec(r){
+    if(!r || typeof r !== 'object') return null;
+    var out = { id:String(r.id || ''), reporterUid:String(r.reporterUid || ''), reportedUid:String(r.reportedUid || ''), reportedName:String(r.reportedName || 'Tester').slice(0, 60), reason:String(r.reason || ''), note:String(r.note || '').slice(0, 500), ts:(typeof r.ts === 'number' ? r.ts : Date.now()), status:'new' };
+    if(!out.id || !out.reporterUid || !out.reportedUid) return null;
+    if(['Spam', 'Harassment or mean messages', 'Cheating', 'Something else'].indexOf(out.reason) === -1) return null;
+    return out;
+  }
+  function flushReports(){
+    if(typeof fetch !== 'function') return Promise.resolve({ sent:0, queued: loadReportQueue().length });
+    var pending = loadReportQueue();
+    if(!pending.length) return Promise.resolve({ sent:0, queued:0 });
+    if(typeof window.betaFreshToken !== 'function') return Promise.resolve({ sent:0, queued: pending.length });
+    return window.betaFreshToken().then(function(token){
+      if(!token) return { sent:0, queued: pending.length };
+      var sent = 0;
+      var chain = Promise.resolve();
+      pending.forEach(function(r){
+        chain = chain.then(function(){
+          var payload = cleanReportRec(r);
+          if(!payload){ removeReportById(r && r.id); return; }
+          return fetch(FB_RTDB + '/userReports/' + encodeURIComponent(payload.id) + '.json?auth=' + encodeURIComponent(token), { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
+            .then(function(res){ if(!res.ok) throw new Error('rtdb ' + res.status); sent++; removeReportById(payload.id); })
+            .catch(function(){ /* stays queued, retried by the poller */ });
+        });
+      });
+      return chain.then(function(){ return { sent: sent, queued: loadReportQueue().length }; });
+    }).catch(function(){ return { sent:0, queued: loadReportQueue().length }; });
+  }
+
+  /* ---------- report overlay ---------- */
+  var reportTarget = null;
+  function openReport(uid, name){
+    var me = myUid(); if(!me){ toast('Sign in to report a tester.'); return; }
+    if(!uid) return;
+    reportTarget = { uid: uid, name: String(name || 'Tester').slice(0, 60) };
+    var ov = document.getElementById('brReportOverlay'); if(!ov) return;
+    var nm = document.getElementById('brReportName'); if(nm) nm.textContent = reportTarget.name;
+    var form = document.getElementById('brReasonList'); if(form) form.hidden = false;
+    var noteWrap = document.querySelector('#brReportOverlay .login-field'); if(noteWrap) noteWrap.hidden = false;
+    var note = document.getElementById('brNote'); if(note) note.value = '';
+    var send = document.getElementById('brReportSendBtn'); if(send){ send.hidden = false; send.disabled = false; }
+    var cancel = document.getElementById('brReportCancelBtn'); if(cancel) cancel.hidden = false;
+    var done = document.getElementById('brReportDone'); if(done) done.hidden = true;
+    var msg = document.getElementById('brReportMsg'); if(msg){ msg.hidden = true; msg.textContent = ''; }
+    try {
+      var radios = document.querySelectorAll('input[name="brReason"]');
+      radios.forEach(function(r){ r.checked = false; });
+    } catch(e){}
+    ov.hidden = false;
+    try { document.body.style.overflow = 'hidden'; } catch(e){}
+  }
+  function closeReport(){
+    var ov = document.getElementById('brReportOverlay'); if(!ov) return;
+    ov.hidden = true;
+    try {
+      var lv = document.getElementById('loginView'), lf = document.getElementById('loginFaqView');
+      var locked = !!((lv && !lv.hidden) || (lf && !lf.hidden));
+      document.body.style.overflow = locked ? 'hidden' : '';
+    } catch(e){}
+  }
+  function sendReport(){
+    if(!reportTarget) return;
+    var reason = '';
+    try { var sel = document.querySelector('input[name="brReason"]:checked'); reason = sel ? sel.value : ''; } catch(e){}
+    var msg = document.getElementById('brReportMsg');
+    if(!reason){
+      if(msg){ msg.textContent = 'Pick a reason first.'; msg.hidden = false; }
+      return;
+    }
+    var noteEl = document.getElementById('brNote');
+    var note = noteEl ? String(noteEl.value || '').trim().slice(0, 500) : '';
+    var rec = { id: new Date().toISOString() + '-' + Math.random().toString(36).slice(2, 9), reporterUid: myUid(), reportedUid: reportTarget.uid, reportedName: reportTarget.name, reason: reason, note: note, ts: Date.now(), status:'new' };
+    var q = loadReportQueue(); q.push(rec); saveReportQueue(q);
+    var send = document.getElementById('brReportSendBtn'); if(send) send.disabled = true;
+    flushReports().then(function(){ showReportDone(); }).catch(function(){ showReportDone(); });
+  }
+  function showReportDone(){
+    var form = document.getElementById('brReasonList'); if(form) form.hidden = true;
+    var noteWrap = document.querySelector('#brReportOverlay .login-field'); if(noteWrap) noteWrap.hidden = true;
+    var send = document.getElementById('brReportSendBtn'); if(send) send.hidden = true;
+    var cancel = document.getElementById('brReportCancelBtn'); if(cancel) cancel.hidden = true;
+    var done = document.getElementById('brReportDone'); if(done) done.hidden = false;
+    var db = document.getElementById('brReportDoneBtn'); if(db) { try { db.focus(); } catch(e){} }
+  }
+
+  /* ---------- wire overlay + expose ---------- */
+  var ov = document.getElementById('brReportOverlay');
+  if(ov){
+    var x = document.getElementById('brReportCloseX'); if(x) x.addEventListener('click', closeReport);
+    var c = document.getElementById('brReportCancelBtn'); if(c) c.addEventListener('click', closeReport);
+    var d = document.getElementById('brReportDoneBtn'); if(d) d.addEventListener('click', closeReport);
+    var s = document.getElementById('brReportSendBtn'); if(s) s.addEventListener('click', sendReport);
+    ov.addEventListener('click', function(e){ if(e.target === ov) closeReport(); });
+    document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && !ov.hidden) closeReport(); });
+  }
+  /* Re-render the Blocked list when the signed-in account changes, so
+     each tester sees their own blocks (same wrap pattern as Friends). */
+  try {
+    var origAuth = window.renderTesterAuth;
+    if(typeof origAuth === 'function' && !origAuth.__brWrapped){
+      var wrappedAuth = function(){ var r = origAuth.apply(this, arguments); try { loadBlocked(); renderBlockedList(); } catch(e){} return r; };
+      wrappedAuth.__brWrapped = true;
+      window.renderTesterAuth = wrappedAuth;
+    }
+  } catch(e){}
+  try {
+    if(window.holoFriends && typeof window.holoFriends.refresh === 'function' && !window.holoFriends.refresh.__brWrapped){
+      var origRef = window.holoFriends.refresh;
+      var wrappedRef = function(){ var r = origRef.apply(this, arguments); try { renderBlockedList(); } catch(e){} return r; };
+      wrappedRef.__brWrapped = true;
+      window.holoFriends.refresh = wrappedRef;
+    }
+  } catch(e){}
+  window.holoBlockReport = { blockUser: blockUser, unblockUser: unblockUser, reportUser: openReport, isBlocked: isBlocked, blockedList: blockedList, loadBlocked: loadBlocked, renderBlockedList: renderBlockedList, flushReports: flushReports, queueCount: function(){ return loadReportQueue().length; } };
+  loadBlocked();
+  renderBlockedList();
+  setTimeout(flushReports, 3000);
+  setInterval(flushReports, 8000);
+  setTimeout(function(){ loadBlocked(); renderBlockedList(); }, 2500);
+})();
+</script>
+
 <style>
 /* TURN-BASED-2026-11-24 (Holo 13:42 "Lets do it"): Phase 1 turn-based
    multiplayer — Tic Tac Toe only, friends-only, on the existing
