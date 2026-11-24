@@ -1077,6 +1077,21 @@ body.preview-as-tester #pointsWallet{display:none!important}
 .egg.anim-wave svg{animation:eggWave .9s ease;transform-origin:50% 85%}
 .egg.anim-squeak svg{animation:eggSqueak .8s ease}
 @media (prefers-reduced-motion: reduce){ .egg.dancing svg,.egg.anim-bounce svg,.egg.anim-spin svg,.egg.anim-wave svg,.egg.anim-squeak svg,.egg-sparkle,.egg-burst,.egg-pop{animation:none!important} }
+/* GLITCH-SQUASH-2026-11-24 (Holo picked this, 2026-11-24 00:39): a little
+   pixel bug gets squashed flat with a splat when a tester opens a
+   fixed-report thank-you. Custom keyframes for this moment only. The
+   arrival pop below is the small Inbox bounce when the notice lands. */
+.thanks-squash{position:relative;height:96px;margin:10px auto 2px;text-align:center;pointer-events:none}
+.thanks-squash .sq-bug{display:inline-block;font-size:44px;line-height:1;animation:glitchBugIn .45s ease-out both,glitchSquash .38s ease-in .55s both}
+.thanks-squash .sq-splat{position:absolute;left:50%;top:54%;transform:translate(-50%,-50%);font-size:52px;line-height:1;opacity:0;animation:glitchSplat .5s ease-out .62s both}
+.thanks-squash .sq-word{position:absolute;left:50%;top:6px;transform:translateX(-50%);font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:13px;letter-spacing:.12em;color:var(--gold);white-space:nowrap;opacity:0;animation:glitchSplatWord .8s ease-out .62s both}
+@keyframes glitchBugIn{0%{transform:translateY(-26px) scale(1)}60%{transform:translateY(2px) scale(1)}100%{transform:translateY(0) scale(1)}}
+@keyframes glitchSquash{0%{transform:scale(1,1)}55%{transform:scale(1.6,.16)}100%{transform:scale(1.35,.22)}}
+@keyframes glitchSplat{0%{opacity:0;transform:translate(-50%,-50%) scale(.3) rotate(-20deg)}40%{opacity:1;transform:translate(-50%,-50%) scale(1.25) rotate(8deg)}100%{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(0)}}
+@keyframes glitchSplatWord{0%{opacity:0;transform:translateX(-50%) translateY(4px) scale(.7)}30%{opacity:1;transform:translateX(-50%) translateY(0) scale(1.1)}100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+@keyframes thanksPop{0%{transform:scale(.94)}55%{transform:scale(1.03)}100%{transform:scale(1)}}
+.inbox-item.thanks-new{animation:thanksPop .45s ease}
+@media (prefers-reduced-motion: reduce){ .thanks-squash .sq-bug,.thanks-squash .sq-splat,.thanks-squash .sq-word,.inbox-item.thanks-new{animation:none!important} }
 .egg-sparkle{position:absolute;left:50%;top:40%;z-index:5;color:var(--gold);font-size:14px;line-height:1;pointer-events:none;text-shadow:0 0 6px rgba(255,176,32,.9);animation:sparkleFloat .85s ease-out forwards}
 @keyframes sparkleFloat{0%{opacity:0;transform:translate(-50%,-50%) scale(.4)}25%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--sx,0px)),calc(-50% + var(--sy,-34px))) scale(1.25) rotate(40deg)}}
 .egg-pop{position:absolute;left:50%;bottom:calc(100% - 6px);transform:translateX(-50%);z-index:6;background:#0a0620;color:#fff;border:1.5px solid var(--gold);font-size:11px;font-weight:800;padding:4px 8px;border-radius:999px;white-space:nowrap;pointer-events:none;animation:popBubble .95s ease forwards}
@@ -16000,6 +16015,124 @@ function renderTesterAuth(){
       fetch(probeUrl, { cache:'no-store' }).then(function(r2){ done(!!(r2 && r2.ok), r2 ? r2.status : 0); }).catch(function(){ done(false, 0); });
     });
   }
+  /* REPORT-BACKS-2026-11-24 (Holo 2026-11-24 00:35): owner-only "thank
+     a tester when their report is fixed" — a small form in the Owner
+     Dash that sends a review-fixed Inbox notice via thankTester, with
+     a confirm step and an honest not-sent state until the RTDB rules
+     publish (due Nov 27) allows cross-user writes. Owner-only by
+     construction: renders inside buildDash(), which only runs when
+     canSeeOwnerDash(). */
+  var THANKS_SENT_KEY = 'holos-arcade-thanks-sent';
+  function thanksSentLoad(){
+    try { var v = JSON.parse(localStorage.getItem(THANKS_SENT_KEY)); if(Array.isArray(v)) return v; } catch(e){}
+    return [];
+  }
+  function thanksSentSave(list){
+    try { localStorage.setItem(THANKS_SENT_KEY, JSON.stringify(list.slice(0, 20))); } catch(e){}
+  }
+  function thanksResolveGame(input){
+    var raw = String(input || '').trim();
+    if(!raw) return null;
+    var lower = raw.toLowerCase(); var found = null;
+    try {
+      document.querySelectorAll('.game-card').forEach(function(c){
+        if(found) return;
+        var b = c.querySelector('[data-game]'); var h = c.querySelector('h3');
+        if(!b) return;
+        var slug = String(b.getAttribute('data-game') || '').trim(); if(!slug) return;
+        var title = h ? h.textContent.trim() : slug;
+        if(slug.toLowerCase() === lower || title.toLowerCase() === lower) found = { gameName: title, slug: slug };
+      });
+    } catch(e){}
+    return found || { gameName: raw, slug: '' };
+  }
+  function thanksPreviewText(gameName){
+    var w = null;
+    try { w = (window.holoInbox && window.holoInbox.thankYouWording) || null; } catch(e){}
+    var title = (w && w.title) || 'Fixed \u2014 thank you, agent!';
+    var body = (w && w.body) || 'We looked into your report about {game}. Fixed. Thank you for helping make the Arcade better! Please give it another play and tell us if it feels right now.';
+    return { title: title, body: body.split('{game}').join(gameName || 'a game') };
+  }
+  function renderThanksBacks(){
+    var box = document.getElementById('thanksBacksCard');
+    if(!box || !canSeeOwnerDash()) return;
+    var sent = thanksSentLoad();
+    var sentHtml = sent.length ? '<p style="margin:12px 0 0;color:var(--muted);font-size:13px;font-weight:800">Sent before</p><ul style="margin:4px 0 0;padding-left:18px;color:var(--muted);font-size:13px;line-height:1.7">' + sent.map(function(s){ return '<li>' + escO(s.name) + ' \u2014 ' + escO(s.game) + ' \u00B7 ' + escO(s.at) + '</li>'; }).join('') + '</ul>' : '';
+    var opts = '';
+    try {
+      var seen = {};
+      document.querySelectorAll('.game-card h3').forEach(function(h){
+        var t = (h.textContent || '').trim(); if(!t || seen[t]) return; seen[t] = 1;
+        opts += '<option value="' + escO(t) + '">';
+      });
+    } catch(e){}
+    box.innerHTML =
+      '<p style="margin:0 0 8px;color:var(--muted);font-size:13.5px">Send a thank-you to a tester whose report got fixed. They get it in their Inbox, with a link back to the game.</p>' +
+      '<div class="login-field"><label for="thanksTesterName">Tester code name (as on their report)</label><input id="thanksTesterName" type="text" autocomplete="off" placeholder="e.g. SummerOf69" /></div>' +
+      '<div class="login-field"><label for="thanksGame">Game</label><input id="thanksGame" type="text" autocomplete="off" list="thanksGameList" placeholder="e.g. 8-ball-pool" /><datalist id="thanksGameList">' + opts + '</datalist></div>' +
+      '<p style="margin:0 0 8px"><button type="button" class="btn btn-dark" id="thanksPreviewBtn">Preview &amp; send</button></p>' +
+      '<div id="thanksConfirm" hidden style="margin:0 0 8px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--card)"><p style="margin:0 0 6px;font-weight:800;font-size:14px">This is what they will get:</p><p id="thanksPreviewText" style="margin:0 0 8px;color:var(--muted);font-size:13.5px;line-height:1.6"></p><p style="margin:0"><button type="button" class="btn btn-dark" id="thanksConfirmBtn">Confirm send</button> <button type="button" class="btn btn-light" id="thanksCancelBtn">Cancel</button></p></div>' +
+      '<p class="dash-status" id="thanksStatus" role="status"></p>' +
+      '<p style="margin:6px 0 0;color:var(--muted);font-size:12.5px">Messages need the Firebase rules publish (due Nov 27) before they can land in a tester\u2019s Inbox. Until then, sending honestly reports \u201CNot sent\u201D \u2014 nothing is faked.</p>' +
+      sentHtml;
+    var pending = null;
+    var statusEl = document.getElementById('thanksStatus');
+    function say(msg){ if(statusEl) statusEl.textContent = msg; }
+    var prevBtn = document.getElementById('thanksPreviewBtn');
+    if(prevBtn) prevBtn.addEventListener('click', function(){
+      var nameEl = document.getElementById('thanksTesterName');
+      var gameEl = document.getElementById('thanksGame');
+      var name = String((nameEl && nameEl.value) || '').trim();
+      var gameRaw = String((gameEl && gameEl.value) || '').trim();
+      if(!name){ say('Pop the tester\u2019s code name in first \u2014 it\u2019s the name on their report.'); return; }
+      if(!gameRaw){ say('Pop the game in first.'); return; }
+      if(!(window.holoFriends && typeof window.holoFriends.searchCloud === 'function')){ say('Tester lookup isn\u2019t loaded on this page \u2014 hard-refresh and try again.'); return; }
+      say('Looking up ' + name + '\u2026');
+      window.holoFriends.searchCloud(name).then(function(found){
+        found = found || [];
+        var lower = name.toLowerCase(); var hit = null;
+        found.forEach(function(f){ if(!hit && String(f.name || '').toLowerCase() === lower) hit = f; });
+        if(!hit) hit = found[0] || null;
+        if(!hit){ say('Couldn\u2019t find a tester called ' + name + ' \u2014 check the code name on their report.'); return; }
+        var g = thanksResolveGame(gameRaw);
+        var pv = thanksPreviewText(g.gameName);
+        pending = { uid: hit.uid, name: hit.name || name, gameName: g.gameName, slug: g.slug };
+        var cf = document.getElementById('thanksConfirm');
+        var tx = document.getElementById('thanksPreviewText');
+        if(tx) tx.textContent = 'To: ' + pending.name + ' \u00B7 ' + pv.title + ' \u2014 ' + pv.body;
+        if(cf) cf.hidden = false;
+        say('');
+      }).catch(function(){ say('Tester lookup failed \u2014 check your connection and try again.'); });
+    });
+    var cancelBtn = document.getElementById('thanksCancelBtn');
+    if(cancelBtn) cancelBtn.addEventListener('click', function(){
+      pending = null;
+      var cf = document.getElementById('thanksConfirm'); if(cf) cf.hidden = true;
+      say('');
+    });
+    var confirmBtn = document.getElementById('thanksConfirmBtn');
+    if(confirmBtn) confirmBtn.addEventListener('click', function(){
+      if(!pending){ say('Nothing to send yet \u2014 preview one first.'); return; }
+      if(!(window.holoInbox && typeof window.holoInbox.thankTester === 'function')){ say('The thank-you sender isn\u2019t loaded on this page \u2014 hard-refresh and try again.'); return; }
+      var p = pending; pending = null;
+      var cf = document.getElementById('thanksConfirm'); if(cf) cf.hidden = true;
+      say('Sending to ' + p.name + '\u2026');
+      window.holoInbox.thankTester(p.uid, p.gameName, p.slug).then(function(r){
+        if(r === null || r === undefined){
+          say('Not sent \u2014 the message needs the rules publish (due Nov 27) before it can land in a tester\u2019s Inbox. Nothing was sent \u2014 try again after the publish.');
+          return;
+        }
+        var list = thanksSentLoad();
+        list.unshift({ name: p.name, game: p.gameName, at: new Date().toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) });
+        thanksSentSave(list);
+        renderThanksBacks();
+        var stNew = document.getElementById('thanksStatus');
+        if(stNew) stNew.textContent = 'Sent \u2705 \u2014 ' + p.name + ' will see it in their Inbox.';
+      }).catch(function(){
+        say('Not sent \u2014 something went wrong sending. Nothing was sent \u2014 try again.');
+      });
+    });
+  }
   function buildDash(){
     if(!canSeeOwnerDash()) return;
     var mount = document.getElementById('ownerDashMount');
@@ -16016,6 +16149,7 @@ function renderTesterAuth(){
           '<button type="button" data-owner-jump="ownerDashTesterView">\uD83D\uDC40 Tester view</button>' +
           '<button type="button" data-owner-jump="ownerDashAccounts">\uD83D\uDC65 Accounts</button>' +
           '<button type="button" data-owner-jump="ownerDashSiteHealth">\uD83D\uDC9A Site health</button>' +
+          '<button type="button" data-owner-jump="ownerDashThanks">\uD83D\uDC8C Report-backs</button>' +
           '<button type="button" data-owner-jump="liveInviteMount">\uD83C\uDF9F\uFE0F Invites</button>' +
         '</nav>' +
         '<details class="dash-cat" id="ownerDashTesterView" open>' +
@@ -16032,6 +16166,10 @@ function renderTesterAuth(){
         '<details class="dash-cat" id="ownerDashSiteHealth">' +
           '<summary>\uD83D\uDC9A Site health</summary>' +
           '<div class="dash-cat-body"><div id="siteHealthCard"></div></div>' +
+        '</details>' +
+        '<details class="dash-cat" id="ownerDashThanks">' +
+          '<summary>\uD83D\uDC8C Report-backs</summary>' +
+          '<div class="dash-cat-body"><div id="thanksBacksCard"></div></div>' +
         '</details>';
       var openBtn = document.getElementById('openTesterLiveBtn');
       if(openBtn) openBtn.addEventListener('click', openTesterLiveView);
@@ -16047,6 +16185,7 @@ function renderTesterAuth(){
     mount.hidden = false;
     renderOwnerAccounts();
     renderSiteHealth();
+    renderThanksBacks();
     if(liveMount.firstChild) { applySettings(); return; }
     liveMount.innerHTML =
       '<nav class="dash-jumpbar" aria-label="Jump to a dash section">' +
@@ -20321,6 +20460,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     }).catch(function(){ return null; });
   }
   var items = [];
+  var thanksPopped = {}; /* THANKS-ARRIVAL-2026-11-24: ids that already popped once */
   var unreadOnly = false; /* INBOX-CLEAR-FILTER-2026-11-23 */
   var draftsOnly = false; /* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:13): All / Unread / Drafts */
   var archivedOnly = false; /* INBOX-EMAIL-2026-11-23 (Holo 08:33): Archived filter — archive only, no delete */
@@ -20422,6 +20562,15 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       list.innerHTML = '<p class="inbox-empty">' + emptyMsg + '</p>'; return;
     }
     list.innerHTML = shown.map(function(n){
+      /* THANKS-ARRIVAL-2026-11-24: a fresh, unread fixed-report thank-you
+         pops once when it first lands in a visible Inbox — never again
+         for that id, and never while the Inbox is not on screen. */
+      var thanksNew = false;
+      if(n.type === 'review-fixed' && !n.read && !thanksPopped[n.id]){
+        var inboxVisible = true;
+        try { inboxVisible = (document.body.getAttribute('data-view') === 'inbox'); } catch(e){}
+        if(inboxVisible){ thanksNew = true; thanksPopped[n.id] = 1; }
+      }
       var icon = TYPES[n.type] || '🔔';
       /* INBOX-DRAFT-FILTER-2026-11-23 (Holo 00:14): per-item Mark read on unread items */
       var actions = '';
@@ -20434,7 +20583,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       /* INBOX-EMAIL-2026-11-23: email row — avatar, sender, subject, preview, time, unread dot */
       var from = senderOf(n);
       var initial = (from.replace(/[^A-Za-z0-9]/g, '').charAt(0) || 'H').toUpperCase();
-      return '<article class="inbox-item' + (n.read ? '' : ' unread') + '" data-id="' + esc(n.id) + '" tabindex="0" role="button" aria-label="Open message: ' + esc(n.title) + '"><div class="inbox-ava" aria-hidden="true">' + esc(initial) + '</div><div class="inbox-main"><div class="inbox-row1"><span class="inbox-from">' + esc(from) + '</span><span class="inbox-time">' + esc(whenShort(n.createdAt)) + '</span></div><div class="inbox-subj">' + icon + ' ' + esc(n.title) + '</div><div class="inbox-prev">' + esc(previewOf(n)) + '</div>' + linkBtn + '</div>' + (n.read ? '' : '<span class="inbox-dot" aria-label="Unread"></span>') + '</article>';
+      return '<article class="inbox-item' + (n.read ? '' : ' unread') + (thanksNew ? ' thanks-new' : '') + '" data-id="' + esc(n.id) + '" tabindex="0" role="button" aria-label="Open message: ' + esc(n.title) + '"><div class="inbox-ava" aria-hidden="true">' + esc(initial) + '</div><div class="inbox-main"><div class="inbox-row1"><span class="inbox-from">' + esc(from) + '</span><span class="inbox-time">' + esc(whenShort(n.createdAt)) + '</span></div><div class="inbox-subj">' + icon + ' ' + esc(n.title) + '</div><div class="inbox-prev">' + esc(previewOf(n)) + '</div>' + linkBtn + '</div>' + (n.read ? '' : '<span class="inbox-dot" aria-label="Unread"></span>') + '</article>';
     }).join('');
     list.querySelectorAll('.inbox-markread').forEach(function(btn){
       btn.addEventListener('click', function(){ markRead(btn.closest('.inbox-item').getAttribute('data-id')); });
@@ -20513,9 +20662,18 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(reportId) ntc.reportId = String(reportId).slice(0, 80); /* DEVICE-QUESTIONNAIRE-2026-11-23: optional marker so the reader can tell a questionnaire message apart from other 'system' notices. */
     return sendNotice(a.uid, ntc).then(function(r){ refresh(); return r; });
   }
+  /* THANK-YOU-WORDING-2026-11-24 — ONE constant. Holo picks the fun
+     wording: swap this constant only, nothing else. {game} is the game
+     title. The body must keep the retest ask. The text below is the
+     plain template until Holo's pick lands. */
+  var THANK_YOU_WORDING = {
+    title: 'Fixed \u2014 thank you, agent!',
+    body: 'We looked into your report about {game}. Fixed. Thank you for helping make the Arcade better! Please give it another play and tell us if it feels right now.'
+  };
   function thankTester(uid, gameName, slug){
     /* Owner flow (plan Phase 1): fixed template, Holo approves wording. */
-    return sendNotice(uid, { type:'review-fixed', title:'Fixed — thank you, agent!', body:'We looked into your report about ' + (gameName || 'a game') + '. Fixed. Thank you for helping make the Arcade better!', link: slug ? ('game:' + slug) : '' });
+    var body = THANK_YOU_WORDING.body.split('{game}').join(gameName || 'a game');
+    return sendNotice(uid, { type:'review-fixed', title: THANK_YOU_WORDING.title, body: body, link: slug ? ('game:' + slug) : '' });
   }
   /* INBOX-EMAIL-2026-11-23: chat-style reading view */
   var readingId = null;
@@ -20696,6 +20854,18 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     thread.appendChild(sr);
     var bub = document.createElement('div'); bub.className = 'bubble'; bub.textContent = n.body || '';
     thread.appendChild(bub);
+    /* GLITCH-SQUASH-2026-11-24 (Holo picked this): opening a fixed-report
+       thank-you squashes a little pixel bug flat with a splat, plus
+       confetti. Tester-side only — it fires when the tester opens the
+       notification, never for the owner sending it. */
+    if(n.type === 'review-fixed'){
+      try {
+        var sq = document.createElement('div'); sq.className = 'thanks-squash'; sq.setAttribute('aria-hidden', 'true');
+        sq.innerHTML = '<span class="sq-bug">\uD83D\uDC1B</span><span class="sq-splat">\uD83D\uDCA5</span><span class="sq-word">SPLAT!</span>';
+        thread.appendChild(sq);
+        if(typeof celebrateConfetti === 'function') celebrateConfetti(60);
+      } catch(e){}
+    }
     if(dqIsQuestionnaire(n)) renderDeviceQuestionnaire(thread, n); /* DEVICE-QUESTIONNAIRE-2026-11-23: the chips + form render under the bubble. */
     var acts = rd.querySelector('.read-actions'); acts.innerHTML = '';
     if(n.link){
@@ -20780,7 +20950,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   try { new MutationObserver(function(){ var v = document.body.getAttribute('data-view'); if(v === 'inbox') refresh(); else if(readingId) closeMessage(false); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] }); } catch(e){}
   setInterval(tick, 60000);
   setTimeout(tick, 2500);
-  window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, archiveItem:archiveItem, openMessage:openMessage, closeMessage:closeMessage, section:function(){ return section; }, setSection:setSection, filter:inboxFilter, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, unreadCount:unreadCount, items:function(){ return items.slice(); } };
+  window.holoInbox = { refresh:refresh, markRead:markRead, markAllRead:markAllRead, archiveItem:archiveItem, openMessage:openMessage, closeMessage:closeMessage, section:function(){ return section; }, setSection:setSection, filter:inboxFilter, sendNotice:sendNotice, notifySelf:notifySelf, thankTester:thankTester, thankYouWording:THANK_YOU_WORDING, unreadCount:unreadCount, items:function(){ return items.slice(); } };
 })();
 </script>
 <!-- FRIEND-REQUESTS-2026-11-22 (Holo 23:32): cross-device friend
