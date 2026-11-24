@@ -13602,8 +13602,10 @@ window.holoDaily = (function(){
      form, help chat, crash reports, account recovery, code-name
      change). Everything here is automatic — no new questions for
      the tester. Never includes passwords, invite codes, or
-     localStorage contents; the signed-in email + code name go to
-     the owner-only Sheet, never into tester-facing copy. */
+     localStorage contents: URLs are scrubbed (query dropped, secret
+     hashes dropped) and the signed-in email is never captured — the
+     code name still goes to the owner-only Sheet, never into
+     tester-facing copy. FB-LEAK-FIX-2026-11-24. */
   var __holoPrevHash = '';
   try {
     window.addEventListener('hashchange', function(e){
@@ -13632,16 +13634,38 @@ window.holoDaily = (function(){
     if(/Safari/.test(s)) return 'Safari';
     return '';
   }
+  /* FB-LEAK-FIX-2026-11-24 (Holo: fix the /feedback leak): invite codes
+     and the owner secret ride in the URL (?invite=CODE, ?owner=<secret>,
+     and #invite=CODE tucked in the hash) and used to be copied verbatim
+     into every report — and /feedback is readable by any signed-in
+     tester. Reports keep the page path, never query secrets: the query
+     string is dropped entirely, and a hash is kept only when it carries
+     no secret param. Also used as a backstop in sanitizePayload, so
+     records queued on a device by the pre-fix hub get scrubbed on flush. */
+  function holoScrubUrl(u){
+    try {
+      var s = String(u || '');
+      if(!s) return '';
+      var hash = '';
+      var hi = s.indexOf('#');
+      if(hi >= 0){ hash = s.slice(hi); s = s.slice(0, hi); }
+      var qi = s.indexOf('?');
+      if(qi >= 0) s = s.slice(0, qi);
+      if(hash && /(^|[?&#])(invite|owner|auth|access_token|code|token|password|secret)=/i.test(hash)) hash = '';
+      return (s + hash).slice(0, 500);
+    } catch(e){ return ''; }
+  }
+  window.holoScrubUrl = holoScrubUrl;
   function holoReportContext(){
     var ctx = {};
     try {
       var ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
-      ctx.url = String((typeof location !== 'undefined' && location.href) || '').slice(0, 500);
+      ctx.url = holoScrubUrl((typeof location !== 'undefined' && location.href) || '');
       var path = ((typeof location !== 'undefined' && location.pathname) || '') + ((typeof location !== 'undefined' && location.search) || '') + ((typeof location !== 'undefined' && location.hash) || '');
-      ctx.page = path.slice(0, 500);
-      ctx.view = String((typeof location !== 'undefined' && location.hash) || '#main').slice(0, 200);
-      ctx.prevHash = __holoPrevHash ? ('#' + __holoPrevHash) : '';
-      try { ctx.referrer = String(document.referrer || '').slice(0, 500); } catch(e){ ctx.referrer = ''; }
+      ctx.page = holoScrubUrl(path);
+      ctx.view = holoScrubUrl((typeof location !== 'undefined' && location.hash) || '#main').slice(0, 200);
+      ctx.prevHash = __holoPrevHash ? holoScrubUrl('#' + __holoPrevHash) : '';
+      try { ctx.referrer = holoScrubUrl(document.referrer || ''); } catch(e){ ctx.referrer = ''; }
       ctx.host = (typeof location !== 'undefined' && location.hostname) || '';
       var standalone = false;
       try { standalone = !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone); } catch(e){}
@@ -13658,7 +13682,10 @@ window.holoDaily = (function(){
       else ctx.deviceType = 'desktop';
       ctx.os = holoParseOs(ua);
       ctx.browserVer = holoParseBrowser(ua);
-      try { var a = JSON.parse(localStorage.getItem('holos-firebase-auth') || 'null'); if(a && a.email) ctx.testerEmail = String(a.email); } catch(e){}
+      /* FB-LEAK-FIX-2026-11-24: testerEmail is NOT captured any more —
+         it used to land in /feedback (readable by any signed-in tester).
+         The Sheet Email column stays blank for new reports; look the
+         address up in Firebase Console by Code Name when you need it. */
       try { var t = (typeof getTester === 'function') ? getTester() : null; if(t && t.name) ctx.testerName = String(t.name); } catch(e){}
       var now = new Date();
       try { ctx.tsLocal = now.toLocaleString(); } catch(e){ ctx.tsLocal = now.toString(); }
@@ -13666,7 +13693,7 @@ window.holoDaily = (function(){
       try { var slug = (typeof playerSlug === 'function') ? playerSlug() : null; if(slug){ ctx.game = slug; try { ctx.gameTitle = gameTitle(slug); } catch(e2){ ctx.gameTitle = slug; } } } catch(e){}
       try {
         var le = window.__holoLastError;
-        if(le && le.message && le.at && (Date.now() - le.at) < 30 * 60 * 1000) ctx.lastError = String(le.message).slice(0, 300);
+        if(le && le.message && le.at && (Date.now() - le.at) < 30 * 60 * 1000) ctx.lastError = String(le.message).replace(/([?&#])(auth|access_token|invite|owner)=[^&\s]*/gi, '$1$2=[removed]').slice(0, 300);
       } catch(e){}
     } catch(e){}
     return ctx;
@@ -19356,6 +19383,14 @@ function renderTesterAuth(){
     try {
       Object.keys(src || {}).forEach(function(k){
         if(k === 'fbSent' || k === 'fbKey' || k === 'fbAnon') return;
+        if(k === 'testerEmail') return; /* FB-LEAK-FIX-2026-11-24: email never goes to /feedback. */
+        if((k === 'url' || k === 'page' || k === 'referrer' || k === 'view' || k === 'prevHash') && typeof src[k] === 'string'){
+          /* FB-LEAK-FIX-2026-11-24: scrub records queued on-device by the
+             pre-fix hub before they flush — they may still carry ?invite=.
+             (Uses src[k]: this block runs before var v is assigned.) */
+          try { out[k] = (typeof window.holoScrubUrl === 'function') ? window.holoScrubUrl(src[k]) : src[k]; } catch(e){ out[k] = src[k]; }
+          return;
+        }
         var v = src[k];
         if(k === 'screenshot' && typeof v === 'string'){
           /* FB-SCREENSHOT-2026-11-23: data URL already shrunk client-side; validate + hard cap. */
@@ -20313,7 +20348,8 @@ function renderTesterAuth(){
       sessionStorage.setItem('holo-error-offered','1');
       shown = true;
       var base = (location.hostname.indexOf('holosarcade.ca') >= 0) ? '/404.html' : '404.html';
-      var href = base + '?err=' + encodeURIComponent(String(msg || 'Unknown glitch').slice(0,300)) + '&page=' + encodeURIComponent(location.href);
+      var _errPage = (typeof window.holoScrubUrl === 'function') ? window.holoScrubUrl(location.href) : String(location.href || '').split('#')[0].split('?')[0];
+      var href = base + '?err=' + encodeURIComponent(String(msg || 'Unknown glitch').slice(0,300)) + '&page=' + encodeURIComponent(_errPage);
       var bar = document.createElement('div');
       bar.setAttribute('style','position:fixed;left:12px;right:12px;bottom:12px;z-index:9999;background:#241a3d;color:#f5efff;border:1px solid #453070;border-radius:14px;padding:12px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between;font-family:system-ui,sans-serif;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.5)');
       var txt = document.createElement('span');
