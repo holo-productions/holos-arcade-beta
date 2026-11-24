@@ -751,6 +751,8 @@ body.login-faq-open .login-faq-nav-title{display:block;position:absolute;left:50
 .card-art .badge{font-family:var(--pixel);font-size:9px;letter-spacing:0;line-height:1.5;padding:7px 9px}
 /* EASY-ADDS-2026-11-23: New badge (bottom-right, clear of the duck + category badge) */
 .card-art .badge-new{top:auto;bottom:10px;right:10px;background:#ffd166;color:#241043}
+/* TRENDING-2026-11-24: real play-count chip on Trending shelf cards (bottom-left, clear of the New badge). Never a .badge — isComingSoon() reads .badge text. */
+.card-art .trend-count{position:absolute;top:auto;bottom:10px;left:10px;background:#0a0620;color:#ffd166;border:1.5px solid rgba(255,209,102,.7);font-family:var(--pixel);font-size:9px;letter-spacing:0;line-height:1.5;padding:7px 9px;border-radius:999px}
 .stat b{font-family:var(--pixel);font-size:19px;line-height:1.5;font-weight:400}
 .play{font-family:var(--pixel);font-size:10px;letter-spacing:0;line-height:1.6}
 .practice-btn{font-family:var(--pixel);font-size:9px;letter-spacing:0;line-height:1.6}
@@ -3138,6 +3140,7 @@ setTimeout(function(){
     <input id="search" type="search" placeholder="Search games by name — try 'trivia', 'werewolf', 'mad cow'…" aria-label="Search games by name">
     <button class="pill active" data-filter="all" type="button">All games</button>
     <button class="pill" data-filter="recent" type="button">Recently Played</button>
+    <button class="pill" data-filter="trending" type="button">Trending now</button>
     <button class="pill" data-filter="personal" type="button">Holo's games</button>
     <button class="pill" data-filter="puzzle" type="button">Puzzles</button>
     <button class="pill" data-filter="cards" type="button">Card games</button>
@@ -8357,8 +8360,71 @@ setTimeout(function(){
   function cardSlugOf(c){ var b = c.querySelector('[data-game]'); return b ? (b.getAttribute('data-game') || '') : ''; }
   var recentSet = {};
   function refreshRecentSet(){ recentSet = {}; loadRecents().forEach(function(r){ recentSet[r.slug] = r.ts || 0; }); }
+  /* TRENDING-2026-11-24: the "Trending now" shelf. Ranked ONLY from
+     real /plays records (RTDB, signed-in read via betaFetchPlays) —
+     never seeded, estimated or guessed. Threshold: at least 5 total
+     plays across at least 3 games, else the shelf says plainly there
+     is not enough play data yet (and still shows whatever real plays
+     exist, with their true counts). Top 8 ranked cards gather into
+     the flat grid like Recently Played; each carries a "#n · N plays"
+     chip. Re-read on every pill tap and once shortly after hub load,
+     so new plays land without any fake real-time claim. Counts are
+     all beta plays so far (beta is days old); a time-windowed rank
+     is a future step once volume grows. */
+  var TRENDING_MIN_TOTAL = 5, TRENDING_MIN_GAMES = 3, TRENDING_SHOW = 8;
+  var trendingData = null; /* { total, games:[{slug,plays}] } once loaded */
+  var trendingState = 'idle'; /* idle | loading | ready | sparse | error */
+  var trendingCounts = {}; /* slug -> real play count, from /plays */
+  var trendingRank = []; /* ranked slugs currently shown (top 8 or fewer) */
+  function trendingReady(){
+    return !!(trendingData && trendingData.total >= TRENDING_MIN_TOTAL &&
+      trendingData.games.length >= TRENDING_MIN_GAMES);
+  }
+  function refreshTrendingSet(){
+    trendingRank = [];
+    if(!trendingData || !Array.isArray(trendingData.games)) return;
+    var playable = {};
+    cards.forEach(function(c){ playable[cardSlugOf(c)] = true; });
+    trendingData.games.forEach(function(g){
+      if(trendingRank.length >= TRENDING_SHOW) return;
+      if(playable[g.slug]) trendingRank.push(g.slug);
+    });
+  }
+  function loadTrending(){
+    if(typeof window.betaFetchPlays !== 'function'){ trendingState = 'error'; if(filter === 'trending') apply(); return; }
+    if(trendingState === 'loading') return;
+    trendingState = 'loading';
+    if(filter === 'trending') apply();
+    window.betaFetchPlays().then(function(d){
+      if(!d || !Array.isArray(d.games)){ trendingState = 'error'; }
+      else {
+        trendingData = d;
+        trendingCounts = {};
+        d.games.forEach(function(g){ trendingCounts[g.slug] = g.plays; });
+        trendingState = trendingReady() ? 'ready' : 'sparse';
+      }
+      if(filter === 'trending') apply();
+    }).catch(function(){ trendingState = 'error'; if(filter === 'trending') apply(); });
+  }
   function apply(){
     if(filter === 'recent') refreshRecentSet();
+    if(filter === 'trending') refreshTrendingSet();
+    /* TRENDING-2026-11-24: count chips live only on the Trending shelf. */
+    document.querySelectorAll('.trend-count').forEach(function(el){ el.remove(); });
+    if(filter === 'trending'){
+      trendingRank.forEach(function(slug, i){
+        var card = null;
+        cards.forEach(function(c){ if(!card && cardSlugOf(c) === slug) card = c; });
+        if(!card) return;
+        var art = card.querySelector('.card-art');
+        if(!art) return;
+        var chip = document.createElement('span');
+        chip.className = 'trend-count';
+        var n = trendingCounts[slug] || 0;
+        chip.textContent = '#' + (i + 1) + ' \u00b7 ' + n + (n === 1 ? ' play' : ' plays');
+        art.appendChild(chip);
+      });
+    }
     /* AGE18-2026-11-23: hidden 18+ games never show in the Library,
        search or shelf filters. */
     var age18Hidden = !!(window.holoAge18 && !window.holoAge18.adultGamesVisible());
@@ -8372,7 +8438,7 @@ setTimeout(function(){
     cards.forEach(function(c){
       var cat = c.getAttribute('data-cat')||'';
       var txt = ((c.textContent||'') + ' ' + (c.getAttribute('data-search')||'') + ' ' + (c.getAttribute('data-cat')||'')).toLowerCase();
-      var show = (filter==='all' || (filter==='recent' ? !!recentSet[cardSlugOf(c)] : cat.indexOf(filter)!==-1)) && (!q || txt.indexOf(q)!==-1);
+      var show = (filter==='all' || (filter==='recent' ? !!recentSet[cardSlugOf(c)] : filter==='trending' ? !!trendingCounts[cardSlugOf(c)] : cat.indexOf(filter)!==-1)) && (!q || txt.indexOf(q)!==-1);
       if(q && isComingSoon(c)) show = false;
       if(show && age18Hidden && window.holoAge18.isAdultCard(c)) show = false;
       if(show){
@@ -8396,10 +8462,18 @@ setTimeout(function(){
     });
     var p19 = document.querySelector('.pill[data-filter="party19"]');
     if(p19) p19.style.display = age18Hidden ? 'none' : '';
-    empty.textContent = (filter === 'recent' && !visible)
+    /* TRENDING-2026-11-24: the shelf never fakes popularity. Sparse
+       data shows the honest message AND the real plays that exist. */
+    var trendingMsg = '';
+    if(filter === 'trending'){
+      if(trendingState === 'loading') trendingMsg = 'Loading the most-played games\u2026';
+      else if(trendingState === 'error') trendingMsg = 'Couldn\u2019t load play counts right now \u2014 play a game and check back in a bit.';
+      else if(trendingState === 'sparse') trendingMsg = 'Not enough plays yet \u2014 play games to fill this shelf.';
+    }
+    empty.textContent = trendingMsg || ((filter === 'recent' && !visible)
       ? 'No recently played games yet \u2014 play a game and it will show up here so you can find it again (and tap the duck to favourite it!).'
-      : 'No game matches that search \u2014 try \u201Ctrivia\u201D or clear the filters.';
-    empty.style.display = visible ? 'none' : 'block';
+      : 'No game matches that search \u2014 try \u201Ctrivia\u201D or clear the filters.');
+    empty.style.display = (trendingMsg || !visible) ? 'block' : 'none';
     /* LIB-COUNT-2026-11-23 (Holo 10:00/10:01): live games count —
        total from the rendered playable cards; filtered count while
        a shelf filter or search is active. LIVE_GAMES = games that
@@ -8428,6 +8502,21 @@ setTimeout(function(){
         document.querySelectorAll('main .section').forEach(function(sec){ sec.style.display = 'none'; });
       }
     }
+    /* TRENDING-2026-11-24: ranked cards gather into the flat grid in
+       rank order (slugs with no Library card, e.g. hidden games, are
+       skipped — nothing is invented to fill the shelf). */
+    if(filter === 'trending'){
+      var fgT = $('flatGrid');
+      if(fgT){
+        trendingRank.forEach(function(slug){
+          var card = null;
+          cards.forEach(function(c){ if(!card && cardSlugOf(c) === slug) card = c; });
+          if(card && card.style.display !== 'none') fgT.appendChild(card);
+        });
+        fgT.hidden = false;
+        document.querySelectorAll('main .section').forEach(function(sec){ sec.style.display = 'none'; });
+      }
+    }
     updateShowMoreButtons(paging, totals);
   }
   buildShowMoreButtons();
@@ -8440,14 +8529,21 @@ setTimeout(function(){
       filter = p.getAttribute('data-filter');
       /* RECENT-PLAYED-2026-11-23: leaving the Recently Played shelf
          puts every card back where the current sort wants it. */
-      if(prevFilter === 'recent' && filter !== 'recent'){
+      /* TRENDING-2026-11-24: same restore when leaving the Trending
+         shelf; tapping it re-reads /plays so new plays land. */
+      if((prevFilter === 'recent' || prevFilter === 'trending') && filter !== 'recent' && filter !== 'trending'){
         var sp = document.querySelector('.pill[data-sort].active');
         setSort(sp ? sp.getAttribute('data-sort') : 'category');
       }
+      if(filter === 'trending') loadTrending();
       apply();
     });
   });
   search.addEventListener('input', apply);
+  /* TRENDING-2026-11-24: warm the cache shortly after hub load so
+     the first tap is instant; signed-out visitors get null and the
+     shelf reports it honestly when tapped. */
+  setTimeout(function(){ try { loadTrending(); } catch(e){} }, 1500);
   /* AGE18-2026-11-23: let the 18+ module re-run the filter when the
      toggle or date of birth changes (no reload needed). */
   window.holoRefreshLibrary = function(){ try { apply(); } catch(e){} };
@@ -19435,6 +19531,36 @@ function renderTesterAuth(){
     } catch(e){}
   }
   window.betaLogPlay = logPlay;
+  /* TRENDING-2026-11-24: read /plays for the "Trending now" shelf.
+     Signed-in read (rules: auth != null). Returns { total, games:
+     [{slug, plays}] } ranked most-played first (ties A-Z), or null
+     when not signed in, offline, or denied — the shelf then says so
+     instead of showing invented counts. No seeding, no estimates. */
+  function fetchPlays(){
+    if(typeof fetch !== 'function') return Promise.resolve(null);
+    return freshToken().then(function(token){
+      if(!token) return null;
+      return fetch(FB_RTDB + '/plays.json?auth=' + encodeURIComponent(token))
+        .then(function(res){ if(!res.ok) throw new Error('plays read failed'); return res.json(); })
+        .then(function(data){
+          if(!data || typeof data !== 'object') return { total: 0, games: [] };
+          var counts = {};
+          Object.keys(data).forEach(function(k){
+            var r = data[k];
+            var slug = r && (r.game || r.slug);
+            if(!slug) return;
+            slug = String(slug);
+            counts[slug] = (counts[slug] || 0) + 1;
+          });
+          var games = Object.keys(counts).map(function(s){ return { slug: s, plays: counts[s] }; });
+          games.sort(function(a, b){ return (b.plays - a.plays) || (a.slug < b.slug ? -1 : (a.slug > b.slug ? 1 : 0)); });
+          var total = games.reduce(function(n, g){ return n + g.plays; }, 0);
+          return { total: total, games: games };
+        })
+        .catch(function(){ return null; });
+    }).catch(function(){ return null; });
+  }
+  window.betaFetchPlays = fetchPlays;
   try {
     document.addEventListener('click', function(ev){
       try {
