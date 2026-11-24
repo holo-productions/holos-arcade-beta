@@ -13749,6 +13749,15 @@ function signOutTester(){
      kind it was (remembered or session-only). */
   try { localStorage.removeItem(TESTER_LS_KEY); } catch(e){}
   try { sessionStorage.removeItem(TESTER_LS_KEY); } catch(e){}
+  /* INBOX-LEAK-FIX-2026-11-24 (Holo 2026-11-24 07:58): also drop the
+     saved Firebase credential. It belongs to whoever was signed
+     in — leaving it behind lets the next sign-in on this device
+     (local/offline fallback) read the previous user's inbox with
+     the previous user's still-valid token. The reverify gate keeps
+     the token only while the gate is up; this sign-out path
+     abandons verification, so clearing here is correct. */
+  try { localStorage.removeItem('holos-firebase-auth'); } catch(e){}
+  try { if(window.holoBetaAuth) delete window.holoBetaAuth; } catch(e){}
   /* Back at the login screen, the Terms & Policies box starts
      unticked again — it is agreed fresh at every login, and
      Remember me returns to its unticked default too. */
@@ -13913,6 +13922,27 @@ function cacheLocalAccount(name, email, password, uid, existing, inviteCode, rol
   });
 }
 function finishSignIn(rec, rememberMe){
+  /* INBOX-LEAK-FIX-2026-11-24 (Holo 2026-11-24 07:58): a stale
+     Firebase record from a previous user on this device must never
+     survive a local/offline fallback sign-in. On the normal Firebase
+     path betaSignInAsync just saved a record for this email, so this
+     is a no-op; on fallback paths the stored record may belong to
+     someone else — drop it unless its email matches the signing-in
+     account. Placed here, the single choke point for every sign-in
+     completion, instead of duplicating the check at all six
+     fallback sites. */
+  try {
+    var __em = String((rec && rec.email) || '').trim().toLowerCase();
+    var __stored = null;
+    try { __stored = JSON.parse(localStorage.getItem('holos-firebase-auth') || 'null'); } catch(__e0){}
+    if(__stored && typeof __stored === 'object'){
+      var __sem = String(__stored.email || '').trim().toLowerCase();
+      if(__em && __sem !== __em){
+        try { localStorage.removeItem('holos-firebase-auth'); } catch(__e1){}
+        try { if(window.holoBetaAuth) delete window.holoBetaAuth; } catch(__e2){}
+      }
+    }
+  } catch(__e){}
   rememberLastEmail(rec.email);
   var session = saveTesterSession({ name:rec.name, code:rec.code, role:rec.role || '', comp:!!rec.comp, termsAcceptedAt:rec.termsAcceptedAt, signedInAt:new Date().toISOString(), email:rec.email || '', uid:rec.uid || '' }, !!rememberMe);
   return { ok:true, tester:session };
@@ -20538,7 +20568,31 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
   var AUTH_KEY = 'holos-firebase-auth';
   var TYPES = { 'review-fixed':'✅', 'friend-request':'👥', 'friend-accepted':'🤝', 'announcement':'📣', 'support-reply':'💬', 'system':'🔔' };
-  function loadAuth(){ try { var v = JSON.parse(localStorage.getItem(AUTH_KEY)); if(v && v.idToken && v.uid) return v; } catch(e){} return null; }
+  function loadAuth(){
+    /* INBOX-LEAK-FIX-2026-11-24 (Holo 2026-11-24 07:58): never trust a
+       Firebase record that disagrees with the signed-in tester
+       session. If a session exists and its email or uid doesn't
+       match the stored record, the record is stale (previous user
+       on this device) — return null so the Inbox loads nothing
+       rather than someone else's inbox. A field is only compared
+       when both sides carry it. */
+    try {
+      var v = JSON.parse(localStorage.getItem(AUTH_KEY));
+      if(v && v.idToken && v.uid){
+        try {
+          var t = (typeof getTester === 'function') ? getTester() : null;
+          if(t){
+            var tem = String(t.email || '').trim().toLowerCase();
+            var vem = String(v.email || '').trim().toLowerCase();
+            var tuid = String(t.uid || '');
+            if((tem && vem && tem !== vem) || (tuid && tuid !== String(v.uid || ''))) return null;
+          }
+        } catch(e0){}
+        return v;
+      }
+    } catch(e){}
+    return null;
+  }
   function freshToken(){
     var a = loadAuth(); if(!a) return Promise.resolve(null);
     if(a.exp && a.exp > Date.now() + 60000) return Promise.resolve(a.idToken);
