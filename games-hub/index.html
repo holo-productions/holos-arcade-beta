@@ -15858,6 +15858,67 @@ function renderTesterAuth(){
     }).join('');
     box.innerHTML = '<p style="margin:0 0 6px;font-weight:800">Accounts on this device (owner only)</p><ul style="margin:0;padding-left:18px;color:var(--muted);font-size:13.5px;line-height:1.7">' + rows + '</ul><p style="margin:6px 0 0;color:var(--muted);font-size:12.5px">Invite codes are noted at register from Nov 22, 2026 onward, and also saved to Firebase under the tester\u2019s own account record. Codes are not checked against a list yet.</p>';
   }
+  /* SITE-HEALTH-2026-11-24: Owner Dash "Site health" card.
+     Reads site-health.json (written by the hourly health-watch
+     cron, only when something changes) and shows the last
+     recorded status, plus a live "Check now" probe that fetches
+     the hub itself cache-busted. Owner-only: this only ever
+     renders inside buildDash(), which only runs when
+     canSeeOwnerDash(). */
+  function siteHealthTime(iso){
+    try { var d = new Date(iso); if(!isNaN(d.getTime())) return d.toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }); } catch(e){}
+    return String(iso || '');
+  }
+  function renderSiteHealth(){
+    var box = document.getElementById('siteHealthCard');
+    if(!box || !canSeeOwnerDash()) return;
+    box.innerHTML = '<p style="margin:0;color:var(--muted);font-size:13.5px">Checking\u2026</p>';
+    fetch('../site-health.json?v=' + Date.now(), { cache:'no-store' }).then(function(r){
+      if(!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function(d){
+      var up = (d && d.status === 'up');
+      var pill = up ? '\u2705 Up' : '\u274C Down';
+      var cert = (d && d.certOk) ? 'Yes' : 'No';
+      var build = (d && d.lastBuild) ? escO(String(d.lastBuild).slice(0, 7)) + ' \u2014 ' + escO(d.lastBuildStatus || '') : 'unknown';
+      var cname = (d && d.pagesCname) ? escO(d.pagesCname) : '';
+      box.innerHTML =
+        '<p style="margin:0 0 6px;font-size:15px"><strong>' + pill + '</strong>' +
+        (cname ? ' <span style="color:var(--muted);font-size:13px">' + cname + '</span>' : '') + '</p>' +
+        '<ul style="margin:0 0 8px;padding-left:18px;color:var(--muted);font-size:13.5px;line-height:1.7">' +
+        '<li>Last check: ' + escO(siteHealthTime(d && d.checkedAt)) + '</li>' +
+        '<li>Certificate OK: ' + cert + '</li>' +
+        '<li>Last build: ' + build + '</li>' +
+        '</ul>' +
+        '<p style="margin:0 0 8px;color:var(--muted);font-size:12.5px">The watch writes a new check only when something changes \u2014 tap Check now for a live reading.</p>' +
+        '<p style="margin:0 0 8px"><button type="button" class="btn btn-dark" id="siteHealthCheckNow">Check now</button> <span id="siteHealthLive" style="color:var(--muted);font-size:13px" role="status"></span></p>' +
+        '<p style="margin:0;color:var(--muted);font-size:12.5px">The hourly watch checks on its own and messages you if the site goes down.</p>';
+      var btn = document.getElementById('siteHealthCheckNow');
+      if(btn) btn.addEventListener('click', probeSiteHealthNow);
+    }).catch(function(){
+      box.innerHTML =
+        '<p style="margin:0 0 8px;color:var(--muted);font-size:13.5px">No check recorded yet \u2014 the hourly watch writes the first one at its next run.</p>' +
+        '<p style="margin:0 0 8px"><button type="button" class="btn btn-dark" id="siteHealthCheckNow">Check now</button> <span id="siteHealthLive" style="color:var(--muted);font-size:13px" role="status"></span></p>' +
+        '<p style="margin:0;color:var(--muted);font-size:12.5px">The hourly watch checks on its own and messages you if the site goes down.</p>';
+      var btn2 = document.getElementById('siteHealthCheckNow');
+      if(btn2) btn2.addEventListener('click', probeSiteHealthNow);
+    });
+  }
+  function probeSiteHealthNow(){
+    var out = document.getElementById('siteHealthLive');
+    if(out) out.textContent = 'Checking\u2026';
+    var probeUrl = './?sitehealth=' + Date.now();
+    function done(ok, code){
+      if(!out) return;
+      out.textContent = ok ? ('\u2705 Live right now: up (HTTP ' + code + ', just now)') : ('\u274C Live right now: down (just now)');
+    }
+    fetch(probeUrl, { method:'HEAD', cache:'no-store' }).then(function(r){
+      if(r && r.ok){ done(true, r.status); return; }
+      return fetch(probeUrl, { cache:'no-store' }).then(function(r2){ done(!!(r2 && r2.ok), r2 ? r2.status : 0); }).catch(function(){ done(false, 0); });
+    }).catch(function(){
+      fetch(probeUrl, { cache:'no-store' }).then(function(r2){ done(!!(r2 && r2.ok), r2 ? r2.status : 0); }).catch(function(){ done(false, 0); });
+    });
+  }
   function buildDash(){
     if(!canSeeOwnerDash()) return;
     var mount = document.getElementById('ownerDashMount');
@@ -15873,6 +15934,7 @@ function renderTesterAuth(){
         '<nav class="dash-jumpbar" aria-label="Owner Dash menu">' +
           '<button type="button" data-owner-jump="ownerDashTesterView">\uD83D\uDC40 Tester view</button>' +
           '<button type="button" data-owner-jump="ownerDashAccounts">\uD83D\uDC65 Accounts</button>' +
+          '<button type="button" data-owner-jump="ownerDashSiteHealth">\uD83D\uDC9A Site health</button>' +
           '<button type="button" data-owner-jump="liveInviteMount">\uD83C\uDF9F\uFE0F Invites</button>' +
         '</nav>' +
         '<details class="dash-cat" id="ownerDashTesterView" open>' +
@@ -15885,6 +15947,10 @@ function renderTesterAuth(){
         '<details class="dash-cat" id="ownerDashAccounts">' +
           '<summary>\uD83D\uDC65 Accounts on this device</summary>' +
           '<div class="dash-cat-body"><div id="ownerAccountsList"></div></div>' +
+        '</details>' +
+        '<details class="dash-cat" id="ownerDashSiteHealth">' +
+          '<summary>\uD83D\uDC9A Site health</summary>' +
+          '<div class="dash-cat-body"><div id="siteHealthCard"></div></div>' +
         '</details>';
       var openBtn = document.getElementById('openTesterLiveBtn');
       if(openBtn) openBtn.addEventListener('click', openTesterLiveView);
@@ -15899,6 +15965,7 @@ function renderTesterAuth(){
     }
     mount.hidden = false;
     renderOwnerAccounts();
+    renderSiteHealth();
     if(liveMount.firstChild) { applySettings(); return; }
     liveMount.innerHTML =
       '<nav class="dash-jumpbar" aria-label="Jump to a dash section">' +
