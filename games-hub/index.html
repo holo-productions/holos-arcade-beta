@@ -467,6 +467,8 @@ footer a.legal-link:hover{color:var(--rff)}
 .hbadge span{font-size:12px;color:var(--muted);display:block}
 .hbadge.locked{opacity:.55;filter:grayscale(1)}
 .hbadge.earned{border-color:var(--gold);box-shadow:inset 0 0 0 1px var(--gold)}
+.hbadge.botd{outline:2px dashed var(--gold);outline-offset:2px}
+.hbadge .botd-tag{display:inline-block;margin-top:6px;font-size:11px;font-weight:800;color:#171a18;background:var(--gold);border-radius:999px;padding:2px 8px}
 .stats-list{list-style:none;margin:0;padding:0;font-size:14.5px}
 .stats-list li{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
 .stats-list li:last-child{border-bottom:none}
@@ -2952,6 +2954,11 @@ setTimeout(function(){
     <h1 id="reviewsTitle">Trophy Case — your stamps &amp; fun challenges</h1>
     <p class="xp-level-line"><svg class="coin-ic" aria-hidden="true"><use href="#xpStar"></use></svg> <strong id="xpLevelTextT">Level 1</strong> · <span id="xpLevelBalT">0</span> Glitch XP · <span id="xpLevelNextT"></span> <span class="tester-badge boss-title-pill" id="profileBossTitle" hidden>👑 Final Boss</span></p>
     <p class="legal-intro">This is your Trophy Case — no missions, nothing you have to do. Every game you report on earns a stamp in your collection below — just tap Report back after you play. The challenges are silly little dares for when you feel like one — skip them all and just play what you want, in any order, any time. That's the whole point of the arcade.</p>
+    <h3 class="fans-subhead">Your badges</h3>
+    <p class="g-note" style="margin:0 0 6px">Badges are yours only — nobody else can see them, and they never show up on a leaderboard or anyone else's screen. Practice rounds never earn badges. Each badge adds Glitch XP the moment you earn it: Easy 5, Medium 15, Hard 30.</p>
+    <p class="g-note" id="trophyBotdLine" style="margin:0 0 6px"></p>
+    <p class="g-note" id="trophyBadgeCountLine" style="margin:0 0 6px"></p>
+    <div class="badge-shelf" id="trophyBadgeShelf"></div>
     <h3 class="fans-subhead">Pick one if you dare</h3>
     <div class="dare-zone">
       <button class="dare-btn" id="darePickBtn" type="button">Shuffle 🎲</button>
@@ -12325,6 +12332,14 @@ window.holoDaily = (function(){
     </details>
 
     <details class="legal-section">
+      <summary>What are badges?</summary>
+      <div class="legal-content">
+        <p>Badges are little achievements for playing — first game, 5 different games, a 7-day streak, winning a round on Hard, and more. Each one adds Glitch XP when you earn it: Easy badges 5, Medium 15, Hard 30. One badge a day is the ⭐ Badge of the Day. Your badges live in your Trophy Case and are yours only — nobody else can see them. Practice rounds never earn badges.</p>
+        <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="trophy">Open Trophy Case &#8594;</button></p>
+      </div>
+    </details>
+
+    <details class="legal-section">
       <summary>Which devices can I play on?</summary>
       <div class="legal-content">
         <p>Any phone, tablet, or computer with a browser. Sign in with your email and password on up to 5 devices. Your scores and Glitch XP stay on the device you played on.</p>
@@ -13073,32 +13088,140 @@ window.holoDaily = (function(){
   if(dtD) dtD.addEventListener('click', function(){ var r = $('reviewsNavLink2'); if(r) r.click(); setTimeout(function(){ var d = $('darePickBtn'); if(d) d.scrollIntoView({ behavior:'smooth', block:'center' }); }, 350); });
   try { new MutationObserver(function(){ if(document.body.getAttribute('data-view') === 'daily') renderDailyTiles(); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] }); } catch(e){}
 
-  /* ---------- Badge shelf ---------- */
+  /* ---------- Badge shelf ----------
+     BADGES-2026-11-24: per-game achievement badges (Kongregate-style
+     starter set, 12 generic badges). Tiers pay Glitch XP on unlock:
+     Easy 5 / Medium 15 / Hard 30, awarded once, the moment a badge
+     is first earned (badges already satisfied when this build first
+     loads unlock then, with their XP — they were earned before
+     badges paid XP). Badge state lives per-device in localStorage
+     under ONE key, 'holoArcade_v1_badges':
+     { earned:{<id>:'YYYY-MM-DD',...}, finishes:<n>, hardWins:<n> }
+     — a later cloud-sync job can read that one key to sync badges.
+     Badges are PRIVATE: they render only in your own Trophy Case /
+     Your Arcade panel, never on a leaderboard or another player's
+     screen, and nothing about them is sent anywhere.
+     Practice rounds never earn badges: practice opens never call
+     onPlay, and finish/win events are ignored while the practice
+     banner is up (or the frame URL carries ?practice=1).
+     Badge of the Day: HUB_BADGES[dayNum % HUB_BADGES.length] —
+     deterministic per local day, highlight only, no bonus XP.
+     Games may report wins / level-completes by posting
+     {type:'holo-badge-event', event:'win'|'level-complete'|'hard-win',
+     game:<slug>} to the hub; 'hard-win' means a win on Hard. */
+  var BADGE_KEY = 'holoArcade_v1_badges';
+  var BADGE_XP = { easy:5, medium:15, hard:30 };
+  var BADGE_STATE = null;
+  try { var _bv = JSON.parse(localStorage.getItem(BADGE_KEY)); if(_bv && typeof _bv === 'object') BADGE_STATE = _bv; } catch(e){}
+  BADGE_STATE = BADGE_STATE || {};
+  BADGE_STATE.earned = (BADGE_STATE.earned && typeof BADGE_STATE.earned === 'object') ? BADGE_STATE.earned : {};
+  BADGE_STATE.finishes = BADGE_STATE.finishes || 0; BADGE_STATE.hardWins = BADGE_STATE.hardWins || 0;
+  function saveBadges(){ try { localStorage.setItem(BADGE_KEY, JSON.stringify(BADGE_STATE)); } catch(e){} }
+  function playDayStreak(){
+    var set = {}; (H.playDays || []).forEach(function(d){ set[d] = true; });
+    var n = dayNumNow(), c = 0;
+    if(!set[dateKey(n)]) n -= 1; /* not played yet today — streak runs through yesterday */
+    while(set[dateKey(n)]){ c++; n--; }
+    return c;
+  }
+  function badgeOfTheDay(dayNum){ return HUB_BADGES[(typeof dayNum === 'number' ? dayNum : dayNumNow()) % HUB_BADGES.length]; }
   var HUB_BADGES = [
-    { id:'first',   icon:'🎉', name:'First Mission',          req:'Open any game', test:function(){ return H.totalOpens >= 1; } },
-    { id:'gotd1',   icon:'⭐', name:'Daily Mission One', req:'Play the Game of the Day once', test:function(){ return H.gotdEver; } },
-    { id:'streak3', icon:'🔥', name:'3-Day Duty',        req:'Reach a 3-day Game-of-the-Day streak', test:function(){ return gotdState().best >= 3; } },
-    { id:'streak7', icon:'🌋', name:'7-Day Duty',        req:'Reach a 7-day Game-of-the-Day streak', test:function(){ return gotdState().best >= 7; } },
-    { id:'diff10',  icon:'🎲', name:'10 Missions',  req:'Play 10 different games', test:function(){ return Object.keys(H.plays).length >= 10; } },
-    { id:'diff25',  icon:'🕹️', name:'25 Missions',  req:'Play 25 different games', test:function(){ return Object.keys(H.plays).length >= 25; } },
-    { id:'chal5',   icon:'📅', name:'Daily Ops ×5',  req:'Complete 5 daily challenges', test:function(){ return Object.keys(H.challengeDone).length >= 5; } },
-    { id:'pts500',  icon:'💰', name:'500 Glitch XP',     req:'Earn 500 Glitch XP in total', test:function(){ return H.totalEarned >= 500; } }
+    { id:'first',   tier:'easy',   icon:'🎉', name:'First Mission',     req:'Open any game', test:function(){ return H.totalOpens >= 1; } },
+    { id:'diff5',   tier:'easy',   icon:'🎲', name:'5 Missions',        req:'Play 5 different games', test:function(){ return Object.keys(H.plays).length >= 5; } },
+    { id:'gotd1',   tier:'easy',   icon:'⭐', name:'Daily Mission One', req:'Play the Game of the Day once', test:function(){ return H.gotdEver; } },
+    { id:'finish1', tier:'easy',   icon:'🏁', name:'Level Complete',    req:'Finish a game round', test:function(){ return BADGE_STATE.finishes >= 1; } },
+    { id:'diff10',  tier:'medium', icon:'🎲', name:'10 Missions',       req:'Play 10 different games', test:function(){ return Object.keys(H.plays).length >= 10; } },
+    { id:'streak3', tier:'medium', icon:'🔥', name:'3-Day Duty',        req:'Reach a 3-day Game-of-the-Day streak', test:function(){ return gotdState().best >= 3; } },
+    { id:'chal5',   tier:'medium', icon:'📅', name:'Daily Ops ×5',      req:'Complete 5 daily challenges', test:function(){ return Object.keys(H.challengeDone).length >= 5; } },
+    { id:'play7',   tier:'medium', icon:'🗓️', name:'7 Days Running',    req:'Play on 7 days in a row', test:function(){ return playDayStreak() >= 7; } },
+    { id:'diff25',  tier:'hard',   icon:'🕹️', name:'25 Missions',       req:'Play 25 different games', test:function(){ return Object.keys(H.plays).length >= 25; } },
+    { id:'streak7', tier:'hard',   icon:'🌋', name:'7-Day Duty',        req:'Reach a 7-day Game-of-the-Day streak', test:function(){ return gotdState().best >= 7; } },
+    { id:'hardwin', tier:'hard',   icon:'💪', name:'Hard Mode Hero',    req:'Win a round on Hard', test:function(){ return BADGE_STATE.hardWins >= 1; } },
+    { id:'pts500',  tier:'hard',   icon:'💰', name:'500 Glitch XP',     req:'Earn 500 Glitch XP in total', test:function(){ return H.totalEarned >= 500; } }
   ];
+  function checkBadges(){
+    var fresh = [], totalXp = 0, changed = false, guard = 0;
+    do {
+      changed = false; guard++;
+      HUB_BADGES.forEach(function(b){
+        if(BADGE_STATE.earned[b.id]) return;
+        var ok = false; try { ok = b.test(); } catch(e){}
+        if(!ok) return;
+        BADGE_STATE.earned[b.id] = todayK;
+        var xp = BADGE_XP[b.tier] || 0;
+        totalXp += xp; fresh.push(b);
+        if(xp) earn(xp, 'Badge: ' + b.name);
+        changed = true;
+      });
+    } while(changed && guard < 3); /* loop so one unlock can chain into another (e.g. XP total) */
+    if(fresh.length){
+      saveBadges();
+      var names = fresh.map(function(b){ return b.name; }).join(', ');
+      toast(fresh.length === 1
+        ? '🏅 Badge unlocked: ' + names + '! +' + totalXp + ' Glitch XP'
+        : '🏅 ' + fresh.length + ' badges unlocked: ' + names + '! +' + totalXp + ' Glitch XP');
+    }
+    return fresh;
+  }
+  function badgePracticeNow(){
+    try { var b = $('practiceBanner'); if(b && !b.hidden) return true; } catch(e){}
+    try {
+      var pl = $('player');
+      var fr = pl && pl.querySelector('.game-pane:not([hidden]) iframe');
+      var src = fr && (fr.getAttribute('src') || '');
+      if(src && src.indexOf('practice=1') !== -1) return true;
+    } catch(e){}
+    return false;
+  }
+  function recordFinish(slug){
+    if(!slug || badgePracticeNow()) return false;
+    BADGE_STATE.finishes++;
+    saveBadges();
+    checkBadges();
+    renderAll();
+    return true;
+  }
+  function recordBadgeEvent(ev, slug){
+    if(!ev || badgePracticeNow()) return false;
+    if(ev === 'hard-win'){ BADGE_STATE.hardWins++; BADGE_STATE.finishes++; }
+    else if(ev === 'win' || ev === 'level-complete'){ BADGE_STATE.finishes++; }
+    else return false;
+    saveBadges();
+    checkBadges();
+    renderAll();
+    return true;
+  }
+  window.addEventListener('message', function(e){
+    try { if(e && e.data && e.data.type === 'holo-badge-event') recordBadgeEvent(e.data.event, e.data.game); } catch(err){}
+  });
+  window.holoBadges = {
+    recordFinish: recordFinish,
+    recordEvent: recordBadgeEvent,
+    checkBadges: checkBadges,
+    badgeOfTheDay: badgeOfTheDay,
+    list: HUB_BADGES,
+    key: BADGE_KEY,
+    state: function(){ return BADGE_STATE; }
+  };
   function renderBadges(){
-    var shelf = $('badgeShelf'), line = $('badgeCountLine');
-    if(!shelf) return;
+    var botd = badgeOfTheDay();
     var earned = 0;
-    shelf.innerHTML = '';
-    HUB_BADGES.forEach(function(b){
-      if(b.id === 'pts500') return; /* points hidden on the tester build */
-      var ok = false; try { ok = b.test(); } catch(e){}
-      if(ok) earned++;
-      var d = document.createElement('div');
-      d.className = 'hbadge ' + (ok ? 'earned' : 'locked');
-      d.innerHTML = '<span class="ic">' + (ok ? b.icon : '🔒') + '</span><b>' + b.name + '</b><span>' + (ok ? 'Earned ✓' : b.req) + '</span>';
-      shelf.appendChild(d);
+    HUB_BADGES.forEach(function(b){ if(BADGE_STATE.earned[b.id]) earned++; });
+    [['badgeShelf','badgeCountLine'], ['trophyBadgeShelf','trophyBadgeCountLine']].forEach(function(pair){
+      var shelf = $(pair[0]), line = $(pair[1]);
+      if(!shelf) return;
+      shelf.innerHTML = '';
+      HUB_BADGES.forEach(function(b){
+        var ok = !!BADGE_STATE.earned[b.id];
+        var d = document.createElement('div');
+        d.className = 'hbadge ' + (ok ? 'earned' : 'locked') + (b.id === botd.id ? ' botd' : '');
+        d.innerHTML = '<span class="ic">' + (ok ? b.icon : '🔒') + '</span><b>' + b.name + '</b><span>' + (ok ? 'Earned ✓ · +' + (BADGE_XP[b.tier] || 0) + ' XP' : b.req + ' · ' + (BADGE_XP[b.tier] || 0) + ' XP') + '</span>' + (b.id === botd.id ? '<span class="botd-tag">⭐ Badge of the Day</span>' : '');
+        shelf.appendChild(d);
+      });
+      if(line) line.textContent = earned + ' of ' + HUB_BADGES.length + ' badges earned — they live in this browser only.';
     });
-    if(line) line.textContent = earned + ' of ' + (HUB_BADGES.length - 1) + ' badges earned — they live in this browser only.';
+    var bl = $('trophyBotdLine');
+    if(bl) bl.textContent = '⭐ Badge of the Day: ' + botd.name + ' — ' + botd.req + ' (' + (BADGE_XP[botd.tier] || 0) + ' XP). A new one is picked every day.';
     return earned;
   }
 
@@ -13107,13 +13230,14 @@ window.holoDaily = (function(){
     var ul = $('statsList'); if(!ul) return;
     var fav = '—', favN = 0;
     Object.keys(H.plays).forEach(function(s){ if(H.plays[s] > favN){ favN = H.plays[s]; fav = gameName(s); } });
-    var earned = 0; HUB_BADGES.forEach(function(b){ if(b.id === 'pts500') return; /* points hidden on the tester build */ try { if(b.test()) earned++; } catch(e){} });
+    var earned = 0; HUB_BADGES.forEach(function(b){ try { if(BADGE_STATE.earned[b.id]) earned++; } catch(e){} });
     var rows = [
       ['Games played (opens)', H.totalOpens.toLocaleString()],
       ['Different games played', Object.keys(H.plays).length.toLocaleString()],
+      ['Games finished', (BADGE_STATE.finishes || 0).toLocaleString()],
       ['Current streak', curStreak() + (curStreak() === 1 ? ' day' : ' days')],
       ['Best streak', gotdState().best + (gotdState().best === 1 ? ' day' : ' days')],
-      ['Badges earned', earned + ' / ' + (HUB_BADGES.length - 1)],
+      ['Badges earned', earned + ' / ' + HUB_BADGES.length],
       ['Favourite game', favN ? fav + ' (' + favN + ' plays)' : '—']
     ];
     ul.innerHTML = rows.map(function(r){ return '<li><span>' + r[0] + '</span><b>' + r[1] + '</b></li>'; }).join('');
@@ -13183,7 +13307,7 @@ window.holoDaily = (function(){
     b.addEventListener('click', function(){ onPlay(b.getAttribute('data-game')); });
   });
 
-  function renderAll(){ renderPoints(); renderChallenge(); renderBadges(); renderStats(); }
+  function renderAll(){ checkBadges(); renderPoints(); renderChallenge(); renderBadges(); renderStats(); }
   applySettings(); saveHub(); renderAll();
 
   /* ---------- Feedback + Tester Reviews ---------- */
@@ -23510,7 +23634,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     return lastSlug;
   }
   function isPractice(){ var b = document.getElementById('practiceBanner'); return !!(b && !b.hidden); }
-  function show(){ if(player.hidden) return; bar.hidden = false; try { if(window.holoComp) window.holoComp.onGameFinished(slug()); } catch(e){} }
+  function show(){ if(player.hidden) return; var first = bar.hidden; bar.hidden = false; if(first){ try { if(window.holoBadges) window.holoBadges.recordFinish(slug()); } catch(e){} } try { if(window.holoComp) window.holoComp.onGameFinished(slug()); } catch(e){} }
   function hide(){ bar.hidden = true; }
   window.holoGameFinished = show;
   /* Native end panels */
