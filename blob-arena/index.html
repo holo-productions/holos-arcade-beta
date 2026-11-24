@@ -931,7 +931,8 @@ function makeBot(i, fresh){
   return {
     name:BOT_NAMES[i%BOT_NAMES.length], color:BOT_COLORS[i%BOT_COLORS.length],
     x:x, y:y, mass: fresh? d.botStart*rand(0.7,1.5) : rand(9, d.botStart*1.6),
-    vx:0, vy:0, tx:x, ty:y, think:rand(0,0.4), boost:false, dead:0, wob:rand(0,6.28)
+    vx:0, vy:0, tx:x, ty:y, think:rand(0,0.4), boost:false, dead:0, wob:rand(0,6.28),
+    stuckClock:0, lx:x, ly:y, escT:0, escX:x, escY:y
   };
 }
 
@@ -1120,18 +1121,23 @@ function botThink(b, dt){
     if(b.mass > o.mass*1.12 && dd<preyD){ prey=o; preyD=dd; }
   }
   b.boost=false;
-  if(threat && threatD < Math.pow(myR+radiusOf(threat.mass)+190,2)){
+  var combat=false; /* fleeing or chasing: headings that may drive into a wall */
+  if(b.escT>0){
+    /* Committed escape heading (set when a wall reflection fired): hold it
+       until the timer runs out so the bot actually travels into open water
+       instead of turning straight back at the wall the moment it leaves the
+       near-wall zone, where plain flee would point at the wall again. */
+    b.escT-=dt; b.tx=b.escX; b.ty=b.escY;
+  } else if(threat && threatD < Math.pow(myR+radiusOf(threat.mass)+190,2)){
     var ta=Math.atan2(b.y-threat.y, b.x-threat.x);
     b.tx=b.x+Math.cos(ta)*320; b.ty=b.y+Math.sin(ta)*320;
     if(threatD < Math.pow(myR+radiusOf(threat.mass)+90,2) && b.mass>16) b.boost=true;
-    return;
-  }
-  if(prey && Math.random()<d.botAggro && preyD < Math.pow(430,2)){
+    combat=true;
+  } else if(prey && Math.random()<d.botAggro && preyD < Math.pow(430,2)){
     b.tx=prey.x; b.ty=prey.y;
     if(preyD<Math.pow(150,2) && b.mass>prey.mass*1.5 && b.mass>18) b.boost=true;
-    return;
-  }
-  if(b.think<=0){
+    combat=true;
+  } else if(b.think<=0){
     b.think=rand(0.25,0.7);
     var best=null, bd=1e18;
     for(var j=0;j<pellets.length;j+=3){
@@ -1140,6 +1146,58 @@ function botThink(b, dt){
     }
     if(best){ b.tx=best.x; b.ty=best.y; }
     else { b.tx=rand(80,WORLD-80); b.ty=rand(80,WORLD-80); }
+  }
+  /* --- wall avoidance: bounce the heading off the wall, don't drive into it --- */
+  /* Flee/chase targets used to point straight past the arena edge, and
+     moveEntity clamps position to the wall while the velocity keeps pushing
+     into it, so the target stayed unreachable forever and the bot sat
+     pinned on the wall/corner. When a fleeing/chasing bot near a wall is
+     heading into it, reflect the blocked heading component(s) off the wall
+     (keeps the sideways component, so it turns away along the wall) and,
+     for a near head-on heading that would charge straight back at the
+     threat, add a sideways bias toward open water. Pellet hunting is left
+     alone: pellet targets are clamped below to reachable positions, so bots
+     can still eat pellets near the edge. */
+  var Rm=myR+5;
+  if(combat){
+    var dl=Math.hypot(b.tx-b.x, b.ty-b.y)||1;
+    var dx=(b.tx-b.x)/dl, dy=(b.ty-b.y)/dl;
+    var nearL=b.x<150, nearR=b.x>WORLD-150, nearT=b.y<150, nearB=b.y>WORLD-150;
+    var blockX=(nearL&&dx<0)||(nearR&&dx>0);
+    var blockY=(nearT&&dy<0)||(nearB&&dy>0);
+    if(blockX) dx=-dx;
+    if(blockY) dy=-dy;
+    if(blockX&&blockY){
+      /* corner: both components reflected, bot darts back into open water */
+    } else if(blockX&&Math.abs(dy)<0.35){
+      dy=(b.y<WORLD/2?1:-1)*0.6;
+    } else if(blockY&&Math.abs(dx)<0.35){
+      dx=(b.x<WORLD/2?1:-1)*0.6;
+    }
+    if(blockX||blockY){
+      var rl=Math.hypot(dx,dy)||1;
+      b.tx=b.x+dx/rl*320; b.ty=b.y+dy/rl*320;
+      /* commit to this escape heading for ~0.9s (see the escT branch above) */
+      b.escX=b.tx; b.escY=b.ty; b.escT=0.9;
+    }
+  }
+  b.tx=Math.max(Rm, Math.min(WORLD-Rm, b.tx));
+  b.ty=Math.max(Rm, Math.min(WORLD-Rm, b.ty));
+  /* --- stuck recovery: pinned on a wall/corner despite the steering --- */
+  /* If the bot has barely moved in 0.6s while its target is still far away,
+     it is stuck: send it back toward the centre with a random sideways
+     offset so it peels off the wall instead of re-pinning in the same spot. */
+  b.stuckClock+=dt;
+  if(b.stuckClock>=0.6){
+    var moved=dist2(b.x,b.y,b.lx,b.ly);
+    var want=Math.hypot(b.tx-b.x, b.ty-b.y);
+    if(moved < 30*30 && want>80){
+      var ra=Math.atan2(WORLD/2-b.y, WORLD/2-b.x)+rand(-0.8,0.8);
+      b.tx=Math.max(Rm, Math.min(WORLD-Rm, b.x+Math.cos(ra)*420));
+      b.ty=Math.max(Rm, Math.min(WORLD-Rm, b.y+Math.sin(ra)*420));
+      b.think=Math.max(b.think, 0.8);
+    }
+    b.lx=b.x; b.ly=b.y; b.stuckClock=0;
   }
 }
 
