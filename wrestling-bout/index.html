@@ -1,0 +1,1047 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="color-scheme" content="light dark"/>
+<link rel="icon" href="data:,"/>
+<title>Wrestling Bout - Holo's Arcade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FFF1F2; --card:#FFFEFB; --card2:#FCE4F0; --ink:#2E1730; --muted:#8A6A86; --line:#F0C9DE;
+  --pink:#DC2626; --pink-d:#B91C1C; --purple:#F59E0B; --purple-d:#5E35C9; --gold:#FFB020; --gold-d:#D98A00;
+  --teal:#18A999; --teal-d:#0E7A6E; --blue:#3FA7F5; --shadow:0 8px 24px rgba(120,30,80,.14); --radius:18px;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#1E1220; --card:#2D1E30; --card2:#3D2942; --ink:#FFF0F7; --muted:#C9A8C4; --line:#4E3552; --shadow:0 8px 24px rgba(0,0,0,.45); }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:Nunito,system-ui,sans-serif;-webkit-tap-highlight-color:transparent}
+button{font-family:inherit;cursor:pointer;min-height:44px}
+h1,h2,h3{font-family:Fredoka,Nunito,sans-serif;margin:0;line-height:1.05}
+.wrap{max-width:760px;margin:0 auto;padding:0 14px 28px}
+.marquee{height:14px;margin:0 -14px;background:radial-gradient(circle at 10px 7px,#FFE066 4px,transparent 5px) 0 0/28px 14px repeat-x,linear-gradient(90deg,var(--pink),var(--purple));border-bottom:3px solid var(--pink-d)}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:14px 0 10px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-emoji{font-size:38px;line-height:1;filter:drop-shadow(0 3px 0 rgba(0,0,0,.12))}
+.logo h1{font-size:28px}
+.logo p{margin:2px 0 0;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.top-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.pill-btn{border:2px solid var(--line);background:var(--card);color:var(--ink);font-weight:900;font-size:13px;padding:8px 12px;border-radius:999px}
+.pill-btn:active{transform:scale(.97)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.stat{background:var(--card);border:2px solid var(--line);border-radius:14px;padding:8px 6px;text-align:center;box-shadow:var(--shadow)}
+.stat b{display:block;font-family:Fredoka,sans-serif;font-size:20px;line-height:1}
+.stat span{font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.stat.score b{color:var(--pink)} .stat.best b{color:var(--purple)}
+.arena{background:linear-gradient(180deg,#3B2D5C,#7C3AED);border:3px solid var(--purple-d);border-radius:22px;padding:12px;box-shadow:var(--shadow);position:relative}
+.arena-head{text-align:center;color:#fff;font-family:Fredoka,sans-serif;font-size:20px;letter-spacing:.06em;text-shadow:0 2px 0 rgba(0,0,0,.2);margin-bottom:8px}
+.arena-head small{display:block;font-family:Nunito,sans-serif;font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;opacity:.9}
+canvas#game{display:block;width:100%;height:auto;border-radius:16px;background:#BFE9FF;touch-action:none;border:3px solid rgba(255,255,255,.65)}
+.msg{min-height:46px;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;font-weight:900;font-size:15px;padding:8px 10px 2px;line-height:1.3}
+.balance-wrap{margin-top:8px;background:rgba(255,255,255,.2);border-radius:14px;padding:8px 10px;color:#fff;font-weight:900;font-size:12px}
+.balance-track{position:relative;height:18px;background:linear-gradient(90deg,#FF3B30,#FFB020 30%,#3FA34D 50%,#FFB020 70%,#FF3B30);border-radius:999px;margin-top:5px;border:2px solid rgba(255,255,255,.6)}
+.balance-needle{position:absolute;top:-4px;width:8px;height:22px;background:#2E1730;border:2px solid #fff;border-radius:4px;left:50%;margin-left:-4px}
+.controls{margin-top:12px;background:var(--card);border:2px solid var(--line);border-radius:18px;padding:12px;box-shadow:var(--shadow)}
+.pad{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ctrl{border:2.5px solid var(--line);background:var(--card2);color:var(--ink);border-radius:14px;font-size:24px;font-weight:900;padding:10px 6px;min-height:56px;touch-action:none;user-select:none;-webkit-user-select:none}
+.ctrl:active,.ctrl.held{background:var(--gold);border-color:var(--gold-d);transform:scale(.97)}
+.ctrl small{display:block;font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.hintline{text-align:center;font-size:12px;font-weight:800;color:var(--muted);margin-top:8px}
+.panel{background:var(--card);border:2px solid var(--line);border-radius:20px;padding:18px;box-shadow:var(--shadow);margin-top:12px}
+.panel h2{font-size:22px;margin-bottom:6px} .panel p{color:var(--muted);font-weight:700;line-height:1.5;margin:6px 0}
+.diff-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:14px 0}
+.diff{border:2.5px solid var(--line);background:var(--card2);border-radius:14px;padding:12px 6px;text-align:center;font-weight:900;color:var(--ink)}
+.diff small{display:block;font-weight:700;color:var(--muted);margin-top:4px;line-height:1.35;font-size:11px}
+.diff.sel{border-color:var(--pink);box-shadow:0 0 0 3px rgba(232,74,138,.18)}
+.btn{border:none;border-radius:999px;padding:14px 16px;font-weight:900;font-size:16px}
+.btn-primary{background:var(--pink);color:#fff;box-shadow:0 6px 0 var(--pink-d);width:100%} .btn-primary:active{transform:translateY(3px);box-shadow:0 3px 0 var(--pink-d)}
+.btn-secondary{background:var(--card);border:2px solid var(--line);color:var(--ink)}
+.btn-practice{background:var(--teal);color:#fff;box-shadow:0 6px 0 var(--teal-d);width:100%} .btn-practice:active{transform:translateY(3px);box-shadow:0 3px 0 var(--teal-d)}
+.practice-card{margin-top:12px;border:2px dashed var(--teal);background:#E9F7F3;border-radius:14px;padding:12px}
+@media(prefers-color-scheme:dark){.practice-card{background:#16302B}}
+.practice-card p{margin:4px 0 10px;font-size:13px}
+.bests{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.best-chip{background:var(--card2);border:1.5px solid var(--line);border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900}
+.mode-badge{display:none;background:var(--teal);color:#fff;font-weight:900;font-size:12px;padding:6px 11px;border-radius:999px;align-self:center}
+.mode-badge.show{display:inline-block}
+.live-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.live-row .btn{flex:1}
+.overlay{position:fixed;inset:0;background:rgba(30,10,25,.62);display:none;place-items:end center;z-index:50}
+.overlay.open{display:grid}
+.sheet{background:var(--bg);width:100%;max-width:560px;max-height:88vh;overflow:auto;border-radius:22px 22px 0 0;padding:20px 18px 28px}
+.sheet h2{font-size:24px;margin-bottom:8px} .sheet h3{font-size:16px;margin:16px 0 6px}
+.sheet p,.sheet li{font-weight:700;color:var(--muted);line-height:1.55}
+.sheet ul{padding-left:20px;margin:6px 0} .sheet li{margin:4px 0}
+.close-x{float:right;width:40px;height:40px;border-radius:50%;border:2px solid var(--line);background:var(--card);font-size:18px;font-weight:900;color:var(--ink)}
+.stars{display:flex;gap:6px;margin:10px 0}
+.star{font-size:34px;background:none;border:none;padding:4px;line-height:1;filter:grayscale(1);opacity:.5;min-width:44px}
+.star.on{filter:none;opacity:1}
+textarea{width:100%;border:2px solid var(--line);border-radius:12px;padding:12px;font-family:inherit;font-weight:700;background:var(--card);color:var(--ink);min-height:84px;resize:vertical}
+.tag-row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.tag{border:2px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:7px 12px;font-weight:900;font-size:13px}
+.tag.sel{border-color:var(--pink);background:var(--card2)}
+.fb-q{font-weight:900;font-size:13px;margin-top:12px;color:var(--ink)}
+.hidden{display:none!important}
+footer{margin-top:22px;text-align:center;padding:18px 10px;border-top:2px dashed var(--line)}
+footer b{font-family:Fredoka,sans-serif} footer p{margin:4px 0;color:var(--muted);font-weight:700;font-size:13px}
+.score-big{font-family:Fredoka,sans-serif;font-size:44px;text-align:center;margin:8px 0}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);background:#2E1730;color:#FFF0F7;padding:12px 16px;border-radius:999px;font-weight:900;font-size:14px;opacity:0;pointer-events:none;transition:.25s;z-index:60;max-width:92vw;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+table{width:100%;border-collapse:collapse;font-weight:700;color:var(--muted);font-size:14px;margin:8px 0}
+td,th{border:1.5px solid var(--line);padding:7px 8px;text-align:left}
+th{background:var(--card2);color:var(--ink)}
+/* vtut visual steps */
+.vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
+@media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
+.vtut-card{position:relative;border-radius:14px;padding:12px 10px 10px;text-align:center;background:rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.12)}
+.vtut-num{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;background:#ff5fa2;color:#fff;font-size:12px;font-weight:800;line-height:20px}
+.vtut-pic{height:52px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.vtut-pic svg{width:44px;height:44px}
+.vtut-card b{display:block;font-size:.92rem;margin-bottom:2px}
+.vtut-card p{margin:0;font-size:.85rem;line-height:1.35;opacity:.92}
+
+/* ================= GAME-THEME-2026-11-22 =================
+   Holo 2026-11-22 21:18: games themed too - shared Arcade
+   theme layer on every standalone game. Unique per game
+   (own colours, art and board untouched) inside the Arcade
+   theme family: navy cabinet frame, pixel gradient title,
+   cyan accents, 3-tier chrome buttons, console-framed stage.
+   CSS only - no JS or gameplay changes. */
+:root{--ha-navy:#0a0620;--ha-pink:#ff3ec8;--ha-violet:#8b5cff;--ha-blue:#3b82f6;--ha-cyan:#38e1ff;--ha-gold:#ffb020;--ha-grad:linear-gradient(92deg,#ff3ec8 0%,#ff7ad9 22%,#8b5cff 52%,#3b82f6 82%,#38e1ff 100%);--ha-pixel:"Press Start 2P","Courier New",monospace}
+html{background:#0a0620}
+h1{font-family:var(--ha-pixel);font-size:clamp(15px,4.5vw,24px);line-height:1.7;letter-spacing:0;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(2px 2px 0 rgba(139,92,255,.45))}
+canvas{outline:3px solid var(--ha-violet);box-shadow:0 0 0 3px #0a0620,0 0 26px rgba(139,92,255,.4);border-radius:10px}
+#btnStart,#startBtn,#playBtn,#btnPlay,#newBtn,#newGameBtn,#btnNew,#againBtn,#btnAgain,#btnPlayAgain,#fbSave,#btnSaveFeedback{background:linear-gradient(92deg,#ffb020 0%,#ffd43b 50%,#ffb020 100%);color:#140b33;border:3px solid #fff;border-radius:12px;font-family:var(--ha-pixel);font-size:11px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #b45309,0 0 18px rgba(255,176,32,.5);cursor:pointer}
+#btnRules,#rulesBtn,#btnFeedback,#feedbackBtn,#btnFeedbackFooter,#btnTutorial,#tutorialBtn,#howBtn,#btnHow,#ovHow,#btnPractice,#practiceBtn{background:var(--ha-grad);color:#fff;border:none;border-radius:10px;font-family:var(--ha-pixel);font-size:10px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #4c1d95,0 8px 20px rgba(255,62,200,.3);cursor:pointer}
+.vtut-card{border:2px solid rgba(139,92,255,.55);background:linear-gradient(180deg,#1e1247,#140b33);color:#e9e4ff;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+.vtut-num{background:var(--ha-grad)}
+a{color:var(--ha-cyan)}
+
+/* TUT-POPUP-2026-11-22 (Holo 22:24): How to play popup sized for
+   the device + pixel title header bar. CSS only. */
+.modal:has(.vtut-grid),.sheet:has(.vtut-grid),.card:has(.vtut-grid),.box:has(.vtut-grid),.panel:has(.vtut-grid),.tut-card,.tutorial-backdrop{max-width:min(92vw,560px);max-height:88dvh;overflow-y:auto;box-sizing:border-box}
+.vtut-grid{grid-template-columns:1fr}
+@media (min-width:521px){.vtut-grid{grid-template-columns:1fr 1fr}}
+.modal:has(.vtut-grid) :is(h2,h3),.sheet:has(.vtut-grid) :is(h2,h3),.card:has(.vtut-grid) :is(h2,h3),.box:has(.vtut-grid) :is(h2,h3),.panel:has(.vtut-grid) :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;color:#fff;background:#0a0620;border:2px solid rgba(139,92,255,.65);border-radius:10px;padding:10px 12px;margin:0 0 12px}
+.modal:has(.vtut-grid) :is(h2,h3)::before,.sheet:has(.vtut-grid) :is(h2,h3)::before,.card:has(.vtut-grid) :is(h2,h3)::before,.box:has(.vtut-grid) :is(h2,h3)::before,.panel:has(.vtut-grid) :is(h2,h3)::before{content:"Wrestling Bout — ";background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tut-card .tut-head{background:#0a0620}
+.tut-card .tut-head :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* INSERT-COIN-2026-11-22 (Holo 23:13): old-school title-screen
+   blink line on game start/title areas. Same blink as the 404
+   page .coin. CSS + one tiny guarded script; no gameplay change. */
+@keyframes haCoinBlink{50%{opacity:.25}}
+.insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
+@media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+</style>
+/* per-game: 4-button touch pad + wind/gauge bars */
+.pad4{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.gauge-wrap{margin-top:8px;background:rgba(255,255,255,.2);border-radius:14px;padding:8px 10px;color:#fff;font-weight:900;font-size:12px}
+.gauge-track{position:relative;height:18px;background:rgba(0,0,0,.25);border-radius:999px;margin-top:5px;border:2px solid rgba(255,255,255,.6);overflow:hidden}
+.gauge-fill{height:100%;background:linear-gradient(90deg,#FFB020,#3FA34D);width:50%}
+.practice-banner{margin-top:12px;background:#FFF7D6;border:2px dashed #D9A400;color:#4A3800;border-radius:14px;padding:12px 14px;font-weight:700;line-height:1.5}
+.mode-badge{display:inline-block;background:#FFB020;color:#140b33;border-radius:999px;padding:6px 12px;font-weight:900;font-size:12px;letter-spacing:.05em}
+@media (max-width:390px){.stats{grid-template-columns:repeat(3,1fr)}.logo h1{font-size:22px}.ctrl{font-size:20px}}
+
+</head>
+<body>
+<div class="wrap">
+  <div class="marquee"></div>
+  <header class="topbar">
+    <div class="logo"><div class="logo-emoji">🤼</div><div><h1>Wrestling Bout</h1><p>Holo's Arcade - Grapple, slam, pin!</p></div></div>
+    <div class="top-actions">
+      <button class="pill-btn" id="btnTutorial" type="button">How to play</button>
+      <button class="pill-btn" id="btnRules" type="button">📖 Rules</button>
+      <button class="pill-btn" id="btnFeedback" type="button">💬 Feedback</button>
+    </div>
+  </header>
+
+  <main id="viewGame">
+    <div class="stats">
+<div class="stat score"><b id="statScore">0</b><span>Score</span></div><div class="stat"><b id="statRound">1 / 3</b><span>Round</span></div><div class="stat"><b id="statYou">100</b><span>Your health</span></div><div class="stat"><b id="statRival">100</b><span>Bruno health</span></div><div class="stat"><b id="statWins">0–0</b><span>Rounds won</span></div><div class="stat best"><b id="statBest">0</b><span>Best score</span></div>
+    </div>
+
+    <section class="arena" aria-label="Wrestling Bout">
+      <div class="arena-head">WRESTLING BOUT<small>Grapple • Slam • Pin</small></div>
+      <canvas id="game" width="800" height="500" aria-label="Wrestling ring. Mash grapple to fill your meter, slam when it is full, and hold pin when your rival is wobbly."></canvas>
+
+      <div class="msg" id="msg" role="status" aria-live="polite">Pick a difficulty, then step into the ring with Bruno!</div>
+    </section>
+
+    <div class="practice-banner hidden" id="practiceBanner" role="status"><strong>🎓 Practice round — no score saved.</strong> Bruno goes easy on you in practice. Turn practice off when you're ready for a round that counts.</div>
+
+    <section class="controls" aria-label="Wrestling Bout controls">
+      <div class="pad4">
+<button class="ctrl" id="btnGrapple" type="button" aria-label="Grapple">🤼<small>Grapple</small></button><button class="ctrl" id="btnSlam" type="button" aria-label="Slam">💥<small>Slam</small></button><button class="ctrl" id="btnPin" type="button" aria-label="Pin">📌<small>Pin</small></button><button class="ctrl" id="btnBlock" type="button" aria-label="Block">🛡️<small>Block</small></button>
+      </div>
+      <p class="hintline">J = Grapple, K = Slam, L = Pin, Space = Block — or tap the buttons below.</p>
+    </section>
+
+    <section class="panel" id="startPanel">
+      <h2>Ready to rumble?</h2>
+      <p>Three rounds against Bruno the Bruiser. Mash Grapple to fill your meter, hit Slam when it is full to hurt him, and when his health drops low, hold Pin for the three-count. First to 2 rounds takes the bout — and Bruno is trying to do the very same thing to you. Block with Space when he winds up!</p>
+      <div class="diff-row" role="group" aria-label="Difficulty">
+        <button class="diff" data-diff="easy" type="button">😊 Easy<small>Slow Bruno<br>Soft slams<br>Easy pins</small></button>
+        <button class="diff" data-diff="normal" type="button">🎯 Normal<small>Steady Bruno<br>Fair slams<br>Fair pins</small></button>
+        <button class="diff" data-diff="hard" type="button">🔥 Hard<small>Fast Bruno<br>Hard slams<br>Slippery pins</small></button>
+      </div>
+      <button class="btn btn-primary" id="btnStart" type="button">▶ Start the bout</button>
+      <div class="practice-card">
+        <b>🎓 New here? Try Practice mode</b>
+        <p>A practice bout with no score saved. Learn the grapple, the slam and the pin, then tap End round.</p>
+        <button class="btn btn-practice" id="btnPractice" type="button">🎓 Start Practice mode</button>
+      </div>
+      <div class="bests" id="bestsRow"></div>
+      <div class="live-row hidden" id="liveRow">
+        <span class="mode-badge" id="modeBadge">▶ PLAYING</span>
+        <button class="btn btn-secondary" id="btnEndRound" type="button">✕ End round</button>
+      </div>
+    </section>
+  </main>
+
+  <main id="viewRules" class="hidden">
+    <div class="panel">
+      <h2>📖 Rules - Wrestling Bout</h2>
+<h3>🎯 Goal</h3><p>Beat Bruno the Bruiser in a best-of-3-rounds bout. Win a round by pinfall, knockout, or having more health when the 60-second round clock runs out. First to 2 rounds wins the match.</p><h3>🕹️ How to wrestle</h3><ul><li><b>Grapple</b> (J or the button) — mash it to fill your grapple meter. Holding it builds slowly; mashing builds fast.</li><li><b>Slam</b> (K) — only works with a full grapple meter. Deals big damage and scores +50.</li><li><b>Pin</b> (L) — only works when Bruno's health is low (30 or under). Hold it to count to three. If you let go, the count fades.</li><li><b>Block</b> (Space, hold) — halves the damage when Bruno slams you. Watch for his wind-up.</li><li>Bruno pins <b>you</b> when your health is low — mash <b>Grapple</b> to escape his pin!</li></ul><h3>🏆 Scoring</h3><table><tr><th>Action</th><th>Points</th></tr><tr><td>Slam Bruno</td><td>+50</td></tr><tr><td>Win a round</td><td>+150</td></tr><tr><td>Win the match</td><td>+250</td></tr></table><p>Best score for each difficulty is saved on this device.</p><h3>⚙️ Difficulty (saved for next time)</h3><table><tr><th></th><th>Easy</th><th>Normal</th><th>Hard</th></tr><tr><td>Bruno's speed</td><td>Slow</td><td>Steady</td><td>Fast</td></tr><tr><td>Bruno's slam</td><td>Soft</td><td>Fair</td><td>Hard</td></tr><tr><td>Pin escapes</td><td>Easy</td><td>Fair</td><td>Slippery</td></tr></table><h3>🎓 Practice mode</h3><p>A practice bout with no score saved. Use <b>End round</b> to finish whenever you like.</p><h3>💾 Saving</h3><p>Difficulty and best scores are saved in this browser on this device only. Nothing is sent anywhere.</p>
+      <button class="btn btn-primary" id="btnBackToGame" type="button" style="margin-top:14px">← Back to Game</button>
+    </div>
+  </main>
+
+  <footer>
+    <b>Holo's Arcade</b>
+    <p>Part of Holo's Arcade - Wrestling Bout, a Holo original</p>
+    <p style="font-size:12px">Best scores and feedback are saved on this device only. Practice rounds never save a score.</p>
+    <p style="margin-top:8px"><button class="pill-btn" id="btnFeedbackFooter" type="button">💬 Feedback</button></p>
+  </footer>
+</div>
+
+<!-- TUTORIAL OVERLAY -->
+<div class="overlay" id="tutorialOverlay" role="dialog" aria-modal="true" aria-label="How to play tutorial">
+  <div class="sheet">
+    <button class="close-x" data-close="tutorialOverlay" type="button" aria-label="Close">✕</button>
+    <h2>How to play</h2>
+    <p style="color:var(--muted);font-weight:700;margin:0">A quick walkthrough — only when you want it. Tap a card's picture, then try it on the water / in the ring.</p>
+    <div class="vtut-grid">
+<div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#f87171" stroke-width="3" stroke-linecap="round"><circle cx="17" cy="17" r="8"/><circle cx="31" cy="17" r="8"/><path d="M17 25v8M31 25v8M12 40h24"/></svg></div><b>Mash Grapple</b><p>Tap Grapple (J) again and again to fill your meter.</p></div><div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M24 6v22M24 28l-8-6M24 28l8-6M14 40h20"/></svg></div><b>Slam when full</b><p>With a full meter, hit Slam (K) for big damage.</p></div><div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#a78bfa" stroke-width="3" stroke-linecap="round"><path d="M10 38h28M14 38V20a10 10 0 0 1 20 0v18M24 30v-6"/></svg></div><b>Pin when he's low</b><p>At 30 health or under, hold Pin (L) for the 3-count.</p></div><div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#38bdf8" stroke-width="3" stroke-linejoin="round"><path d="M12 10h24v28H12z"/><path d="M12 10l24 28M36 10L12 38"/></svg></div><b>Block his slams</b><p>Hold Block (Space) to halve Bruno's slam damage.</p></div><div class="vtut-card"><span class="vtut-num">5</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#f87171" stroke-width="3" stroke-linecap="round"><circle cx="17" cy="17" r="8"/><circle cx="31" cy="17" r="8"/><path d="M17 25v8M31 25v8M12 40h24"/></svg></div><b>Escape his pin</b><p>If Bruno pins you, mash Grapple to break free!</p></div><div class="vtut-card"><span class="vtut-num">6</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"><path d="M14 8h20v10a10 10 0 0 1-20 0zM14 12H8a6 6 0 0 0 6 6M34 12h6a6 6 0 0 1-6 6M24 28v6M16 40h16M20 34h8v6h-8z"/></svg></div><b>First to 2 rounds</b><p>Win 2 of 3 rounds to take the whole bout.</p></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" data-close="tutorialOverlay" type="button" style="flex:1">Got it — let's play</button><button class="btn btn-secondary" id="tutorialRules" type="button">Read full rules</button></div>
+  </div>
+</div>
+
+<!-- FEEDBACK OVERLAY -->
+<div class="overlay" id="feedbackOverlay" role="dialog" aria-modal="true" aria-label="Feedback">
+  <div class="sheet">
+    <button class="close-x" data-close="feedbackOverlay" type="button" aria-label="Close">✕</button>
+    <h2>💬 Feedback</h2>
+    <p style="color:var(--muted);font-weight:700;margin:0">How was it? Your rating and comment are saved on this device only.</p>
+    <div class="stars" id="stars" role="group" aria-label="Star rating">
+      <button class="star" data-v="1" type="button" aria-label="1 star">⭐</button><button class="star" data-v="2" type="button" aria-label="2 stars">⭐</button><button class="star" data-v="3" type="button" aria-label="3 stars">⭐</button><button class="star" data-v="4" type="button" aria-label="4 stars">⭐</button><button class="star" data-v="5" type="button" aria-label="5 stars">⭐</button>
+    </div>
+    <p class="fb-q">What did you like most?</p>
+    <div class="tag-row" id="fbFun"><button class="tag" data-v="fun" type="button">Fun</button><button class="tag" data-v="relaxing" type="button">Relaxing</button><button class="tag" data-v="challenging" type="button">Challenging</button><button class="tag" data-v="pretty" type="button">Pretty</button></div>
+    <p class="fb-q">Did everything work?</p>
+    <div class="tag-row" id="fbWorks"><button class="tag" data-v="works" type="button">Works great</button><button class="tag" data-v="glitch" type="button">Hit a glitch</button><button class="tag" data-v="confusing" type="button">Confusing</button></div>
+    <p class="fb-q">How was the difficulty?</p>
+    <div class="tag-row" id="fbDiff"><button class="tag" data-v="too-easy" type="button">Too easy</button><button class="tag" data-v="just-right" type="button">Just right</button><button class="tag" data-v="too-hard" type="button">Too hard</button></div>
+    <label for="feedbackText" style="font-weight:900;display:block;margin:12px 0 6px">Your comment</label>
+    <textarea id="feedbackText" placeholder="What did you like? What drove you mad?"></textarea>
+    <p style="color:var(--muted);font-size:13px;font-weight:700;margin:10px 0 0;line-height:1.5">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button class="btn btn-primary" id="btnSaveFeedback" type="button" style="flex:1">Save feedback</button><button class="btn btn-secondary" data-close="feedbackOverlay" type="button">Cancel</button></div>
+    <p id="feedbackSaved" style="font-weight:700;min-height:20px"></p>
+  </div>
+</div>
+
+<!-- END OVERLAY -->
+<div class="overlay" id="endOverlay" role="dialog" aria-modal="true" aria-label="Round complete">
+  <div class="sheet" style="text-align:center">
+    <div style="font-size:3rem" id="endEmoji">🏆</div>
+    <h2 id="endTitle">Round complete!</h2>
+    <div class="score-big" id="endScore">0</div>
+    <p id="endText" style="font-weight:700;line-height:1.6"></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" id="btnPlayAgain" type="button" style="flex:1">Play again</button><button class="btn btn-secondary" data-close="endOverlay" type="button">View game</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script>
+(function(){
+"use strict";
+function $(id){ return document.getElementById(id); }
+var GAME = "wrestling-bout";
+var FEEDBACK_KEY = "holos-arcade-feedback";
+var DIFF_KEY = GAME + "-difficulty";
+var BEST_KEY = GAME + "-bests";
+var SCORE_KEY = GAME + "-score";
+function storeGet(k, fb){ try{ var v = localStorage.getItem(k); return v==null?fb:JSON.parse(v); }catch(e){ return fb; } }
+function storeSet(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+var DIFFS = {
+  easy:{ label:"Easy", speed:0.8, ai:0.7, hazards:0.7, time:1.25 },
+  normal:{ label:"Normal", speed:1, ai:1, hazards:1, time:1 },
+  hard:{ label:"Hard", speed:1.25, ai:1.35, hazards:1.4, time:0.85 }
+};
+var diff = storeGet(DIFF_KEY, "normal");
+if(!DIFFS[diff]) diff = "normal";
+var practice = false;
+try{ practice = (window.__holoPractice === true); }catch(e){}
+var sessionStart = Date.now();
+var playing = false, ended = false;
+
+/* SERVER-READY-2026-11-23: one STATE object per game is the single
+   source of truth for score + result. Nothing score-related lives
+   only in the DOM. The future server will read STATE (room state)
+   and write opponent state back into it; the leaderboard will sync
+   from commitScore()/publishResult() below. No networking here. */
+var STATE = {
+  game: GAME, score: 0, best: 0, time: 0, result: null,
+  difficulty: diff, practice: false, startedAt: null, endedAt: null
+};
+/* SERVER-READY-2026-11-23: player-slot model. Solo games use one
+   slot (p1); versus games use p1 + p2 with a current-turn pointer.
+   The future server maps each slot to a network player; the game
+   never hard-codes "player 1 vs player 2" into UI-only variables. */
+var PLAYERS = [
+  { id:"p1", slot:0, name:"You", isLocal:true, score:0, roundsWon:0 },
+  { id:"p2", slot:1, name:"Rival", isLocal:false, score:0, roundsWon:0 }
+];
+var currentPlayer = "p1";
+function getPlayer(id){ for(var i=0;i<PLAYERS.length;i++) if(PLAYERS[i].id===id) return PLAYERS[i]; return PLAYERS[0]; }
+
+/* SERVER-READY-2026-11-23: commitScore() is the ONE funnel every
+   score change flows through. Future hook: the shared leaderboard
+   sync call goes here (one place), reading STATE + PLAYERS. */
+function commitScore(points, reason){
+  if(!playing || ended) return;
+  STATE.score = Math.max(0, STATE.score + points);
+  getPlayer("p1").score = STATE.score;
+  renderStats();
+}
+/* SERVER-READY-2026-11-23: publishResult() is the ONE place a
+   finished round/match reports its result. Future hook: the server
+   room will broadcast this result (and receive the opponent's) here. */
+function publishResult(){
+  STATE.result = STATE.result || "finished";
+  STATE.endedAt = new Date().toISOString();
+  STATE.time = Math.round((Date.now() - sessionStart) / 1000);
+  if(!practice){
+    var bests = storeGet(BEST_KEY, {});
+    var prev = bests[diff] || 0;
+    if(STATE.score > prev){ bests[diff] = STATE.score; storeSet(BEST_KEY, bests); }
+    STATE.best = bests[diff] || 0;
+  }
+  renderBests(); renderStats();
+}
+
+var AC = null;
+function beep(freq, dur, type, vol){
+  try{
+    if(!AC) AC = new (window.AudioContext||window.webkitAudioContext)();
+    if(AC.state === "suspended") AC.resume();
+    var o = AC.createOscillator(), g = AC.createGain();
+    o.type = type || "sine"; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol || 0.1, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + (dur || 0.12));
+    o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime + (dur || 0.12));
+  }catch(e){}
+}
+function toast(t){
+  var el = $("toast"); if(!el) return;
+  el.textContent = t; el.classList.add("show");
+  clearTimeout(el._t); el._t = setTimeout(function(){ el.classList.remove("show"); }, 2400);
+}
+function setMsg(t){ var m = $("msg"); if(m) m.textContent = t; }
+
+/* Shared input: keyboard + touch + mouse all write into `input`.
+   Gameplay reads `input` only, never raw events. */
+var input = { left:false, right:false, up:false, down:false, action:false, action2:false, action3:false, steer:0 };
+var KEYMAP = {"j":"action","J":"action","k":"action2","K":"action2","l":"action3","L":"action3"," ":"up"};
+document.addEventListener("keydown", function(e){
+  var k = KEYMAP[e.key];
+  if(k){ input[k] = true; if(e.key === " " ) e.preventDefault(); }
+  if(e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown") e.preventDefault();
+});
+document.addEventListener("keyup", function(e){
+  var k = KEYMAP[e.key];
+  if(k){ input[k] = false; }
+});
+function bindHold(id, key){
+  var el = $(id); if(!el) return;
+  function on(e){ e.preventDefault(); input[key] = true; el.classList.add("held"); }
+  function off(e){ e.preventDefault(); input[key] = false; el.classList.remove("held"); }
+  el.addEventListener("pointerdown", on);
+  el.addEventListener("pointerup", off);
+  el.addEventListener("pointerleave", off);
+  el.addEventListener("pointercancel", off);
+}
+function bindTap(id, fn){
+  var el = $(id); if(!el) return;
+  el.addEventListener("click", function(e){ e.preventDefault(); fn(); });
+}
+
+/* GAMEPAD-HOOK-2026-11-23: gamepad-ready input. The shared gamepad
+   helper (being built separately, incl. the Capacitor app wrap) will
+   plug in here: it owns navigator.getGamepads() polling and writes
+   into the SAME `input` object above (axes -> left/right/up/down +
+   steer, buttons -> action/action2/action3), so no gameplay code
+   changes when the helper lands. This stub polls the standard
+   mapping directly until the helper takes over, and is a no-op
+   when no gamepad is connected. */
+var __gamepadSeen = false, __gamepadSteer = false;
+function pollGamepad(){
+  try{
+    var pads = navigator.getGamepads ? navigator.getGamepads() : [];
+    var gp = null;
+    for(var i=0;i<pads.length;i++){ if(pads[i] && pads[i].connected){ gp = pads[i]; break; } }
+    if(!gp) return;
+    if(!__gamepadSeen){ __gamepadSeen = true; toast("Gamepad connected — sticks steer, buttons play."); }
+    var ax = gp.axes[0] || 0, ay = gp.axes[1] || 0;
+    var dz = 0.25;
+    if(Math.abs(ax) > dz){ input.steer = ax; input.left = ax < -dz; input.right = ax > dz; }
+    else if(__gamepadSteer){ input.steer = 0; input.left = false; input.right = false; }
+    __gamepadSteer = Math.abs(ax) > dz;
+    if(Math.abs(ay) > dz){ input.up = ay < -dz; input.down = ay > dz; }
+    var b = gp.buttons || [];
+    input.action = !!(b[0] && b[0].pressed);
+    input.action2 = !!(b[1] && b[1].pressed);
+    input.action3 = !!(b[2] && b[2].pressed);
+  }catch(e){}
+}
+
+/* Difficulty */
+function paintDiff(){
+  document.querySelectorAll(".diff").forEach(function(b){
+    b.classList.toggle("sel", b.getAttribute("data-diff") === diff);
+  });
+  STATE.difficulty = diff;
+  renderBests();
+}
+document.querySelectorAll(".diff").forEach(function(b){
+  b.addEventListener("click", function(){
+    diff = b.getAttribute("data-diff");
+    storeSet(DIFF_KEY, diff);
+    paintDiff();
+    if(!playing){ resetGame(); draw(); renderStats(); }
+    toast(DIFFS[diff].label + " it is. Saved for next time.");
+  });
+});
+function renderBests(){
+  var bests = storeGet(BEST_KEY, {});
+  var row = $("bestsRow"); if(!row) return;
+  var parts = [];
+  ["easy","normal","hard"].forEach(function(k){
+    parts.push("🏆 " + DIFFS[k].label + " best: " + (bests[k] || 0));
+  });
+  row.innerHTML = parts.map(function(p){ return "<span class=\"best-chip\">" + p + "</span>"; }).join(" ");
+}
+
+/* Views: Rules */
+function showRules(){ $("viewGame").classList.add("hidden"); $("viewRules").classList.remove("hidden"); window.scrollTo(0,0); }
+function showGame(){ $("viewRules").classList.add("hidden"); $("viewGame").classList.remove("hidden"); window.scrollTo(0,0); }
+$("btnRules").addEventListener("click", showRules);
+$("btnBackToGame").addEventListener("click", showGame);
+
+/* Tutorial + overlays */
+$("btnTutorial").addEventListener("click", function(){ $("tutorialOverlay").classList.add("open"); });
+$("tutorialRules").addEventListener("click", function(){ $("tutorialOverlay").classList.remove("open"); showRules(); });
+document.querySelectorAll("[data-close]").forEach(function(b){
+  b.addEventListener("click", function(){ $(b.getAttribute("data-close")).classList.remove("open"); });
+});
+document.querySelectorAll(".overlay").forEach(function(o){
+  o.addEventListener("click", function(e){ if(e.target === o) o.classList.remove("open"); });
+});
+
+/* Feedback (always allowed to save, even in practice) */
+var fbRating = 0, fbFun = "", fbWorks = "", fbDiffTag = "";
+function paintStars(){
+  document.querySelectorAll("#stars .star").forEach(function(s){
+    s.classList.toggle("on", Number(s.getAttribute("data-v")) <= fbRating);
+  });
+}
+document.querySelectorAll("#stars .star").forEach(function(s){
+  s.addEventListener("click", function(){ fbRating = Number(s.getAttribute("data-v")); paintStars(); });
+});
+function bindTagRow(id, setter){
+  document.querySelectorAll("#" + id + " .tag").forEach(function(t){
+    t.addEventListener("click", function(){
+      var was = t.classList.contains("sel");
+      document.querySelectorAll("#" + id + " .tag").forEach(function(x){ x.classList.remove("sel"); });
+      if(!was){ t.classList.add("sel"); setter(t.getAttribute("data-v")); } else { setter(""); }
+    });
+  });
+}
+bindTagRow("fbFun", function(v){ fbFun = v; });
+bindTagRow("fbWorks", function(v){ fbWorks = v; });
+bindTagRow("fbDiff", function(v){ fbDiffTag = v; });
+function openFeedback(){
+  fbRating = 0; fbFun = ""; fbWorks = ""; fbDiffTag = "";
+  paintStars();
+  document.querySelectorAll("#feedbackOverlay .tag").forEach(function(x){ x.classList.remove("sel"); });
+  $("feedbackText").value = ""; $("feedbackSaved").innerHTML = "";
+  $("feedbackOverlay").classList.add("open");
+}
+$("btnFeedback").addEventListener("click", openFeedback);
+$("btnFeedbackFooter").addEventListener("click", openFeedback);
+$("btnSaveFeedback").addEventListener("click", function(){
+  var tags = [];
+  if(fbFun) tags.push(fbFun);
+  if(fbWorks) tags.push(fbWorks);
+  if(fbDiffTag) tags.push(fbDiffTag);
+  var secs = playing ? Math.round((Date.now() - sessionStart) / 1000) : Math.round(STATE.time || 0);
+  var rec = {
+    game: GAME, mode: practice ? "practice" : "standard", difficulty: diff, level: diff,
+    device: (navigator.userAgent || "").slice(0,120), playTimeSeconds: secs,
+    stars: fbRating, rating: fbRating,
+    comment: $("feedbackText").value.trim(), text: $("feedbackText").value.trim(),
+    tag: tags.join(", "), tags: tags, score: STATE.score, timestamp: new Date().toISOString()
+  };
+  var arr = storeGet(FEEDBACK_KEY, []);
+  if(!Array.isArray(arr)) arr = [];
+  arr.push(rec);
+  storeSet(FEEDBACK_KEY, arr);
+  $("feedbackSaved").innerHTML = '<p style="font-weight:900;color:var(--ink);text-align:center">Thanks! Saved on this device.</p>';
+  toast("Thanks for the feedback!");
+  setTimeout(function(){ $("feedbackOverlay").classList.remove("open"); }, 1200);
+});
+
+/* Start / end round */
+function startRound(isPractice){
+  practice = !!isPractice;
+  STATE.practice = practice;
+  try{ window.__holoPractice = practice; }catch(e){}
+  playing = true; ended = false;
+  sessionStart = Date.now();
+  STATE.score = 0; STATE.result = null; STATE.startedAt = new Date().toISOString(); STATE.endedAt = null;
+  PLAYERS.forEach(function(p){ p.score = 0; p.roundsWon = 0; });
+  currentPlayer = "p1";
+  $("startPanel").classList.add("hidden");
+  $("liveRow").classList.remove("hidden");
+  $("practiceBanner").classList.toggle("hidden", !practice);
+  $("modeBadge").textContent = practice ? "🎓 PRACTICE — scores don't count" : "▶ PLAYING — " + DIFFS[diff].label;
+  $("endOverlay").classList.remove("open");
+  resetGame();
+  renderStats(); renderBests();
+  beep(660, 0.1, "sine", 0.12);
+  setMsg(practice ? "Practice round — no score saved. Have fun learning the ropes!" : "Go! " + START_MSG);
+  loop();
+}
+function endRound(reason, title, emoji, text){
+  if(!playing || ended) return;
+  playing = false; ended = true;
+  STATE.result = reason || "finished";
+  publishResult();
+  $("liveRow").classList.add("hidden");
+  $("startPanel").classList.remove("hidden");
+  $("practiceBanner").classList.add("hidden");
+  $("endEmoji").textContent = emoji || "🏆";
+  $("endTitle").textContent = title || "Round complete!";
+  $("endScore").textContent = STATE.score;
+  $("endText").innerHTML = text || ("You scored <strong>" + STATE.score + "</strong> on " + DIFFS[diff].label + "." + (practice ? "<br><strong>Practice — this score was not saved.</strong>" : "<br>Best on " + DIFFS[diff].label + ": " + (STATE.best || STATE.score) + "."));
+  $("endOverlay").classList.add("open");
+  beep(880, 0.18, "sine", 0.12); setTimeout(function(){ beep(1100, 0.22, "sine", 0.1); }, 160);
+}
+$("btnStart").addEventListener("click", function(){ startRound(false); });
+$("btnPractice").addEventListener("click", function(){ startRound(true); });
+$("btnEndRound").addEventListener("click", function(){ endRound("quit", "Round ended", "👋", "You ended the round with <strong>" + STATE.score + "</strong> points." + (practice ? "<br><strong>Practice — nothing was saved.</strong>" : "")); });
+$("btnPlayAgain").addEventListener("click", function(){
+  $("endOverlay").classList.remove("open");
+  startRound(practice);
+});
+window.addEventListener("holo-practice-on", function(){ if(!playing) startRound(true); });
+
+/* Canvas helpers shared by the four games */
+var canvas = $("game"), ctx = canvas.getContext("2d");
+var W = 800, H = 500;
+function rr(x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+function circle(x, y, r, fill, stroke){
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill();
+  if(stroke){ ctx.strokeStyle = stroke; ctx.lineWidth = 2; ctx.stroke(); }
+}
+function text(str, x, y, size, fill, align){
+  ctx.font = "900 " + size + "px Nunito, system-ui, sans-serif";
+  ctx.fillStyle = fill || "#fff"; ctx.textAlign = align || "center"; ctx.textBaseline = "middle";
+  ctx.fillText(str, x, y);
+}
+/* Drag on the canvas steers (pointer): sets input.steer -1..1 */
+var dragging = false;
+canvas.addEventListener("pointerdown", function(e){ dragging = true; canvas.setPointerCapture(e.pointerId); steerFromEvent(e); e.preventDefault(); });
+canvas.addEventListener("pointermove", function(e){ if(dragging) steerFromEvent(e); });
+canvas.addEventListener("pointerup", function(){ dragging = false; input.steer = 0; });
+canvas.addEventListener("pointercancel", function(){ dragging = false; input.steer = 0; });
+function steerFromEvent(e){
+  var r = canvas.getBoundingClientRect();
+  var x = (e.clientX - r.left) / r.width;
+  input.steer = Math.max(-1, Math.min(1, (x - 0.5) * 2));
+  if(x < 0.45){ input.left = true; input.right = false; }
+  else if(x > 0.55){ input.right = true; input.left = false; }
+  else { input.left = false; input.right = false; }
+}
+
+/* Main loop: game code provides update(dt) + draw(). */
+var lastT = 0, rafId = 0;
+function loop(t){
+  if(!playing) return;
+  var now = t || performance.now();
+  var dt = Math.min(50, now - (lastT || now)) / 16.7;
+  lastT = now;
+  pollGamepad();
+  update(dt);
+  draw();
+  rafId = requestAnimationFrame(loop);
+}
+
+/* ===== WRESTLING BOUT gameplay ===== */
+
+var prevIn = { action:false, action2:false, action3:false, up:false, down:false };
+function edge(k){ var v = !!input[k]; var was = prevIn[k]; prevIn[k] = v; return v && !was; }
+function fmtTime(s){ s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ":" + ("0" + (s % 60)).slice(-2); }
+function elapsedSec(){ return (Date.now() - sessionStart) / 1000; }
+function bests(){ return storeGet(BEST_KEY, {}); }
+
+var START_MSG = "Grapple, slam and pin Bruno before he pins you!";
+var ROUND_SECS = 60;
+var roundNum = 1, roundFrames = ROUND_SECS * 60;
+var p1hp = 100, p2hp = 100, g1 = 0, g2 = 0;
+var pinP = 0, pinA = 0, aiThink = 0, shake = 0;
+PLAYERS[0].name = "You";
+PLAYERS[1].name = "Bruno";
+function resetRound(){
+  p1hp = 100; p2hp = 100; g1 = 0; g2 = 0; pinP = 0; pinA = 0;
+  roundFrames = ROUND_SECS * 60; aiThink = 60;
+}
+function resetGame(){
+  roundNum = 1;
+  PLAYERS[0].roundsWon = 0; PLAYERS[1].roundsWon = 0;
+  resetRound();
+}
+function winRound(winnerId, how){
+  var w = getPlayer(winnerId);
+  w.roundsWon++;
+  currentPlayer = winnerId;
+  if(winnerId === "p1") commitScore(150, "round");
+  beep(winnerId === "p1" ? 880 : 220, 0.3, "sine", 0.14);
+  if(w.roundsWon >= 2){ matchEnd(winnerId, how); return; }
+  roundNum++;
+  setMsg((winnerId === "p1" ? "You take" : "Bruno takes") + " round " + (roundNum - 1) + " — " +
+    (how === "pin" ? "by pinfall!" : how === "ko" ? "by knockout!" : "on points!") + " Round " + roundNum + " starts now!");
+  toast("Round " + roundNum + " — first to 2 rounds wins the bout!");
+  resetRound();
+}
+function matchEnd(winnerId, how){
+  var youWon = winnerId === "p1";
+  if(youWon) commitScore(250, "match-win");
+  endRound(youWon ? "win" : "loss", youWon ? "You win the bout!" : "Bruno wins the bout",
+    youWon ? "🏆" : "🤼",
+    (youWon ? "You pinned Bruno down and took the match " : "Bruno took the match ") +
+    "<strong>" + PLAYERS[0].roundsWon + "–" + PLAYERS[1].roundsWon + "</strong> in rounds" +
+    (how === "pin" ? " — sealed with a pinfall!" : how === "ko" ? " — sealed with a knockout!" : ".") +
+    "<br>Final score: <strong>" + STATE.score + "</strong>." +
+    (practice ? "<br><strong>Practice — this score was not saved.</strong>" : "<br>Best on " + DIFFS[diff].label + ": " + (STATE.best || STATE.score) + "."));
+}
+function aiSlam(){
+  var blocking = !!input.up;
+  var dmg = Math.round((blocking ? 8 : 17) * DIFFS[diff].ai);
+  p1hp = Math.max(0, p1hp - dmg);
+  g2 = 0; shake = 8;
+  beep(160, 0.25, "sawtooth", 0.12);
+  setMsg(blocking ? "Blocked! Bruno's slam barely hurt." : "💥 Bruno slams you! -" + dmg + " health. Grapple back!");
+  if(window.holoBuzz) window.holoBuzz(60);
+}
+function update(dt){
+  if(shake > 0) shake -= dt;
+  roundFrames -= dt;
+  var blocking = !!input.up;
+  var grappleEdge = edge("action");
+  if(input.action){ g1 = Math.min(100, g1 + 0.55 * dt); }
+  if(grappleEdge){ g1 = Math.min(100, g1 + 9); beep(440, 0.05, "square", 0.05); }
+  if(edge("action2")){
+    if(g1 >= 100){
+      p2hp = Math.max(0, p2hp - 24); g1 = 0; shake = 10;
+      commitScore(50, "slam");
+      beep(320, 0.2, "sawtooth", 0.12); setTimeout(function(){ beep(520, 0.15, "sine", 0.1); }, 120);
+      setMsg("💥 SLAM! Bruno is hurt — keep grappling, then pin him when his health is low!");
+    } else {
+      setMsg("Fill your grapple meter first — mash Grapple, then Slam!");
+    }
+  }
+  g2 = Math.min(100, g2 + 0.22 * DIFFS[diff].ai * dt);
+  aiThink -= dt;
+  if(aiThink <= 0){
+    aiThink = 45 + Math.random() * 55;
+    if(g2 >= 100){ aiSlam(); }
+    else if(p1hp <= 30 && Math.random() < 0.45){ pinA = Math.max(pinA, 12); setMsg("😱 Bruno is going for the pin! Mash GRAPPLE to escape!"); }
+    else { g2 = Math.min(100, g2 + 10 + Math.random() * 12); }
+  }
+  if(p2hp <= 30 && input.action3){
+    pinP = Math.min(100, pinP + 1.5 * dt);
+    if(Math.floor(pinP / 34) > Math.floor((pinP - 1.5 * dt) / 34) && pinP < 100) beep(700, 0.1, "sine", 0.1);
+    if(pinP >= 100){ winRound("p1", "pin"); return; }
+  } else if(pinP > 0){ pinP = Math.max(0, pinP - 2.5 * dt); }
+  if(p1hp <= 30 && pinA > 0){
+    pinA = Math.min(100, pinA + 0.85 * DIFFS[diff].ai * dt);
+    if(grappleEdge){ pinA = Math.max(0, pinA - 7); }
+    if(pinA >= 100){ winRound("p2", "pin"); return; }
+  } else if(pinA > 0){ pinA = Math.max(0, pinA - 2 * dt); }
+  if(p1hp <= 0){ winRound("p2", "ko"); return; }
+  if(p2hp <= 0){ winRound("p1", "ko"); return; }
+  if(roundFrames <= 0){
+    winRound(p1hp === p2hp ? "p1" : (p1hp > p2hp ? "p1" : "p2"), "points");
+    return;
+  }
+  renderStats();
+}
+function bar(x, y, w, h, frac, col, bg){
+  ctx.fillStyle = bg || "rgba(0,0,0,.35)"; rr(x, y, w, h, 6); ctx.fill();
+  ctx.fillStyle = col; if(frac > 0){ rr(x, y, Math.max(8, w * frac), h, 6); ctx.fill(); }
+}
+function wrestler(x, y, col, singlet, flip, label){
+  ctx.save();
+  ctx.translate(x + (shake > 0 ? (Math.random() * 6 - 3) : 0), y);
+  if(flip) ctx.scale(-1, 1);
+  circle(0, 34, 26, col, "#222");
+  circle(-24, 18, 11, col, "#222"); circle(24, 18, 11, col, "#222");
+  circle(0, 0, 30, singlet, "#222");
+  circle(0, -34, 20, col, "#222");
+  circle(-7, -36, 3, "#222"); circle(7, -36, 3, "#222");
+  ctx.strokeStyle = "#222"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(-2, -28, 8, 0.2, Math.PI - 0.6); ctx.stroke();
+  ctx.fillStyle = "#fff"; text(label, 0, -62, 13, "#fff");
+  ctx.restore();
+}
+function draw(){
+  ctx.fillStyle = "#3b2d5c"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#e8dcc0"; rr(60, 90, W - 120, 330, 18); ctx.fill();
+  ctx.strokeStyle = "#c0392b"; ctx.lineWidth = 6; rr(60, 90, W - 120, 330, 18); ctx.stroke();
+  ctx.strokeStyle = "rgba(192,57,43,.5)"; ctx.lineWidth = 3;
+  ctx.strokeRect(90, 120, W - 180, 270);
+  text("ROUND " + roundNum + "  •  " + Math.ceil(roundFrames / 60) + "s", W / 2, 40, 20, "#fff");
+  text("YOU", 150, 120, 16, "#7dd3fc", "left");
+  text("BRUNO", W - 150, 120, 16, "#fca5a5", "right");
+  bar(90, 140, 220, 16, p1hp / 100, p1hp > 30 ? "#22c55e" : "#ef4444");
+  bar(W - 310, 140, 220, 16, p2hp / 100, p2hp > 30 ? "#22c55e" : "#ef4444");
+  text("GRAPPLE", 150, 185, 13, "#FFE9A3", "left");
+  text("GRAPPLE", W - 150, 185, 13, "#FFE9A3", "right");
+  bar(90, 200, 220, 12, g1 / 100, "#38bdf8");
+  bar(W - 310, 200, 220, 12, g2 / 100, "#f87171");
+  if(g1 >= 100) text("💥 SLAM READY — hit Slam!", W / 2, 185, 15, "#FFD43B");
+  wrestler(300, 300, "#f2c89b", "#2563eb", false, "YOU");
+  wrestler(500, 300, "#e8b48a", "#dc2626", true, "BRUNO");
+  if(pinP > 0){
+    text("PIN!  " + (Math.floor(pinP / 34) + 1) + "…", W / 2, 250, 30, "#FFD43B");
+    bar(W / 2 - 130, 275, 260, 14, pinP / 100, "#FFD43B");
+    text("Hold PIN — don't let go!", W / 2, 305, 14, "#fff");
+  }
+  if(pinA > 0){
+    text("😱 BRUNO IS PINNING YOU — MASH GRAPPLE!", W / 2, 250, 20, "#f87171");
+    bar(W / 2 - 130, 275, 260, 14, pinA / 100, "#ef4444");
+  }
+  text("Rounds: You " + PLAYERS[0].roundsWon + " – " + PLAYERS[1].roundsWon + " Bruno   •   First to 2 wins", W / 2, 450, 15, "#fff");
+  if(p2hp <= 30 && pinP <= 0) text("Bruno is wobbly — HOLD PIN NOW!", W / 2, 420, 16, "#FFD43B");
+  if(!playing && !ended){
+    text("🤼 Ready to rumble?", W / 2, 210, 26, "#fff");
+    text("Mash Grapple to fill your meter, Slam when it's full,", W / 2, 245, 15, "#FFE9A3");
+    text("then hold Pin when Bruno's health is low.", W / 2, 268, 15, "#FFE9A3");
+  }
+}
+function renderStats(){
+  $("statScore").textContent = STATE.score;
+  $("statRound").textContent = roundNum + " / 3";
+  $("statYou").textContent = Math.round(p1hp);
+  $("statRival").textContent = Math.round(p2hp);
+  $("statWins").textContent = PLAYERS[0].roundsWon + "–" + PLAYERS[1].roundsWon;
+  $("statBest").textContent = bests()[diff] || 0;
+}
+function gameDebug(){
+  return { round: roundNum, p1hp: Math.round(p1hp), p2hp: Math.round(p2hp),
+    g1: Math.round(g1), g2: Math.round(g2), pinP: Math.round(pinP), pinA: Math.round(pinA),
+    winsP1: PLAYERS[0].roundsWon, winsP2: PLAYERS[1].roundsWon };
+}
+bindHold("btnGrapple", "action");
+bindTap("btnSlam", function(){ input.action2 = true; setTimeout(function(){ input.action2 = false; }, 120); });
+bindHold("btnPin", "action3");
+bindHold("btnBlock", "up");
+
+/* Read-only debug snapshot for automated play-through checks.
+   State only — no mutation, no cheats; the game plays itself
+   through real input events. */
+window.__debug = {
+  get playing(){ return playing; },
+  get ended(){ return ended; },
+  get score(){ return STATE.score; },
+  get practice(){ return practice; },
+  get diff(){ return diff; },
+  get state(){ return JSON.parse(JSON.stringify(STATE)); },
+  get players(){ return JSON.parse(JSON.stringify(PLAYERS)); },
+  get gameState(){ return typeof gameDebug === "function" ? gameDebug() : {}; }
+};
+
+paintDiff();
+resetGame();
+renderStats();
+renderBests();
+draw();
+})();
+</script>
+<script>
+/* INSERT-COIN-2026-11-22: place the blinking line under the title
+   on games with a start button; remove it once play starts. */
+(function(){try{
+  if(document.querySelector('.insert-coin'))return;
+  var ids=['btnStart','startBtn','playBtn','btnPlay','newBtn','newGameBtn','btnNew'];
+  var start=null,i,b;
+  for(i=0;i<ids.length;i++){start=document.getElementById(ids[i]);if(start)break;}
+  if(!start){var btns=document.querySelectorAll('button');for(i=0;i<btns.length;i++){b=btns[i];if(/^(\u25b6\s*)?(start game|start|play|new game|begin)$/i.test((b.textContent||'').trim())){start=b;break;}}}
+  if(!start)return;
+  var h=document.querySelector('h1')||document.querySelector('h2');if(!h||!h.parentNode)return;
+  var p=document.createElement('p');p.className='insert-coin';p.setAttribute('aria-hidden','true');p.textContent='INSERT COIN TO CONTINUE';
+  h.parentNode.insertBefore(p,h.nextSibling);
+  start.addEventListener('click',function(){if(p.parentNode)p.parentNode.removeChild(p);});
+}catch(e){}})();
+</script>
+<script>
+/* BACK-TO-HUB-2026-11-23: every game gets a way back to the Arcade hub
+   when opened directly (dead-end fix). Hidden inside the hub iframe,
+   where the hub itself provides navigation. */
+(function(){try{
+  if(window.self!==window.top)return;
+  if(document.querySelector('a[href*="games-hub"]'))return;
+  var a=document.createElement('a');a.href='../games-hub/';a.textContent='\u2190 Back to the Arcade';
+  a.style.cssText='position:fixed;left:10px;bottom:10px;z-index:9990;background:rgba(20,16,60,.88);color:#fff;padding:7px 14px;border-radius:999px;font:600 13px system-ui,sans-serif;text-decoration:none;border:1px solid rgba(255,255,255,.4);box-shadow:0 2px 10px rgba(0,0,0,.35)';
+  document.body.appendChild(a);
+}catch(e){}})();
+</script>
+</body>
+</html>
