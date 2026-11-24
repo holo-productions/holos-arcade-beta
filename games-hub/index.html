@@ -2946,7 +2946,7 @@ setTimeout(function(){
   <section class="hub-panel" id="settingsPanel" aria-label="Settings" hidden>
     <span class="kicker personal">Settings</span>
     <h2>Settings</h2>
-    <p style="margin:0;color:var(--muted);max-width:640px">Sound, friends, email and 18+ settings — the same controls, in their own place.</p>
+    <p style="margin:0;color:var(--muted);max-width:640px">Sound, friends, email and 18+ settings — the same controls, in their own place. If a parent PIN is set, changing any setting here needs the PIN first.</p>
     <div class="hub-box">
       <h3>Settings</h3>
       <div class="set-row">
@@ -7886,6 +7886,30 @@ setTimeout(function(){
     });
   }
 
+  /* ---------- Parent PIN gates ANY settings change ----------
+     PARENT-PIN-RULE-2026-11-24 (Holo 2026-11-24 07:51): if a parent
+     PIN is active on the account, changing ANY setting first needs
+     the parent PIN — not just the 18+ toggle. Owner + gizmo-*
+     accounts are exempt (same rule as the 18+ / device-cap
+     exemptions). No PIN active = behaviour unchanged, no prompt.
+     The check itself is fail-CLOSED (a wrong PIN changes nothing);
+     only a PIN state that cannot be read at all fails OPEN, so a
+     storage hiccup never locks the owner out of her own settings. */
+  function settingsPinNeeded(){
+    try {
+      if(isExemptAdult() || age18Exempt()) return false;
+      return hasPin();
+    } catch(e){ return false; }
+  }
+  function requireParentPin(message, cb){
+    if(typeof cb !== 'function') cb = function(){};
+    if(!settingsPinNeeded()){ cb(true); return; }
+    openPinPrompt(function(ok){ cb(!!ok); }, { message: message || 'Enter the parent PIN to change this setting.', goLabel: 'Continue' });
+  }
+  function gateSettingsChange(label, fn){
+    requireParentPin('Enter the parent PIN to change ' + label + '.', function(ok){ if(ok) fn(); });
+  }
+
   /* ---------- One modal, reused by every 18+ step ---------- */
   var overlay = null, titleEl = null, bodyEl = null;
   function ensureModal(){
@@ -7932,13 +7956,22 @@ setTimeout(function(){
     if(!hasPin()){ openVerifiedSetup('pin', cb); return; } /* No PIN yet — set one up first (email-verified). */
     openPinPrompt(cb);
   }
-  function openPinPrompt(cb){
+  /* PARENT-PIN-RULE-2026-11-24 (Holo 2026-11-24 07:51): if a parent
+     PIN is active, changing ANY setting needs the parent PIN first.
+     openPinPrompt is the one PIN prompt every gated change reuses —
+     opts.message / opts.goLabel override the 18+ wording; the
+     defaults keep the 18+ unlock copy exactly as before. */
+  function openPinPrompt(cb, opts){
+    opts = opts || {};
+    var pinMsg = opts.message || 'Enter the parent PIN to turn the 18+ games back on.';
+    var pinGo = opts.goLabel || 'Unlock 18+ games';
+    var pinHelp = opts.helper || 'Forgot the PIN? Set a new one in Settings under 18+ games — it needs an email check first.';
     openModal('Parent PIN',
-      '<p>Enter the parent PIN to turn the 18+ games back on.</p>' +
+      '<p>' + pinMsg + '</p>' +
       '<div class="login-field"><label for="age18Pin">Parent PIN</label><input id="age18Pin" type="password" inputmode="numeric" autocomplete="off" maxlength="4" placeholder="4 digits" /></div>' +
       '<p class="login-error" id="age18PinErr" role="alert" hidden></p>' +
-      '<p><button type="button" class="btn btn-dark" id="age18PinGo">Unlock 18+ games</button> <button type="button" class="btn btn-light" id="age18PinCancel">Cancel</button></p>' +
-      '<p class="login-helper">Forgot the PIN? Set a new one in Settings under 18+ games — it needs an email check first.</p>',
+      '<p><button type="button" class="btn btn-dark" id="age18PinGo">' + pinGo + '</button> <button type="button" class="btn btn-light" id="age18PinCancel">Cancel</button></p>' +
+      '<p class="login-helper">' + pinHelp + '</p>',
       function(){ cb(false); });
     var inp = document.getElementById('age18Pin');
     if(inp) inp.focus();
@@ -8059,7 +8092,7 @@ setTimeout(function(){
         ? '18+ party games stay hidden until your 18th birthday. There is no switch to turn them on for this account.'
         : '18+ party games stay hidden until you add a date of birth. There is no switch to turn them on for this account.');
     var st = document.getElementById('parentPinState');
-    if(st) st.textContent = hasPin() ? 'PIN is set. Turning 18+ games back on needs it.' : 'No PIN set yet — set one up so a kid can\'t switch the games back on.';
+    if(st) st.textContent = hasPin() ? 'PIN is set. Changing any setting needs it.' : 'No PIN set yet — set one up so a kid can\'t change the settings.';
     var dl = document.getElementById('adultDobLine');
     if(dl){
       if(under) dl.textContent = dob() ? 'Date of birth on file — 18+ games stay hidden until your 18th birthday.' : 'No date of birth on file yet — 18+ games stay hidden until you add one.';
@@ -8093,15 +8126,37 @@ setTimeout(function(){
           syncToggleUI();
         });
       } else {
-        setHide18(true);
-        setMsg('18+ games hidden on this device.');
-        syncToggleUI();
+        /* PARENT-PIN-RULE-2026-11-24: hiding the games is a settings
+           change too — with a PIN active it needs the PIN first.
+           (This retires the "turning them OFF is free, no PIN" rule
+           for PIN-active accounts; no PIN active = unchanged.) */
+        requireParentPin('Enter the parent PIN to hide the 18+ games.', function(ok){
+          if(!ok){ syncToggleUI(); return; }
+          setHide18(true);
+          setMsg('18+ games hidden on this device.');
+          syncToggleUI();
+        });
       }
     });
     var pb = document.getElementById('parentPinBtn');
-    if(pb) pb.addEventListener('click', function(){ openVerifiedSetup('pin', function(ok){ if(ok) syncToggleUI(); }); });
+    /* PARENT-PIN-RULE-2026-11-24: changing the PIN itself needs the
+       current PIN first (then the usual email-verified flow). Setting
+       the very first PIN has no current PIN, so it goes straight to
+       the email flow, as before. */
+    if(pb) pb.addEventListener('click', function(){
+      requireParentPin('Enter the current parent PIN to change it.', function(ok){
+        if(ok) openVerifiedSetup('pin', function(ok2){ if(ok2) syncToggleUI(); });
+      });
+    });
     var db = document.getElementById('adultDobChangeBtn');
-    if(db) db.addEventListener('click', function(){ openVerifiedSetup('dob', function(ok){ if(ok) syncToggleUI(); }); });
+    /* PARENT-PIN-RULE-2026-11-24: changing the date of birth is a
+       settings change — with a PIN active it needs the PIN first,
+       then the usual email-verified flow. */
+    if(db) db.addEventListener('click', function(){
+      requireParentPin('Enter the parent PIN to change the date of birth.', function(ok){
+        if(ok) openVerifiedSetup('dob', function(ok2){ if(ok2) syncToggleUI(); });
+      });
+    });
     syncToggleUI();
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wireSettings);
@@ -8116,9 +8171,11 @@ setTimeout(function(){
     dob: dob, validateDob: validateDob, saveDob: saveDob, isAdultByDob: isAdultByDob,
     cleanDob: cleanDob, dobFieldHTML: dobFieldHTML, bindDobField: bindDobField,
     hide18: hide18, setHide18: setHide18, adultGamesVisible: adultGamesVisible,
-    hasPin: hasPin, adultUnlock18: adultUnlock18, showBlocked: showBlocked, isExemptAdult: isExemptAdult,
+    hasPin: hasPin, checkPin: checkPin, adultUnlock18: adultUnlock18, showBlocked: showBlocked, isExemptAdult: isExemptAdult,
+    settingsPinNeeded: settingsPinNeeded, requireParentPin: requireParentPin, gateSettingsChange: gateSettingsChange,
     applyAll: applyAll, syncToggleUI: syncToggleUI
   };
+  window.holoGateSettingsChange = gateSettingsChange;
 })();
 </script>
 
@@ -12191,7 +12248,7 @@ var LOCATIONS = [
     <details class="legal-section">
       <summary>How do I hide 18+ games from kids?</summary>
       <div class="legal-content">
-        <p>In Settings, under 18+ games, turn Hide 18+ games on. Kings Cup Party, Cup Toss Party and Never Have I Ever Party disappear from the Library, search, Categories and Game of the Day. Turning them back on needs the parent PIN. Your date of birth (asked when you register) hides them automatically until your 18th birthday, when they switch on by themselves. If the account is under 18, or has no date of birth on file, there is no switch at all — the 18+ games stay hidden.</p>
+        <p>In Settings, under 18+ games, turn Hide 18+ games on. Kings Cup Party, Cup Toss Party and Never Have I Ever Party disappear from the Library, search, Categories and Game of the Day. Turning them back on needs the parent PIN — and with a PIN set, hiding them needs it too. Your date of birth (asked when you register) hides them automatically until your 18th birthday, when they switch on by themselves. If the account is under 18, or has no date of birth on file, there is no switch at all — the 18+ games stay hidden.</p>
       <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="settings">Go to Settings &#8594;</button></p>
         </div>
     </details>
@@ -12199,7 +12256,7 @@ var LOCATIONS = [
     <details class="legal-section">
       <summary>What is the parent PIN?</summary>
       <div class="legal-content">
-        <p>A 4-digit PIN that unlocks the 18+ games after they have been hidden. Set it up in Settings under 18+ games. Setting or changing the PIN always needs email verification first: we email you a link, and only after you tap it can you set or change the PIN. Turning the games off is free and never needs the PIN. The PIN never unlocks 18+ games for an account under 18 — or one with no date of birth on file.</p>
+        <p>A 4-digit PIN that unlocks the 18+ games after they have been hidden. Set it up in Settings under 18+ games. Setting the first PIN, and changing it, always needs email verification first: we email you a link, and only after you tap it can you set or change the PIN. Changing the PIN also needs the current PIN first. When a parent PIN is set, changing any setting needs the PIN — hiding the 18+ games, the sound and display switches, friend requests, email choices and the date of birth. The PIN never unlocks 18+ games for an account under 18 — or one with no date of birth on file.</p>
       <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="settings">Go to Settings &#8594;</button></p>
         </div>
     </details>
@@ -12656,6 +12713,13 @@ var LOCATIONS = [
     ul.innerHTML = rows.map(function(r){ return '<li><span>' + r[0] + '</span><b>' + r[1] + '</b></li>'; }).join('');
   }
 
+  /* PARENT-PIN-RULE-2026-11-24 (Holo 2026-11-24 07:51): with a
+     parent PIN active, every Settings change below goes through
+     the PIN prompt first. window.holoGateSettingsChange is set by
+     the AGE18 module; if it is ever missing, changes apply as
+     before (fail-open) instead of breaking the toggles. */
+  function gateSettingsChange(label, fn){ var g = window.holoGateSettingsChange; if(typeof g === 'function') g(label, fn); else fn(); }
+
   /* ---------- Accessibility settings ---------- */
   function applySettings(){
     document.body.classList.toggle('cb', H.cb);
@@ -12665,9 +12729,9 @@ var LOCATIONS = [
     if(big){ big.setAttribute('aria-pressed', H.big ? 'true' : 'false'); big.textContent = H.big ? 'On' : 'Off'; }
   }
   var cbT = $('cbToggle');
-  if(cbT) cbT.addEventListener('click', function(){ H.cb = !H.cb; saveHub(); applySettings(); });
+  if(cbT) cbT.addEventListener('click', function(){ gateSettingsChange('Colourblind-friendly mode', function(){ H.cb = !H.cb; saveHub(); applySettings(); }); });
   var bigT = $('bigToggle');
-  if(bigT) bigT.addEventListener('click', function(){ H.big = !H.big; saveHub(); applySettings(); });
+  if(bigT) bigT.addEventListener('click', function(){ gateSettingsChange('Big-text mode', function(){ H.big = !H.big; saveHub(); applySettings(); }); });
   /* EASY-ADDS-2026-11-23 (Holo 2026-11-23 08:18): vibration toggle
      + buzz helper. Default on; saved in hub state and mirrored to
      'holos-arcade-haptics' so games can read it. */
@@ -12675,7 +12739,7 @@ var LOCATIONS = [
   window.holoBuzz = holoBuzz;
   function hapSync(){ var b = $('hapToggle'); if(b){ b.setAttribute('aria-pressed', H.hap ? 'true' : 'false'); b.textContent = H.hap ? 'On' : 'Off'; } try { localStorage.setItem('holos-arcade-haptics', H.hap ? 'on' : 'off'); } catch(e){} }
   var hapT = $('hapToggle');
-  if(hapT) hapT.addEventListener('click', function(){ H.hap = !H.hap; saveHub(); hapSync(); if(H.hap) holoBuzz(20); });
+  if(hapT) hapT.addEventListener('click', function(){ gateSettingsChange('Vibration', function(){ H.hap = !H.hap; saveHub(); hapSync(); if(H.hap) holoBuzz(20); }); });
   hapSync();
 
   /* ---------- Play events → points, challenge, stats ---------- */
@@ -14604,6 +14668,12 @@ function renderTesterAuth(){
   function nlSession(){
     try { return JSON.parse(localStorage.getItem(TESTER_LS_KEY) || sessionStorage.getItem(TESTER_LS_KEY) || 'null'); } catch(e){ return null; }
   }
+  /* PARENT-PIN-RULE-2026-11-24 (Holo 2026-11-24 07:51): with a
+     parent PIN active, every Settings change below goes through
+     the PIN prompt first. window.holoGateSettingsChange is set by
+     the AGE18 module; if it is ever missing, changes apply as
+     before (fail-open) instead of breaking the toggles. */
+  function gateSettingsChange(label, fn){ var g = window.holoGateSettingsChange; if(typeof g === 'function') g(label, fn); else fn(); }
   /* EMAIL-PREFS-2026-11-23: per-type email opt-ins (Messages,
      Notifications, Friend requests, Report replies). Defaults
      all ON. Saved to localStorage (per account code), the local
@@ -14634,9 +14704,11 @@ function renderTesterAuth(){
   EP_KEYS.forEach(function(k){
     var b = document.querySelector('[data-email-pref="' + k + '"]');
     if(b) b.addEventListener('click', function(){
-      var p = epCurrent(); p[k] = !p[k]; epSave(p); epSync();
-      var m = document.getElementById('emailPrefsMsg');
-      if(m){ m.textContent = 'Saved. ' + (p[k] ? 'You will get those emails.' : 'Those emails are off.'); m.hidden = false; }
+      gateSettingsChange('Email notifications', function(){
+        var p = epCurrent(); p[k] = !p[k]; epSave(p); epSync();
+        var m = document.getElementById('emailPrefsMsg');
+        if(m){ m.textContent = 'Saved. ' + (p[k] ? 'You will get those emails.' : 'Those emails are off.'); m.hidden = false; }
+      });
     });
   });
   epSync();
@@ -14801,10 +14873,12 @@ function renderTesterAuth(){
   ['sound','music'].forEach(function(k){
     var b = document.querySelector('[data-sound-pref="' + k + '"]');
     if(b) b.addEventListener('click', function(){
-      window.holoSettings[k] = !window.holoSettings[k];
-      sndSave(); sndSync();
-      var m = document.getElementById('soundSettingsMsg');
-      if(m){ m.textContent = 'Saved. ' + (k === 'sound' ? 'Sound effects' : 'Music') + (window.holoSettings[k] ? ' on.' : ' off.'); m.hidden = false; }
+      gateSettingsChange(k === 'sound' ? 'Sound effects' : 'Music', function(){
+        window.holoSettings[k] = !window.holoSettings[k];
+        sndSave(); sndSync();
+        var m = document.getElementById('soundSettingsMsg');
+        if(m){ m.textContent = 'Saved. ' + (k === 'sound' ? 'Sound effects' : 'Music') + (window.holoSettings[k] ? ' on.' : ' off.'); m.hidden = false; }
+      });
     });
   });
   /* EASY-ADDS-2026-11-23 (Holo 2026-11-23 08:18): audio gate so the
@@ -14869,9 +14943,11 @@ function renderTesterAuth(){
     try { if(window.betaSetAcceptFriendRequests) window.betaSetAcceptFriendRequests(!!on); } catch(e){}
   }
   if(frTgl) frTgl.addEventListener('click', function(){
-    var next = !frCurrent(); frSave(next); frSync();
-    var m = document.getElementById('friendReqSettingMsg');
-    if(m){ m.textContent = next ? 'Saved. Other testers can send you friend requests.' : 'Saved. New friend requests to you are off.'; m.hidden = false; }
+    gateSettingsChange('Friend requests', function(){
+      var next = !frCurrent(); frSave(next); frSync();
+      var m = document.getElementById('friendReqSettingMsg');
+      if(m){ m.textContent = next ? 'Saved. Other testers can send you friend requests.' : 'Saved. New friend requests to you are off.'; m.hidden = false; }
+    });
   });
   frSync();
   try { if(window.betaGetAcceptFriendRequests) window.betaGetAcceptFriendRequests().then(function(remote){ if(remote !== null && remote !== undefined && !!remote !== frCurrent()){ frSave(!!remote); frSync(); } }); } catch(e){}
@@ -14924,7 +15000,7 @@ function renderTesterAuth(){
   var impFile = document.getElementById('importDataFile');
   function importDataMsg(t){ var m = document.getElementById('downloadDataMsg'); if(m){ m.textContent = t; m.hidden = false; } }
   try { var impDone = sessionStorage.getItem('holos-arcade-import-done'); if(impDone){ sessionStorage.removeItem('holos-arcade-import-done'); importDataMsg('Done — your data is back on this device.'); } } catch(e){}
-  if(impBtn && impFile) impBtn.addEventListener('click', function(){ impFile.click(); });
+  if(impBtn && impFile) impBtn.addEventListener('click', function(){ gateSettingsChange('Import my data', function(){ impFile.click(); }); });
   if(impFile) impFile.addEventListener('change', function(){
     var f = impFile.files && impFile.files[0];
     impFile.value = '';
