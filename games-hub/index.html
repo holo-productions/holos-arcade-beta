@@ -21665,7 +21665,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 <script>
 /* FRIEND-REQUESTS-2026-11-22 */
 (function(){
-  var FB_API_KEY='<redacted>';
+  var FB_API_KEY='AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak';
   var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
   var AUTH_KEY = 'holos-firebase-auth';
   var OUT_KEY = 'holos-friend-requests-out';
@@ -22052,7 +22052,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 <script>
 /* FRIEND-DMS-2026-11-24 */
 (function(){
-  var FB_API_KEY='<redacted>';
+  var FB_API_KEY='AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak';
   var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
   var AUTH_KEY = 'holos-firebase-auth';
   var MAX_LEN = 500, RATE_MAX = 20, RATE_WINDOW = 60000;
@@ -22806,6 +22806,523 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   window.holoDMs = { open: openThread, close: closeThread, refresh: refresh, unreadCount: unreadCount, stickers: STICKERS, emojis: EMOJIS, keyboard: toggleKeyboard };
 })();
 </script>
+<style>
+/* TURN-BASED-2026-11-24 (Holo 13:42 "Lets do it"): Phase 1 turn-based
+   multiplayer — Tic Tac Toe only, friends-only, on the existing
+   Firebase RTDB. No new server. No banner or overlay ever: the turn
+   notice lives in the Inbox + the unread badge + this lobby/list
+   only. While any game is open, nothing pops up. Inside the match,
+   "Your turn" is a status line in the board area itself, never an
+   extra banner. Notices are individual and per-account: one
+   recipient (the player whose turn it is) per match, to that
+   account's own Inbox only — never broadcast, never shared across
+   accounts on the same device. A notice carries only the match
+   itself + the opponent's username (already a mutual friend) — no
+   scores, no other matches, no other account's activity, no friend
+   lists. Usernames only, never emails. */
+#turnPlay{margin:14px 0;padding:14px;border:2px solid var(--violet);border-radius:14px;background:linear-gradient(180deg,#241a3d,#171040)}
+#turnPlay[hidden]{display:none!important}
+.turn-head{margin:0 0 4px;font-family:var(--pixel);font-size:13px;color:#ffd43b}
+.turn-sub{margin:0 0 10px;color:#cfc8ff;font-size:13.5px}
+.turn-friends{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.turn-friend-chip{display:flex;align-items:center;gap:8px;background:#0a0620;border:2px solid #2a1b5e;border-radius:999px;padding:6px 8px 6px 12px;color:#fff;font-weight:700;font-size:13.5px}
+.turn-friend-chip button{flex:0 0 auto}
+.turn-match-list{display:grid;gap:8px;margin:0 0 12px}
+.turn-match{border:2px solid #2a1b5e;border-radius:12px;background:#0a0620;padding:10px 12px}
+.turn-match.your-turn{border-color:#ffd43b;box-shadow:0 0 10px rgba(255,212,59,.35)}
+.turn-match-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.turn-match-row b{color:#fff}
+.turn-match-status{color:#b8f4ff;font-weight:700;font-size:13px}
+.turn-match-status.wait{color:#cfc8ff}
+.turn-match .btn{margin-left:auto}
+.turn-board-wrap{margin:12px 0}
+.turn-summary{margin:0 0 8px;color:#e9e4ff;font-size:14px;font-weight:700}
+.turn-summary .turn-you{color:#ffd43b}
+.turn-lastmove{margin:0 0 10px;color:#b8f4ff;font-size:13.5px;font-weight:700}
+.turn-board{display:grid;grid-template-columns:repeat(3,72px);grid-template-rows:repeat(3,72px);gap:6px;justify-content:start}
+.turn-cell{border:2px solid var(--violet);border-radius:12px;background:#0a0620;color:#fff;font-family:var(--pixel);font-size:30px;cursor:pointer;padding:0}
+.turn-cell:disabled{cursor:default;opacity:.75}
+.turn-cell.mark-x{color:#b8f4ff}
+.turn-cell.mark-o{color:#ff3ec8}
+.turn-cell.turn-last{border-color:#ffd43b;box-shadow:0 0 10px rgba(255,212,59,.6)}
+.turn-cell.turn-win{border-color:#ffd43b;background:#ffd43b22}
+.turn-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
+.turn-history{margin:10px 0 0;padding:0;list-style:none;color:#cfc8ff;font-size:13px}
+.turn-history li{padding:3px 0;border-top:1px solid #2a1b5e}
+.turn-history li:first-child{border-top:0}
+.turn-empty{color:#cfc8ff;font-size:14px;margin:6px 0}
+.turn-muted-head{margin:10px 0 0;color:#cfc8ff;font-size:13px;font-weight:700}
+@media(max-width:520px){.turn-board{grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,64px)}}
+</style>
+<script>
+/* TURN-BASED-2026-11-24 (Holo 13:42 "Lets do it"): Phase 1 — Tic Tac
+   Toe, friends-only, on the existing Firebase RTDB. No new server,
+   no extra monthly cost. One pilot game: Tic Tac Toe — the simplest
+   of the 8 pass-and-play duels (3x3 board, clear turns, trivial
+   win/draw detection). Turn notices (Holo 13:44-13:47):
+   (1) when a turn changes, ONLY the player whose turn it is gets ONE
+   Inbox notice ("Your turn in Tic Tac Toe vs [username]") — one
+   recipient per match, never broadcast, never group; (2) the unread
+   badge on the Inbox envelope counts it (existing Inbox badge —
+   unread notifications); (3) inside the match, "Your turn" is a
+   status line in the board area itself — NEVER a banner/overlay, and
+   nothing pops up while any game is open. The waiting player sees
+   "Waiting for [username]". No email, no send outside the platform.
+   Per-account: notices + matches live under the account's own
+   /users/$uid nodes (owner-only read) — a player on two devices
+   sees the same account's matches; another account on the same
+   device never sees them. No cross info: a notice carries only the
+   match + the opponent's username (already a mutual friend) — no
+   scores, no other matches, no other account's activity, no friend
+   lists. Usernames only, never emails. Each move stores its
+   timestamp; the notice + match view show when the opponent played
+   ("Your turn — [username] played at 1:42 PM"). Match view also has
+   a game summary (marks so far, whose turn) + the last move
+   highlighted + a short move history list. Block/report/mute apply
+   (same as DMs): block via the DM thread block, report files to
+   /feedback as "Turn-based report", mute hides the match from the
+   list. Rate limits + no links, no voice/camera. Practice never
+   earns; a finished match earns the standard 10 Glitch XP for
+   playing (same as a solo game) — spendable coins stay off until
+   the shop. Until the pending rules publish lands, every cloud call
+   fails soft with the "rules publish still pending" note. */
+(function(){
+  var FB_API_KEY='AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak';
+  var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+  var AUTH_KEY = 'holos-firebase-auth';
+  var RATE_MAX = 20, RATE_WINDOW = 60000;
+  var CELL_NAMES = ['top-left','top-middle','top-right','middle-left','centre','middle-right','bottom-left','bottom-middle','bottom-right'];
+  var WIN_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+  var WIN_XP = 10;
+  function loadAuth(){ try { var v = JSON.parse(localStorage.getItem(AUTH_KEY)); if(v && v.idToken && v.uid) return v; } catch(e){} return null; }
+  function freshToken(){
+    var a = loadAuth(); if(!a) return Promise.resolve(null);
+    if(a.exp && a.exp > Date.now() + 60000) return Promise.resolve(a.idToken);
+    if(!a.refreshToken) return Promise.resolve(null);
+    return fetch('https://securetoken.googleapis.com/v1/token?key=' + FB_API_KEY, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:'grant_type=refresh_token&refresh_token=' + encodeURIComponent(a.refreshToken) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(j && j.id_token){ a.idToken = j.id_token; a.refreshToken = j.refresh_token || a.refreshToken; a.exp = Date.now() + ((parseInt(j.expires_in,10)||3600)*1000); try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e){} return a.idToken; } return null; })
+      .catch(function(){ return null; });
+  }
+  function api(method, path, body){
+    return freshToken().then(function(tok){
+      if(!tok) return null;
+      var q = '', p = path, qi = path.indexOf('?');
+      if(qi !== -1){ p = path.slice(0, qi); q = path.slice(qi + 1); }
+      var url = FB_RTDB + p + '.json?auth=' + encodeURIComponent(tok) + (q ? '&' + q : '');
+      return fetch(url, { method:method, headers:{ 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined })
+        .then(function(r){ if(!r.ok) return null; if(method === 'DELETE') return true; return r.json().catch(function(){ return true; }); }).catch(function(){ return null; });
+    }).catch(function(){ return null; });
+  }
+  function esc(s){ var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+  function toast(msg){ try { if(typeof showBadgeToast === 'function') showBadgeToast(msg); } catch(e){} }
+  function myUid(){ var a = loadAuth(); return a ? a.uid : null; }
+  var myNameCache = null;
+  function myName(){
+    if(myNameCache) return Promise.resolve(myNameCache);
+    var uid = myUid(); if(!uid) return Promise.resolve('A tester');
+    return api('GET', '/users/' + encodeURIComponent(uid)).then(function(u){
+      var n = (u && (u.username || u.name)) ? String(u.username || u.name) : 'A tester';
+      myNameCache = n; return n;
+    });
+  }
+  function timeShort(ts){
+    try { var d = new Date(ts); if(isNaN(d)) return ''; return d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }); } catch(e){ return ''; }
+  }
+  function isMutualFriend(uid){
+    try { var cf = (window.holoFriends && window.holoFriends.cloudFriends) ? window.holoFriends.cloudFriends() : {}; return !!cf[uid]; } catch(e){ return false; }
+  }
+  function friendName(uid){
+    try { var cf = (window.holoFriends && window.holoFriends.cloudFriends) ? window.holoFriends.cloudFriends() : {}; if(cf[uid] && cf[uid].name) return cf[uid].name; } catch(e){}
+    return 'Tester';
+  }
+  function pairParts(a, b){ return [String(a), String(b)].sort(); }
+  function sendNotice(toUid, notice){
+    try {
+      if(window.holoInbox && window.holoInbox.sendNotice) return window.holoInbox.sendNotice(toUid, notice);
+    } catch(e){}
+    if(!toUid || !notice) return Promise.resolve(null);
+    var body = { type: String(notice.type || 'system').slice(0, 40), title: String(notice.title || '').slice(0, 120), body: String(notice.body || '').slice(0, 600), createdAt: Date.now(), read: false };
+    if(notice.link) body.link = String(notice.link).slice(0, 120);
+    return api('POST', '/users/' + encodeURIComponent(toUid) + '/notifications', body);
+  }
+  function winnerOf(board){
+    for(var i = 0; i < WIN_LINES.length; i++){
+      var l = WIN_LINES[i];
+      if(board[l[0]] && board[l[0]] === board[l[1]] && board[l[1]] === board[l[2]]) return { mark: board[l[0]], line: l };
+    }
+    return null;
+  }
+  function isBlockedWith(uid){
+    var me = myUid(); if(!me || !uid || me === uid) return Promise.resolve(false);
+    var p = pairParts(me, uid);
+    return api('GET', '/dmThreads/' + encodeURIComponent(p[0]) + '/' + encodeURIComponent(p[1]) + '/blockedBy').then(function(bl){
+      if(!bl || typeof bl !== 'object') return false;
+      return !!(bl[me] || bl[uid]);
+    });
+  }
+  var matches = {};   /* mid -> match */
+  var openMid = null;
+  var sentTimes = [];
+  var muted = {};
+  var xpDone = {};
+  try { muted = JSON.parse(localStorage.getItem('holo-turn-muted') || '{}') || {}; } catch(e){ muted = {}; }
+  try { xpDone = JSON.parse(localStorage.getItem('holo-turn-xp') || '{}') || {}; } catch(e){ xpDone = {}; }
+  function saveMuted(){ try { localStorage.setItem('holo-turn-muted', JSON.stringify(muted)); } catch(e){} }
+  function saveXpDone(){ try { localStorage.setItem('holo-turn-xp', JSON.stringify(xpDone)); } catch(e){} }
+  function rateOk(){
+    var now = Date.now();
+    sentTimes = sentTimes.filter(function(t){ return now - t < RATE_WINDOW; });
+    if(sentTimes.length >= RATE_MAX) return false;
+    sentTimes.push(now); return true;
+  }
+  function oppOf(m, me){ return m.aUid === me ? { uid: m.bUid, name: m.bName } : { uid: m.aUid, name: m.aName }; }
+  function markOf(m, uid){ return m.xUid === uid ? 'X' : 'O'; }
+  function myTurnCount(){
+    var me = myUid(); if(!me) return 0;
+    var n = 0;
+    Object.keys(matches).forEach(function(mid){
+      var m = matches[mid];
+      if(!muted[mid] && m && m.status === 'playing' && m.turn === me) n++;
+    });
+    return n;
+  }
+  function awardWinXp(mid){
+    if(xpDone[mid]) return;
+    xpDone[mid] = true; saveXpDone();
+    try {
+      var H = JSON.parse(localStorage.getItem('holoArcade_v1_hub') || '{}') || {};
+      H.points = (H.points || 0) + WIN_XP; H.totalEarned = (H.totalEarned || 0) + WIN_XP;
+      localStorage.setItem('holoArcade_v1_hub', JSON.stringify(H));
+      var v = H.points.toLocaleString();
+      ['pointsBal','chipPointsBal'].forEach(function(id){ var el = document.getElementById(id); if(el) el.textContent = v; });
+    } catch(e){}
+  }
+  function challenge(uid, name){
+    var me = myUid();
+    if(!me){ toast('Sign in first to challenge a friend.'); return; }
+    if(!uid || uid === me) return;
+    if(!isMutualFriend(uid)){ toast('You can only challenge a friend — add them first.'); return; }
+    if(!rateOk()){ toast('Slow down a little — too many challenges at once.'); return; }
+    isBlockedWith(uid).then(function(blocked){
+      if(blocked){ toast('You cannot challenge this tester right now.'); return; }
+      myName().then(function(myN){
+        var now = Date.now();
+        var match = { game:'tic-tac-toe', aUid:me, bUid:uid, aName:myN, bName:String(name || friendName(uid)), xUid:me, oUid:uid, board:['','','','','','','','',''], turn:me, status:'waiting', winner:null, lastMoveAt:0, lastMoveBy:'', lastMoveCell:-1, history:[], moves:0, createdAt:now, updatedAt:now };
+        api('POST', '/turnMatches', match).then(function(r){
+          if(!r || !r.name){ toast('Turn-based needs one more Arcade update — the new rules publish is still pending.'); return; }
+          var mid = r.name;
+          api('PUT', '/users/' + encodeURIComponent(me) + '/turnMatches/' + encodeURIComponent(mid), true);
+          api('PUT', '/users/' + encodeURIComponent(uid) + '/turnMatches/' + encodeURIComponent(mid), true);
+          sendNotice(uid, { type:'turn-invite', title:'Tic Tac Toe challenge!', body: myN + ' challenged you to Tic Tac Toe.', link:'game:tic-tac-toe' });
+          matches[mid] = match; openMid = mid; render();
+          toast('Challenge sent to ' + (name || friendName(uid)) + '!');
+          try { location.hash = '#game/tic-tac-toe'; } catch(e){}
+        });
+      });
+    });
+  }
+  function accept(mid){
+    var m = matches[mid], me = myUid();
+    if(!m || !me || m.status !== 'waiting' || m.bUid !== me) return;
+    if(!rateOk()){ toast('Slow down a little.'); return; }
+    api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'playing', updatedAt:Date.now() }).then(function(r){
+      if(r === null){ toast('That did not save — the new rules publish is still pending.'); return; }
+      m.status = 'playing'; m.updatedAt = Date.now(); render();
+      myName().then(function(myN){
+        sendNotice(m.aUid, { type:'turn', title:'Your turn in Tic Tac Toe', body:'Your turn in Tic Tac Toe vs ' + myN + ' — ' + myN + ' accepted at ' + timeShort(Date.now()) + '.' });
+      });
+    });
+  }
+  function decline(mid){
+    var m = matches[mid], me = myUid();
+    if(!m || !me || m.status !== 'waiting') return;
+    api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'declined', updatedAt:Date.now() }).then(function(r){
+      if(r === null){ toast('That did not save — the new rules publish is still pending.'); return; }
+      m.status = 'declined'; m.updatedAt = Date.now(); render();
+    });
+  }
+  function makeMove(mid, cell){
+    var m = matches[mid], me = myUid();
+    if(!m || !me || m.status !== 'playing' || m.turn !== me) return;
+    var board = (m.board || []).slice();
+    if(board.length !== 9 || board[cell]) return;
+    if(!rateOk()){ toast('Slow down a little.'); return; }
+    var mark = markOf(m, me);
+    board[cell] = mark;
+    var now = Date.now();
+    var win = winnerOf(board);
+    var full = board.every(function(c){ return !!c; });
+    var status = win ? 'won' : (full ? 'draw' : 'playing');
+    var winner = win ? me : null;
+    var opp = oppOf(m, me);
+    var history = (m.history || []).slice();
+    history.push({ by:me, cell:cell, at:now });
+    var patch = { board:board, turn:opp.uid, status:status, winner:winner, lastMoveAt:now, lastMoveBy:me, lastMoveCell:cell, history:history, moves:(m.moves || 0) + 1, updatedAt:now };
+    api('PATCH', '/turnMatches/' + encodeURIComponent(mid), patch).then(function(r){
+      if(r === null){ toast('That move did not save — the new rules publish is still pending.'); return; }
+      Object.keys(patch).forEach(function(k){ m[k] = patch[k]; });
+      if(status === 'won' || status === 'draw') awardWinXp(mid);
+      render();
+      myName().then(function(myN){
+        if(status === 'playing'){
+          sendNotice(opp.uid, { type:'turn', title:'Your turn in Tic Tac Toe', body:'Your turn in Tic Tac Toe vs ' + myN + ' — ' + myN + ' played at ' + timeShort(now) + '.' });
+        } else if(status === 'won'){
+          sendNotice(opp.uid, { type:'turn', title:'Tic Tac Toe — ' + myN + ' won', body:myN + ' won Tic Tac Toe vs you at ' + timeShort(now) + '. Tap to rematch.' });
+        } else {
+          sendNotice(opp.uid, { type:'turn', title:'Tic Tac Toe — draw', body:'Your Tic Tac Toe game vs ' + myN + ' ended in a draw at ' + timeShort(now) + '. Tap to rematch.' });
+        }
+      });
+    });
+  }
+  function rematch(mid){
+    var m = matches[mid], me = myUid();
+    if(!m || !me || (m.status !== 'won' && m.status !== 'draw' && m.status !== 'declined')) return;
+    var opp = oppOf(m, me);
+    challenge(opp.uid, opp.name);
+  }
+  function reportMatch(mid){
+    var m = matches[mid], me = myUid();
+    if(!m || !me) return;
+    var opp = oppOf(m, me);
+    myName().then(function(n){
+      var payload = { username:n, testerName:n, game:'Tic Tac Toe', tag:'Turn-based report', comment:'Turn-based report on match ' + mid + ' vs ' + opp.name + ': ' + 'please review this match.', matchId:mid, reporterUid:me, reportedUid:opp.uid, timestamp:new Date().toISOString() };
+      freshToken().then(function(tok){
+        if(!tok) return null;
+        return fetch(FB_RTDB + '/feedback.json?auth=' + encodeURIComponent(tok), { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
+          .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
+      }).then(function(r){
+        if(r){ toast('Reported — thanks, we will look into it.'); try { if(window.holoInbox && window.holoInbox.notifySelf) window.holoInbox.notifySelf('system', 'Report received', 'Thanks, agent — we got your report and will look into it. Watch this inbox for updates.'); } catch(e){} }
+        else toast('That report did not send — try again in a moment.');
+      });
+    });
+  }
+  function blockOpponent(mid){
+    var m = matches[mid], me = myUid();
+    if(!m || !me) return;
+    var opp = oppOf(m, me);
+    var p = pairParts(me, opp.uid);
+    api('PUT', '/dmThreads/' + encodeURIComponent(p[0]) + '/' + encodeURIComponent(p[1]) + '/blockedBy/' + encodeURIComponent(opp.uid), true).then(function(r){
+      if(r === null){ toast('Block did not save — the new rules publish is still pending.'); return; }
+      if(m.status === 'waiting' || m.status === 'playing') decline(mid);
+      openMid = null; render();
+      toast('Blocked — they can no longer challenge or message you.');
+    });
+  }
+  function toggleMute(mid){
+    if(muted[mid]){ delete muted[mid]; toast('Match unmuted.'); }
+    else { muted[mid] = true; toast('Match muted — hidden from your list.'); }
+    saveMuted(); render();
+  }
+  function statusText(m, me){
+    if(m.status === 'waiting') return m.bUid === me ? 'Waiting for you to accept' : 'Waiting for ' + m.bName + ' to accept';
+    if(m.status === 'declined') return 'Declined';
+    if(m.status === 'draw') return 'Draw';
+    if(m.status === 'won'){
+      var w = m.winner === me ? 'You' : (m.winner === m.aUid ? m.aName : m.bName);
+      return w + ' won';
+    }
+    if(m.turn === me) return 'Your turn';
+    return 'Waiting for ' + (m.turn === m.aUid ? m.aName : m.bName);
+  }
+  function summaryHtml(m, me){
+    var board = m.board || [];
+    var x = 0, o = 0;
+    board.forEach(function(c){ if(c === 'X') x++; if(c === 'O') o++; });
+    var youMark = markOf(m, me), opp = oppOf(m, me);
+    var who = m.status === 'playing' ? (m.turn === me ? 'Your turn' : opp.name + '’s turn') : statusText(m, me);
+    return '<p class="turn-summary"><span class="turn-you">You (' + youMark + ')</span> vs ' + esc(opp.name) + ' (' + (youMark === 'X' ? 'O' : 'X') + ') · X: ' + x + ' · O: ' + o + ' · ' + esc(who) + '</p>';
+  }
+  function lastMoveHtml(m){
+    if(!m.lastMoveAt || m.lastMoveCell == null || m.lastMoveCell < 0) return '';
+    var who = m.lastMoveBy === m.aUid ? m.aName : m.bName;
+    var mark = m.lastMoveBy === m.xUid ? 'X' : 'O';
+    return '<p class="turn-lastmove">Last move: ' + esc(who) + ' (' + mark + ') played ' + CELL_NAMES[m.lastMoveCell] + ' at ' + timeShort(m.lastMoveAt) + '</p>';
+  }
+  function historyHtml(m){
+    var h = m.history || [];
+    if(!h.length) return '';
+    var items = h.map(function(mv, i){
+      var who = mv.by === m.aUid ? m.aName : m.bName;
+      var mark = mv.by === m.xUid ? 'X' : 'O';
+      return '<li>' + (i + 1) + '. ' + esc(who) + ' (' + mark + ') — ' + CELL_NAMES[mv.cell] + ' at ' + timeShort(mv.at) + '</li>';
+    }).join('');
+    return '<ul class="turn-history">' + items + '</ul>';
+  }
+  function loadMatches(){
+    var me = myUid();
+    if(!me) return Promise.resolve(false);
+    return api('GET', '/users/' + encodeURIComponent(me) + '/turnMatches').then(function(idx){
+      if(!idx || typeof idx !== 'object') return false;
+      var keys = Object.keys(idx);
+      var jobs = keys.map(function(mid){
+        return api('GET', '/turnMatches/' + encodeURIComponent(mid)).then(function(m){
+          if(m && typeof m === 'object') matches[mid] = m;
+        });
+      });
+      return Promise.all(jobs).then(function(){
+        Object.keys(matches).forEach(function(mid){
+          var m = matches[mid];
+          if(m && (m.status === 'won' || m.status === 'draw')) awardWinXp(mid);
+        });
+        render(); return true;
+      });
+    });
+  }
+  function render(){
+    var root = document.getElementById('turnPlay');
+    if(!root) return;
+    var me = myUid();
+    if(!me){
+      root.innerHTML = '<h3 class="turn-head">Play a friend — turn-based</h3><p class="turn-sub">Sign in to challenge a friend to Tic Tac Toe. Take turns whenever you like — no live server needed.</p>';
+      return;
+    }
+    var friends = [];
+    try { var cf = (window.holoFriends && window.holoFriends.cloudFriends) ? window.holoFriends.cloudFriends() : {}; Object.keys(cf).forEach(function(uid){ friends.push({ uid:uid, name:(cf[uid] && cf[uid].name) || 'Tester' }); }); } catch(e){}
+    var mids = Object.keys(matches).sort(function(a, b){ return (matches[b].updatedAt || 0) - (matches[a].updatedAt || 0); });
+    var shown = mids.filter(function(mid){ return !muted[mid]; });
+    var hidden = mids.filter(function(mid){ return !!muted[mid]; });
+    var yourTurn = myTurnCount();
+    var h = '<h3 class="turn-head">Play a friend — turn-based' + (yourTurn ? ' · ' + yourTurn + ' need' + (yourTurn === 1 ? 's' : '') + ' your move' : '') + '</h3>' +
+      '<p class="turn-sub">Challenge a friend to Tic Tac Toe. You take turns whenever you like — the board waits for you.</p>';
+    if(friends.length){
+      h += '<div class="turn-friends">' + friends.map(function(f){
+        return '<span class="turn-friend-chip">' + esc(f.name) + ' <button type="button" class="btn btn-dark dm-mini" data-turn-challenge="' + esc(f.uid) + '" data-turn-name="' + esc(f.name) + '">Challenge</button></span>';
+      }).join('') + '</div>';
+    } else {
+      h += '<p class="turn-empty">No friends yet — add a friend first, then challenge them here.</p>';
+    }
+    if(shown.length){
+      h += '<div class="turn-match-list">' + shown.map(function(mid){
+        var m = matches[mid];
+        var opp = oppOf(m, me);
+        var st = statusText(m, me);
+        var cls = (m.status === 'playing' && m.turn === me) ? ' your-turn' : '';
+        return '<div class="turn-match' + cls + '" data-turn-mid="' + esc(mid) + '"><div class="turn-match-row"><b>' + esc(opp.name) + '</b><span class="turn-match-status' + (m.status === 'playing' && m.turn !== me ? ' wait' : '') + '">' + esc(st) + '</span><button type="button" class="btn btn-dark dm-mini" data-turn-open="' + esc(mid) + '">' + (openMid === mid ? 'Close' : 'Open') + '</button></div></div>';
+      }).join('') + '</div>';
+    } else {
+      h += '<p class="turn-empty">No matches yet — challenge a friend above.</p>';
+    }
+    if(hidden.length){
+      h += '<p class="turn-muted-head">' + hidden.length + ' muted match' + (hidden.length === 1 ? '' : 'es') + ' hidden — <button type="button" class="btn btn-dark dm-mini" data-turn-unmute-all>Show them</button></p>';
+    }
+    if(openMid && matches[openMid] && !muted[openMid]){
+      h += openHtml(openMid, matches[openMid], me);
+    }
+    root.innerHTML = h;
+    root.querySelectorAll('[data-turn-challenge]').forEach(function(b){
+      b.addEventListener('click', function(){ challenge(b.getAttribute('data-turn-challenge'), b.getAttribute('data-turn-name')); });
+    });
+    root.querySelectorAll('[data-turn-open]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var mid = b.getAttribute('data-turn-open');
+        openMid = (openMid === mid) ? null : mid;
+        render();
+      });
+    });
+    var un = root.querySelector('[data-turn-unmute-all]');
+    if(un) un.addEventListener('click', function(){ hidden.forEach(function(mid){ delete muted[mid]; }); saveMuted(); render(); });
+    bindOpen(root);
+  }
+  function openHtml(mid, m, me){
+    var opp = oppOf(m, me);
+    var board = m.board || [];
+    var win = winnerOf(board);
+    var winLine = win ? win.line : [];
+    var myTurnNow = m.status === 'playing' && m.turn === me;
+    var cells = '';
+    for(var i = 0; i < 9; i++){
+      var v = board[i] || '';
+      var cls = 'turn-cell' + (v === 'X' ? ' mark-x' : v === 'O' ? ' mark-o' : '') + ((m.lastMoveCell === i) ? ' turn-last' : '') + ((winLine.indexOf(i) !== -1) ? ' turn-win' : '');
+      var dis = (!myTurnNow || v) ? ' disabled' : '';
+      cells += '<button type="button" class="' + cls + '"' + dis + ' data-turn-cell="' + i + '" aria-label="' + CELL_NAMES[i] + (v ? ' — ' + v : '') + '">' + esc(v) + '</button>';
+    }
+    var h = '<div class="turn-board-wrap">' + summaryHtml(m, me) + lastMoveHtml(m) +
+      '<div class="turn-board">' + cells + '</div>' +
+      '<div class="turn-actions">';
+    if(m.status === 'waiting' && m.bUid === me){
+      h += '<button type="button" class="btn btn-light" data-turn-accept="' + esc(mid) + '">Accept challenge</button><button type="button" class="btn btn-dark" data-turn-decline="' + esc(mid) + '">Decline</button>';
+    }
+    if(m.status === 'waiting' && m.aUid === me){
+      h += '<button type="button" class="btn btn-dark" data-turn-decline="' + esc(mid) + '">Cancel challenge</button>';
+    }
+    if(m.status === 'won' || m.status === 'draw'){
+      h += '<button type="button" class="btn btn-light" data-turn-rematch="' + esc(mid) + '">Rematch — swap X and O</button>';
+    }
+    h += '<button type="button" class="btn btn-dark" data-turn-report="' + esc(mid) + '">Report</button>' +
+      '<button type="button" class="btn btn-dark" data-turn-block="' + esc(mid) + '">Block ' + esc(opp.name) + '</button>' +
+      '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>' +
+      '</div>' + historyHtml(m) + '</div>';
+    return h;
+  }
+  function bindOpen(root){
+    root.querySelectorAll('[data-turn-cell]').forEach(function(b){
+      b.addEventListener('click', function(){ makeMove(openMid, parseInt(b.getAttribute('data-turn-cell'), 10)); });
+    });
+    root.querySelectorAll('[data-turn-accept]').forEach(function(b){
+      b.addEventListener('click', function(){ accept(b.getAttribute('data-turn-accept')); });
+    });
+    root.querySelectorAll('[data-turn-decline]').forEach(function(b){
+      b.addEventListener('click', function(){ decline(b.getAttribute('data-turn-decline')); });
+    });
+    root.querySelectorAll('[data-turn-rematch]').forEach(function(b){
+      b.addEventListener('click', function(){ rematch(b.getAttribute('data-turn-rematch')); });
+    });
+    root.querySelectorAll('[data-turn-report]').forEach(function(b){
+      b.addEventListener('click', function(){ reportMatch(b.getAttribute('data-turn-report')); });
+    });
+    root.querySelectorAll('[data-turn-block]').forEach(function(b){
+      b.addEventListener('click', function(){ blockOpponent(b.getAttribute('data-turn-block')); });
+    });
+    root.querySelectorAll('[data-turn-mute]').forEach(function(b){
+      b.addEventListener('click', function(){ toggleMute(b.getAttribute('data-turn-mute')); });
+    });
+  }
+  function injectFriendCardButtons(){
+    var grid = document.getElementById('cloudFriendGrid'); if(!grid) return;
+    grid.querySelectorAll('.friend-card').forEach(function(card){
+      if(card.querySelector('.turn-challenge-btn')) return;
+      var rem = card.querySelector('[data-freq-remove]');
+      if(!rem) return;
+      var uid = rem.getAttribute('data-freq-remove');
+      var name = 'Tester';
+      try { var b = card.querySelector('.friend-main b'); if(b) name = b.textContent; } catch(e){}
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'btn btn-dark dm-mini turn-challenge-btn'; btn.textContent = 'Tic Tac Toe';
+      btn.addEventListener('click', function(){ challenge(uid, name); });
+      var anchor = card.querySelector('.dm-open-btn');
+      if(anchor && anchor.parentNode) anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+      else rem.parentNode.insertBefore(btn, rem.nextSibling);
+    });
+  }
+  function buildUI(){
+    var pane = document.getElementById('pane-tic-tac-toe');
+    if(pane && !document.getElementById('turnPlay')){
+      var sec = document.createElement('div');
+      sec.id = 'turnPlay';
+      var frame = document.getElementById('TicTacToeFrame');
+      if(frame && frame.parentNode) frame.parentNode.insertBefore(sec, frame);
+      else pane.appendChild(sec);
+    }
+    render();
+    injectFriendCardButtons();
+  }
+  buildUI();
+  try {
+    var gridObs = new MutationObserver(function(){ injectFriendCardButtons(); });
+    var cg = document.getElementById('cloudFriendGrid');
+    if(cg) gridObs.observe(cg, { childList:true, subtree:true });
+    new MutationObserver(function(){ render(); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] });
+  } catch(e){}
+  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape' && openMid){ openMid = null; render(); } });
+  setInterval(function(){ if(myUid()) loadMatches(); }, 20000);
+  setInterval(function(){ injectFriendCardButtons(); }, 5000);
+  setTimeout(function(){ buildUI(); loadMatches(); injectFriendCardButtons(); }, 2500);
+  window.addEventListener('hashchange', function(){ try { if((location.hash || '').indexOf('#game/tic-tac-toe') !== -1) loadMatches(); } catch(e){} });
+  window.holoTurn = { challenge:challenge, refresh:loadMatches, matches:function(){ return matches; }, myTurnCount:myTurnCount, open:function(mid){ openMid = mid; render(); } };
+})();
+</script>
+
 
 <!-- END-BAR-2026-11-22 (Holo 23:03): after a game finishes, show
      Replay / Game Menu / Close in the hub game view. Detection:
