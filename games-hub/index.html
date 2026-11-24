@@ -2554,22 +2554,23 @@ setTimeout(function(){
     <div id="ownerMount"></div>
     <div id="signInPane">
     <h3 class="gate-form-title">Already a player? Press start</h3>
-    <form id="loginForm" novalidate>
+    <!-- ONEPASS-1PASSWORD-2026-11-23: real <form> with method/action + name attributes on every input, so 1Password (esp. Android) detects this as a login form and offers to fill. Submit is preventDefault'd by JS — the page never reloads. -->
+    <form id="loginForm" method="post" action="#" novalidate>
       <div class="login-field">
         <label for="loginName">Your email</label>
-        <input id="loginName" type="email" autocomplete="email" placeholder="you@example.com" />
+        <input id="loginName" name="email" type="email" autocomplete="email" placeholder="you@example.com" />
       </div>
       <div class="login-field">
         <label for="loginCode">Your password</label>
-        <input id="loginCode" type="password" autocomplete="current-password" placeholder="Your password" />
+        <input id="loginCode" name="password" type="password" autocomplete="current-password" placeholder="Your password" />
         <p class="login-helper">Use the email and password you registered with. Your invite code is only needed once, when you register.</p>
       </div>
       <div class="login-terms">
-        <input type="checkbox" id="loginTerms" required aria-required="true" />
+        <input type="checkbox" id="loginTerms" name="terms" required aria-required="true" />
         <label for="loginTerms">I agree to the <a href="#legal" id="loginLegalLink">Terms &amp; Policies</a></label>
       </div>
       <div class="login-terms login-remember">
-        <input type="checkbox" id="loginRemember" />
+        <input type="checkbox" id="loginRemember" name="remember" />
         <label for="loginRemember">Remember me — stay signed in on this device</label>
       </div>
       <p class="login-helper" style="margin:-4px 0 12px">Leave “Remember me” unticked and you’ll be signed out when you close this tab.</p>
@@ -2578,13 +2579,15 @@ setTimeout(function(){
     </form>
     <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="forgotPwBtn">Forgot password?</button></p>
     <div id="forgotPwPanel" hidden>
+      <form id="forgotPwForm" method="post" action="#" novalidate>
       <div class="login-field">
         <label for="forgotPwEmail">Your account email</label>
-        <input id="forgotPwEmail" type="email" autocomplete="email" placeholder="you@example.com" />
+        <input id="forgotPwEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" />
         <p class="login-helper">Pop in the email you registered with and we will send a password reset link.</p>
       </div>
       <p class="login-error" id="forgotPwMsg" role="status" hidden></p>
-      <button class="btn btn-light login-switch" id="forgotPwSend" type="button">Send reset link</button>
+      <button class="btn btn-light login-switch" id="forgotPwSend" type="submit">Send reset link</button>
+      </form>
     </div>
     </div>
     <div id="verifyGatePane" hidden>
@@ -7342,10 +7345,10 @@ setTimeout(function(){
   var DOB_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   function dobDaysInMonth(y, m){ return new Date(y, m, 0).getDate(); } /* m is 1-12 */
   function dobFieldHTML(id){
-    return '<div class="dob-wrap"><input id="' + id + '" type="text" inputmode="numeric" autocomplete="bday" placeholder="DD/MM/YYYY" maxlength="10" /></div>' +
-      '<div class="dob-selects"><select id="' + id + 'Year" aria-label="Birth year"><option value="">Year</option></select>' +
-      '<select id="' + id + 'Month" aria-label="Birth month"><option value="">Month</option></select>' +
-      '<select id="' + id + 'Day" aria-label="Birth day"><option value="">Day</option></select></div>';
+    return '<div class="dob-wrap"><input id="' + id + '" name="bday" type="text" inputmode="numeric" autocomplete="bday" placeholder="DD/MM/YYYY" maxlength="10" /></div>' +
+      '<div class="dob-selects"><select id="' + id + 'Year" name="bday-year" aria-label="Birth year"><option value="">Year</option></select>' +
+      '<select id="' + id + 'Month" name="bday-month" aria-label="Birth month"><option value="">Month</option></select>' +
+      '<select id="' + id + 'Day" name="bday-day" aria-label="Birth day"><option value="">Day</option></select></div>';
   }
   function bindDobField(id){
     var txt = document.getElementById(id);
@@ -14043,8 +14046,12 @@ function renderTesterAuth(){
     fpPanel.hidden = !fpPanel.hidden;
     if(!fpPanel.hidden){ var fe = document.getElementById('forgotPwEmail'); if(fe) fe.focus(); }
   });
-  var fpSend = document.getElementById('forgotPwSend');
-  if(fpSend) fpSend.addEventListener('click', function(){
+  /* ONEPASS-1PASSWORD-2026-11-23: the forgot-password panel is a real
+     <form> now (see #forgotPwForm in the gate markup), so the send
+     logic below runs on submit — Enter works, page never reloads. */
+  var fpForm = document.getElementById('forgotPwForm');
+  if(fpForm) fpForm.addEventListener('submit', function(e){
+    e.preventDefault();
     var fe = document.getElementById('forgotPwEmail');
     var msg = document.getElementById('forgotPwMsg');
     var email = fe ? String(fe.value || '').trim() : '';
@@ -14452,14 +14459,14 @@ function renderTesterAuth(){
     var createPane = document.createElement('div');
     createPane.id = 'createPane';
     createPane.innerHTML =
-      '<form id="createForm" novalidate>' +
-      '<div class="login-field"><label for="createName">Code Name</label><input id="createName" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
-      '<div class="login-field"><label for="createEmail">Your email</label><input id="createEmail" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
-      '<div class="login-field"><label for="createDob">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDob') : '<input id="createDob" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
-      '<div class="login-field"><label for="createPw">Choose a password</label><input id="createPw" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
-      '<div class="login-field"><label for="createPw2">Confirm password</label><input id="createPw2" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
-      '<div class="login-field"><label for="createInvite">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInvite" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Enter the code from your invite link.</p></div>' +
-      '<div class="login-terms"><input type="checkbox" id="createTerms" required aria-required="true" /><label for="createTerms">I agree to the <a href="#legal" id="createLegalLink">Terms &amp; Policies</a></label></div>' +
+      '<form id="createForm" method="post" action="#" novalidate>' +
+      '<div class="login-field"><label for="createName">Code Name</label><input id="createName" name="username" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
+      '<div class="login-field"><label for="createEmail">Your email</label><input id="createEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
+      '<div class="login-field"><label for="createDob">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDob') : '<input id="createDob" name="bday" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
+      '<div class="login-field"><label for="createPw">Choose a password</label><input id="createPw" name="password" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
+      '<div class="login-field"><label for="createPw2">Confirm password</label><input id="createPw2" name="password-confirm" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
+      '<div class="login-field"><label for="createInvite">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInvite" name="invite-code" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Enter the code from your invite link.</p></div>' +
+      '<div class="login-terms"><input type="checkbox" id="createTerms" name="terms" required aria-required="true" /><label for="createTerms">I agree to the <a href="#legal" id="createLegalLink">Terms &amp; Policies</a></label></div>' +
       '<p class="login-error" id="createError" role="alert" hidden></p>' +
       '<button class="btn btn-dark login-btn" id="createSubmit" type="submit">Join the Glitch Squad!</button>' +
       '</form>' +
@@ -14637,14 +14644,14 @@ function renderTesterAuth(){
     createPane.id = 'createPaneOwner';
     createPane.hidden = true;
     createPane.innerHTML =
-      '<form id="createFormOwner" novalidate>' +
-      '<div class="login-field"><label for="createNameOwner">Code Name</label><input id="createNameOwner" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
-      '<div class="login-field"><label for="createEmailOwner">Your email</label><input id="createEmailOwner" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
-      '<div class="login-field"><label for="createDobOwner">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDobOwner') : '<input id="createDobOwner" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
-      '<div class="login-field"><label for="createPwOwner">Choose a password</label><input id="createPwOwner" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
-      '<div class="login-field"><label for="createPw2Owner">Confirm password</label><input id="createPw2Owner" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
-      '<div class="login-field"><label for="createInviteOwner">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInviteOwner" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Enter the code from your invite link.</p></div>' +
-      '<div class="login-terms"><input type="checkbox" id="createTermsOwner" required aria-required="true" /><label for="createTermsOwner">I agree to the <a href="#legal" id="createLegalLinkOwner">Terms &amp; Policies</a></label></div>' +
+      '<form id="createFormOwner" method="post" action="#" novalidate>' +
+      '<div class="login-field"><label for="createNameOwner">Code Name</label><input id="createNameOwner" name="username" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
+      '<div class="login-field"><label for="createEmailOwner">Your email</label><input id="createEmailOwner" name="email" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
+      '<div class="login-field"><label for="createDobOwner">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDobOwner') : '<input id="createDobOwner" name="bday" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
+      '<div class="login-field"><label for="createPwOwner">Choose a password</label><input id="createPwOwner" name="password" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
+      '<div class="login-field"><label for="createPw2Owner">Confirm password</label><input id="createPw2Owner" name="password-confirm" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
+      '<div class="login-field"><label for="createInviteOwner">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInviteOwner" name="invite-code" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Enter the code from your invite link.</p></div>' +
+      '<div class="login-terms"><input type="checkbox" id="createTermsOwner" name="terms" required aria-required="true" /><label for="createTermsOwner">I agree to the <a href="#legal" id="createLegalLinkOwner">Terms &amp; Policies</a></label></div>' +
       '<p class="login-error" id="createErrorOwner" role="alert" hidden></p>' +
       '<button class="btn btn-dark login-btn" id="createSubmitOwner" type="submit">Join the Glitch Squad!</button>' +
       '</form>' +
@@ -18524,12 +18531,12 @@ function renderTesterAuth(){
     <button class="pop-x" id="rcCloseX" type="button" aria-label="Close">×</button>
     <h2 class="rc-title" id="rcTitle">Account recovery</h2>
     <p class="rc-desc">Lost access to your account email? Tell us who you are and where to reach you now. We'll verify it's you and move your account over — your Code Name, Glitch XP and progress come with you.</p>
-    <form id="rcForm" novalidate>
-      <div class="login-field"><label for="rcCodeName">Your Code Name</label><input id="rcCodeName" type="text" autocomplete="username" placeholder="Your Code Name" /></div>
-      <div class="login-field"><label for="rcOldEmail">Old email (the one on your account)</label><input id="rcOldEmail" type="email" autocomplete="email" placeholder="you@example.com" /></div>
-      <div class="login-field"><label for="rcNewEmail">New email (where we can reach you)</label><input id="rcNewEmail" type="email" autocomplete="email" placeholder="you@example.com" /></div>
-      <div class="login-field"><label for="rcInviteCode">Invite code (if you remember it)</label><input id="rcInviteCode" type="text" autocomplete="off" placeholder="Optional" /></div>
-      <div class="login-field"><label for="rcNotes">Anything else that proves it's you?</label><textarea id="rcNotes" rows="3" placeholder="Optional — games you play, when you joined, anything only you'd know"></textarea></div>
+    <form id="rcForm" method="post" action="#" novalidate>
+      <div class="login-field"><label for="rcCodeName">Your Code Name</label><input id="rcCodeName" name="username" type="text" autocomplete="username" placeholder="Your Code Name" /></div>
+      <div class="login-field"><label for="rcOldEmail">Old email (the one on your account)</label><input id="rcOldEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" /></div>
+      <div class="login-field"><label for="rcNewEmail">New email (where we can reach you)</label><input id="rcNewEmail" name="new-email" type="email" autocomplete="email" placeholder="you@example.com" /></div>
+      <div class="login-field"><label for="rcInviteCode">Invite code (if you remember it)</label><input id="rcInviteCode" name="invite-code" type="text" autocomplete="off" placeholder="Optional" /></div>
+      <div class="login-field"><label for="rcNotes">Anything else that proves it's you?</label><textarea id="rcNotes" name="notes" rows="3" placeholder="Optional — games you play, when you joined, anything only you'd know"></textarea></div>
       <p class="login-error" id="rcMsg" role="alert" hidden></p>
       <button class="rc-submit" id="rcSubmitBtn" type="submit">Send recovery request</button>
       <div class="gm-tier3-row">
