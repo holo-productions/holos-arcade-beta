@@ -686,6 +686,7 @@ function makeKart(i,isPlayer){
   return {i:i,player:!!isPlayer,name:NAMES[i],color:COLORS[i],x:px,y:py,angle:ang,speed:0,
     lastIdx:idx,prog:0,lap:1,finished:false,finishTime:0,lapStart:0,curLapTime:0,bestLap:0,
     passedMid:false,lastSafe:{x:px,y:py,angle:ang,idx:idx},safeTimer:0,
+    lane:isPlayer?0:[-32,-21,-11,0,11,21,32][i-1],stuckT:0,stuckAcc:0,stuckMark:0,
     aiSeed:Math.random()*1000, wobble:(Math.random()-0.5), boost:0, boosting:false,
     item:null, shieldT:0, spinT:0, turboT:0, itemDelay:0};
 }
@@ -950,6 +951,18 @@ function stepKart(k,dt,input){
   k.lastIdx=idx;
   k.safeTimer+=dt;
   if(onTrack && k.safeTimer>1.2 && Math.abs(k.speed)>20){ k.lastSafe={x:k.x,y:k.y,angle:k.angle,idx:idx}; k.safeTimer=0; }
+  if(!k.player && !k.finished){
+    k.stuckAcc+=dt;
+    if(k.stuckAcc>=1){
+      var dp=totalProg(k)-k.stuckMark;
+      if(dp<1.5 && Math.abs(k.speed)<30){ k.stuckT++; } else { k.stuckT=0; }
+      k.stuckMark=totalProg(k); k.stuckAcc=0;
+      if(k.stuckT>=2){
+        k.x=k.lastSafe.x; k.y=k.lastSafe.y; k.angle=k.lastSafe.angle; k.lastIdx=k.lastSafe.idx;
+        k.speed=30; k.spinT=0; k.stuckT=0; k.stuckMark=totalProg(k);
+      }
+    }
+  }
 }
 function stepProjectiles(dt){
   for(var i=projectiles.length-1;i>=0;i--){
@@ -998,7 +1011,8 @@ function aiInput(k,dt){
   var target=line[(ni+look)%N];
   var ang=trackAngle(ni);
   var off = Math.sin((raceTime*0.35)+k.aiSeed)*d.err*0.5 + k.wobble*d.err;
-  var tx=target.x+Math.cos(ang+Math.PI/2)*off*0.4, ty=target.y+Math.sin(ang+Math.PI/2)*off*0.4;
+  var lat=off*0.4+k.lane;
+  var tx=target.x+Math.cos(ang+Math.PI/2)*lat, ty=target.y+Math.sin(ang+Math.PI/2)*lat;
   var want=Math.atan2(ty-k.y,tx-k.x);
   var diff=want-k.angle;
   while(diff>Math.PI)diff-=Math.PI*2; while(diff<-Math.PI)diff+=Math.PI*2;
@@ -1064,13 +1078,25 @@ function endRace(early){
   if(pos===1){ beep(523,0.12); setTimeout(function(){beep(659,0.12);},130); setTimeout(function(){beep(784,0.22);},260); }
   setPracticeUI();
 }
+/* KART-AI-FIX-2026-11-24: collisions used to set both karts to avg*0.92 on
+   EVERY frame they touched, so a pack of rivals bled each other to a crawl
+   (speed ~13) and could never steer out - the "clumps up and gets stuck
+   forever" report. Now the push-apart still separates karts, but the speed
+   penalty only applies when the pair is actually closing on each other, and
+   it is gentle (x0.97) so it cannot compound into a standstill. Exact
+   overlaps (dist 0) get a deterministic nudge instead of being skipped. */
 function collide(){
   for(var i=0;i<karts.length;i++)for(var j=i+1;j<karts.length;j++){
     var a=karts[i],b=karts[j],dx=b.x-a.x,dy=b.y-a.y,dist=Math.hypot(dx,dy);
-    if(dist>0 && dist<26){
-      var push=(26-dist)/2, nx=dx/dist, ny=dy/dist;
+    if(dist<26){
+      var push,nx,ny;
+      if(dist>0){ push=(26-dist)/2; nx=dx/dist; ny=dy/dist; }
+      else { push=13; nx=(a.i%2?1:-1); ny=0; }
       a.x-=nx*push; a.y-=ny*push; b.x+=nx*push; b.y+=ny*push;
-      var avg=(a.speed+b.speed)/2; a.speed=avg*0.92; b.speed=avg*0.92;
+      var avx=Math.cos(a.angle)*a.speed, avy=Math.sin(a.angle)*a.speed;
+      var bvx=Math.cos(b.angle)*b.speed, bvy=Math.sin(b.angle)*b.speed;
+      var relN=(bvx-avx)*nx+(bvy-avy)*ny;
+      if(relN<-20){ var avg=(a.speed+b.speed)/2; a.speed=avg*0.97; b.speed=avg*0.97; }
     }
   }
 }
