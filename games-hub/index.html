@@ -23719,18 +23719,19 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
               done.push(item.ts);
             } else {
               _blocked = true;
-              item.tries = (item.tries || 0) + 1;
-              if(item.tries >= 3) done.push(item.ts); /* give up after 3 tries */
+              item.tries = (item.tries || 0) + 1; /* persisted below; retries until it lands — the usual failure is "rules not published yet", which can last days, so never drop a queued score */
             }
           });
         });
       });
     });
     chain.then(function(){
-      if(done.length){
-        var cur = queueLoad().filter(function(x){ return done.indexOf(x.ts) < 0; });
-        queueSave(cur);
-      }
+      var cur = queueLoad();
+      var triesByTs = {};
+      q.forEach(function(x){ triesByTs[x.ts] = x.tries; });
+      cur.forEach(function(x){ if(triesByTs[x.ts] !== undefined) x.tries = triesByTs[x.ts]; });
+      if(done.length) cur = cur.filter(function(x){ return done.indexOf(x.ts) < 0; });
+      queueSave(cur);
     }).catch(function(){});
   }
   /* ---- read a board (friends-only in beta, everyone when public) ---- */
