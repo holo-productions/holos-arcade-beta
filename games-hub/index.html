@@ -23728,13 +23728,14 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       b.addEventListener('click', function(){ toggleArchive(b.getAttribute('data-dm-archive'), !archived[b.getAttribute('data-dm-archive')]); });
     });
   }
-  /* INBOX-DM-FIX-2026-11-24: archive / unarchive one DM thread. Own record only. */
+  /* INBOX-DM-FIX-2026-11-24: archive / unarchive one DM thread. Own record only.
+     DM-UNARCHIVE-REPLY-2026-11-24: the archived value is the archive time (ms), not `true` — a reply that lands after that time brings the thread back to the Inbox. Older entries stored `true`; they are treated as archived at an unknown time, so any unread reply brings them back. */
   function toggleArchive(tid, on){
     var uid = myUid(); if(!uid || !tid) return;
-    if(on){ archived[tid] = true; api('PUT', '/users/' + encodeURIComponent(uid) + '/dmArchived/' + encodeURIComponent(tid), true); }
+    if(on){ var now = Date.now(); archived[tid] = now; api('PUT', '/users/' + encodeURIComponent(uid) + '/dmArchived/' + encodeURIComponent(tid), now); }
     else { delete archived[tid]; api('DELETE', '/users/' + encodeURIComponent(uid) + '/dmArchived/' + encodeURIComponent(tid)); }
     if(openTid === tid && on) closeThread();
-    renderList(); syncBadge(); syncDmVisibility();
+    renderList(); syncBadge(); syncDmVisibility(); updateThreadMenu();
   }
 
   function refresh(){
@@ -23748,6 +23749,14 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       return api('GET', '/users/' + encodeURIComponent(uid) + '/dmArchived');
     }).then(function(av){
       archived = (av && typeof av === 'object') ? av : {};
+      /* DM-UNARCHIVE-REPLY-2026-11-24 (Holo 2026-11-24 16:17): a reply to a message you already archived lands back in your Inbox. The sender bumps lastMessageAt + unread on every message, so a reply after the archive time unarchives the thread — it returns to Messages with its unread badge. A thread with no reply after archiving stays archived. */
+      Object.keys(threads).forEach(function(tid){
+        if(!archived[tid]) return;
+        var t = threads[tid] || {};
+        if((t.unread || 0) <= 0) return;
+        var at = archived[tid];
+        if(at === true || (typeof at === 'number' && (t.lastMessageAt || 0) > at)) toggleArchive(tid, false);
+      });
       buildUI(); renderList(); syncBadge(); syncDmVisibility();
       return true;
     });
@@ -23916,6 +23925,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         hidePanels();
         api('PATCH', '/dmThreads/' + encodeURIComponent(openA) + '/' + encodeURIComponent(openB), { lastMessageAt: Date.now(), lastPreview: preview });
         bumpPartnerInbox(preview, kind, stickerId);
+        /* DM-UNARCHIVE-REPLY-2026-11-24: sending from an archived thread brings it back to the Inbox too — you are active in it again. */
+        if(archived[openTid]) toggleArchive(openTid, false);
         loadMessages();
       });
     });
