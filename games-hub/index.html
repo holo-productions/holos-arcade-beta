@@ -21595,6 +21595,584 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   window.holoFriends = { refresh:refresh, sendRequest:sendRequest, acceptRequest:acceptRequest, declineRequest:declineRequest, cancelRequest:cancelRequest, removeCloudFriend:removeCloudFriend, searchCloud:searchCloud, incoming:function(){ return incoming; }, cloudFriends:function(){ return cloudFriends; }, outgoing:function(){ return outgoing; } };
 })();
 </script>
+<!-- FRIEND-DMS-2026-11-24 (Holo 12:15): friend-only DMs.
+     Tap Message on a cloud friend -> chat thread in the Inbox
+     (Messages section). One thread per pair, text + Arcade stickers
+     + emoji. Friends only: both sides must be mutual cloud friends
+     (rules enforce /friends, client checks too). Every thread has
+     Block / Report / Mute. Rate limit 20 msgs/min, 500 chars, no
+     links. GIFs are the built-in Arcade sticker pack (duck, Eevee,
+     Gizmo, coins, star) — no external GIF service, so no API key;
+     full GIPHY/Tenor search needs a key (open item, see
+     firebase-rules-dms-update-2026-11-24.md). Needs the RTDB rules
+     publish in that doc — every cloud call fails soft (null) until
+     then, same pattern as friend requests. -->
+<style>
+/* FRIEND-DMS-2026-11-24 */
+#dmBadge{position:absolute;top:-6px;left:-6px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;background:#38e1ff;color:#0a0620;font-size:11px;font-weight:800;line-height:18px;text-align:center;box-shadow:0 0 8px rgba(56,225,255,.8)}
+#dmBadge[hidden]{display:none!important}
+#dmList{margin-top:12px}
+#dmList h3{margin:0 0 6px;font-family:"Bricolage Grotesque",sans-serif;font-size:17px;color:#fff}
+.dm-row{display:flex;gap:10px;align-items:center;background:#0a0620;border:2px solid #8b5cff;border-radius:14px;padding:10px 14px;margin-top:8px;color:#e9e4ff;cursor:pointer;text-align:left;width:100%;font-family:inherit}
+.dm-row.unread{border-color:#38e1ff;box-shadow:0 0 10px rgba(56,225,255,.3)}
+.dm-row .dm-main{flex:1 1 auto;min-width:0}
+.dm-row .dm-name{font-weight:800;color:#fff;font-size:14.5px;display:block}
+.dm-row .dm-prev{font-size:13px;color:#a99fe0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.dm-row .dm-time{font-size:11.5px;color:#b8f4ff;white-space:nowrap;flex:0 0 auto}
+.dm-row .dm-count{flex:0 0 auto;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#38e1ff;color:#0a0620;font-size:11.5px;font-weight:800;line-height:20px;text-align:center}
+.dm-row .dm-dot{flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:#38e1ff;box-shadow:0 0 6px rgba(56,225,255,.8);margin-top:6px}
+#dmThread[hidden]{display:none!important}
+#dmThread{margin-top:12px;background:linear-gradient(180deg,#171040,#0e0828 75%);border:2px solid var(--violet);border-radius:18px;box-shadow:0 0 0 3px #0a0620,0 0 26px rgba(139,92,255,.35);overflow:hidden}
+#dmThread::before{content:"";display:block;height:6px;background:linear-gradient(90deg,var(--pink),var(--violet),var(--blue),var(--cyan))}
+.dm-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 14px 0}
+.dm-head h3{margin:0;font-family:var(--pixel);font-size:13px;line-height:1.7;color:#fff;flex:1 1 auto;min-width:120px}
+.dm-note{padding:6px 14px 0;color:#b8f4ff;font-size:12.5px}
+.dm-msgs{display:flex;flex-direction:column;gap:8px;padding:12px 14px;max-height:46vh;overflow-y:auto}
+.dm-bubble{max-width:82%;padding:9px 12px;border-radius:14px;font-size:14.5px;line-height:1.45;color:#fff;white-space:pre-wrap;word-break:break-word}
+.dm-bubble.mine{align-self:flex-end;background:linear-gradient(135deg,#8b5cff,#ff2e9a);border-bottom-right-radius:4px}
+.dm-bubble.theirs{align-self:flex-start;background:#0a0620;border:2px solid #8b5cff;border-bottom-left-radius:4px}
+.dm-bubble .dm-when{display:block;font-size:11px;color:#b8f4ff;margin-top:3px}
+.dm-bubble .dm-report{background:none;border:none;color:#b8f4ff;font-size:11.5px;font-weight:700;cursor:pointer;padding:2px 0 0;text-decoration:underline}
+.dm-sticker{width:64px;height:52px;display:block}
+.dm-sticker svg{width:100%;height:100%}
+.dm-compose{display:flex;gap:8px;padding:0 14px 12px;align-items:center}
+.dm-compose input{flex:1 1 auto;min-width:0;min-height:44px;border:2px solid var(--violet);border-radius:12px;background:#0a0620;color:#fff;font-family:inherit;font-size:15px;padding:10px 12px}
+.dm-compose input:focus{outline:2px solid var(--pink);outline-offset:1px}
+.dm-tool{flex:0 0 auto;min-width:44px;min-height:44px;border-radius:12px;border:2px solid var(--violet);background:#0a0620;color:#fff;font-size:19px;cursor:pointer}
+.dm-emoji-panel,.dm-gif-panel{padding:0 14px 12px}
+.dm-emoji-panel[hidden],.dm-gif-panel[hidden]{display:none!important}
+.dm-emoji-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
+.dm-emoji-grid button{font-size:22px;line-height:1;background:#0a0620;border:1px solid #2a1b5e;border-radius:10px;min-height:40px;cursor:pointer}
+.dm-emoji-grid button:hover{border-color:#ff2e9a}
+.dm-gif-search{width:100%;min-height:44px;border:2px solid var(--violet);border-radius:12px;background:#0a0620;color:#fff;font-family:inherit;font-size:15px;padding:10px 12px;margin-bottom:8px;box-sizing:border-box}
+.dm-sticker-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.dm-sticker-btn{background:#0a0620;border:2px solid #2a1b5e;border-radius:12px;padding:8px 4px;cursor:pointer;color:#e9e4ff;font-family:inherit;font-size:12px;font-weight:700}
+.dm-sticker-btn svg{width:56px;height:44px;display:block;margin:0 auto 4px}
+.dm-sticker-btn:hover{border-color:#ff2e9a}
+.dm-blocked-note{padding:0 14px 12px;color:#ffb3d9;font-size:13.5px;font-weight:700}
+.dm-empty{color:#cfc8ff;font-size:14px;margin-top:8px}
+#inbox.dm-reading .inbox-list,#inbox.dm-reading #inboxDrafts,#inbox.dm-reading #friendReqInbox,#inbox.dm-reading #dmList,#inbox.dm-reading > .inbox-actions,#inbox.dm-reading .inbox-filter{display:none!important}
+#inbox.inbox-reading #dmList,#inbox.inbox-reading #dmThread{display:none!important}
+.dm-mini{padding:7px 10px!important;font-size:12.5px!important;min-height:36px!important}
+.dm-open-btn{margin-left:6px}
+</style>
+<script>
+/* FRIEND-DMS-2026-11-24 */
+(function(){
+  var FB_API_KEY='<redacted>';
+  var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+  var AUTH_KEY = 'holos-firebase-auth';
+  var MAX_LEN = 500, RATE_MAX = 20, RATE_WINDOW = 60000;
+  /* Small mask-on-display list (originals stay stored so a report
+     shows moderation what was actually sent). Holo can adjust. */
+  var PROFANITY = ['damn','hell','shit','fuck','bitch','bastard','crap','dick','piss','asshole','douche'];
+  var EMOJIS = ['😀','😄','😂','🤣','😊','😍','🥰','😘','😜','🤪','😎','🤩','🥳','😴','🤔','🙃','😉','😢','😭','😡','🤯','🥺','😇','🤠','👍','👎','👏','🙌','✌️','🤞','👀','💪','🎮','🕹️','🎲','🎯','🏆','🥇','⭐','🌟','💥','🔥','❤️','💙','💜','💛','💚','🧡','🖤','🤍','🎉','🎊','✨','🌈','🍕','🍔','🍩','🍪','☕','🐶','🐱','🐸','🦆','🐛','🦄','👾','🤖','👻','💀','🎃','⚡','💎','🍀','🌙','☀️'];
+  /* Built-in Arcade sticker pack — the hub's own pixel SVG symbols,
+     so no external GIF service and no API key. Search filters by
+     label + tags. A tap sends the sticker straight away. */
+  var STICKERS = [
+    { id:'duck', sym:'runnerDuck', label:'Duck', tags:'duck quack yellow rubber' },
+    { id:'duck2', sym:'eggDuck', label:'Little duck', tags:'duck quack yellow rubber' },
+    { id:'eevee', sym:'eggEevee', label:'Eevee', tags:'eevee dog puppy merle' },
+    { id:'gizmo', sym:'eggGizmo', label:'Gizmo', tags:'gizmo cat kitty calico' },
+    { id:'gold', sym:'coinGlitchGold', label:'Glitch Gold', tags:'gold coin money glitch' },
+    { id:'bucks', sym:'coinDuckBucks', label:'Duck Bucks', tags:'duck bucks money coin' },
+    { id:'star', sym:'xpStar', label:'Star', tags:'star xp awesome great win' }
+  ];
+  function loadAuth(){ try { var v = JSON.parse(localStorage.getItem(AUTH_KEY)); if(v && v.idToken && v.uid) return v; } catch(e){} return null; }
+  function freshToken(){
+    var a = loadAuth(); if(!a) return Promise.resolve(null);
+    if(a.exp && a.exp > Date.now() + 60000) return Promise.resolve(a.idToken);
+    if(!a.refreshToken) return Promise.resolve(null);
+    return fetch('https://securetoken.googleapis.com/v1/token?key=' + FB_API_KEY, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:'grant_type=refresh_token&refresh_token=' + encodeURIComponent(a.refreshToken) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(j && j.id_token){ a.idToken = j.id_token; a.refreshToken = j.refresh_token || a.refreshToken; a.exp = Date.now() + ((parseInt(j.expires_in,10)||3600)*1000); try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e){} return a.idToken; } return null; })
+      .catch(function(){ return null; });
+  }
+  function api(method, path, body){
+    return freshToken().then(function(tok){
+      if(!tok) return null;
+      var q = '', p = path, qi = path.indexOf('?');
+      if(qi !== -1){ p = path.slice(0, qi); q = path.slice(qi + 1); }
+      var url = FB_RTDB + p + '.json?auth=' + encodeURIComponent(tok) + (q ? '&' + q : '');
+      return fetch(url, { method:method, headers:{ 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined })
+        .then(function(r){ if(!r.ok) return null; if(method === 'DELETE') return true; return r.json().catch(function(){ return true; }); }).catch(function(){ return null; });
+    }).catch(function(){ return null; });
+  }
+  function esc(s){ var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+  function whenShort(ts){
+    try {
+      var d = new Date(ts); if(isNaN(d)) return '';
+      var now = new Date();
+      if(d.toDateString() === now.toDateString()) return d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+      var y = new Date(now); y.setDate(now.getDate() - 1);
+      if(d.toDateString() === y.toDateString()) return 'Yesterday';
+      return d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+    } catch(e){ return ''; }
+  }
+  function when(ts){
+    try { var d = new Date(ts); if(isNaN(d)) return ''; return d.toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }); } catch(e){ return ''; }
+  }
+  function myUid(){ var a = loadAuth(); return a ? a.uid : null; }
+  var myNameCache = null;
+  function myName(){
+    if(myNameCache) return Promise.resolve(myNameCache);
+    var uid = myUid(); if(!uid) return Promise.resolve('A tester');
+    return api('GET', '/users/' + encodeURIComponent(uid)).then(function(u){
+      var n = (u && (u.username || u.name)) ? String(u.username || u.name) : 'A tester';
+      myNameCache = n; return n;
+    });
+  }
+  function toast(msg){ try { if(typeof showBadgeToast === 'function') showBadgeToast(msg); } catch(e){} }
+  function maskText(s){
+    var out = String(s || '');
+    PROFANITY.forEach(function(w){
+      try { out = out.replace(new RegExp('\\b' + w + '\\b', 'gi'), function(m){ return m.charAt(0) + '*'.repeat(Math.max(1, m.length - 1)); }); } catch(e){}
+    });
+    return out;
+  }
+  function pairKey(a, b){ return [String(a), String(b)].sort().join('_'); }
+  function pairParts(a, b){ return [String(a), String(b)].sort(); }
+  function isMutualFriend(uid){
+    try { var cf = (window.holoFriends && window.holoFriends.cloudFriends) ? window.holoFriends.cloudFriends() : {}; return !!cf[uid]; } catch(e){ return false; }
+  }
+  function friendName(uid){
+    try { var cf = (window.holoFriends && window.holoFriends.cloudFriends) ? window.holoFriends.cloudFriends() : {}; if(cf[uid] && cf[uid].name) return cf[uid].name; } catch(e){}
+    return 'Tester';
+  }
+
+  var threads = {};   /* tid -> {withUid, withName, lastMessageAt, lastPreview, unread} */
+  var muted = {};     /* tid -> true */
+  var openTid = null, openWith = null, openName = '', openA = null, openB = null;
+  var openBlockedMe = false, openBlockedByMe = false;
+  var sentTimes = [];
+  var pollTimer = null;
+
+  function stickerById(id){ for(var i = 0; i < STICKERS.length; i++){ if(STICKERS[i].id === id) return STICKERS[i]; } return null; }
+  function stickerHtml(id){
+    var st = stickerById(id);
+    if(!st) return '';
+    return '<span class="dm-sticker" aria-label="' + esc(st.label) + '"><svg aria-hidden="true"><use href="#' + esc(st.sym) + '"></use></svg></span>';
+  }
+  function previewOf(m){
+    if(!m) return '';
+    if(m.kind === 'sticker'){ var st = stickerById(m.sticker); return 'Sent a sticker' + (st ? ' — ' + st.label : ''); }
+    return String(m.text || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function ensureBadge(){
+    var bell = document.getElementById('inboxBellBtn');
+    if(!bell || document.getElementById('dmBadge')) return;
+    var b = document.createElement('span');
+    b.id = 'dmBadge'; b.hidden = true; b.textContent = '0';
+    bell.appendChild(b);
+  }
+  function syncBadge(){
+    ensureBadge();
+    var b = document.getElementById('dmBadge'); if(!b) return;
+    var n = 0;
+    Object.keys(threads).forEach(function(tid){ if(!muted[tid]) n += (threads[tid].unread || 0); });
+    b.textContent = n > 9 ? '9+' : String(n);
+    b.hidden = n === 0;
+  }
+  function unreadCount(){
+    var n = 0;
+    Object.keys(threads).forEach(function(tid){ if(!muted[tid]) n += (threads[tid].unread || 0); });
+    return n;
+  }
+
+  function buildUI(){
+    ensureBadge();
+    var inbox = document.getElementById('inbox');
+    if(inbox && !document.getElementById('dmList')){
+      var dl = document.createElement('div'); dl.id = 'dmList';
+      dl.innerHTML = '<h3>Direct messages</h3><div id="dmRows"></div>';
+      var list = document.getElementById('inboxList');
+      if(list) inbox.insertBefore(dl, list); else inbox.appendChild(dl);
+    }
+    if(inbox && !document.getElementById('dmThread')){
+      var th = document.createElement('div'); th.id = 'dmThread'; th.hidden = true;
+      th.innerHTML =
+        '<div class="dm-head"><h3 id="dmThreadTitle">Chat</h3>' +
+        '<button type="button" class="btn btn-light dm-mini" id="dmMuteBtn">Mute</button>' +
+        '<button type="button" class="btn btn-light dm-mini" id="dmBlockBtn">Block</button>' +
+        '<button type="button" class="btn btn-light dm-mini" id="dmCloseBtn">Back</button></div>' +
+        '<p class="dm-note">Friends only — just the two of you. No voice or camera here.</p>' +
+        '<div class="dm-msgs" id="dmMsgs" aria-live="polite"></div>' +
+        '<div class="dm-blocked-note" id="dmBlockedNote" hidden></div>' +
+        '<div class="dm-emoji-panel" id="dmEmojiPanel" hidden><div class="dm-emoji-grid" id="dmEmojiGrid"></div></div>' +
+        '<div class="dm-gif-panel" id="dmGifPanel" hidden><input class="dm-gif-search" id="dmGifSearch" type="text" autocomplete="off" placeholder="Search stickers — try duck, Eevee, Gizmo…" aria-label="Search stickers" /><div class="dm-sticker-grid" id="dmStickerGrid"></div></div>' +
+        '<div class="dm-compose"><input id="dmInput" type="text" autocomplete="off" maxlength="500" placeholder="Message your friend…" aria-label="Message your friend" />' +
+        '<button type="button" class="dm-tool" id="dmEmojiBtn" title="Emoji" aria-label="Emoji">😀</button>' +
+        '<button type="button" class="dm-tool" id="dmGifBtn" title="Stickers" aria-label="Stickers">🎬</button>' +
+        '<button type="button" class="btn btn-dark dm-mini" id="dmSendBtn" style="min-height:44px">Send</button></div>';
+      inbox.appendChild(th);
+      var grid = document.getElementById('dmEmojiGrid');
+      if(grid){
+        grid.innerHTML = EMOJIS.map(function(e){ return '<button type="button" data-emoji="' + esc(e) + '">' + esc(e) + '</button>'; }).join('');
+        grid.querySelectorAll('[data-emoji]').forEach(function(b){
+          b.addEventListener('click', function(){ insertAtCursor(b.getAttribute('data-emoji')); });
+        });
+      }
+      renderStickers('');
+      var gs = document.getElementById('dmGifSearch');
+      if(gs) gs.addEventListener('input', function(){ renderStickers(gs.value); });
+      var eb = document.getElementById('dmEmojiBtn');
+      if(eb) eb.addEventListener('click', function(){ togglePanel('dmEmojiPanel'); });
+      var gb = document.getElementById('dmGifBtn');
+      if(gb) gb.addEventListener('click', function(){ togglePanel('dmGifPanel'); });
+      var sb = document.getElementById('dmSendBtn');
+      if(sb) sb.addEventListener('click', function(){ sendText(); });
+      var inp = document.getElementById('dmInput');
+      if(inp) inp.addEventListener('keydown', function(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); sendText(); } });
+      var mb = document.getElementById('dmMuteBtn');
+      if(mb) mb.addEventListener('click', function(){ toggleMute(); });
+      var bb = document.getElementById('dmBlockBtn');
+      if(bb) bb.addEventListener('click', function(){ if(openBlockedByMe) unblockThread(); else blockThread(); });
+      var cb = document.getElementById('dmCloseBtn');
+      if(cb) cb.addEventListener('click', function(){ closeThread(); });
+    }
+    var sel = document.getElementById('inboxSectionSelect');
+    if(sel && !sel.__dmWired){ sel.__dmWired = true; sel.addEventListener('change', function(){ syncDmVisibility(); }); }
+    var vf = document.getElementById('inboxViewFilter');
+    if(vf && !vf.__dmWired){ vf.__dmWired = true; vf.addEventListener('change', function(){ syncDmVisibility(); }); }
+    syncDmVisibility();
+  }
+  function togglePanel(id){
+    var a = document.getElementById('dmEmojiPanel'), b = document.getElementById('dmGifPanel');
+    var el = document.getElementById(id); if(!el) return;
+    var show = el.hidden;
+    if(a) a.hidden = true;
+    if(b) b.hidden = true;
+    el.hidden = !show;
+  }
+  function hidePanels(){
+    var a = document.getElementById('dmEmojiPanel'), b = document.getElementById('dmGifPanel');
+    if(a) a.hidden = true;
+    if(b) b.hidden = true;
+  }
+  function insertAtCursor(text){
+    var inp = document.getElementById('dmInput'); if(!inp) return;
+    inp.focus();
+    var s = (typeof inp.selectionStart === 'number') ? inp.selectionStart : inp.value.length;
+    var e = (typeof inp.selectionEnd === 'number') ? inp.selectionEnd : s;
+    inp.value = inp.value.slice(0, s) + text + inp.value.slice(e);
+    var pos = s + text.length;
+    try { inp.selectionStart = pos; inp.selectionEnd = pos; } catch(err){}
+  }
+  function renderStickers(q){
+    var grid = document.getElementById('dmStickerGrid'); if(!grid) return;
+    var needle = String(q || '').trim().toLowerCase();
+    var list = STICKERS.filter(function(st){
+      if(!needle) return true;
+      return (st.label + ' ' + st.tags).toLowerCase().indexOf(needle) !== -1;
+    });
+    if(!list.length){ grid.innerHTML = '<p class="dm-empty" style="grid-column:1/-1">No sticker matches that — try duck, Eevee, Gizmo, coin or star.</p>'; return; }
+    grid.innerHTML = list.map(function(st){
+      return '<button type="button" class="dm-sticker-btn" data-sticker="' + esc(st.id) + '"><svg aria-hidden="true"><use href="#' + esc(st.sym) + '"></use></svg>' + esc(st.label) + '</button>';
+    }).join('');
+    grid.querySelectorAll('[data-sticker]').forEach(function(b){
+      b.addEventListener('click', function(){ sendSticker(b.getAttribute('data-sticker')); });
+    });
+  }
+  function syncDmVisibility(){
+    var list = document.getElementById('dmList'); if(!list) return;
+    var sel = document.getElementById('inboxSectionSelect');
+    var vf = document.getElementById('inboxViewFilter');
+    var show = true;
+    if(sel && sel.value !== 'all' && sel.value !== 'messages') show = false;
+    if(vf && vf.value === 'drafts') show = false;
+    if(document.body.getAttribute('data-view') !== 'inbox') show = false;
+    list.hidden = !show;
+  }
+
+  function renderList(){
+    var rows = document.getElementById('dmRows'); if(!rows) return;
+    var keys = Object.keys(threads).sort(function(a, b){ return (threads[b].lastMessageAt || 0) - (threads[a].lastMessageAt || 0); });
+    if(!keys.length){
+      rows.innerHTML = '<p class="dm-empty">No chats yet — tap Message on a friend to start one.</p>';
+      return;
+    }
+    rows.innerHTML = keys.map(function(tid){
+      var t = threads[tid] || {};
+      var unread = (!muted[tid] && (t.unread || 0) > 0);
+      var initial = String(t.withName || 'T').replace(/[^A-Za-z0-9]/g, '').charAt(0).toUpperCase() || 'T';
+      return '<button type="button" class="dm-row' + (unread ? ' unread' : '') + '" data-dm-open="' + esc(t.withUid) + '" data-dm-name="' + esc(t.withName || 'Tester') + '">' +
+        '<span class="inbox-ava" aria-hidden="true">' + esc(initial) + '</span>' +
+        '<span class="dm-main"><span class="dm-name">' + esc(t.withName || 'Tester') + '</span>' +
+        '<span class="dm-prev">' + esc(previewOf({ kind: (t.lastKind || 'text'), text: t.lastPreview, sticker: t.lastSticker })) + '</span></span>' +
+        '<span class="dm-time">' + esc(whenShort(t.lastMessageAt)) + '</span>' +
+        (unread ? '<span class="dm-count">' + esc(String(t.unread > 9 ? '9+' : t.unread)) + '</span>' : '') +
+        '</button>';
+    }).join('');
+    rows.querySelectorAll('[data-dm-open]').forEach(function(b){
+      b.addEventListener('click', function(){ openThread(b.getAttribute('data-dm-open'), b.getAttribute('data-dm-name') || 'Tester'); });
+    });
+  }
+
+  function refresh(){
+    var uid = myUid();
+    if(!uid){ threads = {}; muted = {}; renderList(); syncBadge(); return Promise.resolve(false); }
+    return api('GET', '/users/' + encodeURIComponent(uid) + '/dmInbox').then(function(data){
+      threads = (data && typeof data === 'object') ? data : {};
+      return api('GET', '/users/' + encodeURIComponent(uid) + '/dmMuted');
+    }).then(function(m){
+      muted = (m && typeof m === 'object') ? m : {};
+      buildUI(); renderList(); syncBadge(); syncDmVisibility();
+      return true;
+    });
+  }
+
+  function ensureThread(a, b){
+    return api('GET', '/dmThreads/' + encodeURIComponent(a) + '/' + encodeURIComponent(b)).then(function(t){
+      if(t) return true;
+      var parts = {}; parts[a] = true; parts[b] = true;
+      return api('PUT', '/dmThreads/' + encodeURIComponent(a) + '/' + encodeURIComponent(b), { participants: parts, lastMessageAt: Date.now(), lastPreview: '' }).then(function(r){ return r !== null; });
+    });
+  }
+  function openThread(withUid, withName){
+    var uid = myUid();
+    if(!uid){ toast('Sign in to send direct messages, agent.'); return; }
+    if(withUid === uid){ toast('That is you — pick a friend to message.'); return; }
+    if(!isMutualFriend(withUid)){ toast('You can only message friends — send them a friend request first.'); return; }
+    var parts = pairParts(uid, withUid);
+    openA = parts[0]; openB = parts[1];
+    openTid = pairKey(uid, withUid);
+    openWith = withUid; openName = withName || friendName(withUid);
+    var sec = document.getElementById('inbox');
+    var th = document.getElementById('dmThread');
+    var rd = document.getElementById('inboxRead');
+    if(!sec || !th) return;
+    if(rd) rd.hidden = true;
+    sec.classList.remove('inbox-reading');
+    sec.classList.add('dm-reading');
+    th.hidden = false;
+    var title = document.getElementById('dmThreadTitle');
+    if(title) title.textContent = 'Chat with ' + openName;
+    hidePanels();
+    var inp = document.getElementById('dmInput'); if(inp) inp.value = '';
+    updateThreadMenu();
+    loadMessages();
+    markRead();
+    if(pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(function(){ if(openTid) loadMessages(); }, 8000);
+    try { th.scrollIntoView(); } catch(e){}
+  }
+  function closeThread(){
+    if(pollTimer){ clearInterval(pollTimer); pollTimer = null; }
+    openTid = null; openWith = null; openName = ''; openA = null; openB = null;
+    openBlockedMe = false; openBlockedByMe = false;
+    var sec = document.getElementById('inbox');
+    var th = document.getElementById('dmThread');
+    if(sec) sec.classList.remove('dm-reading');
+    if(th) th.hidden = true;
+    refresh();
+  }
+  function updateThreadMenu(){
+    var mb = document.getElementById('dmMuteBtn');
+    if(mb) mb.textContent = (openTid && muted[openTid]) ? 'Unmute' : 'Mute';
+    var bb = document.getElementById('dmBlockBtn');
+    if(bb) bb.textContent = openBlockedByMe ? 'Unblock' : 'Block';
+    var note = document.getElementById('dmBlockedNote');
+    if(note){
+      if(openBlockedMe){ note.hidden = false; note.textContent = 'You cannot message this tester right now.'; }
+      else if(openBlockedByMe){ note.hidden = false; note.textContent = 'You blocked this tester — they cannot message you. Unblock to chat again.'; }
+      else note.hidden = true;
+    }
+    var inp = document.getElementById('dmInput');
+    var send = document.getElementById('dmSendBtn');
+    var dis = openBlockedMe || openBlockedByMe;
+    if(inp) inp.disabled = dis;
+    if(send) send.disabled = dis;
+  }
+  function loadMessages(){
+    if(!openTid || !openA || !openB) return Promise.resolve(false);
+    var uid = myUid();
+    return api('GET', '/dmThreads/' + encodeURIComponent(openA) + '/' + encodeURIComponent(openB) + '/blockedBy').then(function(bl){
+      openBlockedMe = !!(bl && bl[uid]);
+      openBlockedByMe = !!(bl && bl[openWith]);
+      updateThreadMenu();
+      var q = '?orderBy=' + encodeURIComponent('"$key"') + '&limitToLast=50';
+      return api('GET', '/dmThreads/' + encodeURIComponent(openA) + '/' + encodeURIComponent(openB) + '/messages' + q);
+    }).then(function(data){
+      var box = document.getElementById('dmMsgs'); if(!box) return false;
+      var msgs = [];
+      if(data && typeof data === 'object'){
+        Object.keys(data).forEach(function(id){ var m = data[id] || {}; m.id = id; msgs.push(m); });
+        msgs.sort(function(x, y){ return (x.createdAt || 0) - (y.createdAt || 0); });
+      }
+      if(!msgs.length){ box.innerHTML = '<p class="dm-empty">Say hi to ' + esc(openName) + ' — only the two of you can see this chat.</p>'; return true; }
+      box.innerHTML = msgs.map(function(m){
+        var mine = m.fromUid === uid;
+        var inner = '';
+        if(m.kind === 'sticker'){ inner = stickerHtml(m.sticker); }
+        else inner = esc(maskText(m.text || ''));
+        var rep = (!mine) ? '<button type="button" class="dm-report" data-dm-report="' + esc(m.id) + '">Report this message</button>' : '';
+        return '<div class="dm-bubble ' + (mine ? 'mine' : 'theirs') + '">' + inner + '<span class="dm-when">' + esc(when(m.createdAt)) + '</span>' + rep + '</div>';
+      }).join('');
+      box.querySelectorAll('[data-dm-report]').forEach(function(b){
+        b.addEventListener('click', function(){
+          var id = b.getAttribute('data-dm-report');
+          var m = null; msgs.forEach(function(x){ if(x.id === id) m = x; });
+          if(m) reportMessage(m);
+        });
+      });
+      box.scrollTop = box.scrollHeight;
+      return true;
+    });
+  }
+  function markRead(){
+    var uid = myUid();
+    if(!uid || !openTid) return;
+    if(threads[openTid]) threads[openTid].unread = 0;
+    syncBadge(); renderList();
+    api('PATCH', '/users/' + encodeURIComponent(uid) + '/dmInbox/' + encodeURIComponent(openTid), { unread: 0 });
+  }
+  function rateOk(){
+    var now = Date.now();
+    sentTimes = sentTimes.filter(function(t){ return now - t < RATE_WINDOW; });
+    if(sentTimes.length >= RATE_MAX){ toast('Slow down a little — too many messages at once.'); return false; }
+    sentTimes.push(now);
+    return true;
+  }
+  function bumpPartnerInbox(preview, kind, stickerId){
+    var uid = myUid(); if(!uid || !openTid || !openWith) return;
+    var tid = openTid;
+    api('GET', '/users/' + encodeURIComponent(openWith) + '/dmInbox/' + encodeURIComponent(tid)).then(function(cur){
+      var unread = ((cur && typeof cur.unread === 'number') ? cur.unread : 0) + 1;
+      myName().then(function(n){
+        var body = { withUid: uid, withName: n, lastMessageAt: Date.now(), lastPreview: preview, unread: unread, lastKind: kind || 'text' };
+        if(stickerId) body.lastSticker = stickerId;
+        api('PUT', '/users/' + encodeURIComponent(openWith) + '/dmInbox/' + encodeURIComponent(tid), body);
+      });
+    });
+    var own = { withUid: openWith, withName: openName, lastMessageAt: Date.now(), lastPreview: preview, unread: 0, lastKind: kind || 'text' };
+    if(stickerId) own.lastSticker = stickerId;
+    api('PUT', '/users/' + encodeURIComponent(uid) + '/dmInbox/' + encodeURIComponent(tid), own);
+    if(threads[tid]){ threads[tid].lastMessageAt = own.lastMessageAt; threads[tid].lastPreview = preview; threads[tid].lastKind = kind || 'text'; if(stickerId) threads[tid].lastSticker = stickerId; }
+    renderList();
+  }
+  function sendMessage(kind, text, stickerId){
+    if(!openTid || !openA || !openB || !openWith) return;
+    var uid = myUid(); if(!uid) return;
+    if(openBlockedMe){ toast('You cannot message this tester right now.'); return; }
+    if(openBlockedByMe){ toast('You blocked this tester — unblock to chat again.'); return; }
+    if(!isMutualFriend(openWith)){ toast('You can only message friends — they may have removed you.'); return; }
+    if(!rateOk()) return;
+    var bodyText = String(text || '');
+    if(kind === 'text'){
+      bodyText = bodyText.trim();
+      if(!bodyText){ toast('Type a message first, agent.'); return; }
+      if(bodyText.length > MAX_LEN){ toast('Keep it under 500 characters, agent.'); return; }
+      if(/https?:\/\/|www\./i.test(bodyText)){ toast('Links are not allowed in direct messages — type it out instead.'); return; }
+    }
+    var preview = (kind === 'sticker') ? ('Sent a sticker' + (stickerById(stickerId) ? ' — ' + stickerById(stickerId).label : '')) : bodyText.slice(0, 80);
+    ensureThread(openA, openB).then(function(ok){
+      if(!ok){ toast('Direct messages need one more Arcade update — the new rules publish is still pending.'); return; }
+      return myName().then(function(n){
+        var body = { fromUid: uid, fromName: n, text: (kind === 'sticker') ? ('[sticker:' + stickerId + ']') : bodyText, kind: kind || 'text', createdAt: Date.now() };
+        if(stickerId) body.sticker = stickerId;
+        return api('POST', '/dmThreads/' + encodeURIComponent(openA) + '/' + encodeURIComponent(openB) + '/messages', body);
+      }).then(function(r){
+        if(r === null){ toast('That message did not send — the new DM rules publish is still pending.'); return; }
+        var inp = document.getElementById('dmInput'); if(inp && kind === 'text') inp.value = '';
+        hidePanels();
+        api('PATCH', '/dmThreads/' + encodeURIComponent(openA) + '/' + encodeURIComponent(openB), { lastMessageAt: Date.now(), lastPreview: preview });
+        bumpPartnerInbox(preview, kind, stickerId);
+        loadMessages();
+      });
+    });
+  }
+  function sendText(){
+    var inp = document.getElementById('dmInput'); if(!inp) return;
+    sendMessage('text', inp.value, null);
+  }
+  function sendSticker(id){
+    if(!stickerById(id)) return;
+    sendMessage('sticker', '', id);
+  }
+  function toggleMute(){
+    var uid = myUid(); if(!uid || !openTid) return;
+    if(muted[openTid]){
+      api('DELETE', '/users/' + encodeURIComponent(uid) + '/dmMuted/' + encodeURIComponent(openTid)).then(function(){
+        delete muted[openTid]; updateThreadMenu(); syncBadge(); toast('Chat unmuted — new messages will badge again.');
+      });
+    } else {
+      api('PUT', '/users/' + encodeURIComponent(uid) + '/dmMuted/' + encodeURIComponent(openTid), true).then(function(){
+        muted[openTid] = true; updateThreadMenu(); syncBadge(); toast('Chat muted — no badge for new messages here.');
+      });
+    }
+  }
+  function blockThread(){
+    if(!openTid || !openA || !openB || !openWith) return;
+    api('PUT', '/dmThreads/' + encodeURIComponent(openA) + '/' + encodeURIComponent(openB) + '/blockedBy/' + encodeURIComponent(openWith), true).then(function(r){
+      if(r === null){ toast('Block did not save — the new DM rules publish is still pending.'); return; }
+      openBlockedByMe = true; updateThreadMenu();
+      toast('Blocked — they can no longer message you.');
+      closeThread();
+    });
+  }
+  function unblockThread(){
+    if(!openTid || !openA || !openB || !openWith) return;
+    api('DELETE', '/dmThreads/' + encodeURIComponent(openA) + '/' + encodeURIComponent(openB) + '/blockedBy/' + encodeURIComponent(openWith)).then(function(){
+      openBlockedByMe = false; updateThreadMenu(); toast('Unblocked — you can chat again.');
+    });
+  }
+  function reportMessage(m){
+    var uid = myUid(); if(!uid) return;
+    myName().then(function(n){
+      var payload = {
+        username: n, testerName: n, game: 'Direct message', tag: 'DM report',
+        comment: 'Reported DM from ' + (m.fromName || 'tester') + ': ' + String(m.kind === 'sticker' ? ('[sticker:' + (m.sticker || '') + ']') : (m.text || '')).slice(0, 400),
+        threadId: openTid || '', msgId: m.id || '', reporterUid: uid, reportedUid: m.fromUid || '',
+        timestamp: new Date().toISOString()
+      };
+      return freshToken().then(function(tok){
+        if(!tok) return null;
+        return fetch(FB_RTDB + '/feedback.json?auth=' + encodeURIComponent(tok), { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
+          .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
+      });
+    }).then(function(r){
+      if(r){ toast('Reported — thanks, we will look into it.'); try { if(window.holoInbox && window.holoInbox.notifySelf) window.holoInbox.notifySelf('system', 'Report received', 'Thanks, agent — we got your report and will look into it. Watch this inbox for updates.'); } catch(e){} }
+      else toast('That report did not send — try again in a moment.');
+    });
+  }
+  function injectMessageButtons(){
+    var grid = document.getElementById('cloudFriendGrid'); if(!grid) return;
+    grid.querySelectorAll('.friend-card').forEach(function(card){
+      if(card.querySelector('.dm-open-btn')) return;
+      var rem = card.querySelector('[data-freq-remove]');
+      if(!rem) return;
+      var uid = rem.getAttribute('data-freq-remove');
+      var name = 'Tester';
+      try { var b = card.querySelector('.friend-main b'); if(b) name = b.textContent; } catch(e){}
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'btn btn-dark dm-mini dm-open-btn'; btn.textContent = 'Message';
+      btn.addEventListener('click', function(){ openThread(uid, name); });
+      rem.parentNode.insertBefore(btn, rem.nextSibling);
+    });
+  }
+  buildUI();
+  try {
+    var gridObs = new MutationObserver(function(){ injectMessageButtons(); });
+    var cg = document.getElementById('cloudFriendGrid');
+    if(cg) gridObs.observe(cg, { childList:true, subtree:true });
+    new MutationObserver(function(){
+      var v = document.body.getAttribute('data-view');
+      buildUI();
+      if(v === 'inbox'){ refresh(); syncDmVisibility(); }
+      else if(openTid){ closeThread(); }
+      if(v === 'friends'){ injectMessageButtons(); }
+    }).observe(document.body, { attributes:true, attributeFilter:['data-view'] });
+  } catch(e){}
+  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape' && openTid) closeThread(); });
+  setInterval(function(){ ensureBadge(); if(myUid()) refresh(); }, 30000);
+  setInterval(function(){ injectMessageButtons(); }, 5000);
+  setTimeout(function(){ buildUI(); refresh(); injectMessageButtons(); }, 2500);
+  window.holoDMs = { open: openThread, close: closeThread, refresh: refresh, unreadCount: unreadCount, stickers: STICKERS, emojis: EMOJIS };
+})();
+</script>
+
 <!-- END-BAR-2026-11-22 (Holo 23:03): after a game finishes, show
      Replay / Game Menu / Close in the hub game view. Detection:
      hub-native end panels (tEnd/wEnd/djEnd/mcOver), postMessage
