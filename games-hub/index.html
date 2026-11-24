@@ -18104,6 +18104,22 @@ function renderTesterAuth(){
       }).catch(function(){ return null; });
   }
 
+  function syncDisplayName(rec, username){
+    /* DISPLAY-NAME-2026-11-24: Firebase Auth displayName feeds the
+       %DISPLAY_NAME% variable in the password-reset email, so the
+       reset email can greet the tester by username. Sign-up sets it
+       at creation; this backfills it on sign-in for accounts created
+       before that. Fail-open: a failed update never blocks sign-in
+       or sign-up and never shows an error to the tester.
+       returnSecureToken:false on purpose - no token churn, and the
+       stored session (incl. sessionCreatedAt) is left untouched. */
+    try {
+      var name = String(username || '').trim();
+      if(!name || !rec || !rec.idToken || typeof fetch !== 'function') return Promise.resolve(null);
+      return postJSON('https://identitytoolkit.googleapis.com/v1/accounts:update?key=' + FB_API_KEY, { idToken:rec.idToken, displayName:name, returnSecureToken:false })
+        .then(function(){ return null; }).catch(function(){ return null; });
+    } catch(e){ return Promise.resolve(null); }
+  }
   function saveAuth(j, email){
     try {
       var rec = { idToken:j.idToken, refreshToken:j.refreshToken, uid:j.localId, email:email || j.email || '', exp: Date.now() + ((parseInt(j.expiresIn,10)||3600)*1000), sessionCreatedAt: Date.now() }; /* SIGN-OUT-EVERYWHERE-2026-11-23: session birth time, compared against sessionsRevokedAt */
@@ -18366,7 +18382,7 @@ function renderTesterAuth(){
   }
   window.betaSignUpAsync = function(email, password, username, inviteCode, dob){
     if(!email || !password || typeof fetch !== 'function') return Promise.resolve({ ok:false, code:'NETWORK', error:betaFriendlyError('') });
-    return doSignUp(email, password).then(function(r){
+    return doSignUp(email, password, username).then(function(r){
       if(r.ok && r.json && r.json.idToken){
         var rec = saveAuth(r.json, email);
         if(!rec) return { ok:false, code:'NETWORK', error:betaFriendlyError('') };
@@ -18623,6 +18639,7 @@ function renderTesterAuth(){
         if(!rec) return { ok:false, code:'NETWORK', error:betaFriendlyError('') };
         return fetchUser(rec).then(function(u){
           if(u && u.username) writeUsernameIndex(rec, u.username);
+          if(u && u.username && String(u.username) !== String((r.json && r.json.displayName) || '')) syncDisplayName(rec, u.username); /* DISPLAY-NAME-2026-11-24: backfill the Auth displayName from the account username so the reset email greets the tester by name */
           writeDevice(rec, 'sign-in');
           pushFeedback();
           var notedCode = (u && u.inviteCode) ? cleanInviteCode(u.inviteCode) : '';
@@ -18672,8 +18689,10 @@ function renderTesterAuth(){
   function doSignIn(email, password){
     return postJSON('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' + FB_API_KEY, { email:email, password:password, returnSecureToken:true });
   }
-  function doSignUp(email, password){
-    return postJSON('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + FB_API_KEY, { email:email, password:password, returnSecureToken:true });
+  function doSignUp(email, password, displayName){
+    var body = { email:email, password:password, returnSecureToken:true };
+    if(displayName && String(displayName).trim()) body.displayName = String(displayName).trim(); /* DISPLAY-NAME-2026-11-24: set the Auth displayName at creation so %DISPLAY_NAME% works in the reset email */
+    return postJSON('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + FB_API_KEY, body);
   }
   function betaAuthErrorText(code){
     code = String(code || '');
@@ -18705,7 +18724,7 @@ function renderTesterAuth(){
   }
   window.betaSignUp = function(email, password, username, inviteCode){
     if(!email || !password || typeof fetch !== 'function') return;
-    doSignUp(email, password).then(function(r){
+    doSignUp(email, password, username).then(function(r){
       if(r.ok && r.json && r.json.idToken){ var rec = saveAuth(r.json, email); if(rec){ var legacyPatch = { email:email }; if(username) legacyPatch.username = String(username); var legacyCode = cleanInviteCode(inviteCode || localInviteCodeFor(email)); if(legacyCode) legacyPatch.inviteCode = legacyCode; try { if((typeof isOwnerMode === 'function' && isOwnerMode()) && isOwnerUid(rec.uid)) legacyPatch.role = 'owner'; } catch(e){} patchUser(rec, legacyPatch); sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); }); writeDevice(rec, 'register'); } return; }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
       if(msg.indexOf('EMAIL_EXISTS') >= 0){
