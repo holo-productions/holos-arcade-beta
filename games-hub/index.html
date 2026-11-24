@@ -2826,6 +2826,25 @@ setTimeout(function(){
   </section>
 
 
+  <section class="hub-panel view-daily" id="tournamentPanel" aria-label="Weekly tournament">
+    <div class="hub-box" id="tournamentBox">
+      <h3>🏆 This week's tournament</h3>
+      <p id="tournGameLine">Loading this week's game…</p>
+      <button class="btn btn-dark" id="tournPlay" type="button" hidden>▶ Play this week's game</button>
+      <ol id="tournBoard" class="lb-list" aria-label="Tournament leaderboard"></ol>
+      <p id="tournRankLine" class="tourn-note"></p>
+      <div class="lb-vis" id="tournVis" role="group" aria-label="How you appear on leaderboards">
+        <span class="lb-vis-label">Show me as:</span>
+        <button type="button" class="lb-vis-btn" data-vis="name">My Code Name</button>
+        <button type="button" class="lb-vis-btn" data-vis="anon">🦆 Anonymous</button>
+        <button type="button" class="lb-vis-btn" data-vis="hidden">🙈 Hidden</button>
+      </div>
+      <p class="tourn-note">Friends-only while we test — at launch, everyone plays. Scores show Code Names only, never real names or emails. Pick Anonymous to hide your name, or Hidden to keep your scores to yourself.</p>
+      <p class="tourn-note" id="tournPending" hidden>Leaderboards open once the new Arcade rules publish — coming soon.</p>
+    </div>
+  </section>
+
+
   <section class="hub-panel" id="yourArcadePanel" aria-label="Your Arcade — badges and stats">
     <span class="kicker personal">Your Arcade</span>
     <h2>Badges &amp; Bragging Rights</h2>
@@ -20088,6 +20107,12 @@ function renderTesterAuth(){
       <button class="tier3-link" id="gmBack" type="button">← Back</button>
       <button class="tier3-link" id="gmFeedback" type="button">💬 Feedback</button>
     </div>
+    <div id="gmLeaderboard" hidden>
+      <h3 class="gm-lb-title">🏆 Friends leaderboard</h3>
+      <ol id="gmLbList" class="lb-list" aria-label="Leaderboard for this game"></ol>
+      <p id="gmLbRank" class="tourn-note"></p>
+      <p class="tourn-note">Friends only while we test. Scores show Code Names only.</p>
+    </div>
     <p class="gm-coin" aria-hidden="true">INSERT COIN TO CONTINUE</p>
   </div>
 </div>
@@ -20267,6 +20292,7 @@ function renderTesterAuth(){
     menu.hidden = false;
     document.body.style.overflow = 'hidden';
     gmStart.focus();
+    try { if(window.holoComp) window.holoComp.renderMenuBoard(slug); } catch(e){}
   }
   function closeMenu(){
     menu.hidden = true;
@@ -23358,7 +23384,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     return lastSlug;
   }
   function isPractice(){ var b = document.getElementById('practiceBanner'); return !!(b && !b.hidden); }
-  function show(){ if(player.hidden) return; bar.hidden = false; }
+  function show(){ if(player.hidden) return; bar.hidden = false; try { if(window.holoComp) window.holoComp.onGameFinished(slug()); } catch(e){} }
   function hide(){ bar.hidden = true; }
   window.holoGameFinished = show;
   /* Native end panels */
@@ -23424,6 +23450,493 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   window.holoEndBar = { show:show, hide:hide };
 })();
 </script>
+
+
+<style>
+/* COMP-LEADERBOARD-2026-11-24 (Holo 2026-11-24 14:06 "Can we"):
+   Single-player competitions — friend tournaments in beta, everyone
+   at live. Leaderboard lists, rank rows and the "show me as" toggle.
+   Same Arcade palette as the Daily tiles; gold for ranks. */
+.lb-list{list-style:none;margin:10px 0 0;padding:0}
+.lb-list li{display:flex;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid rgba(139,92,255,.25);font-weight:700;color:#e9e4ff}
+.lb-list li:last-child{border-bottom:none}
+.lb-list li.me{background:rgba(255,176,32,.13);border-radius:8px}
+.lb-rank{flex:0 0 34px;text-align:center;font-family:var(--pixel);font-size:11px;color:var(--gold)}
+.lb-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-score{flex:0 0 auto;font-family:var(--pixel);font-size:12px;color:#8fe3a0}
+.lb-vis{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.lb-vis-label{font-weight:800;color:#e9e4ff;font-size:13px}
+.lb-vis-btn{min-height:40px;padding:6px 12px;border-radius:999px;border:2px solid var(--violet);background:#0a0620;color:#e9e4ff;font-weight:800;font-size:13px;cursor:pointer}
+.lb-vis-btn.active{border-color:var(--gold);background:rgba(255,176,32,.16);color:#fff}
+.tourn-note{color:var(--muted);font-size:13px;line-height:1.5;margin:8px 0 0}
+.tourn-note strong{color:#e9e4ff}
+#gmLeaderboard{margin-top:14px;border-top:1px solid rgba(139,92,255,.35);padding-top:12px;text-align:left}
+.gm-lb-title{font-family:var(--pixel);font-size:11px;line-height:1.7;color:#e9e4ff;margin:0 0 4px}
+#tournPlay{margin-top:10px}
+</style>
+<script>
+/* COMP-LEADERBOARD-2026-11-24 (Holo 2026-11-24 14:06 "Can we"):
+   Single-player competitions with a shared leaderboard.
+   BETA = friend tournaments only: a tester sees leaderboards among
+   themselves + their friends, so we can test them now. At live launch
+   it opens to EVERYONE — flip: set /leaderboardConfig/public = true
+   in the Firebase Console (no rules re-publish needed; see the
+   rules doc ~/workspace/games/firebase-rules-leaderboard-update-2026-11-24.md).
+   PRIVACY: scores are shared under Code Names only — never real
+   names, never emails. Each tester picks how they appear on the
+   leaderboard: Code Name (default), Anonymous (a duck, no name), or
+   Hidden (their scores never leave their device at all).
+   Scores live at /leaderboards/<slug>/best/<uid> (all-time best) and
+   /leaderboards/<slug>/weeks/<ISO week>/<uid> (this week's best).
+   Practice rounds never submit. One entry per player per game — a
+   new score only replaces the old one when it is better (enforced
+   in the RTDB rules too). Scores are NOT cheat-proof: /plays is
+   readable/writable by any signed-in tester today, and a tech-savvy
+   tester could hand-craft a score write — client-side caps and the
+   best-only rule limit the damage; see the manual for the honest
+   limits. The leaderboard stays dark until Holo publishes the
+   rules (see the rules doc) — until then scores queue on-device
+   and flush on their own, like /plays. */
+(function(){
+  "use strict";
+  var FB_API_KEY = "AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak";
+  var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+  var AUTH_KEY = 'holos-firebase-auth';
+  var VIS_KEY = 'holos-arcade-leaderboard-visibility';
+  var QUEUE_KEY = 'holos-arcade-leaderboard-queue';
+  var BEST_KEY = 'holos-arcade-leaderboard-best';
+  /* Pilot games: wired for score submission (server-ready
+     __holoGameState + a numeric score + a finished signal).
+     cap = the highest score one round can honestly produce;
+     anything above it is rejected client-side as impossible.
+     To add a game: give it a finished() test, a score field and a
+     cap, then list it here. The weekly tournament game is always
+     picked from this list, so its board is never empty. */
+  var PILOT = {
+    'archery': { cap:500, label:'Archery',
+      finished:function(gs){ return gs.state === 'finished'; },
+      scoreOf:function(gs){ return gs.score; },
+      practiceOf:function(gs){ return gs.mode === 'practice'; } },
+    'fruit-slice': { cap:5000, label:'Fruit Slice',
+      finished:function(gs){ return gs.state === 'finished'; },
+      scoreOf:function(gs){ return gs.score; },
+      practiceOf:function(gs){ return gs.mode === 'practice'; } },
+    'slingshot': { cap:5000, label:'Slingshot Smash',
+      finished:function(gs){ return gs.phase === 'finished'; },
+      scoreOf:function(gs){ return gs.score; },
+      practiceOf:function(gs){ return gs.practice === true; } },
+    'cops-and-robbers': { cap:10000, label:'Cops and Robbers',
+      finished:function(gs){ return gs.state === 'finished'; },
+      scoreOf:function(gs){ return gs.score; },
+      practiceOf:function(gs){ return gs.mode === 'practice'; } },
+    'escape-kitchen': { cap:3000, label:'Escape the Kitchen',
+      finished:function(gs){ return !!(gs.result && gs.result.escaped); },
+      scoreOf:function(gs){ return gs.score; },
+      practiceOf:function(gs){ return gs.mode === 'practice'; } }
+  };
+  var _blocked = false; /* last flush failed while signed in (rules not published yet?) */
+  var lastSubmit = {}; /* slug -> {score, at}: one submit per finished round */
+  /* ---- auth (same pattern as the Inbox module) ---- */
+  function loadAuth(){
+    try {
+      var v = JSON.parse(localStorage.getItem(AUTH_KEY));
+      if(v && v.idToken && v.uid){
+        try {
+          var t = (typeof getTester === 'function') ? getTester() : null;
+          if(t){
+            var tem = String(t.email || '').trim().toLowerCase();
+            var vem = String(v.email || '').trim().toLowerCase();
+            var tuid = String(t.uid || '');
+            if((tem && vem && tem !== vem) || (tuid && tuid !== String(v.uid || ''))) return null;
+          }
+        } catch(e0){}
+        return v;
+      }
+    } catch(e){}
+    return null;
+  }
+  function freshToken(){
+    var a = loadAuth(); if(!a) return Promise.resolve(null);
+    if(a.exp && a.exp > Date.now() + 60000) return Promise.resolve(a.idToken);
+    if(!a.refreshToken) return Promise.resolve(null);
+    return fetch('https://securetoken.googleapis.com/v1/token?key=' + FB_API_KEY, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:'grant_type=refresh_token&refresh_token=' + encodeURIComponent(a.refreshToken) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(j && j.id_token){ a.idToken = j.id_token; a.refreshToken = j.refresh_token || a.refreshToken; a.exp = Date.now() + ((parseInt(j.expires_in,10)||3600)*1000); try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e){} return a.idToken; } return null; })
+      .catch(function(){ return null; });
+  }
+  function req(method, path, body){
+    return freshToken().then(function(tok){
+      if(!tok) return null;
+      return fetch(FB_RTDB + path + '.json?auth=' + encodeURIComponent(tok), { method:method, headers:{ 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined })
+        .then(function(r){ return r.ok ? r.json().catch(function(){ return true; }) : null; }).catch(function(){ return null; });
+    }).catch(function(){ return null; });
+  }
+  /* ---- identity: Code Name only, never email ---- */
+  function myUid(){
+    try { var a = loadAuth(); if(a && a.uid) return String(a.uid); } catch(e){}
+    try { var t = getTester(); if(t && t.uid) return String(t.uid); } catch(e){}
+    return null;
+  }
+  function myName(){
+    try { var t = (typeof getTester === 'function') ? getTester() : null; if(t && t.name) return String(t.name).slice(0, 60); } catch(e){}
+    return 'Tester';
+  }
+  /* ---- visibility: name | anon | hidden ---- */
+  function visibility(){
+    try { var v = localStorage.getItem(VIS_KEY); if(v === 'anon' || v === 'hidden') return v; } catch(e){}
+    return 'name';
+  }
+  function setVisibility(v){
+    if(v !== 'name' && v !== 'anon' && v !== 'hidden') return;
+    try { localStorage.setItem(VIS_KEY, v); } catch(e){}
+    if(v === 'hidden') removeMyEntries();
+    syncVisButtons();
+    renderTournament();
+  }
+  function removeMyEntries(){
+    /* Hidden = no shared entries anywhere. Delete my best + this
+       week's entry for every pilot game (owner delete is allowed
+       by the rules). Scores stay on the device for my own progress. */
+    var uid = myUid(); if(!uid) return;
+    var wk = weekKey();
+    Object.keys(PILOT).forEach(function(slug){
+      req('DELETE', '/leaderboards/' + slug + '/best/' + uid);
+      req('DELETE', '/leaderboards/' + slug + '/weeks/' + wk + '/' + uid);
+    });
+    try { localStorage.removeItem(BEST_KEY); } catch(e){}
+  }
+  /* ---- week + competition game (one game for everyone) ---- */
+  function weekKey(d){
+    d = d || new Date();
+    var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    var day = (t.getUTCDay() + 6) % 7;
+    t.setUTCDate(t.getUTCDate() - day + 3);
+    var first = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+    var fday = (first.getUTCDay() + 6) % 7;
+    first.setUTCDate(first.getUTCDate() - fday + 3);
+    var week = 1 + Math.round((t - first) / 604800000);
+    return t.getUTCFullYear() + '-W' + (week < 10 ? '0' + week : week);
+  }
+  function mondayOfWeek(wk){
+    var m = /^(\d{4})-W(\d{2})$/.exec(wk || '');
+    if(!m) return null;
+    var d = new Date(Date.UTC(+m[1], 0, 4));
+    var day = (d.getUTCDay() + 6) % 7;
+    d.setUTCDate(d.getUTCDate() - day + (+m[2] - 1) * 7);
+    return d;
+  }
+  function weekRangeLabel(wk){
+    var mon = mondayOfWeek(wk); if(!mon) return wk;
+    var sun = new Date(mon.getTime() + 6 * 86400000);
+    function fmt(d){ try { return d.toLocaleDateString('en-GB', { day:'numeric', month:'short', timeZone:'UTC' }); } catch(e){ return ''; } }
+    return fmt(mon) + ' – ' + fmt(sun);
+  }
+  function compGameForWeek(wk){
+    /* One game for every tester that week, seeded by the week —
+       not by the player (Game of the Day is per-player, so it
+       cannot be the shared tournament game). Untested pilot games
+       first, so tournaments also steer testers to untested games;
+       once every pilot game has been tried, any pilot game. */
+    wk = wk || weekKey();
+    var pool = Object.keys(PILOT).filter(function(s){
+      try { return !(window.holoDaily && window.holoDaily.isTested(s)); } catch(e){ return true; }
+    });
+    try { if(window.holoDaily && window.holoDaily.adultHidden()) pool = pool.filter(function(s){ return !window.holoDaily.isAdultSlug(s); }); } catch(e){}
+    if(!pool.length) pool = Object.keys(PILOT);
+    var rnd;
+    try { rnd = window.holoDaily.rngFrom(window.holoDaily.hash32('comp|' + wk)); }
+    catch(e){ rnd = function(){ return 0.5; }; }
+    return pool[Math.floor(rnd() * pool.length)];
+  }
+  function titleForSlug(slug){
+    try {
+      var b = document.querySelector('[data-game="' + slug + '"]');
+      if(b){ var c = b.closest('.game-card'); if(c){ var h = c.querySelector('h3'); if(h) return h.textContent.trim(); } }
+    } catch(e){}
+    return (PILOT[slug] && PILOT[slug].label) || slug;
+  }
+  /* ---- submit (queue + flush, like /plays) ---- */
+  function queueLoad(){
+    try { var v = JSON.parse(localStorage.getItem(QUEUE_KEY)); if(Array.isArray(v)) return v; } catch(e){}
+    return [];
+  }
+  function queueSave(arr){
+    try { localStorage.setItem(QUEUE_KEY, JSON.stringify(arr.slice(-50))); } catch(e){}
+  }
+  function bestLoad(){
+    try { var v = JSON.parse(localStorage.getItem(BEST_KEY)); if(v && typeof v === 'object') return v; } catch(e){}
+    return {};
+  }
+  function bestSave(o){
+    try { localStorage.setItem(BEST_KEY, JSON.stringify(o)); } catch(e){}
+  }
+  function entryPayload(score, diff, mode){
+    var vis = visibility();
+    return { score: score, name: vis === 'anon' ? '' : myName(), anon: vis === 'anon', ts: Date.now(), diff: String(diff == null ? '' : diff), mode: String(mode == null ? '' : mode) };
+  }
+  function submitScore(slug, score, diff, mode){
+    try {
+      if(!PILOT[slug]) return;
+      if(visibility() === 'hidden') return; /* hidden players never submit */
+      if(typeof score !== 'number' || !isFinite(score)) return;
+      score = Math.floor(score);
+      if(score < 0 || score > PILOT[slug].cap) return; /* impossible score */
+      var uid = myUid(); if(!uid) return; /* signed-in testers only */
+      var prev = lastSubmit[slug];
+      if(prev && prev.score === score && Date.now() - prev.at < 300000) return; /* same round re-firing */
+      lastSubmit[slug] = { score: score, at: Date.now() };
+      var wk = weekKey();
+      var best = bestLoad();
+      var wantBest = !(best[slug] && best[slug].score >= score);
+      var wantWeek = !(best[slug + '|' + wk] && best[slug + '|' + wk].score >= score);
+      if(!wantBest && !wantWeek) return;
+      var q = queueLoad();
+      q.push({ slug: slug, score: score, diff: diff || '', mode: mode || '', wk: wk, tries: 0, ts: Date.now() });
+      queueSave(q);
+      flushQueue();
+    } catch(e){}
+  }
+  function flushQueue(){
+    if(typeof fetch !== 'function') return;
+    var q = queueLoad();
+    if(!q.length) return;
+    var uid = myUid(); if(!uid) return;
+    var chain = Promise.resolve();
+    var done = [];
+    q.forEach(function(item){
+      chain = chain.then(function(){
+        var payload = entryPayload(item.score, item.diff, item.mode);
+        var bestP = req('PUT', '/leaderboards/' + item.slug + '/best/' + uid, payload);
+        return bestP.then(function(okBest){
+          var weekP = req('PUT', '/leaderboards/' + item.slug + '/weeks/' + item.wk + '/' + uid, payload);
+          return weekP.then(function(okWeek){
+            if(okBest && okWeek){
+              _blocked = false;
+              var best = bestLoad();
+              if(!best[item.slug] || item.score > best[item.slug].score) best[item.slug] = { score: item.score, ts: item.ts };
+              if(!best[item.slug + '|' + item.wk] || item.score > best[item.slug + '|' + item.wk].score) best[item.slug + '|' + item.wk] = { score: item.score, ts: item.ts };
+              bestSave(best);
+              done.push(item.ts);
+            } else {
+              _blocked = true;
+              item.tries = (item.tries || 0) + 1;
+              if(item.tries >= 3) done.push(item.ts); /* give up after 3 tries */
+            }
+          });
+        });
+      });
+    });
+    chain.then(function(){
+      if(done.length){
+        var cur = queueLoad().filter(function(x){ return done.indexOf(x.ts) < 0; });
+        queueSave(cur);
+      }
+    }).catch(function(){});
+  }
+  /* ---- read a board (friends-only in beta, everyone when public) ---- */
+  var _publicMode = null;
+  function loadPublicMode(){
+    if(_publicMode !== null) return Promise.resolve(_publicMode);
+    return req('GET', '/leaderboardConfig').then(function(v){
+      _publicMode = !!(v && v.public);
+      return _publicMode;
+    }).catch(function(){ _publicMode = false; return false; });
+  }
+  function friendUids(){
+    try {
+      if(window.holoFriends && window.holoFriends.cloudFriends){
+        var cf = window.holoFriends.cloudFriends();
+        return Object.keys(cf || {});
+      }
+    } catch(e){}
+    return [];
+  }
+  function readBoard(slug, scope){
+    var uid = myUid();
+    if(!uid) return Promise.resolve([]);
+    var base = '/leaderboards/' + slug + '/' + (scope === 'week' ? 'weeks/' + weekKey() : 'best');
+    return loadPublicMode().then(function(pub){
+      if(pub){
+        return req('GET', base).then(function(data){
+          if(!data || typeof data !== 'object') return [];
+          var out = [];
+          Object.keys(data).forEach(function(k){
+            var e = data[k];
+            if(e && typeof e.score === 'number') out.push({ uid:k, score:e.score, name:e.name || '', anon:!!e.anon, ts:e.ts || 0 });
+          });
+          return out;
+        });
+      }
+      var uids = [uid].concat(friendUids());
+      var jobs = uids.map(function(u){
+        return req('GET', base + '/' + u).then(function(e){
+          if(!e || typeof e.score !== 'number') return null;
+          return { uid:u, score:e.score, name:e.name || '', anon:!!e.anon, ts:e.ts || 0 };
+        });
+      });
+      return Promise.all(jobs).then(function(rows){ return rows.filter(Boolean); });
+    }).catch(function(){ return []; });
+  }
+  function sortRows(rows){
+    rows.sort(function(a, b){ return (b.score - a.score) || ((a.ts || 0) - (b.ts || 0)); });
+    return rows;
+  }
+  function displayName(row){
+    if(row.anon) return '🦆 Mystery Player';
+    return row.name || 'Tester';
+  }
+  function esc(s){
+    return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function renderRows(listEl, rows, uid, limit){
+    if(!listEl) return;
+    if(!rows.length){
+      listEl.innerHTML = '<li><span class="lb-name">No scores yet — be the first!</span></li>';
+      return;
+    }
+    var html = '';
+    rows.slice(0, limit || 5).forEach(function(r, i){
+      var medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+      html += '<li' + (r.uid === uid ? ' class="me"' : '') + '><span class="lb-rank">' + medal + '</span><span class="lb-name">' + esc(displayName(r)) + (r.uid === uid ? ' (you)' : '') + '</span><span class="lb-score">' + esc(r.score) + '</span></li>';
+    });
+    listEl.innerHTML = html;
+  }
+  function rankLine(rows, uid){
+    if(!rows.length) return '';
+    for(var i = 0; i < rows.length; i++){
+      if(rows[i].uid === uid){
+        return 'You are <strong>#' + (i + 1) + '</strong> of ' + rows.length + ' with <strong>' + esc(rows[i].score) + '</strong>.';
+      }
+    }
+    return 'You have no score on this board yet — play a scored round to join it.';
+  }
+  /* ---- finish hook: called by the END-BAR when a game ends ---- */
+  function onGameFinished(slug){
+    try {
+      if(!slug || !PILOT[slug]) return;
+      var t = (typeof getTester === 'function') ? getTester() : null;
+      if(!t) return;
+      if(visibility() === 'hidden') return;
+      var fr = null;
+      try { fr = document.getElementById(slug + 'Frame'); } catch(e){}
+      if(!fr){
+        try { var pane = document.getElementById('pane-' + slug); if(pane) fr = pane.querySelector('iframe'); } catch(e){}
+      }
+      if(!fr){
+        try { var pl = document.getElementById('player'); if(pl) fr = pl.querySelector('.game-pane:not([hidden]) iframe'); } catch(e){}
+      }
+      if(!fr) return;
+      var gs = null;
+      try { gs = fr.contentWindow && fr.contentWindow.__holoGameState; } catch(e){ return; }
+      if(!gs || typeof gs !== 'object') return;
+      var P = PILOT[slug];
+      if(!P.finished(gs)) return;
+      if(P.practiceOf(gs)) return; /* practice rounds never submit */
+      /* Second practice guard: the hub practice banner / frame URL. */
+      try { var pb = document.getElementById('practiceBanner'); if(pb && !pb.hidden) return; } catch(e){}
+      try { var src = fr.getAttribute('src') || ''; if(src.indexOf('practice=1') !== -1) return; } catch(e){}
+      var score = P.scoreOf(gs);
+      if(typeof score !== 'number' || !isFinite(score)) return;
+      submitScore(slug, score, gs.difficulty, gs.mode);
+      setTimeout(renderTournament, 1500);
+    } catch(e){}
+  }
+  /* ---- weekly tournament card (Daily view) ---- */
+  function syncVisButtons(){
+    var vis = visibility();
+    try {
+      document.querySelectorAll('#tournVis .lb-vis-btn').forEach(function(b){
+        b.classList.toggle('active', b.getAttribute('data-vis') === vis);
+      });
+    } catch(e){}
+  }
+  function renderTournament(){
+    var box = document.getElementById('tournamentBox');
+    if(!box) return;
+    var t = (typeof getTester === 'function') ? getTester() : null;
+    var gameLine = document.getElementById('tournGameLine');
+    var boardEl = document.getElementById('tournBoard');
+    var rankEl = document.getElementById('tournRankLine');
+    var playBtn = document.getElementById('tournPlay');
+    var pendingEl = document.getElementById('tournPending');
+    if(!t){
+      if(gameLine) gameLine.textContent = 'Sign in to play this week\u2019s tournament.';
+      if(boardEl) boardEl.innerHTML = '';
+      if(rankEl) rankEl.textContent = '';
+      if(playBtn) playBtn.hidden = true;
+      return;
+    }
+    var wk = weekKey();
+    var slug = compGameForWeek(wk);
+    var title = titleForSlug(slug);
+    if(gameLine) gameLine.innerHTML = 'This week (' + esc(weekRangeLabel(wk)) + '): <strong>' + esc(title) + '</strong> — highest score wins.';
+    if(playBtn){ playBtn.hidden = false; playBtn.setAttribute('data-game', slug); playBtn.textContent = '\u25B6 Play ' + title; }
+    if(boardEl) boardEl.innerHTML = '<li><span class="lb-name">Loading scores…</span></li>';
+    readBoard(slug, 'week').then(function(rows){
+      rows = sortRows(rows);
+      renderRows(boardEl, rows, myUid(), 5);
+      if(rankEl) rankEl.innerHTML = rankLine(rows, myUid());
+      if(pendingEl) pendingEl.hidden = !(_blocked && !rows.length);
+    });
+    syncVisButtons();
+  }
+  /* ---- per-game board in the Game Menu ---- */
+  function renderMenuBoard(slug){
+    var box = document.getElementById('gmLeaderboard');
+    if(!box) return;
+    if(!PILOT[slug]){ box.hidden = true; return; }
+    box.hidden = false;
+    var listEl = document.getElementById('gmLbList');
+    var rankEl = document.getElementById('gmLbRank');
+    if(listEl) listEl.innerHTML = '<li><span class="lb-name">Loading scores…</span></li>';
+    if(rankEl) rankEl.textContent = '';
+    readBoard(slug, 'best').then(function(rows){
+      rows = sortRows(rows);
+      renderRows(listEl, rows, myUid(), 5);
+      if(rankEl) rankEl.innerHTML = rankLine(rows, myUid());
+    });
+  }
+  /* ---- wire up ---- */
+  function bindVis(){
+    try {
+      var wrap = document.getElementById('tournVis');
+      if(!wrap) return;
+      wrap.addEventListener('click', function(e){
+        var b = e.target && e.target.closest ? e.target.closest('.lb-vis-btn') : null;
+        if(!b) return;
+        setVisibility(b.getAttribute('data-vis'));
+      });
+    } catch(e){}
+  }
+  function init(){
+    bindVis();
+    syncVisButtons();
+    flushQueue();
+    renderTournament();
+    try { setInterval(flushQueue, 30000); } catch(e){}
+    try {
+      window.addEventListener('hashchange', function(){
+        try { if((location.hash || '') === '#daily') renderTournament(); } catch(e){}
+      });
+    } catch(e){}
+    try { setInterval(function(){ try { if((location.hash || '') === '#daily') renderTournament(); } catch(e){} }, 60000); } catch(e){}
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+  window.holoComp = {
+    submitScore:submitScore, onGameFinished:onGameFinished,
+    renderTournament:renderTournament, renderMenuBoard:renderMenuBoard,
+    compGameForWeek:compGameForWeek, weekKey:weekKey,
+    visibility:visibility, setVisibility:setVisibility,
+    pilotGames:function(){ return Object.keys(PILOT); },
+    flushQueue:flushQueue
+  };
+})();
+</script>
+
 
 
 <style>
