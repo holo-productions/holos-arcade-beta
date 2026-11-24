@@ -8824,6 +8824,9 @@ setTimeout(function(){
     var live = ['trivia','werewolf','madcow','dj','poker','solitaire'].concat(Object.keys(NEW_GAMES));
     /* AGE18-2026-11-23: Shuffle never lands on a hidden 18+ game. */
     if(window.holoAge18 && !window.holoAge18.adultGamesVisible()) live = live.filter(function(s){ return !window.holoAge18.isAdultSlug(s); });
+    /* DAILY-DEVICE-2026-11-24: on a phone/tablet, Shuffle never lands
+       on a game that needs a desktop. */
+    try { if(window.holoDaily && window.holoDaily.isTouchDevice()) live = live.filter(function(s){ return !window.holoDaily.phoneBlocked(s); }); } catch(e){}
     if(!live.length) return;
     /* DAILY-UNTESTED-2026-11-24: Shuffle draws from games that still
        need testing first — 3 in 4 shuffles land on an untested game,
@@ -11770,7 +11773,10 @@ var LOCATIONS = [
    Picks are seeded from the player's own identity (Firebase uid,
    else tester code name, else device id) + the day, so two testers
    get different untested games on the same day and the arcade covers
-   more ground. Same player + same day = same pick on every device. */
+   more ground. Same player + same day + same device class = same
+   pick (DAILY-DEVICE-2026-11-24: a phone and a laptop may see
+   different daily games once a desktop-only game exists, so the
+   pick is always playable on the device in hand). */
 window.holoDailyTested = {
   games: {
     '8-ball-pool':1,'abc-fun':1,'air-hockey':1,'algebra-quest-2':1,
@@ -11804,7 +11810,37 @@ window.holoDaily = (function(){
   function testedModes(slug){ try { var m = window.holoDailyTested && window.holoDailyTested.modes && window.holoDailyTested.modes[slug]; return Array.isArray(m) ? m.slice() : []; } catch(e){ return []; } }
   function adultHidden(){ try { return !!(window.holoAge18 && !window.holoAge18.adultGamesVisible()); } catch(e){ return false; } }
   function isAdultSlug(s){ try { return !!(window.holoAge18 && window.holoAge18.isAdultSlug(s)); } catch(e){ return false; } }
-  return { seedId:seedId, hash32:hash32, rngFrom:rngFrom, dayKey:dayKey, isTested:isTested, testedModes:testedModes, adultHidden:adultHidden, isAdultSlug:isAdultSlug };
+  /* DAILY-DEVICE-2026-11-24 (Holo 2026-11-24 15:29: "make [the daily
+     challenges] usable with the device they're on. Don't make them
+     grab a diff device"). PHONE_BLOCKED = games whose core controls
+     need a desktop: keyboard-only movement with no touch alternative,
+     or mouse-move-only aiming. A game lands here only after a real
+     phone check, never on suspicion. EMPTY today — the 2026-11-24
+     audit of all 215 games (180 standalone + 10 extra folders +
+     9 hub-native + 8 duels) found every game phone-playable
+     (tap/click/pointer controls; the one suspect, bubble-pop-bay,
+     aims + shoots on tap). Daily picks, challenge targets, Shuffle
+     and the weekly tournament never send a phone/tablet tester to a
+     game in this set. Same player + same day + same device class =
+     same pick; a phone and a laptop may see different daily games
+     once a desktop-only game exists — that is the point: the pick
+     is always playable on the device in hand. Desktop keeps the
+     full pool. The weekly tournament game is shared by everyone,
+     so it is always drawn from the phone-playable set. */
+  var PHONE_BLOCKED = {};
+  function deviceClass(){
+    try {
+      var ua = navigator.userAgent || '';
+      var low = ua.toLowerCase();
+      var touchPts = 0; try { touchPts = navigator.maxTouchPoints || 0; } catch(e){}
+      if(/iphone|ipod|android.*mobile|windows phone/.test(low)) return 'phone';
+      if(/ipad/.test(low) || (/android/.test(low) && !/mobile/.test(low)) || (/macintosh/.test(low) && touchPts > 0)) return 'tablet';
+      return 'desktop';
+    } catch(e){ return 'desktop'; }
+  }
+  function isTouchDevice(){ var c = deviceClass(); return c === 'phone' || c === 'tablet'; }
+  function phoneBlocked(slug){ try { return !!PHONE_BLOCKED[slug]; } catch(e){ return false; } }
+  return { seedId:seedId, hash32:hash32, rngFrom:rngFrom, dayKey:dayKey, isTested:isTested, testedModes:testedModes, adultHidden:adultHidden, isAdultSlug:isAdultSlug, deviceClass:deviceClass, isTouchDevice:isTouchDevice, phoneBlocked:phoneBlocked };
 })();
 </script>
 <script>
@@ -11817,8 +11853,9 @@ window.holoDaily = (function(){
      from the player's identity + the local day, drawn from the games
      nobody has tried yet (window.holoDailyTested), so each tester
      gets a different untested game and the arcade covers more ground.
-     Same player + same day = same game on every device. Once every
-     game has been tried, the pick falls back to the full list.
+     Same player + same day + same device class = same game
+     (DAILY-DEVICE-2026-11-24). Once every game has been tried,
+     the pick falls back to the full list.
      No repeat of yesterday's game, and no same-genre two days
      running when the pool allows. List order is fixed: the 4 games
      built into this page first, then every standalone game in the
@@ -12114,11 +12151,18 @@ window.holoDaily = (function(){
   function untestedGotdPool(){
     var pool = GOTD_GAMES.filter(function(g){ return !window.holoDaily.isTested(g.id); });
     if(window.holoDaily.adultHidden()) pool = pool.filter(function(g){ return !window.holoDaily.isAdultSlug(g.id); });
+    /* DAILY-DEVICE-2026-11-24: on a phone/tablet, never pick a game
+       that needs a desktop. Same filter on the fallback so the
+       fallback cannot reintroduce a blocked game; last resort is
+       the full list (only reachable if every game were blocked). */
+    if(window.holoDaily.isTouchDevice()) pool = pool.filter(function(g){ return !window.holoDaily.phoneBlocked(g.id); });
     if(!pool.length){
       /* Everything tried (or everything left is 18+ and hidden):
          fall back to the whole list, 18+ filter still applied. */
       pool = GOTD_GAMES.slice();
       if(window.holoDaily.adultHidden()) pool = pool.filter(function(g){ return !window.holoDaily.isAdultSlug(g.id); });
+      if(window.holoDaily.isTouchDevice()) pool = pool.filter(function(g){ return !window.holoDaily.phoneBlocked(g.id); });
+      if(!pool.length) pool = GOTD_GAMES.slice();
     }
     return pool;
   }
@@ -12969,8 +13013,9 @@ window.holoDaily = (function(){
      untested games/modes, unique per player). The challenge is seeded
      from the player's identity + the local day. Weighted draw:
      untested game / untested mode first, then the old category
-     challenges. Same player + same day = same challenge on every
-     device. A challenge never repeats its type two days running when
+     challenges. Same player + same day + same device class = same
+     challenge (DAILY-DEVICE-2026-11-24). A challenge never repeats
+     its type two days running when
      the draw allows, and never targets the same game two days running.
      "Untested mode" means a difficulty the tracker has no review for
      yet (TESTED_MODES, filled from the Feedback Sheet once the
@@ -12993,9 +13038,15 @@ window.holoDaily = (function(){
     var all = allGameSlugs();
     var out = all.filter(function(s){ return !window.holoDaily.isTested(s); });
     if(window.holoDaily.adultHidden()) out = out.filter(function(s){ return !window.holoDaily.isAdultSlug(s); });
+    /* DAILY-DEVICE-2026-11-24: on a phone/tablet, never target a
+       game that needs a desktop — the challenge must be completable
+       on the device in hand. Same filter on the fallback. */
+    if(window.holoDaily.isTouchDevice()) out = out.filter(function(s){ return !window.holoDaily.phoneBlocked(s); });
     if(!out.length){
       out = all.slice();
       if(window.holoDaily.adultHidden()) out = out.filter(function(s){ return !window.holoDaily.isAdultSlug(s); });
+      if(window.holoDaily.isTouchDevice()) out = out.filter(function(s){ return !window.holoDaily.phoneBlocked(s); });
+      if(!out.length) out = all.slice();
     }
     return out;
   }
@@ -13046,6 +13097,8 @@ window.holoDaily = (function(){
       /* Category challenge: pick a matching game to point at. */
       pool = allGameSlugs().filter(function(s){ return hasCat(s, type); });
       if(window.holoDaily.adultHidden()) pool = pool.filter(function(s){ return !window.holoDaily.isAdultSlug(s); });
+      /* DAILY-DEVICE-2026-11-24: same device rule as the untested pools. */
+      if(window.holoDaily.isTouchDevice()) pool = pool.filter(function(s){ return !window.holoDaily.phoneBlocked(s); });
       if(!pool.length) pool = allGameSlugs();
       target = pool[Math.floor(rnd() * pool.length)];
       text = 'Play a ' + type + ' game';
@@ -24462,6 +24515,11 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       try { return !(window.holoDaily && window.holoDaily.isTested(s)); } catch(e){ return true; }
     });
     try { if(window.holoDaily && window.holoDaily.adultHidden()) pool = pool.filter(function(s){ return !window.holoDaily.isAdultSlug(s); }); } catch(e){}
+    /* DAILY-DEVICE-2026-11-24: the tournament game is shared by
+       everyone, so it must be playable on phone AND desktop — a
+       desktop-only pilot can never be the week's game. */
+    try { if(window.holoDaily) pool = pool.filter(function(s){ return !window.holoDaily.phoneBlocked(s); }); } catch(e){}
+    if(!pool.length) pool = Object.keys(PILOT).filter(function(s){ try { return !(window.holoDaily && window.holoDaily.phoneBlocked(s)); } catch(e){ return true; } });
     if(!pool.length) pool = Object.keys(PILOT);
     var rnd;
     try { rnd = window.holoDaily.rngFrom(window.holoDaily.hash32('comp|' + wk)); }
