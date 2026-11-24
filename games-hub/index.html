@@ -3003,7 +3003,7 @@ setTimeout(function(){
       <details class="acct-fold" id="fold-adult">
         <summary>18+ games</summary>
       <div class="adult-settings" id="adultSettingsBox">
-        <p class="contact-note">Hide the 18+ party games on this device before handing it to a kid. Turning them back on needs the parent PIN. Your date of birth hides them automatically until your 18th birthday.</p>
+        <p class="contact-note" id="adultIntroNote">Hide the 18+ party games on this device before handing it to a kid. Turning them back on needs the parent PIN. Your date of birth hides them automatically until your 18th birthday.</p>
         <div class="tgl-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0">
           <span>Hide 18+ games<br><small>Kings Cup Party, Cup Toss Party and Never Have I Ever Party disappear from the Library, search, Categories and Game of the Day.</small></span>
           <button class="tgl" id="hide18Toggle" type="button" aria-pressed="false">Off</button>
@@ -7546,20 +7546,30 @@ setTimeout(function(){
    - Existing accounts are NEVER asked: age verification happens only
      when someone registers (Holo 2026-11-23 17:11: "Then only upon
      registering"). Accounts with no DOB on file FAIL CLOSED since
-     2026-11-24 00:30 (Holo: "Fix") — 18+ games stay hidden, with no
-     toggle to turn them on, until they add a DOB themselves
-     (Settings > 18+ games > Add my date of birth, email-verified).
-     This supersedes the 2026-11-23 17:11 fail-open decision for
-     no-DOB accounts. Owner + gizmo-* system accounts are exempt.
+     2026-11-24 (Holo 2026-11-24 00:30 "Fix"): 18+ games stay hidden
+     and there is no 18+ option until they add an 18+ DOB themselves
+     (Settings > 18+ games > Add my date of birth, email-verified) —
+     the 2026-11-23 fail-open decision is superseded.
+   - KIDS RULE (Holo 2026-11-24 00:29 "Kids accounts. No 18+ option"):
+     an account proven under 18 by its DOB gets NO 18+ option at all —
+     the Settings toggle and the parent PIN row are removed entirely
+     for that account (not just disabled), and the parent PIN cannot
+     unlock 18+ for it. The option returns on the 18th birthday.
+   - Owner UID + gizmo-* system accounts are always treated as adult
+     (owner must always see 18+ for testing) — see isExemptAdult().
+   - NO-DOB-FAIL-CLOSED-2026-11-24: merge note — this build also
+     carries the registration-fallback + Settings-nudge copy (see
+     createDobSkip / adultDobNudge) and the local-account owner
+     exemption age18Exempt() (kids build covers Firebase accounts).
    - Settings (Settings view > 18+ games) has a "Hide 18+ games" toggle
      for the shared-device case ("Lots of parents let kids use their
      devices to play on"): flip it on before handing the device to a
-     kid. Turning games back ON always goes through adultUnlock18()
+     kid. For under-18 or no-DOB accounts the toggle and PIN rows are
+     not shown at all (kids rule / fail-closed) — see syncToggleUI().
+     Turning games back ON always goes through adultUnlock18()
      below — THE single unlock entry point — and needs the parent PIN.
      Turning them OFF is free, no PIN.
-   - Under 18, or with no DOB on file, there is NO 18+ option at all:
-     the toggle and parent-PIN rows are hidden, not just disabled,
-     and the PIN cannot unlock the games.   - Parent PIN: set/change ALWAYS needs email verification first
+   - Parent PIN: set/change ALWAYS needs email verification first
      (button -> verification email -> "I've verified" check -> set PIN).
      The PIN itself is stored as a hash only, never plain text.
    - Effective visibility is always computed live (DOB + toggle), so
@@ -7708,30 +7718,46 @@ setTimeout(function(){
     if(a && a.dob) return cleanDob(a.dob);
     return cleanDob(lsGet('holos-arcade-dob-' + code()));
   }
-  /* NO-DOB-FAIL-CLOSED-2026-11-24 (Holo 2026-11-24 00:30, "Fix"):
-     the owner (Holo, who tests 18+ herself) and gizmo-* system
-     accounts are exempt from the age gate, same pattern as the
-     5-device cap. getTester()/isBossTester() are top-level
-     functions, so they are available here by call time. */
-  function age18Exempt(){
+  function authRec(){
+    try { var v = JSON.parse(lsGet('holos-firebase-auth') || 'null'); return (v && typeof v === 'object') ? v : null; } catch(e){ return null; }
+  }
+  function isExemptAdult(){
+    /* KIDS-RULE + FAIL-CLOSED (Holo 2026-11-24 00:29-00:30): owner UID +
+       gizmo-* system accounts are always treated as adult — the owner
+       must always see 18+ for testing. Same exemption rule as the
+       device cap (deviceCapExempt): UID via the global isOwnerUid
+       allow-list, gizmo-* by email prefix. */
     try {
-      if(typeof getTester === 'function'){
-        var t = getTester();
-        if(t && typeof isBossTester === 'function' && isBossTester(t)) return true;
-        if(t && t.email && String(t.email).trim().toLowerCase().indexOf('gizmo-') === 0) return true;
-      }
+      var a = authRec();
+      if(a && a.uid && typeof isOwnerUid === 'function' && isOwnerUid(a.uid)) return true;
+      var em = (a && a.email) || (acct() && acct().email) || '';
+      if(String(em).trim().toLowerCase().indexOf('gizmo-') === 0) return true;
     } catch(e){}
+    return false;
+  }
+  function age18Exempt(){
+    /* NO-DOB-FAIL-CLOSED-2026-11-24: local-account owner exemption.
+       isExemptAdult() above covers Firebase accounts (auth record).
+       This covers the LOCAL-account path, where there is no
+       firebase-auth record: the signed-in tester record (getTester)
+       with role 'owner' + the owner UID, or a local record whose
+       role is 'owner' / email starts gizmo-. Same exemption rule
+       as the device cap (deviceCapExempt). */
     try {
+      var t = (typeof getTester === 'function') ? getTester() : null;
+      if(t && typeof isBossTester === 'function' && isBossTester(t)) return true;
+      var em = (t && t.email) || '';
+      if(String(em).trim().toLowerCase().indexOf('gizmo-') === 0) return true;
       var a = acct();
-      if(a && a.role === 'owner') return true;
-      if(a && a.email && String(a.email).trim().toLowerCase().indexOf('gizmo-') === 0) return true;
-    } catch(e2){}
+      if(a && String(a.role || '').toLowerCase() === 'owner' && a.uid && typeof isOwnerUid === 'function' && isOwnerUid(a.uid)) return true;
+      if(a && String(a.email || '').trim().toLowerCase().indexOf('gizmo-') === 0) return true;
+    } catch(e){}
     return false;
   }
   function isAdultByDob(){
-    if(age18Exempt()) return true; /* Owner + gizmo-* accounts are always treated as adults. */
+    if(isExemptAdult() || age18Exempt()) return true;
     var d = dob();
-    if(!d) return false; /* No DOB on file — FAIL CLOSED (Holo 2026-11-24 00:30): 18+ stays hidden until a DOB proves 18+. Supersedes the 2026-11-23 17:11 fail-open decision. */
+    if(!d) return false; /* FAIL-CLOSED (Holo 2026-11-24 00:30 "Fix"): no DOB on file = 18+ hidden + no 18+ option, same as the kids rule. Adding an 18+ DOB restores it. Supersedes the 2026-11-23 17:11 fail-open decision. */
     var p = d.split('-'), y = +p[0], m = +p[1] - 1, day = +p[2];
     var eighteenth = new Date(y + 18, m, day);
     if(eighteenth.getMonth() !== m) eighteenth = new Date(y + 18, m + 1, 0); /* Feb 29 -> Feb 28 in non-leap years */
@@ -7779,8 +7805,11 @@ setTimeout(function(){
     } catch(e){ return false; }
   }
   function showBlocked(){
-    if(!dob()){ toast('\uD83D\uDD1E 18+ games stay hidden until you add your date of birth in Settings.'); return; }
-    if(!isAdultByDob()){ toast('\uD83D\uDD1E 18+ games stay hidden until your 18th birthday.'); return; }
+    if(!isAdultByDob()){
+      if(!dob()){ toast('\uD83D\uDD1E 18+ games are hidden. Add your date of birth in Settings to see them.'); return; }
+      toast('\uD83D\uDD1E 18+ games stay hidden until your 18th birthday.');
+      return;
+    }
     toast('\uD83D\uDD1E 18+ games are hidden on this device. Turn them on in Settings — it needs the parent PIN.');
   }
 
@@ -7869,7 +7898,11 @@ setTimeout(function(){
 
   /* ---------- THE single unlock entry point (PIN lives here) ---------- */
   function adultUnlock18(cb){
-    if(!isAdultByDob()){ toast(!dob() ? 'Add your date of birth in Settings first — 18+ games stay hidden until then.' : 'These games stay hidden until your 18th birthday.'); cb(false); return; }
+    if(!isAdultByDob()){
+      if(!dob()) toast('Add your date of birth in Settings first — 18+ games stay hidden until then.');
+      else toast('These games stay hidden until your 18th birthday.');
+      cb(false); return;
+    }
     if(!hasPin()){ openVerifiedSetup('pin', cb); return; } /* No PIN yet — set one up first (email-verified). */
     openPinPrompt(cb);
   }
@@ -7967,9 +8000,9 @@ setTimeout(function(){
   /* AGE18-NO-CATCHUP-2026-11-23 (Holo 17:11: "Then only upon registering"):
      the DOB catch-up prompt for existing accounts is REMOVED — age
      verification happens only when someone registers. Existing
-     accounts with no DOB are never asked; they FAIL CLOSED since
-     2026-11-24 (Holo: "Fix") — 18+ games stay hidden, no toggle,
-     until they add a DOB themselves via Settings > 18+ games >
+     accounts with no DOB are never asked; since 2026-11-24 they fail
+     CLOSED (Holo 00:30 "Fix") — 18+ games hidden, no 18+ option —
+     until they add an 18+ DOB themselves via Settings > 18+ games >
      Add my date of birth (email-verified flow). */
 
   /* ---------- Settings wiring + live re-apply ---------- */
@@ -7982,11 +8015,23 @@ setTimeout(function(){
     t.textContent = hidden ? 'On' : 'Off';
     t.setAttribute('aria-pressed', hidden ? 'true' : 'false');
     t.disabled = under;
-    /* NO-DOB-FAIL-CLOSED-2026-11-24 + KIDS-2026-11-24: under 18 or no
-       DOB on file, there is no 18+ option at all — the toggle and
-       parent-PIN rows are hidden, not just disabled. */
-    try { if(t.parentElement) t.parentElement.hidden = under; } catch(e){}
-    try { var pb0 = document.getElementById('parentPinBtn'); if(pb0 && pb0.parentElement) pb0.parentElement.hidden = under; } catch(e){}
+    /* KIDS-RULE + FAIL-CLOSED (Holo 2026-11-24 00:29-00:30): under-18
+       and no-DOB accounts get NO 18+ option at all — the toggle row
+       and the parent PIN row are removed entirely (not just disabled),
+       and the intro note says so plainly. DOB line / nudge /
+       Change-my-date-of-birth stay: adding an 18+ DOB restores the
+       option, and the games unlock on the 18th birthday. */
+    var note = document.getElementById('adultIntroNote');
+    var tRow = t.closest ? t.closest('.tgl-row') : null;
+    if(tRow) tRow.hidden = under;
+    var pb0 = document.getElementById('parentPinBtn');
+    var pRow = (pb0 && pb0.closest) ? pb0.closest('.tgl-row') : null;
+    if(pRow) pRow.hidden = under;
+    if(note) note.textContent = !under
+      ? 'Hide the 18+ party games on this device before handing it to a kid. Turning them back on needs the parent PIN. Your date of birth hides them automatically until your 18th birthday.'
+      : (dob()
+        ? '18+ party games stay hidden until your 18th birthday. There is no switch to turn them on for this account.'
+        : '18+ party games stay hidden until you add a date of birth. There is no switch to turn them on for this account.');
     var st = document.getElementById('parentPinState');
     if(st) st.textContent = hasPin() ? 'PIN is set. Turning 18+ games back on needs it.' : 'No PIN set yet — set one up so a kid can\'t switch the games back on.';
     var dl = document.getElementById('adultDobLine');
@@ -8045,7 +8090,7 @@ setTimeout(function(){
     dob: dob, validateDob: validateDob, saveDob: saveDob, isAdultByDob: isAdultByDob,
     cleanDob: cleanDob, dobFieldHTML: dobFieldHTML, bindDobField: bindDobField,
     hide18: hide18, setHide18: setHide18, adultGamesVisible: adultGamesVisible,
-    hasPin: hasPin, adultUnlock18: adultUnlock18, showBlocked: showBlocked,
+    hasPin: hasPin, adultUnlock18: adultUnlock18, showBlocked: showBlocked, isExemptAdult: isExemptAdult,
     applyAll: applyAll, syncToggleUI: syncToggleUI
   };
 })();
@@ -12120,7 +12165,7 @@ var LOCATIONS = [
     <details class="legal-section">
       <summary>How do I hide 18+ games from kids?</summary>
       <div class="legal-content">
-        <p>In Settings, under 18+ games, turn Hide 18+ games on. Kings Cup Party, Cup Toss Party and Never Have I Ever Party disappear from the Library, search, Categories and Game of the Day. Turning them back on needs the parent PIN. Your date of birth (asked when you register) hides them automatically until your 18th birthday, when they switch on by themselves. If there is no date of birth on file, the 18+ games stay hidden and there is no switch to turn them on — add a date of birth in Settings.</p>
+        <p>In Settings, under 18+ games, turn Hide 18+ games on. Kings Cup Party, Cup Toss Party and Never Have I Ever Party disappear from the Library, search, Categories and Game of the Day. Turning them back on needs the parent PIN. Your date of birth (asked when you register) hides them automatically until your 18th birthday, when they switch on by themselves. If the account is under 18, or has no date of birth on file, there is no switch at all — the 18+ games stay hidden.</p>
       <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="settings">Go to Settings &#8594;</button></p>
         </div>
     </details>
@@ -12128,7 +12173,7 @@ var LOCATIONS = [
     <details class="legal-section">
       <summary>What is the parent PIN?</summary>
       <div class="legal-content">
-        <p>A 4-digit PIN that unlocks the 18+ games after they have been hidden. Set it up in Settings under 18+ games. Setting or changing the PIN always needs email verification first: we email you a link, and only after you tap it can you set or change the PIN. Turning the games off is free and never needs the PIN.</p>
+        <p>A 4-digit PIN that unlocks the 18+ games after they have been hidden. Set it up in Settings under 18+ games. Setting or changing the PIN always needs email verification first: we email you a link, and only after you tap it can you set or change the PIN. Turning the games off is free and never needs the PIN. The PIN never unlocks 18+ games for an account under 18 — or one with no date of birth on file.</p>
       <p class="faq-go-row"><button type="button" class="btn btn-light faq-go" data-faq-go="settings">Go to Settings &#8594;</button></p>
         </div>
     </details>
