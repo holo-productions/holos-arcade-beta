@@ -3012,6 +3012,7 @@ setTimeout(function(){
           <button class="btn" id="parentPinBtn" type="button">Set up parent PIN</button>
         </div>
         <p class="contact-note" id="adultDobLine">Date of birth: on file.</p>
+        <p class="contact-note" id="adultDobNudge" hidden>⚠️ No date of birth on file yet — add it so we can show you the right games. It only takes a few seconds.</p>
         <p><button type="button" class="tier3-link" id="adultDobChangeBtn">Change my date of birth</button></p>
       </div>
       </details>
@@ -7397,8 +7398,25 @@ setTimeout(function(){
       var raw = txt.value;
       if(/^\d{4}[-/.]/.test(raw)){ syncFromText(); return; }
       var digits = raw.replace(/\D/g, '').slice(0, 8), out = digits;
-      if(digits.length > 4) out = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4);
-      else if(digits.length > 2) out = digits.slice(0, 2) + '/' + digits.slice(2);
+      if(digits.length === 8){
+        /* DOB-YEARFIRST-2026-11-23: 8 digits can be DDMMYYYY or YYYYMMDD.
+           Both readings cannot have a sane year (1900..this year) at once,
+           so prefer the one whose year is sane. Year-first entry used to
+           get mangled here (19900101 -> 19/90/0101) because the formatter
+           below assumed day-first on every keystroke. */
+        var ddD = parseInt(digits.slice(0, 2), 10), ddM = parseInt(digits.slice(2, 4), 10), ddY = parseInt(digits.slice(4), 10);
+        var yyY = parseInt(digits.slice(0, 4), 10), yyM = parseInt(digits.slice(4, 6), 10), yyD = parseInt(digits.slice(6), 10);
+        var ddSane = ddD >= 1 && ddD <= 31 && ddM >= 1 && ddM <= 12 && ddY >= 1900 && ddY <= nowY;
+        var yySane = yyY >= 1900 && yyY <= nowY && yyM >= 1 && yyM <= 12 && yyD >= 1 && yyD <= 31;
+        if(yySane && !ddSane){ out = digits.slice(0, 4) + '/' + digits.slice(4, 6) + '/' + digits.slice(6); }
+        else { out = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4); }
+      } else if(digits.length >= 3 && /^(19|20)/.test(digits)){
+        /* Still typing a possible year (19xx/20xx): hold off inserting
+           slashes — inserting them as DD/MM/YYYY now is what mangled
+           year-first entry. Slashes land at 8 digits, or on blur. */
+        out = digits;
+      } else if(digits.length > 4){ out = digits.slice(0, 2) + '/' + digits.slice(2, 4) + '/' + digits.slice(4); }
+      else if(digits.length > 2){ out = digits.slice(0, 2) + '/' + digits.slice(2); }
       if(out !== txt.value) txt.value = out;
       syncFromText();
     });
@@ -7664,6 +7682,11 @@ setTimeout(function(){
       if(under) dl.textContent = dob() ? 'Date of birth on file — 18+ games stay hidden until your 18th birthday.' : 'No date of birth on file yet.';
       else dl.textContent = dob() ? 'Date of birth on file — you\'re 18 or older, so 18+ games can be shown.' : 'No date of birth on file yet.';
     }
+    /* DOB-FALLBACK-2026-11-23: nudge in Settings until a DOB is on file. */
+    var dobNudge = document.getElementById('adultDobNudge');
+    if(dobNudge) dobNudge.hidden = !!dob();
+    var dobBtn = document.getElementById('adultDobChangeBtn');
+    if(dobBtn) dobBtn.textContent = dob() ? 'Change my date of birth' : 'Add my date of birth';
     var pb = document.getElementById('parentPinBtn');
     if(pb) pb.textContent = hasPin() ? 'Change parent PIN' : 'Set up parent PIN';
   }
@@ -13504,7 +13527,7 @@ function sendBetaEmailVerification(){
   } catch(e){}
   return Promise.resolve({ sent:false, pending:true });
 }
-function createAccount(name, email, password, confirmPassword, inviteCode, termsAccepted, rememberMe, dob){
+function createAccount(name, email, password, confirmPassword, inviteCode, termsAccepted, rememberMe, dob, allowNoDob){
   /* Account creation via invite link or owner mode (UI built
      by buildInviteUI() for ?invite= links and by
      buildOwnerUI() for the secret owner link only).
@@ -13524,9 +13547,13 @@ function createAccount(name, email, password, confirmPassword, inviteCode, terms
   if(!password || String(password).length < 6) return Promise.resolve({ ok:false, error:'Your password needs at least 6 characters, agent.' });
   if(String(password) !== String(confirmPassword || '')) return Promise.resolve({ ok:false, error:'Those passwords do not match, agent. Have another try.' });
   /* AGE18-2026-11-23: date of birth is required at sign-up; 18+ games
-     stay hidden until the 18th birthday. */
+     stay hidden until the 18th birthday.
+     DOB-FALLBACK-2026-11-23 (Holo): if age verification glitches, the
+     tester can continue without it and add it in Profile Settings —
+     allowNoDob lets the form through with no DOB on file. */
   var dobErr = (window.holoAge18 && window.holoAge18.validateDob) ? window.holoAge18.validateDob(dob) : null;
-  if(dobErr) return Promise.resolve({ ok:false, error:dobErr });
+  if(dobErr && !allowNoDob) return Promise.resolve({ ok:false, error:dobErr });
+  if(allowNoDob && dobErr) dob = '';
   dob = (window.holoAge18 && window.holoAge18.cleanDob) ? window.holoAge18.cleanDob(dob) : String(dob || '').trim();
   var accounts = getAccounts();
   var key = name.toLowerCase();
@@ -14465,7 +14492,7 @@ function renderTesterAuth(){
       '<form id="createForm" method="post" action="#" novalidate>' +
       '<div class="login-field"><label for="createName">Code Name</label><input id="createName" name="username" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
       '<div class="login-field"><label for="createEmail">Your email</label><input id="createEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
-      '<div class="login-field"><label for="createDob">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDob') : '<input id="createDob" name="bday" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
+      '<div class="login-field"><label for="createDob">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDob') : '<input id="createDob" name="bday" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p><p><button type="button" class="tier3-link" id="createDobSkip" hidden>Continue without it for now — I\'ll add it in Settings</button></p></div>' +
       '<div class="login-field"><label for="createPw">Choose a password</label><input id="createPw" name="password" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
       '<div class="login-field"><label for="createPw2">Confirm password</label><input id="createPw2" name="password-confirm" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
       '<div class="login-field"><label for="createInvite">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInvite" name="invite-code" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Enter the code from your invite link.</p></div>' +
@@ -14545,6 +14572,16 @@ function renderTesterAuth(){
       var l = document.getElementById('legalLink');
       if(l) l.click();
     });
+    /* DOB-FALLBACK-2026-11-23: shown only when the DOB check fails at
+       sign-up — lets the tester continue with no DOB on file. */
+    var dobSkipBtn = document.getElementById('createDobSkip');
+    if(dobSkipBtn) dobSkipBtn.addEventListener('click', function(){
+      var f = document.getElementById('createForm');
+      if(!f) return;
+      f.dataset.dobSkip = '1';
+      dobSkipBtn.hidden = true;
+      if(f.requestSubmit) f.requestSubmit(); else f.dispatchEvent(new Event('submit', { cancelable: true }));
+    });
     var cForm = document.getElementById('createForm');
     if(cForm) cForm.addEventListener('submit', function(e){
       e.preventDefault();
@@ -14561,6 +14598,7 @@ function renderTesterAuth(){
          shown as themed field messages instead of the native
          tooltip. createAccount still re-checks before Firebase. */
       clearAllFieldMarks(cForm);
+      var dobSkipHide = document.getElementById('createDobSkip'); if(dobSkipHide) dobSkipHide.hidden = true;
       var nameEl = (document.getElementById('createName') || document.getElementById('createNameOwner'));
       var emailEl2 = document.getElementById('createEmail');
       var pwEl2 = document.getElementById('createPw');
@@ -14571,12 +14609,12 @@ function renderTesterAuth(){
       if(!validAccountEmail(em)){ markFieldInvalid(emailEl2, String(em || '').trim() ? '⚠️ That email looks off, agent.' : '⚠️ This field needs filling in, agent!'); fail('Pop a valid email in, agent. Your verification link goes there.'); if(emailEl2) emailEl2.focus(); return; }
       var dobEl = document.getElementById('createDob');
       var dobErr = (window.holoAge18 && window.holoAge18.validateDob) ? window.holoAge18.validateDob(dob) : null;
-      if(dobErr){ markFieldInvalid(dobEl, '⚠️ ' + dobErr); fail(dobErr); if(dobEl) dobEl.focus(); return; }
+      if(dobErr && cForm.dataset.dobSkip !== '1'){ markFieldInvalid(dobEl, '⚠️ ' + dobErr); fail(dobErr); var dobSkipBtn = document.getElementById('createDobSkip'); if(dobSkipBtn) dobSkipBtn.hidden = false; if(dobEl) dobEl.focus(); return; }
       if(!pw || String(pw).length < 6){ markFieldInvalid(pwEl2, !pw ? '⚠️ This field needs filling in, agent!' : '⚠️ Needs 6+ characters, agent.'); fail('Your password needs at least 6 characters, agent.'); if(pwEl2) pwEl2.focus(); return; }
       if(String(pw) !== String(pw2 || '')){ markFieldInvalid(pw2El, '⚠️ Passwords do not match, agent.'); fail('Those passwords do not match, agent. Have another try.'); if(pw2El) pw2El.focus(); return; }
       if(!String(inv || '').trim()){ markFieldInvalid(invEl, '⚠️ This field needs filling in, agent!'); fail('Your invite code is required, agent. It comes with your invite link. No code? Ask Holo for one.'); if(invEl) invEl.focus(); return; }
       if(!trm){ markFieldInvalid(trmEl, '⚠️ Tick this box first, agent!'); fail('Please tick the box to agree to the Terms & Policies first.'); return; }
-      createAccount(nm, em, pw, pw2, inv, trm, false, dob).then(function(res){
+      createAccount(nm, em, pw, pw2, inv, trm, false, dob, cForm.dataset.dobSkip === '1').then(function(res){
         if(res.ok){
           if(err) err.hidden = true;
           clearAllFieldMarks(cForm);
@@ -14650,7 +14688,7 @@ function renderTesterAuth(){
       '<form id="createFormOwner" method="post" action="#" novalidate>' +
       '<div class="login-field"><label for="createNameOwner">Code Name</label><input id="createNameOwner" name="username" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
       '<div class="login-field"><label for="createEmailOwner">Your email</label><input id="createEmailOwner" name="email" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
-      '<div class="login-field"><label for="createDobOwner">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDobOwner') : '<input id="createDobOwner" name="bday" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p></div>' +
+      '<div class="login-field"><label for="createDobOwner">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDobOwner') : '<input id="createDobOwner" name="bday" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p><p><button type="button" class="tier3-link" id="createDobSkipOwner" hidden>Continue without it for now — I\'ll add it in Settings</button></p></div>' +
       '<div class="login-field"><label for="createPwOwner">Choose a password</label><input id="createPwOwner" name="password" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
       '<div class="login-field"><label for="createPw2Owner">Confirm password</label><input id="createPw2Owner" name="password-confirm" type="password" autocomplete="new-password" placeholder="Type it again" /></div>' +
       '<div class="login-field"><label for="createInviteOwner">Invite / tester code <span style="font-weight:800;color:var(--gold)">(required)</span></label><input id="createInviteOwner" name="invite-code" type="text" autocomplete="off" placeholder="Enter your invite / tester code" required aria-required="true" /><p class="login-helper">Enter the code from your invite link.</p></div>' +
@@ -15079,6 +15117,16 @@ function renderTesterAuth(){
       var l = document.getElementById('legalLink');
       if(l) l.click();
     });
+    /* DOB-FALLBACK-2026-11-23: shown only when the DOB check fails at
+       sign-up — lets the tester continue with no DOB on file. */
+    var dobSkipBtn = document.getElementById('createDobSkipOwner');
+    if(dobSkipBtn) dobSkipBtn.addEventListener('click', function(){
+      var f = document.getElementById('createFormOwner');
+      if(!f) return;
+      f.dataset.dobSkip = '1';
+      dobSkipBtn.hidden = true;
+      if(f.requestSubmit) f.requestSubmit(); else f.dispatchEvent(new Event('submit', { cancelable: true }));
+    });
     var cForm = document.getElementById('createFormOwner');
     if(cForm) cForm.addEventListener('submit', function(e){
       e.preventDefault();
@@ -15095,6 +15143,7 @@ function renderTesterAuth(){
          shown as themed field messages instead of the native
          tooltip. createAccount still re-checks before Firebase. */
       clearAllFieldMarks(cForm);
+      var dobSkipHide = document.getElementById('createDobSkipOwner'); if(dobSkipHide) dobSkipHide.hidden = true;
       var nameEl = document.getElementById('createNameOwner');
       var emailEl2 = document.getElementById('createEmailOwner');
       var pwEl2 = document.getElementById('createPwOwner');
@@ -15105,12 +15154,12 @@ function renderTesterAuth(){
       if(!validAccountEmail(em)){ markFieldInvalid(emailEl2, String(em || '').trim() ? '⚠️ That email looks off, agent.' : '⚠️ This field needs filling in, agent!'); fail('Pop a valid email in, agent. Your verification link goes there.'); if(emailEl2) emailEl2.focus(); return; }
       var dobEl = document.getElementById('createDobOwner');
       var dobErr = (window.holoAge18 && window.holoAge18.validateDob) ? window.holoAge18.validateDob(dob) : null;
-      if(dobErr){ markFieldInvalid(dobEl, '⚠️ ' + dobErr); fail(dobErr); if(dobEl) dobEl.focus(); return; }
+      if(dobErr && cForm.dataset.dobSkip !== '1'){ markFieldInvalid(dobEl, '⚠️ ' + dobErr); fail(dobErr); var dobSkipBtn = document.getElementById('createDobSkipOwner'); if(dobSkipBtn) dobSkipBtn.hidden = false; if(dobEl) dobEl.focus(); return; }
       if(!pw || String(pw).length < 6){ markFieldInvalid(pwEl2, !pw ? '⚠️ This field needs filling in, agent!' : '⚠️ Needs 6+ characters, agent.'); fail('Your password needs at least 6 characters, agent.'); if(pwEl2) pwEl2.focus(); return; }
       if(String(pw) !== String(pw2 || '')){ markFieldInvalid(pw2El, '⚠️ Passwords do not match, agent.'); fail('Those passwords do not match, agent. Have another try.'); if(pw2El) pw2El.focus(); return; }
       if(!String(inv || '').trim()){ markFieldInvalid(invEl, '⚠️ This field needs filling in, agent!'); fail('Your invite code is required, agent. It comes with your invite link. No code? Ask Holo for one.'); if(invEl) invEl.focus(); return; }
       if(!trm){ markFieldInvalid(trmEl, '⚠️ Tick this box first, agent!'); fail('Please tick the box to agree to the Terms & Policies first.'); return; }
-      createAccount(nm, em, pw, pw2, inv, trm, false, dob).then(function(res){
+      createAccount(nm, em, pw, pw2, inv, trm, false, dob, cForm.dataset.dobSkip === '1').then(function(res){
         if(res.ok){
           if(err) err.hidden = true;
           clearAllFieldMarks(cForm);
