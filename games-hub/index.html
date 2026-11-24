@@ -19067,7 +19067,7 @@ function renderTesterAuth(){
     try {
       var items = (window.holoInbox && typeof window.holoInbox.items === 'function') ? window.holoInbox.items() : [];
       var found = null;
-      items.forEach(function(n){ if(n && n.type === 'mission-briefing' && !found) found = n; });
+      items.forEach(function(n){ if(n && (n.type === 'mission-briefing' || n.reportId === 'mission-briefing-v1') && !found) found = n; });
       return found;
     } catch(e){ return null; }
   }
@@ -22297,6 +22297,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   function sectionOf(n){
     if(n.archived) return 'archive';
     if(n.reportId === 'device-questionnaire-v1') return 'messages'; /* DEVICE-QUESTIONNAIRE-2026-11-23: the questionnaire is a message from the Arcade team (sits next to the mission briefing), even though its type is 'system' for the RTDB allowlist. */
+    if(n.reportId === 'mission-briefing-v1') return 'messages'; /* INBOX-DM-FIX-2026-11-24: the briefing now also sends as type 'system' (see the briefing send block) — filed under Messages by reportId, same pattern as the questionnaire. */
     return MSG_TYPES[n.type] ? 'messages' : 'notifications';
   }
   function setSection(s){
@@ -23152,6 +23153,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 .dm-row .dm-time{font-size:11.5px;color:#b8f4ff;white-space:nowrap;flex:0 0 auto}
 .dm-row .dm-count{flex:0 0 auto;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#38e1ff;color:#0a0620;font-size:11.5px;font-weight:800;line-height:20px;text-align:center}
 .dm-row .dm-dot{flex:0 0 auto;width:10px;height:10px;border-radius:50%;background:#38e1ff;box-shadow:0 0 6px rgba(56,225,255,.8);margin-top:6px}
+/* INBOX-DM-FIX-2026-11-24: DM archive — the row is a div now, the open area is its own button so Archive can sit beside it */
+.dm-row-open{display:flex;gap:10px;align-items:center;flex:1 1 auto;min-width:0;background:none;border:0;padding:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.dm-archive-btn{flex:0 0 auto;background:#171231;border:2px solid #8b5cff;color:#e9e4ff;border-radius:10px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
+.dm-archive-btn:hover{border-color:#ff2e9a}
 #dmThread[hidden]{display:none!important}
 #dmThread{margin-top:12px;background:linear-gradient(180deg,#171040,#0e0828 75%);border:2px solid var(--violet);border-radius:18px;box-shadow:0 0 0 3px #0a0620,0 0 26px rgba(139,92,255,.35);overflow:hidden}
 #dmThread::before{content:"";display:block;height:6px;background:linear-gradient(90deg,var(--pink),var(--violet),var(--blue),var(--cyan))}
@@ -23306,6 +23311,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   }
 
   var threads = {};   /* tid -> {withUid, withName, lastMessageAt, lastPreview, unread} */
+  var archived = {};  /* INBOX-DM-FIX-2026-11-24: tid -> true; own /users/$uid/dmArchived — archived chats hide from the list and live in the Archive section. Own-only writes, so no rules change needed. */
   var muted = {};     /* tid -> true */
   var openTid = null, openWith = null, openName = '', openA = null, openB = null;
   var openBlockedMe = false, openBlockedByMe = false;
@@ -23335,13 +23341,13 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     ensureBadge();
     var b = document.getElementById('dmBadge'); if(!b) return;
     var n = 0;
-    Object.keys(threads).forEach(function(tid){ if(!muted[tid]) n += (threads[tid].unread || 0); });
+    Object.keys(threads).forEach(function(tid){ if(!muted[tid] && !archived[tid]) n += (threads[tid].unread || 0); });
     b.textContent = n > 9 ? '9+' : String(n);
     b.hidden = n === 0;
   }
   function unreadCount(){
     var n = 0;
-    Object.keys(threads).forEach(function(tid){ if(!muted[tid]) n += (threads[tid].unread || 0); });
+    Object.keys(threads).forEach(function(tid){ if(!muted[tid] && !archived[tid]) n += (threads[tid].unread || 0); });
     return n;
   }
 
@@ -23360,6 +23366,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         '<div class="dm-head"><h3 id="dmThreadTitle">Chat</h3>' +
         '<button type="button" class="btn btn-light dm-mini" id="dmMuteBtn">Mute</button>' +
         '<button type="button" class="btn btn-light dm-mini" id="dmBlockBtn">Block</button>' +
+        '<button type="button" class="btn btn-light dm-mini" id="dmArchiveBtn">Archive</button>' +
         '<button type="button" class="btn btn-light dm-mini" id="dmCloseBtn">Back</button></div>' +
         '<p class="dm-note">Friends only — just the two of you. No voice or camera here.</p>' +
         '<div class="dm-msgs" id="dmMsgs" aria-live="polite"></div>' +
@@ -23397,6 +23404,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       if(mb) mb.addEventListener('click', function(){ toggleMute(); });
       var bb = document.getElementById('dmBlockBtn');
       if(bb) bb.addEventListener('click', function(){ if(openBlockedByMe) unblockThread(); else blockThread(); });
+      var ab2 = document.getElementById('dmArchiveBtn');
+      if(ab2) ab2.addEventListener('click', function(){ if(openTid) toggleArchive(openTid, !archived[openTid]); });
       var cb = document.getElementById('dmCloseBtn');
       if(cb) cb.addEventListener('click', function(){ closeThread(); });
       buildKeyboard();
@@ -23679,44 +23688,66 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var sel = document.getElementById('inboxSectionSelect');
     var vf = document.getElementById('inboxViewFilter');
     var show = true;
-    if(sel && sel.value !== 'all' && sel.value !== 'messages') show = false;
+    if(sel && sel.value !== 'all' && sel.value !== 'messages' && sel.value !== 'archive') show = false; /* INBOX-DM-FIX-2026-11-24: archived chats show in the Archive section */
     if(vf && vf.value === 'drafts') show = false;
     if(document.body.getAttribute('data-view') !== 'inbox') show = false;
     list.hidden = !show;
+    renderList(); /* INBOX-DM-FIX-2026-11-24: switching sections must re-render the list — otherwise archived chats never appear when the Archive section is picked. */
   }
 
   function renderList(){
     var rows = document.getElementById('dmRows'); if(!rows) return;
+    var sel = document.getElementById('inboxSectionSelect');
+    var inArchive = !!(sel && sel.value === 'archive');
+    var h = document.querySelector('#dmList h3'); if(h) h.textContent = inArchive ? 'Archived chats' : 'Direct messages';
     var keys = Object.keys(threads).sort(function(a, b){ return (threads[b].lastMessageAt || 0) - (threads[a].lastMessageAt || 0); });
+    keys = keys.filter(function(tid){ return !!archived[tid] === inArchive; });
     if(!keys.length){
-      rows.innerHTML = '<p class="dm-empty">No chats yet — tap Message on a friend to start one.</p>';
+      rows.innerHTML = inArchive ? '<p class="dm-empty">No archived chats yet, agent.</p>' : '<p class="dm-empty">No chats yet — tap Message on a friend to start one.</p>';
       return;
     }
     rows.innerHTML = keys.map(function(tid){
       var t = threads[tid] || {};
       var unread = (!muted[tid] && (t.unread || 0) > 0);
       var initial = String(t.withName || 'T').replace(/[^A-Za-z0-9]/g, '').charAt(0).toUpperCase() || 'T';
-      return '<button type="button" class="dm-row' + (unread ? ' unread' : '') + '" data-dm-open="' + esc(t.withUid) + '" data-dm-name="' + esc(t.withName || 'Tester') + '">' +
+      return '<div class="dm-row' + (unread ? ' unread' : '') + '">' +
+        '<button type="button" class="dm-row-open" data-dm-open="' + esc(t.withUid) + '" data-dm-name="' + esc(t.withName || 'Tester') + '">' +
         '<span class="inbox-ava" aria-hidden="true">' + esc(initial) + '</span>' +
         '<span class="dm-main"><span class="dm-name">' + esc(t.withName || 'Tester') + '</span>' +
         '<span class="dm-prev">' + esc(previewOf({ kind: (t.lastKind || 'text'), text: t.lastPreview, sticker: t.lastSticker })) + '</span></span>' +
         '<span class="dm-time">' + esc(whenShort(t.lastMessageAt)) + '</span>' +
         (unread ? '<span class="dm-count">' + esc(String(t.unread > 9 ? '9+' : t.unread)) + '</span>' : '') +
-        '</button>';
+        '</button>' +
+        '<button type="button" class="dm-archive-btn" data-dm-archive="' + esc(tid) + '">' + (inArchive ? 'Unarchive' : 'Archive') + '</button>' +
+        '</div>';
     }).join('');
     rows.querySelectorAll('[data-dm-open]').forEach(function(b){
       b.addEventListener('click', function(){ openThread(b.getAttribute('data-dm-open'), b.getAttribute('data-dm-name') || 'Tester'); });
     });
+    rows.querySelectorAll('[data-dm-archive]').forEach(function(b){
+      b.addEventListener('click', function(){ toggleArchive(b.getAttribute('data-dm-archive'), !archived[b.getAttribute('data-dm-archive')]); });
+    });
+  }
+  /* INBOX-DM-FIX-2026-11-24: archive / unarchive one DM thread. Own record only. */
+  function toggleArchive(tid, on){
+    var uid = myUid(); if(!uid || !tid) return;
+    if(on){ archived[tid] = true; api('PUT', '/users/' + encodeURIComponent(uid) + '/dmArchived/' + encodeURIComponent(tid), true); }
+    else { delete archived[tid]; api('DELETE', '/users/' + encodeURIComponent(uid) + '/dmArchived/' + encodeURIComponent(tid)); }
+    if(openTid === tid && on) closeThread();
+    renderList(); syncBadge(); syncDmVisibility();
   }
 
   function refresh(){
     var uid = myUid();
-    if(!uid){ threads = {}; muted = {}; renderList(); syncBadge(); return Promise.resolve(false); }
+    if(!uid){ threads = {}; muted = {}; archived = {}; renderList(); syncBadge(); return Promise.resolve(false); }
     return api('GET', '/users/' + encodeURIComponent(uid) + '/dmInbox').then(function(data){
       threads = (data && typeof data === 'object') ? data : {};
       return api('GET', '/users/' + encodeURIComponent(uid) + '/dmMuted');
     }).then(function(m){
       muted = (m && typeof m === 'object') ? m : {};
+      return api('GET', '/users/' + encodeURIComponent(uid) + '/dmArchived');
+    }).then(function(av){
+      archived = (av && typeof av === 'object') ? av : {};
       buildUI(); renderList(); syncBadge(); syncDmVisibility();
       return true;
     });
@@ -23776,6 +23807,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(mb) mb.textContent = (openTid && muted[openTid]) ? 'Unmute' : 'Mute';
     var bb = document.getElementById('dmBlockBtn');
     if(bb) bb.textContent = openBlockedByMe ? 'Unblock' : 'Block';
+    var ab = document.getElementById('dmArchiveBtn');
+    if(ab) ab.textContent = (openTid && archived[openTid]) ? 'Unarchive' : 'Archive';
     var note = document.getElementById('dmBlockedNote');
     if(note){
       if(openBlockedMe){ note.hidden = false; note.textContent = 'You cannot message this tester right now.'; }
@@ -24201,7 +24234,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       if(r === null){ toast('That did not save — the new rules publish is still pending.'); return; }
       m.status = 'playing'; m.updatedAt = Date.now(); render();
       myName().then(function(myN){
-        sendNotice(m.aUid, { type:'turn', title:'Your turn in Tic Tac Toe', body:'Your turn in Tic Tac Toe vs ' + myN + ' — ' + myN + ' accepted at ' + timeShort(Date.now()) + '.' });
+        sendNotice(m.aUid, { type:'turn', title:'Your turn in Tic Tac Toe', body:'Your turn in Tic Tac Toe vs ' + myN + ' — ' + myN + ' accepted at ' + timeShort(Date.now()) + '.', link:'game:tic-tac-toe' });
       });
     });
   }
@@ -24237,11 +24270,11 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       render();
       myName().then(function(myN){
         if(status === 'playing'){
-          sendNotice(opp.uid, { type:'turn', title:'Your turn in Tic Tac Toe', body:'Your turn in Tic Tac Toe vs ' + myN + ' — ' + myN + ' played at ' + timeShort(now) + '.' });
+          sendNotice(opp.uid, { type:'turn', title:'Your turn in Tic Tac Toe', body:'Your turn in Tic Tac Toe vs ' + myN + ' — ' + myN + ' played at ' + timeShort(now) + '.', link:'game:tic-tac-toe' });
         } else if(status === 'won'){
-          sendNotice(opp.uid, { type:'turn', title:'Tic Tac Toe — ' + myN + ' won', body:myN + ' won Tic Tac Toe vs you at ' + timeShort(now) + '. Tap to rematch.' });
+          sendNotice(opp.uid, { type:'turn', title:'Tic Tac Toe — ' + myN + ' won', body:myN + ' won Tic Tac Toe vs you at ' + timeShort(now) + '. Tap to rematch.', link:'game:tic-tac-toe' });
         } else {
-          sendNotice(opp.uid, { type:'turn', title:'Tic Tac Toe — draw', body:'Your Tic Tac Toe game vs ' + myN + ' ended in a draw at ' + timeShort(now) + '. Tap to rematch.' });
+          sendNotice(opp.uid, { type:'turn', title:'Tic Tac Toe — draw', body:'Your Tic Tac Toe game vs ' + myN + ' ended in a draw at ' + timeShort(now) + '. Tap to rematch.', link:'game:tic-tac-toe' });
         }
       });
     });
@@ -25733,9 +25766,14 @@ footer .egg-row .egg{width:32px;height:32px}
    like any other message. A true on-register hook isn't
    feasible: registration does NOT sign the tester in, so there is no
    auth token at register time to write the notice with. Deduped
-   server-side by notification type 'mission-briefing' (so it lands once
+   server-side by reportId 'mission-briefing-v1' (so it lands once
    per account across devices) plus a per-account localStorage flag so
-   we don't re-check on every load. Local-only accounts (no Firebase
+   we don't re-check on every load. INBOX-DM-FIX-2026-11-24: the briefing used to
+   send as type 'mission-briefing', which is NOT in the RTDB notification
+   allowlist — verified denied live 2026-11-24, so no tester ever got a
+   briefing. It now sends as type 'system' (allowed) with the reportId
+   above, and sectionOf + tourFindBriefing match the reportId so it still
+   files under Messages and the tour still finds it. Local-only accounts (no Firebase
    auth) can't receive it — notifySelf resolves null and we retry on a
    later load in case the account gains Firebase auth. */
 (function(){
@@ -25763,9 +25801,9 @@ footer .egg-row .egg{width:32px;height:32px}
     Promise.resolve(check).then(function(){
       var existing = [];
       try { existing = window.holoInbox.items() || []; } catch(e){}
-      var has = existing.some(function(n){ return n && n.type === 'mission-briefing'; });
+      var has = existing.some(function(n){ return n && (n.reportId === 'mission-briefing-v1' || n.type === 'mission-briefing'); });
       if(has){ markDone(); return null; }
-      return window.holoInbox.notifySelf('mission-briefing', 'Your mission briefing', BODY).then(function(r){
+      return window.holoInbox.notifySelf('system', 'Your mission briefing', BODY, null, 'mission-briefing-v1').then(function(r){
         if(r) markDone(); else tried = false; /* no Firebase auth yet — retry next load */
         return r;
       });
@@ -25787,9 +25825,9 @@ footer .egg-row .egg{width:32px;height:32px}
    flag). No owner-side send, no UID list needed, no email. The message
    is type 'system' — already in the RTDB notification type allowlist —
    so no Firebase rules change is needed. NOTE: the mission briefing uses
-   type 'mission-briefing', which is NOT in the documented allowlist, so
-   verify in the Firebase Console whether the briefing actually lands
-   live; the questionnaire deliberately avoids that trap. The form itself
+   type 'mission-briefing', which is NOT in the documented allowlist —
+   verified denied live 2026-11-24, and the briefing now uses 'system' +
+   reportId 'mission-briefing-v1' instead (same trap avoided). The form itself
    lives in the Inbox reader (renderDeviceQuestionnaire, NOTIF-CENTER
    block): one-tap chips + the console/gamepad follow-ups, answers saved
    to the tester's own record (/users/$uid/devices). The Report back form
