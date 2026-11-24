@@ -500,6 +500,7 @@ const W=900,H=460, RAIL=36, PLAY={x:RAIL,y:RAIL,w:W-RAIL*2,h:H-RAIL*2}, BR=12.5,
 const POCKETS=[{x:RAIL,y:RAIL},{x:W/2,y:RAIL-4},{x:W-RAIL,y:RAIL},{x:RAIL,y:H-RAIL},{x:W/2,y:H-RAIL+4},{x:W-RAIL,y:H-RAIL}];
 const COLORS={1:'#f6c90e',2:'#2456c8',3:'#d92b2b',4:'#6a2db5',5:'#f07d18',6:'#0f7a3d',7:'#7a2e1f',8:'#111',9:'#f6c90e',10:'#2456c8',11:'#d92b2b',12:'#6a2db5',13:'#f07d18',14:'#0f7a3d',15:'#7a2e1f',0:'#fff'};
 let balls=[], angle=-0.15, power=55, moving=false, turn='you', groups={you:null,ai:null}, ballInHand=false, shotsThisTurn=[], totalShots={you:0,ai:0}, gameOver=false, aiThinking=false;
+let playerPower={you:55,ai:55}; // POWER-PER-PLAYER-2026-11-23: each player keeps their own power; the AI's last power no longer leaks onto the human's next shot (tester bug).
 let mode=localStorage.getItem('pool8_mode')||'match';
 let practiceShots=0, practicePotted=0, practiceScratches=0, lastHint=null;
 function isPractice(){return mode==='practice'}
@@ -538,6 +539,7 @@ function newRack(){
   if(isPractice() && drill!=='full' && drill!=='break'){ setupDrill(drill); }
   else { rack(); }
   turn='you'; groups={you:null,ai:null}; ballInHand=false; gameOver=false; totalShots={you:0,ai:0}; moving=false; aiThinking=false;
+  playerPower={you:55,ai:55}; power=55; powerEl.value=55; document.getElementById('powerVal').textContent=55;
   if(isPractice()){ practiceShots=0; practicePotted=0; practiceScratches=0; }
   document.getElementById('placeHint').style.display='none'; updateCards();
   if(isPractice()){
@@ -653,15 +655,25 @@ function draw(){
   });
 }
 
+// POCKETS-FIRST-2026-11-23: distance from a point to a line segment, for the swept pocket check.
+function segDist(px,py,x,y,cx,cy){ const dx=x-px, dy=y-py, l2=dx*dx+dy*dy; let t=l2?((cx-px)*dx+(cy-py)*dy)/l2:0; t=Math.max(0,Math.min(1,t)); return Math.hypot(cx-(px+t*dx), cy-(py+t*dy)); }
 let lastPocketed=[];
 function physics(){
   if(!moving) return;
   let any=false; lastPocketed=[];
   for(let step=0; step<2; step++){
-    balls.forEach(b=>{ if(b.pocketed||(b.vx===0&&b.vy===0))return; any=true; b.x+=b.vx/2; b.y+=b.vy/2; b.vx*=0.992; b.vy*=0.992; if(Math.hypot(b.vx,b.vy)<0.08){b.vx=0;b.vy=0}
-      if(b.x<PLAY.x+BR){b.x=PLAY.x+BR;b.vx=Math.abs(b.vx)*0.92} if(b.x>PLAY.x+PLAY.w-BR){b.x=PLAY.x+PLAY.w-BR;b.vx=-Math.abs(b.vx)*0.92}
-      if(b.y<PLAY.y+BR){b.y=PLAY.y+BR;b.vy=Math.abs(b.vy)*0.92} if(b.y>PLAY.y+PLAY.h-BR){b.y=PLAY.y+PLAY.h-BR;b.vy=-Math.abs(b.vy)*0.92}
-      POCKETS.forEach(p=>{ if(Math.hypot(b.x-p.x,b.y-p.y)<PR-2){ if(!b.pocketed){b.pocketed=true; b.vx=b.vy=0; lastPocketed.push(b); shotsThisTurn.push(b);} } });
+    balls.forEach(b=>{ if(b.pocketed||(b.vx===0&&b.vy===0))return; any=true; const px=b.x, py=b.y; b.x+=b.vx/2; b.y+=b.vy/2; b.vx*=0.992; b.vy*=0.992; if(Math.hypot(b.vx,b.vy)<0.08){b.vx=0;b.vy=0}
+      // POCKETS-FIRST-2026-11-23 (tester bug: balls bounced out of dead-centre
+      // pockets): swept pocket check BEFORE the rail bounce, and the rails have
+      // gaps at the pocket mouths. The rail used to deflect a ball before the
+      // pocket check could catch it, so a ball a few px off dead-centre
+      // rattled off the jaw. The swept check tests the ball's whole path this
+      // sub-step, so a fast ball can't skip over a pocket.
+      POCKETS.forEach(p=>{ if(segDist(px,py,b.x,b.y,p.x,p.y)<PR){ if(!b.pocketed){b.pocketed=true; b.vx=b.vy=0; lastPocketed.push(b); shotsThisTurn.push(b);} } });
+      if(b.pocketed) return;
+      const topMouth=POCKETS.some(p=>p.y<H/2&&Math.abs(b.x-p.x)<PR), botMouth=POCKETS.some(p=>p.y>=H/2&&Math.abs(b.x-p.x)<PR), leftMouth=POCKETS.some(p=>p.x<W/2&&Math.abs(b.y-p.y)<PR), rightMouth=POCKETS.some(p=>p.x>=W/2&&Math.abs(b.y-p.y)<PR);
+      if(b.x<PLAY.x+BR&&!leftMouth){b.x=PLAY.x+BR;b.vx=Math.abs(b.vx)*0.92} if(b.x>PLAY.x+PLAY.w-BR&&!rightMouth){b.x=PLAY.x+PLAY.w-BR;b.vx=-Math.abs(b.vx)*0.92}
+      if(b.y<PLAY.y+BR&&!topMouth){b.y=PLAY.y+BR;b.vy=Math.abs(b.vy)*0.92} if(b.y>PLAY.y+PLAY.h-BR&&!botMouth){b.y=PLAY.y+PLAY.h-BR;b.vy=-Math.abs(b.vy)*0.92}
     });
     // collisions
     for(let i=0;i<balls.length;i++) for(let j=i+1;j<balls.length;j++){ const a=balls[i],b=balls[j]; if(a.pocketed||b.pocketed)continue; const dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy); if(d>0&&d<BR*2){ const nx=dx/d, ny=dy/d, overlap=(BR*2-d)/2; a.x-=nx*overlap; a.y-=ny*overlap; b.x+=nx*overlap; b.y+=ny*overlap; const p=2*((a.vx*nx+a.vy*ny)-(b.vx*nx+b.vy*ny))/2; a.vx-=p*nx; a.vy-=p*ny; b.vx+=p*nx; b.vy+=p*ny; clickSound(); } }
@@ -727,6 +739,11 @@ function resolveTurn(){
     setStatus(shooter==='you'? `Nice pot! <strong>You shoot again.</strong> ${assigned?'Groups set — you are '+(myGroup==='solid'?'solids':'stripes')+'.':''}` : `Rack potted and <strong>shoots again</strong>.`);
   } else {
     turn=opp;
+    // POWER-PER-PLAYER-2026-11-23: remember the outgoing player's power and
+    // restore the incoming player's own power (was: the AI's last power
+    // carried over onto the human's next shot).
+    playerPower[shooter]=power; power=playerPower[opp];
+    powerEl.value=power; document.getElementById('powerVal').textContent=Math.round(power);
     if(scratched) setStatus(`Scratch! Cue ball down — ${opp==='you'?'<strong>ball in hand for you</strong>. Tap the felt to place it.':'<strong>ball in hand for Rack</strong>.'}`);
     else if(assigned) setStatus(`Groups set! ${shooter==='you'?'You':'Rack'} took ${myGroup==='solid'?'solids':'stripes'}. ${turn==='you'?'<strong>Your turn.</strong>':'<strong>Rack to play…</strong>'}`);
     else setStatus(turn==='you'? `No pot — <strong>your turn</strong>. Aim for ${groups.you? (groupBalls(groups.you).length? 'your group':'the 8-ball') : 'any ball except the 8'}.` : `No pot from you — <strong>Rack is thinking…</strong>`);
@@ -759,7 +776,7 @@ function shootCurrent(){
 }
 document.getElementById('shootBtn').onclick=shootCurrent;
 const powerEl=document.getElementById('power');
-powerEl.addEventListener('input',()=>{power=+powerEl.value; document.getElementById('powerVal').textContent=power});
+powerEl.addEventListener('input',()=>{power=+powerEl.value; if(turn==='you') playerPower.you=power; document.getElementById('powerVal').textContent=power});
 document.getElementById('aimL').onclick=()=>{angle-=0.018; draw()};
 document.getElementById('aimR').onclick=()=>{angle+=0.018; draw()};
 
@@ -798,6 +815,7 @@ function aiShoot(){
   angle=Math.atan2(best.ghostY-c.y,best.ghostX-c.x)+(Math.random()-0.5)*2*noise;
   const dist=Math.hypot(best.ghostX-c.x,best.ghostY-c.y);
   power = Math.max(28, Math.min(92, 38+dist/9 + (difficulty==='hard'?6:0) + Math.random()*8));
+  playerPower.ai=power;
   powerEl.value=power; document.getElementById('powerVal').textContent=Math.round(power);
   setStatus(`Rack lines up on the <strong>${best.t.n}</strong>…`);
   draw();
@@ -823,7 +841,7 @@ document.getElementById('modePracticeBtn').onclick=()=>setMode('practice');
 document.getElementById('practiceBtn').onclick=()=>{ if(isPractice()){ document.getElementById('practicePanel').scrollIntoView({behavior:'smooth',block:'center'}); } else setMode('practice'); };
 document.getElementById('drillSel').addEventListener('change',()=>{ newRack(); });
 document.getElementById('hintBtn').onclick=()=>updatePracticeHint();
-document.getElementById('aimHintBtn').onclick=()=>{ const h=computeBestShot(); if(!h){updatePracticeHint(); return;} lastHint=h; angle=h.angle; power=h.power; powerEl.value=power; document.getElementById('powerVal').textContent=power; document.getElementById('practiceHint').innerHTML=`🎯 <b>Aimed for you:</b> ${h.t.n} ball → ${h.pocketName} pocket at <b>${h.power}% power</b>. Nudge with Fine Aim if you want, then tap <b>SHOOT</b>.`; draw(); };
+document.getElementById('aimHintBtn').onclick=()=>{ const h=computeBestShot(); if(!h){updatePracticeHint(); return;} lastHint=h; angle=h.angle; power=h.power; playerPower.you=power; powerEl.value=power; document.getElementById('powerVal').textContent=power; document.getElementById('practiceHint').innerHTML=`🎯 <b>Aimed for you:</b> ${h.t.n} ball → ${h.pocketName} pocket at <b>${h.power}% power</b>. Nudge with Fine Aim if you want, then tap <b>SHOOT</b>.`; draw(); };
 document.getElementById('bihBtn').onclick=()=>{ if(moving) return; ballInHand=true; document.getElementById('placeHint').style.display='block'; setStatus(`✋ <strong>Ball in hand (practice).</strong> Move over the felt and tap where you want the cue ball, then aim.`); updateCards(); draw(); };
 document.getElementById('bringBackBtn').onclick=()=>{ let placed=0; balls.filter(b=>b.pocketed&&b.n!==0).forEach((b,i)=>{ b.pocketed=false; b.vx=b.vy=0; b.x=520+ (i%4)*62; b.y=150+ Math.floor(i/4)*62; placed++; }); if(cue().pocketed){cue().pocketed=false; cue().x=220; cue().y=230;} setStatus(placed?`↩️ <strong>${placed} ball${placed>1?'s':''} back on the table.</strong> Keep practising — no score affected.`:`No potted balls to bring back yet.`); updateCards(); updatePracticeHint(); draw(); };
 document.getElementById('respottedBtn').onclick=()=>{ const e=balls.find(b=>b.n===8); if(e && e.pocketed){ e.pocketed=false; e.x=610; e.y=230; e.vx=e.vy=0; setStatus(`🔄 <strong>8-ball re-spotted.</strong> Try the finish again.`);} else setStatus(`The 8 is already on the table.`); updateCards(); draw(); };
