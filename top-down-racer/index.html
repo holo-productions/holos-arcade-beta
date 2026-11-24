@@ -1,0 +1,1143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Turbo Topdown</title>
+<style>
+  :root{
+    --bg:#eef3f6; --surface:#ffffff; --surface2:#e6eef3; --ink:#10222e; --muted:#5a6f7c;
+    --line:#cfdde6; --accent:#0e7c86; --accent-ink:#fff; --red:#d93a2b; --blue:#1769c2;
+    --gold:#e8a317; --shadow:0 10px 28px rgba(16,34,46,.12);
+    --radius:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0c171f; --surface:#13242f; --surface2:#1a303f; --ink:#eaf3f7; --muted:#9db4c0;
+      --line:#2a4354; --accent:#2bb3bf; --accent-ink:#06222a;
+      --shadow:0 10px 28px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:ui-rounded,"Avenir Next","Segoe UI",system-ui,-apple-system,sans-serif;line-height:1.45;-webkit-tap-highlight-color:transparent}
+  button,[role="button"],select,summary,input,textarea{font:inherit}
+  button{min-height:44px;min-width:44px;cursor:pointer}
+  .wrap{max-width:560px;margin:0 auto;padding:14px 14px 28px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0 12px}
+  .brand{display:flex;align-items:center;gap:10px;min-width:0}
+  .car-dot{width:40px;height:40px;flex:0 0 40px;border-radius:12px;background:#ffb020;display:grid;place-items:center;box-shadow:inset 0 0 0 3px #fff,0 2px 8px rgba(0,0,0,.25)}
+  h1{font-size:28px;line-height:1;margin:0;letter-spacing:-.02em;font-weight:900}
+  .brand p{margin:2px 0 0;color:var(--muted);font-size:13px;font-weight:600}
+  .nav{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .nav button,.btn{border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 14px;font-weight:700;font-size:14px}
+  .nav button[aria-pressed="true"],.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .btn.primary{font-size:15px;padding:10px 20px}
+  .btn.danger{border-color:#e5b3ad;color:var(--red)}
+  .scoreboard{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;text-align:center}
+  .stat-cell .lab{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .stat-cell .val{font-size:24px;font-weight:900;line-height:1.1;font-variant-numeric:tabular-nums}
+  .stat-cell .val small{font-size:14px;color:var(--muted)}
+  .mid-status{text-align:center;font-size:13px;font-weight:800;color:var(--accent);min-height:1.4em;margin:8px 0 0}
+  .boost-row{display:flex;align-items:center;gap:10px;margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px}
+  .boost-row .lab{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .boost-track{flex:1;height:14px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);overflow:hidden}
+  .boost-fill{height:100%;width:50%;border-radius:999px;background:linear-gradient(90deg,#38e1ff,#8b5cff,#ff3ec8);transition:width .12s linear}
+  .boost-pct{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums;min-width:38px;text-align:right}
+  .track-wrap{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:10px;position:relative}
+  canvas{display:block;width:100%;height:auto;border-radius:12px;background:#1f7a37;touch-action:none}
+  .overlay{position:absolute;inset:10px;border-radius:12px;display:none;place-items:center;text-align:center;background:rgba(10,25,35,.55);color:#fff;padding:20px}
+  .overlay.show{display:grid}
+  .overlay h2{margin:0 0 6px;font-size:28px;font-weight:900}
+  .overlay p{margin:0 0 14px;font-size:15px;opacity:.92;max-width:34ch}
+  .overlay .btn{border:none}
+  .raceflash{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.8);font-size:44px;font-weight:900;color:#fff;text-shadow:0 3px 0 var(--red),0 10px 30px rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:all .18s;text-align:center}
+  .raceflash.pop{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  .touch-controls{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:12px}
+  .touch-controls button{border:1.5px solid var(--line);background:var(--surface2);color:var(--ink);border-radius:12px;padding:10px 4px;font-weight:900;font-size:20px;min-height:56px;touch-action:none;user-select:none;-webkit-user-select:none}
+  .touch-controls button.held{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .touch-controls button.boost-btn{font-size:14px;color:#140b33;background:linear-gradient(92deg,#ffb020,#ffd43b);border-color:#ffb020}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .controls .btn{flex:1 1 auto}
+  .diff-row{margin-top:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+  .diff-row label,.diff-row .lab{font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px}
+  .seg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .seg button{border:1.5px solid var(--line);background:var(--surface2);color:var(--ink);border-radius:10px;padding:10px 6px;font-weight:800;font-size:15px;min-height:48px}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .diff-note{font-size:13px;color:var(--muted);margin:8px 0 0;min-height:1.4em}
+  .sound-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;font-size:14px;font-weight:600}
+  .practice-bar{margin-top:12px;background:var(--surface2);border:1.5px dashed var(--accent);border-radius:var(--radius);padding:10px 14px;display:flex;gap:10px;align-items:flex-start}
+  .practice-bar .tag{flex:0 0 auto;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:3px 9px;margin-top:1px}
+  .practice-bar p{margin:0;font-size:14px;font-weight:600}
+  .practice-bar p span{color:var(--muted);font-weight:600}
+  .btn[aria-pressed="true"].practice-on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .bests{margin-top:14px}
+  .bests h2,.panel h2{font-size:19px;margin:0 0 8px;font-weight:900}
+  .bests-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center}
+  .stat b{display:block;font-size:20px;font-weight:900;font-variant-numeric:tabular-nums}
+  .stat span{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+  @media(max-width:420px){.bests-grid{grid-template-columns:repeat(2,1fr)} h1{font-size:24px} .scoreboard{grid-template-columns:1fr 1fr}}
+  .hint{font-size:13px;color:var(--muted);text-align:center;margin:10px 4px 0}
+  kbd{background:var(--surface2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;font-size:12px;font-family:inherit;font-weight:700}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-top:4px}
+  .panel h3{margin:16px 0 6px;font-size:16px}
+  .panel p,.panel li{font-size:15px}
+  .panel ul,.panel ol{padding-left:22px;margin:6px 0}
+  .panel li{margin:5px 0}
+  .backrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+  .stars{display:flex;gap:6px;margin:6px 0 4px}
+  .stars button{width:52px;height:52px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface2);font-size:26px;line-height:1;color:var(--muted);padding:0}
+  .stars button.on{color:var(--gold);border-color:var(--gold);background:var(--surface)}
+  textarea{width:100%;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);padding:12px;min-height:96px;resize:vertical}
+  .saved-note{font-size:14px;font-weight:700;color:var(--accent);min-height:1.4em;margin:8px 0 0}
+  .prev{background:var(--surface2);border-radius:12px;padding:12px;margin-top:12px;font-size:14px}
+  .prev:empty{display:none}
+  footer{margin-top:22px;text-align:center;color:var(--muted);font-size:13px;font-weight:600;padding:14px 8px 4px;border-top:1px solid var(--line)}
+  [hidden]{display:none !important}
+.vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
+@media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
+.vtut-card{position:relative;border-radius:14px;padding:12px 10px 10px;text-align:center;background:rgba(128,128,128,.10);border:1px solid rgba(128,128,128,.28)}
+.vtut-num{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;background:#ff5fa2;color:#fff;font-size:12px;font-weight:800;line-height:20px}
+.vtut-pic{height:52px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.vtut-pic svg{width:44px;height:44px}
+.vtut-card b{display:block;font-size:.92rem;margin-bottom:2px}
+.vtut-card p{margin:0;font-size:.85rem;line-height:1.35;opacity:.92}
+
+/* ================= GAME-THEME-2026-11-22 =================
+   Shared Arcade theme layer: navy cabinet frame, pixel gradient
+   title, cyan accents, 3-tier chrome buttons, console-framed stage.
+   CSS only - no JS or gameplay changes. */
+:root{--ha-navy:#0a0620;--ha-pink:#ff3ec8;--ha-violet:#8b5cff;--ha-blue:#3b82f6;--ha-cyan:#38e1ff;--ha-gold:#ffb020;--ha-grad:linear-gradient(92deg,#ff3ec8 0%,#ff7ad9 22%,#8b5cff 52%,#3b82f6 82%,#38e1ff 100%);--ha-pixel:"Press Start 2P","Courier New",monospace}
+html{background:#0a0620}
+h1{font-family:var(--ha-pixel);font-size:clamp(15px,4.5vw,24px);line-height:1.7;letter-spacing:0;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(2px 2px 0 rgba(139,92,255,.45))}
+canvas{outline:3px solid var(--ha-violet);box-shadow:0 0 0 3px #0a0620,0 0 26px rgba(139,92,255,.4);border-radius:10px}
+#btnStart,#startBtn,#playBtn,#btnPlay,#newBtn,#newGameBtn,#btnNew,#againBtn,#btnAgain,#btnPlayAgain,#fbSave,#btnSaveFeedback,#btnFbSave{background:linear-gradient(92deg,#ffb020 0%,#ffd43b 50%,#ffb020 100%);color:#140b33;border:3px solid #fff;border-radius:12px;font-family:var(--ha-pixel);font-size:11px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #b45309,0 0 18px rgba(255,176,32,.5);cursor:pointer}
+#btnRules,#rulesBtn,#btnFeedback,#feedbackBtn,#btnFeedbackFooter,#btnTutorial,#tutorialBtn,#howBtn,#btnHow,#ovHow,#btnPractice,#practiceBtn{background:var(--ha-grad);color:#fff;border:none;border-radius:10px;font-family:var(--ha-pixel);font-size:10px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #4c1d95,0 8px 20px rgba(255,62,200,.3);cursor:pointer}
+.vtut-card{border:2px solid rgba(139,92,255,.55);background:linear-gradient(180deg,#1e1247,#140b33);color:#e9e4ff;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+.vtut-num{background:var(--ha-grad)}
+a{color:var(--ha-cyan)}
+.modal:has(.vtut-grid),.sheet:has(.vtut-grid),.card:has(.vtut-grid),.box:has(.vtut-grid),.panel:has(.vtut-grid),.tut-card,.tutorial-backdrop{max-width:min(92vw,560px);max-height:88dvh;overflow-y:auto;box-sizing:border-box}
+.vtut-grid{grid-template-columns:1fr}
+@media (min-width:521px){.vtut-grid{grid-template-columns:1fr 1fr}}
+.modal:has(.vtut-grid) :is(h2,h3),.sheet:has(.vtut-grid) :is(h2,h3),.card:has(.vtut-grid) :is(h2,h3),.box:has(.vtut-grid) :is(h2,h3),.panel:has(.vtut-grid) :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;color:#fff;background:#0a0620;border:2px solid rgba(139,92,255,.65);border-radius:10px;padding:10px 12px;margin:0 0 12px}
+.modal:has(.vtut-grid) :is(h2,h3)::before,.sheet:has(.vtut-grid) :is(h2,h3)::before,.card:has(.vtut-grid) :is(h2,h3)::before,.box:has(.vtut-grid) :is(h2,h3)::before,.panel:has(.vtut-grid) :is(h2,h3)::before{content:"Turbo Topdown — ";background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tut-card .tut-head{background:#0a0620}
+.tut-card .tut-head :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+@keyframes haCoinBlink{50%{opacity:.25}}
+.insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
+@media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <div class="car-dot" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none"><rect x="3" y="10" width="18" height="7" rx="2.5" fill="#140b33"/><path d="M6 10l2-4h8l2 4z" fill="#140b33"/><circle cx="7.5" cy="17.5" r="2" fill="#140b33"/><circle cx="16.5" cy="17.5" r="2" fill="#140b33"/></svg></div>
+      <div><h1>Turbo Topdown</h1><p>Top-down laps, traffic &amp; coins</p></div>
+    </div>
+  </div>
+  <nav class="nav" aria-label="Game sections" style="justify-content:flex-start;padding-bottom:12px">
+    <button type="button" data-view="game" aria-pressed="true">Play</button>
+    <button type="button" data-view="tutorial" aria-pressed="false">Tutorial</button>
+    <button type="button" data-view="rules" aria-pressed="false">Rules</button>
+    <button type="button" data-view="feedback" aria-pressed="false">Feedback</button>
+  </nav>
+
+  <!-- GAME VIEW -->
+  <section id="view-game">
+    <div class="scoreboard" aria-live="polite">
+      <div class="stat-cell"><div class="lab">Lap</div><div class="val" id="lapNow">0<small>/3</small></div></div>
+      <div class="stat-cell"><div class="lab">Time</div><div class="val" id="clock">0:00</div></div>
+      <div class="stat-cell"><div class="lab">Best lap</div><div class="val" id="bestLapNow">—</div></div>
+      <div class="stat-cell"><div class="lab">Score</div><div class="val" id="scoreNow">0</div></div>
+    </div>
+    <p class="mid-status" id="status">Ready</p>
+
+    <div class="boost-row" aria-label="Boost meter">
+      <span class="lab">Boost</span>
+      <div class="boost-track"><div class="boost-fill" id="boostFill"></div></div>
+      <span class="boost-pct" id="boostPct">50%</span>
+      <span class="lab" style="color:var(--ink)">Coins <b id="coinsNow" style="color:var(--gold)">0</b></span>
+    </div>
+
+    <div class="practice-bar" id="practiceBar" hidden>
+      <span class="tag">Practice</span>
+      <p>Practice — scores don&rsquo;t count. <span id="practiceHint">No timer, no laps limit — just drive. Tip: brake before the corners, then boost out of them.</span></p>
+    </div>
+
+    <div class="track-wrap">
+      <canvas id="track" width="480" height="640" aria-label="Top-down race track. Steer with arrow keys or WASD, Space to boost."></canvas>
+      <div class="raceflash" id="raceFlash"></div>
+      <div class="overlay show" id="overlay">
+        <div>
+          <h2 id="ovTitle">Ready to race?</h2>
+          <p id="ovText">3 laps around the loop. Dodge the traffic, grab coins to refill your boost, and beat your best lap.</p>
+          <button type="button" class="btn primary" id="ovBtn">Start race</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="touch-controls" aria-label="On-screen driving controls">
+      <button type="button" id="tLeft" aria-label="Steer left">&#9664;</button>
+      <button type="button" id="tUp" aria-label="Accelerate">&#9650;</button>
+      <button type="button" id="tDown" aria-label="Brake">&#9660;</button>
+      <button type="button" id="tRight" aria-label="Steer right">&#9654;</button>
+      <button type="button" class="boost-btn" id="tBoost" aria-label="Boost">BOOST</button>
+    </div>
+
+    <div class="controls">
+      <button type="button" class="btn primary" id="btnPlay">Start</button>
+      <button type="button" class="btn" id="btnPause" disabled>Pause</button>
+      <button type="button" class="btn" id="btnPractice" aria-pressed="false">Practice round</button>
+      <button type="button" class="btn danger" id="btnReset">Reset race</button>
+    </div>
+
+    <div class="diff-row">
+      <span class="lab" id="diffLab">Difficulty — traffic speed &amp; density</span>
+      <div class="seg" role="group" aria-labelledby="diffLab">
+        <button type="button" data-diff="easy" aria-pressed="false">Easy</button>
+        <button type="button" data-diff="medium" aria-pressed="true">Medium</button>
+        <button type="button" data-diff="hard" aria-pressed="false">Hard</button>
+      </div>
+      <p class="diff-note" id="diffNote"></p>
+      <div class="sound-row"><span>Sound effects</span><button type="button" class="btn" id="btnSound" aria-pressed="true" style="min-height:40px;padding:4px 14px">On</button></div>
+    </div>
+
+    <div class="bests">
+      <h2>Your bests</h2>
+      <div class="bests-grid">
+        <div class="stat"><b id="bRaces">0</b><span>Races</span></div>
+        <div class="stat"><b id="bScore">0</b><span>Best score</span></div>
+        <div class="stat"><b id="bTime">—</b><span>Best 3-lap</span></div>
+        <div class="stat"><b id="bLap">—</b><span>Best lap</span></div>
+      </div>
+      <p class="hint">Saved on this device. Finish 3 laps to set a best time.</p>
+    </div>
+
+    <p class="hint"><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&larr;</kbd><kbd>&rarr;</kbd> / <kbd>W A S D</kbd> drive &middot; <kbd>Space</kbd> boost &middot; <kbd>P</kbd> pause. Controller: left stick / D-pad steers, RB / RT boosts, Start pauses. Drag on the track to steer too.</p>
+  </section>
+
+  <!-- TUTORIAL VIEW -->
+  <section id="view-tutorial" hidden>
+    <div class="panel">
+      <h2>How to play — 30-second tutorial</h2>
+      <p>No walkthrough is forced on you — this page is here whenever you want it.</p>
+      <div class="vtut-grid">
+        <div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#38e1ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M24 40V10M14 20l10-10 10 10"/></svg></div><b>Accelerate</b><p>Hold Up / W, or the up button on screen.</p></div>
+        <div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#a78bfa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 24h14M18 14l10 10-10 10M34 16l6 8-6 8"/></svg></div><b>Steer</b><p>Left / Right or A / D. Steering works best while moving.</p></div>
+        <div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#f472b6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M24 8v30M14 28l10 10 10-10"/></svg></div><b>Brake</b><p>Down / S slows you down. Brake before corners.</p></div>
+        <div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#facc15" stroke="#eab308" stroke-width="2" stroke-linejoin="round"><path d="M27 4L10 28h11l-3 16 18-25H24z"/></svg></div><b>Boost</b><p>Space, or the BOOST button. Uses the boost meter.</p></div>
+        <div class="vtut-card"><span class="vtut-num">5</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#f87171" stroke-width="3" stroke-linecap="round"><rect x="10" y="18" width="28" height="13" rx="4"/><circle cx="16" cy="33" r="3"/><circle cx="32" cy="33" r="3"/><path d="M14 18l3-6h14l3 6"/></svg></div><b>Dodge traffic</b><p>Traffic cars drive the racing line. Hitting one costs speed.</p></div>
+        <div class="vtut-card"><span class="vtut-num">6</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3"><circle cx="24" cy="24" r="14"/><circle cx="24" cy="24" r="6" fill="#fbbf24" stroke="none"/><path d="M24 6v4M24 38v4M6 24h4M38 24h4"/></svg></div><b>Grab coins</b><p>Coins refill your boost and add points to your score.</p></div>
+        <div class="vtut-card"><span class="vtut-num">7</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#34d399" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="24" r="16"/><path d="M24 14v10l7 4"/></svg></div><b>3 laps</b><p>Finish 3 laps. Fast laps and coins beat the time penalty.</p></div>
+      </div>
+      <h3>Picking a difficulty</h3>
+      <p><strong>Easy</strong> is light, slow traffic — learn the corners. <strong>Medium</strong> is a fair race. <strong>Hard</strong> is dense, fast traffic that leaves little room to pass.</p>
+      <div class="backrow"><button type="button" class="btn primary" data-goto="game">Got it — race</button><button type="button" class="btn" data-goto="rules">Read the rules</button></div>
+    </div>
+  </section>
+
+  <!-- RULES VIEW -->
+  <section id="view-rules" hidden>
+    <div class="panel">
+      <h2>Rules</h2>
+      <h3>The race</h3>
+      <ul>
+        <li>A top-down race around a looping track. <strong>3 laps</strong> per race.</li>
+        <li>Your car is the yellow one, starting on the bottom straight. Drive clockwise around the loop.</li>
+        <li>The clock runs from the green light until you cross the line after lap 3.</li>
+      </ul>
+      <h3>Driving</h3>
+      <ul>
+        <li><strong>Up / W</strong> accelerates, <strong>Left / Right</strong> or <strong>A / D</strong> steers, <strong>Down / S</strong> brakes (and reverses slowly).</li>
+        <li><strong>Space</strong> boosts — much faster, but it drains the boost meter.</li>
+        <li>Going off the track onto the grass slows you right down. Stay on the asphalt.</li>
+        <li>On-screen buttons and dragging on the track work on touch screens. A controller works too: stick / D-pad steers, RB / RT boosts, Start pauses.</li>
+      </ul>
+      <h3>Traffic &amp; coins</h3>
+      <ul>
+        <li>Traffic cars drive the racing line at their own pace. Hitting one bounces you back and costs speed — you get a short moment of protection after a crash.</li>
+        <li>Coins sit on the track. Each one refills <strong>+30 boost</strong> and adds points. New coins appear as you collect them.</li>
+      </ul>
+      <h3>Score</h3>
+      <ul>
+        <li>Score = <strong>laps &times; 1000 + coins &times; 50 &minus; race seconds &times; 5</strong> (never below 0).</li>
+        <li>Your best lap, best 3-lap time and best score are saved on this device.</li>
+      </ul>
+      <h3>Difficulty</h3>
+      <ul>
+        <li><strong>Easy:</strong> 3 traffic cars, slow.</li>
+        <li><strong>Medium:</strong> 5 traffic cars, steady.</li>
+        <li><strong>Hard:</strong> 8 traffic cars, fast and dense.</li>
+        <li>You can change difficulty between races — it takes effect on the next race. Your choice is remembered for next time.</li>
+      </ul>
+      <h3>Practice round</h3>
+      <ul>
+        <li>Tap <strong>Practice round</strong> to switch to a practice session at any time.</li>
+        <li>No timer, no lap limit, no score is kept — laps just keep counting so you can learn the track.</li>
+        <li>Practice never saves anything. Tap the button again to return to a 3-lap race.</li>
+      </ul>
+      <div class="backrow"><button type="button" class="btn primary" data-goto="game">Back to the game</button></div>
+    </div>
+  </section>
+
+  <!-- FEEDBACK VIEW -->
+  <section id="view-feedback" hidden>
+    <div class="panel">
+      <h2>Feedback</h2>
+      <p>How's the game feel? Your rating and comment are saved on this device only.</p>
+      <span class="lab" style="font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)">Your rating</span>
+      <div class="stars" id="stars" role="radiogroup" aria-label="Star rating">
+        <button type="button" data-star="1" aria-label="1 star">&#9733;</button>
+        <button type="button" data-star="2" aria-label="2 stars">&#9733;</button>
+        <button type="button" data-star="3" aria-label="3 stars">&#9733;</button>
+        <button type="button" data-star="4" aria-label="4 stars">&#9733;</button>
+        <button type="button" data-star="5" aria-label="5 stars">&#9733;</button>
+      </div>
+      <label for="fbText" style="font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)">Comment</label>
+      <textarea id="fbText" placeholder="What worked? What was too hard, too easy, or glitchy?" style="margin-top:6px"></textarea>
+      <p style="font-size:13px;color:var(--muted);margin:10px 0 0">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+      <div class="backrow">
+        <button type="button" class="btn primary" id="btnFbSave">Save feedback</button>
+        <button type="button" class="btn" data-goto="game">Back to the game</button>
+      </div>
+      <p class="saved-note" id="fbNote" aria-live="polite"></p>
+      <div class="prev" id="fbPrev"></div>
+    </div>
+  </section>
+
+  <footer>More games at Holo's Arcade</footer>
+</div>
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id);};
+
+/* ---------- Views ---------- */
+var views={game:$("view-game"),tutorial:$("view-tutorial"),rules:$("view-rules"),feedback:$("view-feedback")};
+function showView(name){
+  Object.keys(views).forEach(function(k){views[k].hidden=(k!==name);});
+  document.querySelectorAll("[data-view]").forEach(function(b){b.setAttribute("aria-pressed", b.getAttribute("data-view")===name?"true":"false");});
+  if(name!=="game" && state==="racing"){pauseGame();}
+  window.scrollTo({top:0});
+}
+document.querySelectorAll("[data-view]").forEach(function(b){b.addEventListener("click",function(){showView(b.getAttribute("data-view"));});});
+document.querySelectorAll("[data-goto]").forEach(function(b){b.addEventListener("click",function(){showView(b.getAttribute("data-goto"));});});
+
+/* ---------- Storage ---------- */
+function load(key,fallback){try{var v=localStorage.getItem(key);return v?JSON.parse(v):fallback;}catch(e){return fallback;}}
+function save(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
+
+/* ---------- Difficulty ---------- */
+var DIFFS={
+  easy:{label:"Easy",traffic:3,tMin:46,tMax:58,note:"Easy — 3 slow traffic cars. Learn the corners and the boost."},
+  medium:{label:"Medium",traffic:5,tMin:58,tMax:72,note:"Medium — 5 traffic cars at a steady pace. A fair race."},
+  hard:{label:"Hard",traffic:8,tMin:70,tMax:88,note:"Hard — 8 fast traffic cars, dense. Little room to pass."}
+};
+var difficulty=load("topDownRacer_difficulty","medium");
+if(!DIFFS[difficulty])difficulty="medium";
+function applyDiff(){
+  document.querySelectorAll("[data-diff]").forEach(function(b){b.setAttribute("aria-pressed",b.getAttribute("data-diff")===difficulty?"true":"false");});
+  $("diffNote").textContent=DIFFS[difficulty].note;
+  save("topDownRacer_difficulty",difficulty);
+}
+document.querySelectorAll("[data-diff]").forEach(function(b){b.addEventListener("click",function(){difficulty=b.getAttribute("data-diff");applyDiff();beep(660,.05,"sine",.04);});});
+
+/* ---------- Bests ---------- */
+var bests=load("topDownRacer_bests",{races:0,bestScore:0,bestTime:null,bestLap:null});
+function renderBests(){
+  $("bRaces").textContent=bests.races;
+  $("bScore").textContent=bests.bestScore;
+  $("bTime").textContent=bests.bestTime?fmtTime(bests.bestTime):"—";
+  $("bLap").textContent=bests.bestLap?fmtTime(bests.bestLap):"—";
+}
+function fmtTime(s){if(s==null)return "—";s=Math.round(s*10)/10;var m=Math.floor(s/60);var sec=(s%60);return m+":"+(sec<10?"0":"")+sec.toFixed(1);}
+
+/* ---------- Audio ---------- */
+var audioCtx=null, soundOn=load("topDownRacer_sound",true);
+function beep(freq,dur,type,vol){
+  if(!soundOn)return;
+  try{
+    if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==="suspended")audioCtx.resume();
+    var o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=type||"square";o.frequency.value=freq;
+    g.gain.setValueAtTime(vol||.05,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+(dur||.07));
+    o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+(dur||.07));
+  }catch(e){}
+}
+$("btnSound").textContent=soundOn?"On":"Off";
+$("btnSound").setAttribute("aria-pressed",soundOn?"true":"false");
+$("btnSound").addEventListener("click",function(){soundOn=!soundOn;save("topDownRacer_sound",soundOn);this.textContent=soundOn?"On":"Off";this.setAttribute("aria-pressed",soundOn?"true":"false");if(soundOn)beep(660,.06,"sine",.05);});
+
+/* ---------- Track: rounded-rectangle loop, sampled centreline ---------- */
+var W=480,H=640,TRACK_HALF=34,N=400;
+var PTS=[]; // {x,y,ang} centreline samples, index 0 = start line
+(function buildTrack(){
+  var raw=[];
+  function line(x0,y0,x1,y1,n){for(var i=0;i<n;i++){var t=i/n;raw.push({x:x0+(x1-x0)*t,y:y0+(y1-y0)*t});}}
+  function arc(cx,cy,r,a0,a1,n){for(var i=0;i<n;i++){var t=i/n,a=a0+(a1-a0)*t;raw.push({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)});}}
+  // Clockwise on screen (y down), starting at bottom straight middle.
+  line(240,540,300,540,18);
+  arc(300,440,100,Math.PI/2,0,47);          // bottom-right corner
+  line(400,440,400,200,71);                  // right straight up
+  arc(300,200,100,0,-Math.PI/2,47);          // top-right corner
+  line(300,100,180,100,35);                  // top straight
+  arc(180,200,100,-Math.PI/2,-Math.PI,47);   // top-left corner
+  line(80,200,80,440,71);                    // left straight down
+  arc(180,440,100,Math.PI,Math.PI/2,47);     // bottom-left corner
+  line(180,540,240,540,18);                  // bottom straight to start
+  // Resample to exactly N evenly spaced points.
+  var total=0,seg=[];
+  for(var i=0;i<raw.length;i++){var a=raw[i],b=raw[(i+1)%raw.length];var d=Math.hypot(b.x-a.x,b.y-a.y);seg.push(d);total+=d;}
+  var stepLen=total/N,acc=0,idx=0;
+  for(var k=0;k<N;k++){
+    var target=k*stepLen;
+    while(idx<raw.length-1 && acc+seg[idx]<target){acc+=seg[idx];idx++;}
+    var a2=raw[idx],b2=raw[(idx+1)%raw.length],d2=seg[idx]||1,t2=Math.max(0,Math.min(1,(target-acc)/d2));
+    PTS.push({x:a2.x+(b2.x-a2.x)*t2,y:a2.y+(b2.y-a2.y)*t2,ang:0});
+  }
+  for(var j=0;j<N;j++){
+    var p=PTS[j],q=PTS[(j+1)%N];
+    p.ang=Math.atan2(q.y-p.y,q.x-p.x);
+  }
+  // Rotate so index 0 is the start line (240,540).
+  var bi=0,bd=1e9;
+  for(var m=0;m<N;m++){var dd=Math.hypot(PTS[m].x-240,PTS[m].y-540);if(dd<bd){bd=dd;bi=m;}}
+  PTS=PTS.slice(bi).concat(PTS.slice(0,bi));
+})();
+function nearestIdx(x,y){
+  var bi=0,bd=1e18;
+  for(var i=0;i<N;i++){var dx=PTS[i].x-x,dy=PTS[i].y-y,d=dx*dx+dy*dy;if(d<bd){bd=d;bi=i;}}
+  return {i:bi,dist:Math.sqrt(bd)};
+}
+
+/* ---------- Game state ---------- */
+var cv=$("track"),ctx=cv.getContext("2d");
+var state="idle"; // idle | racing | paused | finished
+var TOTAL_LAPS=3;
+var player={x:240,y:540,angle:0,speed:0};
+var keys={};
+var touch={up:false,down:false,left:false,right:false,boost:false,steer:0,gas:false};
+var traffic=[],coins=[];
+var lapsDone=0,totalProgress=0,lastProgIdx=0;
+var raceTime=0,lapStart=0,lapTimes=[],bestLapRace=null;
+var coinsGot=0,boost=50,invuln=0,offTrack=false,crashes=0;
+var lastTs=null,flashTimer=null;
+var practice=false,hintIdx=0;
+var HINTS=[
+  "No timer, no laps limit — just drive. Tip: brake before the corners, then boost out of them.",
+  "Tip: coins refill +30 boost. Grab them on the straights where you don't have to swerve.",
+  "Tip: traffic sticks to the racing line — pass on the inside of a corner, not the outside.",
+  "Tip: if you go wide onto the grass you lose speed fast. Brake early, turn in late.",
+  "Tip: a short boost out of a corner is worth more than a long boost on a straight."
+];
+function nextHint(){$("practiceHint").textContent=HINTS[hintIdx%HINTS.length];hintIdx++;}
+function applyPractice(){
+  var b=$("btnPractice");
+  b.setAttribute("aria-pressed",practice?"true":"false");
+  b.classList.toggle("practice-on",practice);
+  b.textContent=practice?"Practice: On":"Practice round";
+  $("practiceBar").hidden=!practice;
+  if(practice){
+    hintIdx=0;nextHint();
+    $("clock").textContent="—";
+    setStatus("Practice — ready");
+  }else{
+    $("clock").textContent=fmtTime(raceTime);
+    setStatus(state==="racing"?"Racing":"Ready");
+  }
+  syncState();
+}
+$("btnPractice").addEventListener("click",function(){
+  practice=!practice;
+  if(state==="finished"){state="idle";}
+  applyPractice();beep(practice?720:520,.06,"sine",.05);
+});
+
+function computeScore(){
+  var s=lapsDone*1000+coinsGot*50-Math.floor(raceTime)*5;
+  return Math.max(0,s);
+}
+function syncState(){
+  // SERVER-READY-2026-11-23: clean JSON game state for the future server.
+  // No networking here — this object is only read locally / by the hub.
+  window.__holoGameState={
+    slug:"top-down-racer",
+    score:computeScore(),
+    laps:lapsDone,
+    coins:coinsGot,
+    bestLap:bestLapRace,
+    difficulty:difficulty,
+    mode:practice?"practice":"race"
+  };
+}
+
+function spawnTraffic(){
+  traffic=[];
+  var d=DIFFS[difficulty];
+  var colors=["#e5484d","#3b82f6","#22c55e","#f97316","#a855f7","#14b8a6","#eab308","#ec4899"];
+  for(var i=0;i<d.traffic;i++){
+    var s=(120+i*(N-60)/Math.max(1,d.traffic))%N;
+    traffic.push({
+      s:s,
+      speed:d.tMin+Math.random()*(d.tMax-d.tMin),
+      lane:(i%2===0?-13:13),
+      color:colors[i%colors.length],
+      x:0,y:0,angle:0
+    });
+  }
+}
+function spawnCoins(){
+  coins=[];
+  for(var i=0;i<8;i++){
+    coins.push({s:(i*50+25)%N,lane:(i%2===0?-12:12),x:0,y:0,taken:false});
+  }
+  placeCoins();
+}
+function placeCoins(){
+  coins.forEach(function(c){
+    var p=PTS[Math.floor(c.s)%N];
+    var nx=Math.cos(p.ang+Math.PI/2),ny=Math.sin(p.ang+Math.PI/2);
+    c.x=p.x+nx*c.lane;c.y=p.y+ny*c.lane;
+  });
+}
+function respawnCoin(c){
+  // New spot well away from the player.
+  for(var tries=0;tries<20;tries++){
+    var s=Math.floor(Math.random()*N);
+    if(Math.abs(s-lastProgIdx)>60 && Math.abs(s-lastProgIdx)<N-60){c.s=s;break;}
+  }
+  c.lane=Math.random()<0.5?-12:12;
+  c.taken=false;
+  placeCoins();
+}
+function resetRace(){
+  player.x=240;player.y=540;player.angle=0;player.speed=0;
+  lapsDone=0;totalProgress=0;lastProgIdx=0;
+  raceTime=0;lapStart=0;lapTimes=[];bestLapRace=null;
+  coinsGot=0;boost=50;invuln=0;offTrack=false;crashes=0;
+  spawnTraffic();spawnCoins();
+  updateHUD();syncState();
+}
+function updateHUD(){
+  $("lapNow").innerHTML=Math.min(lapsDone,TOTAL_LAPS)+"<small>/"+TOTAL_LAPS+"</small>";
+  if(!practice)$("clock").textContent=fmtTime(raceTime);
+  $("bestLapNow").textContent=bestLapRace?fmtTime(bestLapRace):(bests.bestLap?fmtTime(bests.bestLap):"—");
+  $("scoreNow").textContent=computeScore();
+  $("coinsNow").textContent=coinsGot;
+  $("boostFill").style.width=Math.round(boost)+"%";
+  $("boostPct").textContent=Math.round(boost)+"%";
+}
+function setStatus(t){$("status").textContent=t;}
+function showOverlay(title,text,btn){
+  $("ovTitle").textContent=title;$("ovText").textContent=text;$("ovBtn").textContent=btn;
+  $("overlay").classList.add("show");
+}
+function hideOverlay(){$("overlay").classList.remove("show");}
+function flash(text,color){
+  var f=$("raceFlash");f.textContent=text;f.style.color=color||"#fff";f.classList.add("pop");
+  if(flashTimer)clearTimeout(flashTimer);
+  flashTimer=setTimeout(function(){f.classList.remove("pop");},700);
+}
+
+function startGame(){
+  if(state==="finished"||state==="idle")resetRace();
+  state="racing";hideOverlay();
+  setStatus(practice?"Practice — drive!":"Racing — lap 1 of 3");
+  $("btnPlay").textContent="Racing…";$("btnPlay").disabled=true;
+  $("btnPause").disabled=false;$("btnPause").textContent="Pause";
+  lastTs=null;
+  if(window.requestAnimationFrame)requestAnimationFrame(loop);
+  else setTimeout(function(){loop(performance.now());},16);
+  beep(520,.07,"sine",.05);
+  setTimeout(function(){beep(880,.09,"sine",.05);},120);
+  syncState();
+}
+function pauseGame(){
+  if(state!=="racing")return;
+  state="paused";setStatus("Paused");
+  showOverlay("Paused","Take a breather — the race waits right where you left it.","Resume");
+  $("btnPlay").disabled=false;$("btnPlay").textContent="Resume";$("btnPause").disabled=true;
+}
+function resumeGame(){
+  if(state!=="paused")return;
+  state="racing";hideOverlay();setStatus(practice?"Practice — drive!":"Racing");
+  $("btnPlay").disabled=true;$("btnPlay").textContent="Racing…";$("btnPause").disabled=false;
+  lastTs=null;
+  if(window.requestAnimationFrame)requestAnimationFrame(loop);
+  else setTimeout(function(){loop(performance.now());},16);
+}
+function finishRace(){
+  state="finished";
+  var score=computeScore();
+  bests.races++;
+  if(score>bests.bestScore)bests.bestScore=score;
+  if(bests.bestTime===null||raceTime<bests.bestTime)bests.bestTime=Math.round(raceTime*10)/10;
+  if(bestLapRace!==null&&(bests.bestLap===null||bestLapRace<bests.bestLap))bests.bestLap=Math.round(bestLapRace*10)/10;
+  save("topDownRacer_bests",bests);renderBests();
+  setStatus("Race finished!");
+  var bestLine=bestLapRace?("Best lap "+fmtTime(bestLapRace)+"."):"";
+  showOverlay("Race complete!",
+    "3 laps in "+fmtTime(raceTime)+" — "+coinsGot+" coins, score "+score+". "+bestLine,
+    "Race again");
+  $("btnPlay").disabled=false;$("btnPlay").textContent="Race again";$("btnPause").disabled=true;
+  beep(880,.2,"sine",.06);setTimeout(function(){beep(1174,.25,"sine",.06);},180);
+  syncState();
+}
+function onLap(){
+  var lapTime=raceTime-lapStart;lapStart=raceTime;lapTimes.push(lapTime);
+  if(bestLapRace===null||lapTime<bestLapRace)bestLapRace=lapTime;
+  if(practice){
+    flash("LAP "+lapsDone+"!", "#ffd43b");beep(980,.12,"sine",.05);nextHint();
+    setStatus("Practice — lap "+(lapsDone+1));
+  }else if(lapsDone>=TOTAL_LAPS){
+    finishRace();return;
+  }else{
+    flash("LAP "+lapsDone+"!", "#ffd43b");beep(980,.12,"sine",.05);
+    setStatus("Racing — lap "+(lapsDone+1)+" of 3");
+  }
+  updateHUD();syncState();
+}
+
+$("btnPlay").addEventListener("click",function(){if(state==="paused")resumeGame();else startGame();});
+$("ovBtn").addEventListener("click",function(){if(state==="paused")resumeGame();else startGame();});
+$("btnPause").addEventListener("click",pauseGame);
+$("btnReset").addEventListener("click",function(){
+  state="idle";resetRace();
+  if(practice){
+    showOverlay("Practice round","No timer, no lap limit — just drive. Learn the corners and grab coins to refill your boost.","Start practice");
+    setStatus("Practice — ready");
+  }else{
+    showOverlay("Ready to race?","3 laps around the loop. Dodge the traffic, grab coins to refill your boost, and beat your best lap.","Start race");
+    setStatus("Ready");
+  }
+  $("btnPlay").disabled=false;$("btnPlay").textContent="Start";$("btnPause").disabled=true;
+});
+
+/* ---------- Input: keyboard / gamepad (synthetic keys) / touch ---------- */
+function normCode(e){
+  if(e.code)return e.code;
+  var k=e.key||"";
+  var map={"ArrowUp":"ArrowUp","ArrowDown":"ArrowDown","ArrowLeft":"ArrowLeft","ArrowRight":"ArrowRight"," ":"Space","p":"KeyP","P":"KeyP","w":"KeyW","a":"KeyA","s":"KeyS","d":"KeyD","W":"KeyW","A":"KeyA","S":"KeyS","D":"KeyD"};
+  return map[k]||k;
+}
+window.addEventListener("keydown",function(e){
+  var c=normCode(e);
+  keys[c]=true;
+  if(c==="KeyP"||c==="p"){if(state==="racing")pauseGame();else if(state==="paused")resumeGame();return;}
+  if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].indexOf(c)>=0&&state==="racing")e.preventDefault();
+});
+window.addEventListener("keyup",function(e){keys[e.code||normCode(e)]=false;});
+
+function bindTouch(id,code){
+  var el=$(id);
+  function on(ev){ev.preventDefault();keys[code]=true;el.classList.add("held");}
+  function off(ev){ev.preventDefault();keys[code]=false;el.classList.remove("held");}
+  el.addEventListener("pointerdown",on);
+  el.addEventListener("pointerup",off);
+  el.addEventListener("pointercancel",off);
+  el.addEventListener("pointerleave",off);
+  el.addEventListener("contextmenu",function(ev){ev.preventDefault();});
+}
+bindTouch("tLeft","ArrowLeft");bindTouch("tRight","ArrowRight");
+bindTouch("tUp","ArrowUp");bindTouch("tDown","ArrowDown");bindTouch("tBoost","Space");
+
+/* Drag steering on the track: horizontal drag steers, drag up accelerates. */
+var dragStart=null;
+cv.addEventListener("pointerdown",function(e){dragStart={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId);});
+cv.addEventListener("pointermove",function(e){
+  if(!dragStart)return;
+  var dx=e.clientX-dragStart.x,dy=e.clientY-dragStart.y;
+  touch.steer=Math.max(-1,Math.min(1,dx/50));
+  touch.gas=dy<-30;
+});
+["pointerup","pointercancel"].forEach(function(ev){cv.addEventListener(ev,function(){dragStart=null;touch.steer=0;touch.gas=false;});});
+
+/* ---------- Physics step ---------- */
+function step(dt){
+  var gas=keys["ArrowUp"]||keys["KeyW"]||touch.gas;
+  var brake=keys["ArrowDown"]||keys["KeyS"];
+  var left=keys["ArrowLeft"]||keys["KeyA"];
+  var right=keys["ArrowRight"]||keys["KeyD"];
+  var boostKey=keys["Space"];
+  var steer=(right?1:0)-(left?1:0);
+  if(!steer&&touch.steer)steer=touch.steer;
+
+  var near=nearestIdx(player.x,player.y);
+  offTrack=near.dist>TRACK_HALF+4;
+
+  var boosting=false;
+  if(boostKey&&boost>0&&player.speed>40&&!offTrack){boosting=true;boost=Math.max(0,boost-35*dt);}
+  var maxSpeed=offTrack?150:(boosting?520:340);
+  var accel=offTrack?130:(boosting?520:280);
+  if(gas)player.speed+=accel*dt;
+  if(brake)player.speed-=520*dt;
+  if(!gas&&!brake)player.speed*=Math.exp(-0.55*dt);
+  if(player.speed>maxSpeed)player.speed=Math.max(maxSpeed,player.speed-600*dt);
+  if(player.speed<-120)player.speed=-120;
+  if(Math.abs(player.speed)<2&&!gas)player.speed=0;
+
+  var turnRate=2.9*Math.max(0.3,Math.min(1,Math.abs(player.speed)/200));
+  if(player.speed<0)turnRate*=-1;
+  player.angle+=steer*turnRate*dt;
+  player.x+=Math.cos(player.angle)*player.speed*dt;
+  player.y+=Math.sin(player.angle)*player.speed*dt;
+  // Keep the car on the canvas.
+  player.x=Math.max(14,Math.min(W-14,player.x));
+  player.y=Math.max(14,Math.min(H-14,player.y));
+  if(invuln>0)invuln-=dt;
+
+  // Lap / progress tracking.
+  var idx=near.i;
+  var delta=idx-lastProgIdx;
+  if(delta<-N/2)delta+=N;
+  if(delta>N/2)delta-=N;
+  // Ignore wild jumps (teleport / respawn) so a glitch can't fake a lap.
+  if(Math.abs(delta)<N/4){totalProgress+=delta;}
+  lastProgIdx=idx;
+  var newLaps=Math.floor(totalProgress/N);
+  if(newLaps>lapsDone){
+    lapsDone=newLaps;
+    onLap();
+    if(state!=="racing")return;
+  }
+
+  // Traffic: drive the centreline.
+  for(var i=0;i<traffic.length;i++){
+    var t=traffic[i];
+    t.s=(t.s+t.speed*dt)%N;
+    var p=PTS[Math.floor(t.s)%N];
+    var nx=Math.cos(p.ang+Math.PI/2),ny=Math.sin(p.ang+Math.PI/2);
+    t.x=p.x+nx*t.lane;t.y=p.y+ny*t.lane;t.angle=p.ang;
+    if(invuln<=0&&Math.hypot(player.x-t.x,player.y-t.y)<30){
+      crashes++;
+      player.speed*=-0.25;
+      invuln=1.2;
+      flash("CRASH!","#ff6b6b");
+      beep(140,.25,"sawtooth",.07);
+      try{if(window.holoBuzz)window.holoBuzz(80);}catch(e){}
+      setStatus("Crash! Careful — traffic ahead");
+    }
+  }
+
+  // Coins.
+  for(var j=0;j<coins.length;j++){
+    var c=coins[j];
+    if(!c.taken&&Math.hypot(player.x-c.x,player.y-c.y)<30){
+      c.taken=true;coinsGot++;
+      boost=Math.min(100,boost+30);
+      beep(1320,.08,"sine",.05);setTimeout(function(){beep(1760,.08,"sine",.04);},70);
+      respawnCoin(c);
+    }
+  }
+
+  if(!practice)raceTime+=dt;
+  updateHUD();syncState();
+}
+
+function loop(ts){
+  if(state!=="racing")return;
+  if(!lastTs)lastTs=ts;
+  var dt=Math.min(0.033,(ts-lastTs)/1000);lastTs=ts;
+  step(dt);
+  draw();
+  if(state==="racing"){
+    if(window.requestAnimationFrame)requestAnimationFrame(loop);
+    else setTimeout(function(){loop(performance.now());},16);
+  }
+}
+
+/* ---------- Draw ---------- */
+function rr(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+}
+function drawCar(x,y,angle,color,invulnBlink){
+  if(invulnBlink&&Math.floor(performance.now()/90)%2===0)return;
+  ctx.save();ctx.translate(x,y);ctx.rotate(angle);
+  ctx.fillStyle="#111"; // wheels
+  ctx.fillRect(-13,-15,10,6);ctx.fillRect(3,-15,10,6);
+  ctx.fillRect(-13,9,10,6);ctx.fillRect(3,9,10,6);
+  ctx.fillStyle=color;rr(-16,-11,32,22,5);ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,.85)";rr(-2,-8,10,16,3);ctx.fill(); // windshield
+  ctx.fillStyle="rgba(0,0,0,.25)";ctx.fillRect(8,-8,4,16); // rear stripe
+  ctx.fillStyle="#fff";ctx.fillRect(13,-7,3,5);ctx.fillRect(13,2,3,5); // headlights
+  ctx.restore();
+}
+function draw(){
+  // Grass.
+  ctx.fillStyle="#1f7a37";ctx.fillRect(0,0,W,H);
+  ctx.fillStyle="#2b8a44";
+  for(var gx=0;gx<W;gx+=48)for(var gy=0;gy<H;gy+=48){if(((gx+gy)/48)%2===0)ctx.fillRect(gx,gy,48,48);}
+  // Track: outer asphalt, then inner grass cut-out.
+  ctx.strokeStyle="#3a3f4a";ctx.lineWidth=TRACK_HALF*2;ctx.lineJoin="round";ctx.lineCap="round";
+  ctx.beginPath();
+  ctx.moveTo(PTS[0].x,PTS[0].y);
+  for(var i=1;i<N;i++)ctx.lineTo(PTS[i].x,PTS[i].y);
+  ctx.closePath();ctx.stroke();
+  ctx.strokeStyle="#1f7a37";ctx.lineWidth=TRACK_HALF*2-14;
+  ctx.beginPath();
+  ctx.moveTo(PTS[0].x,PTS[0].y);
+  for(var j=1;j<N;j++)ctx.lineTo(PTS[j].x,PTS[j].y);
+  ctx.closePath();ctx.stroke();
+  // Edge lines.
+  ctx.strokeStyle="rgba(255,255,255,.85)";ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(PTS[0].x,PTS[0].y);
+  for(var k=1;k<N;k++)ctx.lineTo(PTS[k].x,PTS[k].y);
+  ctx.closePath();ctx.stroke();
+  // Centre dashed line.
+  ctx.strokeStyle="#ffd43b";ctx.lineWidth=3;ctx.setLineDash([14,18]);
+  ctx.beginPath();ctx.moveTo(PTS[0].x,PTS[0].y);
+  for(var m=1;m<N;m++)ctx.lineTo(PTS[m].x,PTS[m].y);
+  ctx.closePath();ctx.stroke();ctx.setLineDash([]);
+  // Start / finish line (checkered band across the track at sample 0).
+  var sp=PTS[0];
+  var ax=Math.cos(sp.ang),ay=Math.sin(sp.ang);   // along-track
+  var px2=-ay,py2=ax;                            // across-track
+  for(var ci=0;ci<8;ci++){
+    for(var cj=0;cj<2;cj++){
+      ctx.fillStyle=((ci+cj)%2===0)?"#fff":"#111";
+      var ccx=sp.x+px2*(-TRACK_HALF+4+ci*8.5)+ax*(-4+cj*4);
+      var ccy=sp.y+py2*(-TRACK_HALF+4+ci*8.5)+ay*(-4+cj*4);
+      ctx.save();ctx.translate(ccx,ccy);ctx.rotate(sp.ang);ctx.fillRect(-4,-4.25,8,8.5);ctx.restore();
+    }
+  }
+  // Coins.
+  var bob=Math.sin(performance.now()/250)*2;
+  coins.forEach(function(c){
+    if(c.taken)return;
+    ctx.beginPath();ctx.arc(c.x,c.y+bob*0.4,11,0,Math.PI*2);
+    ctx.fillStyle="#ffd43b";ctx.fill();ctx.lineWidth=2;ctx.strokeStyle="#b45309";ctx.stroke();
+    ctx.beginPath();ctx.arc(c.x,c.y+bob*0.4,5,0,Math.PI*2);
+    ctx.fillStyle="#fff3bf";ctx.fill();
+  });
+  // Traffic then player.
+  traffic.forEach(function(t2){drawCar(t2.x,t2.y,t2.angle,t2.color,false);});
+  drawCar(player.x,player.y,player.angle,"#ffb020",invuln>0);
+  if(offTrack&&state==="racing"){
+    ctx.fillStyle="rgba(0,0,0,.55)";rr(W/2-70,14,140,26,8);ctx.fill();
+    ctx.fillStyle="#ffd43b";ctx.font="700 13px system-ui,sans-serif";ctx.textAlign="center";
+    ctx.fillText("OFF TRACK — SLOW!",W/2,32);
+  }
+}
+
+/* ---------- Feedback ---------- */
+var fb=load("topDownRacer_feedback",null),rating=fb?fb.rating:0;
+function paintStars(){document.querySelectorAll("[data-star]").forEach(function(b){b.classList.toggle("on",+b.getAttribute("data-star")<=rating);});}
+document.querySelectorAll("[data-star]").forEach(function(b){b.addEventListener("click",function(){rating=+b.getAttribute("data-star");paintStars();$("fbNote").textContent="";});});
+if(fb){$("fbText").value=fb.comment||"";renderPrev();}
+function renderPrev(){
+  if(!fb)return;
+  $("fbPrev").innerHTML="<strong>Saved feedback:</strong> "+"★".repeat(fb.rating)+"☆".repeat(5-fb.rating)+"<br>"+(fb.comment?fb.comment.replace(/</g,"&lt;"):"<em>No comment</em>")+"<br><span style='color:var(--muted)'>"+fb.date+"</span>";
+}
+$("btnFbSave").addEventListener("click",function(){
+  if(!rating){$("fbNote").textContent="Please tap a star rating first.";return;}
+  fb={rating:rating,comment:$("fbText").value.trim(),date:new Date().toLocaleDateString()};
+  save("topDownRacer_feedback",fb);renderPrev();
+  try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "top-down-racer", rating: fb.rating||0, text: fb.comment||"", tag: "", mode: "real", level: "", difficulty: difficulty, score: computeScore(), device: (navigator.userAgent||"").slice(0,120), playTime: Math.round(raceTime), timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+  $("fbNote").textContent="Thanks! Feedback saved on this device.";
+  beep(760,.08,"sine",.05);
+});
+
+/* ---------- Test / debug handle (no networking, local only) ---------- */
+window.__topDownRacer={
+  start:startGame,pause:pauseGame,resume:resumeGame,
+  step:function(dt){if(state==="racing"){step(dt);draw();}},
+  state:function(){return {state:state,practice:practice,x:Math.round(player.x),y:Math.round(player.y),angle:+player.angle.toFixed(2),speed:Math.round(player.speed),laps:lapsDone,coins:coinsGot,boost:Math.round(boost),score:computeScore(),raceTime:+raceTime.toFixed(2),bestLap:bestLapRace,traffic:traffic.length,offTrack:offTrack,crashes:crashes};},
+  teleport:function(sampleIdx){
+    var si=((sampleIdx%N)+N)%N;
+    var p=PTS[si];
+    player.x=p.x;player.y=p.y;player.angle=p.ang;player.speed=120;
+    lastProgIdx=si;
+    // Stay in the current lap: progress = completed laps + position in this lap.
+    totalProgress=lapsDone*N+si;
+  },
+  teleportToCoin:function(){
+    var c=null;
+    for(var i=0;i<coins.length;i++){if(!coins[i].taken){c=coins[i];break;}}
+    if(!c)return false;
+    player.x=c.x;player.y=c.y;player.angle=PTS[Math.floor(c.s)%N].ang;player.speed=0;
+    lastProgIdx=Math.floor(c.s)%N;
+    totalProgress=lapsDone*N+lastProgIdx;
+    return true;
+  },
+  setTrafficAtPlayer:function(){
+    if(!traffic.length)return;
+    var t=traffic[0];t.s=lastProgIdx;t.lane=0;
+  }
+};
+
+/* ---------- Init ---------- */
+applyDiff();renderBests();paintStars();resetRace();draw();syncState();
+})();
+</script>
+<script>
+/* INSERT-COIN-2026-11-22: place the blinking line under the title
+   on games with a start button; remove it once play starts. */
+(function(){try{
+  if(document.querySelector('.insert-coin'))return;
+  var ids=['btnStart','startBtn','playBtn','btnPlay','newBtn','newGameBtn','btnNew'];
+  var start=null,i,b;
+  for(i=0;i<ids.length;i++){start=document.getElementById(ids[i]);if(start)break;}
+  if(!start){var btns=document.querySelectorAll('button');for(i=0;i<btns.length;i++){b=btns[i];if(/^(\u25b6\s*)?(start game|start|play|new game|begin)$/i.test((b.textContent||'').trim())){start=b;break;}}}
+  if(!start)return;
+  var h=document.querySelector('h1')||document.querySelector('h2');if(!h||!h.parentNode)return;
+  var p=document.createElement('p');p.className='insert-coin';p.setAttribute('aria-hidden','true');p.textContent='INSERT COIN TO CONTINUE';
+  h.parentNode.insertBefore(p,h.nextSibling);
+  start.addEventListener('click',function(){if(p.parentNode)p.parentNode.removeChild(p);});
+}catch(e){}})();
+</script>
+<script>
+/* BACK-TO-HUB-2026-11-23: every game gets a way back to the Arcade hub
+   when opened directly (dead-end fix). Hidden inside the hub iframe,
+   where the hub itself provides navigation. */
+(function(){try{
+  if(window.self!==window.top)return;
+  if(document.querySelector('a[href*="games-hub"]'))return;
+  var a=document.createElement('a');a.href='../games-hub/';a.textContent='\u2190 Back to the Arcade';
+  a.style.cssText='position:fixed;left:10px;bottom:10px;z-index:9990;background:rgba(20,16,60,.88);color:#fff;padding:7px 14px;border-radius:999px;font:600 13px system-ui,sans-serif;text-decoration:none;border:1px solid rgba(255,255,255,.4);box-shadow:0 2px 10px rgba(0,0,0,.35)';
+  document.body.appendChild(a);
+}catch(e){}})();
+</script>
+<!-- GAMEPAD-2026-11-23: shared gamepad helper — controller support; keyboard/touch/mouse unchanged. -->
+<script src="../shared/gamepad.js"></script>
+<script>
+try { if (window.HoloGamepad) HoloGamepad.bind({ keys: { up:'ArrowUp', down:'ArrowDown', left:'ArrowLeft', right:'ArrowRight', boost:'Space', pause:'KeyP' } }); } catch (e) {}
+</script>
+</body>
+</html>
