@@ -10437,10 +10437,11 @@ var LOCATIONS = [
   var mcKeys = {}, mcPointer = { active: false, x: 0, y: 0 };
   var mcReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var mcBannerTimer = null;
+  /* MADCOW-DIFF-FIX-2026-11-24: retuned levels — Gentle 0.75x/4 hearts/+0.45 aim, Classic unchanged, Stampede 1.55x/2 hearts/-0.35 aim; per-level warning floors. */
   var MC_DIFFS = {
-    gentle:   { label: '🌼 Gentle Pasture', hearts: 4, speed: 0.8,  aimBonus: 0.3 },
-    classic:  { label: '🐮 Classic Field',  hearts: 3, speed: 1,    aimBonus: 0 },
-    stampede: { label: '🔥 Stampede',       hearts: 3, speed: 1.3,  aimBonus: -0.22 }
+    gentle:   { label: '🌼 Gentle Pasture', hearts: 4, speed: 0.75, aimBonus: 0.45,  warnFloor: 0.55 },
+    classic:  { label: '🐮 Classic Field',  hearts: 3, speed: 1,    aimBonus: 0,     warnFloor: 0.45 },
+    stampede: { label: '🔥 Stampede',       hearts: 2, speed: 1.55, aimBonus: -0.35, warnFloor: 0.35 }
   };
   var MC_MODES = {
     endless:    { label: 'Endless Herding', secs: 0 },
@@ -10499,7 +10500,7 @@ var LOCATIONS = [
     return {
       x: mcRand(140, 380), y: mcRand(200, 460), vx: 0, vy: 0, dir: 1,
       state: 'graze', t: mcRand(1.4, 2.4), tx: 0, ty: 0, aimX: 0, aimY: 0,
-      run: 0, speedMul: (1 + (round - 1) * 0.07) * MC_DIFFS[mcDiffKey].speed * (S && S.dailyFactor ? S.dailyFactor : 1)
+      run: 0, speedMul: (1 + (round - 1) * 0.05) * MC_DIFFS[mcDiffKey].speed * (S && S.dailyFactor ? S.dailyFactor : 1)
     };
   }
   function mcSpawnRope(){
@@ -10663,7 +10664,7 @@ var LOCATIONS = [
       if(mcDist(C.x, C.y, C.tx, C.ty) < 16 || C.t < -3) mcPickGraze();
       if(C.t <= 0){
         if(calmDone){ C.state = 'toPen'; C.t = 99; }
-        else { C.state = 'aim'; C.t = Math.max(0.45, 0.85 - S.round * 0.03 + MC_DIFFS[mcDiffKey].aimBonus); mcSfx('moo'); }
+        else { C.state = 'aim'; C.t = Math.max(MC_DIFFS[mcDiffKey].warnFloor, 0.85 - S.round * 0.03 + MC_DIFFS[mcDiffKey].aimBonus); mcSfx('moo'); }
       }
     } else if(C.state === 'aim'){
       C.aimX = E.x; C.aimY = E.y;
@@ -12907,7 +12908,7 @@ var LOCATIONS = [
   /* Auto-captured details: mode / level / difficulty / score where the game shows them. */
   function collectDetails(slug){
     var d = { mode:'', level:'', difficulty:'', score:'' };
-    try { d.difficulty = localStorage.getItem('diff_' + slug) || ''; } catch(e){}
+    try { var _dv = localStorage.getItem('holoArcade_v1_diff_' + slug); d.difficulty = _dv === null ? '' : JSON.parse(_dv); } catch(e){} /* MADCOW-DIFF-FIX-2026-11-24: feedback reads the same prefixed key the games' store uses (store is scoped to the games IIFE) */
     var pane = document.getElementById('pane-' + slug);
     if(pane){
       var modeEl = pane.querySelector('.t-mode.active b, [data-tmode].active, [data-wstyle].active, [data-wdiff].active');
@@ -19746,7 +19747,7 @@ function renderTesterAuth(){
     if(!cfg || !gmSettings){ if(gmSettings) gmSettings.hidden = true; pendingDiff = null; return; }
     gmSettings.hidden = false;
     var cur = null;
-    try { cur = localStorage.getItem('diff_' + currentSlug); } catch(e){}
+    try { var _cv = localStorage.getItem('holoArcade_v1_diff_' + currentSlug); cur = _cv === null ? cfg.def : JSON.parse(_cv); } catch(e){ cur = cfg.def; } /* MADCOW-DIFF-FIX-2026-11-24: menu reads the same prefixed key the games' store uses (store is scoped to the games IIFE) */
     if(!cur || !cfg.opts.some(function(o){ return o[0] === cur; })) cur = cfg.def;
     pendingDiff = cur;
     gmDiffRow.innerHTML = '';
@@ -19757,7 +19758,7 @@ function renderTesterAuth(){
       b.setAttribute('aria-pressed', o[0] === cur ? 'true' : 'false');
       b.addEventListener('click', function(){
         pendingDiff = o[0];
-        try { localStorage.setItem('diff_' + currentSlug, o[0]); } catch(e){}
+        try { localStorage.setItem('holoArcade_v1_diff_' + currentSlug, JSON.stringify(o[0])); } catch(e){} /* MADCOW-DIFF-FIX-2026-11-24: menu writes the same prefixed key the games' store uses */
         gmDiffRow.querySelectorAll('.gm-diff-btn').forEach(function(x){
           var on = x === b; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on ? 'true' : 'false');
         });
