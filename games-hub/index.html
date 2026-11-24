@@ -2578,6 +2578,7 @@ setTimeout(function(){
       </div>
       <p class="login-helper" style="margin:-4px 0 12px">Leave “Remember me” unticked and you’ll be signed out when you close this tab.</p>
       <p class="login-error" id="loginError" role="alert" hidden></p>
+      <p id="deviceLimitContactRow" hidden style="margin:0 0 12px"><button class="btn btn-light login-switch" id="deviceLimitContactBtn" type="button">Contact Holo</button></p>
       <button class="btn btn-dark login-btn" id="loginSubmit" type="submit">▶ Sign in — Press start ◀</button>
     </form>
     <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="forgotPwBtn">Forgot password?</button></p>
@@ -11861,7 +11862,14 @@ var LOCATIONS = [
     <details class="legal-section">
       <summary>Which devices can I play on?</summary>
       <div class="legal-content">
-        <p>Any phone, tablet, or computer with a browser. Sign in with your email and password on any device. Your scores and Glitch XP stay on the device you played on.</p>
+        <p>Any phone, tablet, or computer with a browser. Sign in with your email and password on up to 5 devices. Your scores and Glitch XP stay on the device you played on.</p>
+      </div>
+    </details>
+
+    <details class="legal-section">
+      <summary>How many devices can I use?</summary>
+      <div class="legal-content">
+        <p>Your account works on up to <strong>5 devices</strong> — phone, tablet, or computer. Need a 6th? Contact Holo and she can free up a spot for you.</p>
       </div>
     </details>
 
@@ -13819,6 +13827,12 @@ function signInAccount(email, password, termsAccepted, rememberMe){
           return finishSignIn(rec, rememberMe);
         });
       }
+      /* DEVICE-CAP-2026-11-23: a cap block is final — do not fall
+         through to the local-account fallback below, or a matching
+         local password would sign the 6th device straight in. */
+      if(res && res.deviceLimit){
+        return { ok:false, deviceLimit:true, error:res.error };
+      }
       var local2 = findLocalAccountByEmail(email);
       if(local2 && local2.acct){
         return localPasswordMatches(local2.acct, password).then(function(m){
@@ -13930,7 +13944,7 @@ function createAccount(name, email, password, confirmPassword, inviteCode, terms
   if(accounts[key]) return Promise.resolve({ ok:false, error:'That username is already taken, agent. Try a different username.' });
   if(typeof window.betaSignUpAsync === 'function'){
     return window.betaSignUpAsync(email, password, name, inviteCodeNorm, dob).then(function(res){
-      if(!res || !res.ok) return { ok:false, error:(res && res.error) || 'Could not finish registration, agent. Check your internet and try again in a minute.' };
+      if(!res || !res.ok) return { ok:false, deviceLimit:!!(res && res.deviceLimit), error:(res && res.error) || 'Could not finish registration, agent. Check your internet and try again in a minute.' };
       return cacheLocalAccount(name, email, password, res.uid, null, inviteCodeNorm, res.role || '', dob).then(function(rec){
         rememberLastEmail(rec.email); return { ok:true, account:{ name:rec.name, code:rec.code, email:rec.email, emailVerified:false } };
       });
@@ -14369,8 +14383,10 @@ function renderTesterAuth(){
     var terms = document.getElementById('loginTerms').checked;
     var rememberEl = document.getElementById('loginRemember');
     var remember = !!(rememberEl && rememberEl.checked);
-    function fail(msg){ if(err){ err.textContent = msg; err.hidden = false; } }
+    function hideDeviceLimitRow(){ var r = document.getElementById('deviceLimitContactRow'); if(r) r.hidden = true; }
+    function fail(msg){ hideDeviceLimitRow(); if(err){ err.textContent = msg; err.hidden = false; } }
     function succeed(){
+      hideDeviceLimitRow();
       if(err) err.hidden = true;
       clearAllFieldMarks(form);
       form.reset();
@@ -14398,8 +14414,16 @@ function renderTesterAuth(){
       if(res.ok){ succeed(); return; }
       if(res.verifyGate){ if(err) err.hidden = true; showVerifyGate(res); return; }
       fail(res.error);
+      /* DEVICE-CAP-2026-11-23: over the cap, offer the Contact
+         route (help chat, signed-out mode) next to the message. */
+      if(res && res.deviceLimit){ var dlRow = document.getElementById('deviceLimitContactRow'); if(dlRow) dlRow.hidden = false; }
     });
   });
+  /* DEVICE-CAP-2026-11-23: the over-cap Contact button opens the
+     help chat in signed-out ("login") mode — the tester is signed
+     out at this point, so the signed-in Contact route is hidden. */
+  var dlBtn = document.getElementById('deviceLimitContactBtn');
+  if(dlBtn) dlBtn.addEventListener('click', function(){ if(typeof window.openHelpChat === 'function') window.openHelpChat('login'); });
   /* Reverify gate buttons (2026-11-22): Resend asks the beta
      layer for a fresh VERIFY_EMAIL email; Check again re-looks
      up emailVerified and only then saves the tester session
@@ -17725,6 +17749,113 @@ function renderTesterAuth(){
       fetch(FB_RTDB + '/users/' + encodeURIComponent(rec.uid) + '.json?auth=' + encodeURIComponent(rec.idToken), { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) }).catch(function(){});
     } catch(e){}
   }
+
+  /* DEVICE-CAP-2026-11-23 (Holo 2026-11-23 23:47): 5 devices per
+     account, so passwords cannot be passed around freely ("just
+     in case"). Each device gets a stable ID the first time it
+     signs in (localStorage 'holos-arcade-device-id') and is
+     registered under /users/$uid/registeredDevices/<deviceId>
+     with a plain label + first/last seen. That node is separate
+     from /users/$uid/devices, which holds the device
+     questionnaire ANSWERS — never mix the two. The cap is
+     checked at sign-in and register (before the hub unlocks):
+     an already-registered device proceeds, under 5 registers
+     and proceeds, a 6th distinct device is blocked and signed
+     out. Owner UID + gizmo-* system accounts are exempt.
+     Existing devices are grandfathered: they register as they
+     next sign in / load; nobody is kicked off by this change.
+     Fail-open everywhere: if the check cannot run (no network,
+     rules hiccup), the tester gets in — a glitch never locks a
+     verified tester out, same as the reverify gate. Two devices
+     signing in at the exact same moment could both read the
+     same count and both register (no server-side lock exists
+     yet); the next sign-in then sees the true count. */
+  var DEVICE_CAP = 5;
+  var DEVICE_ID_KEY = 'holos-arcade-device-id';
+  function getDeviceId(){
+    try {
+      var id = localStorage.getItem(DEVICE_ID_KEY);
+      if(id) return String(id);
+      var rnd = '';
+      try { var b = new Uint8Array(8); if(window.crypto && crypto.getRandomValues){ crypto.getRandomValues(b); for(var i=0;i<b.length;i++) rnd += ('0' + b[i].toString(16)).slice(-2); } } catch(e){}
+      if(!rnd) rnd = Math.random().toString(16).slice(2, 10) + Math.random().toString(16).slice(2, 10);
+      id = 'dev-' + Date.now().toString(36) + '-' + rnd;
+      try { localStorage.setItem(DEVICE_ID_KEY, id); } catch(e){}
+      return id;
+    } catch(e){ return 'dev-' + Date.now().toString(36); }
+  }
+  function deviceLabel(){
+    /* Plain-English label Holo reads in Console, e.g.
+       "Android phone · Chrome · 390x844". No emails, no
+       passwords, no codes — the same data writeDevice already
+       captures, just shortened for the device list. */
+    try {
+      var ua = (navigator.userAgent || '');
+      var type = 'computer';
+      try { if(/Mobi|Android|iPhone|iPad|iPod/i.test(ua)) type = (/iPad/i.test(ua) || (/Android/i.test(ua) && !/Mobi/i.test(ua))) ? 'tablet' : 'phone'; } catch(e){}
+      var os = 'Unknown OS';
+      if(/Android/i.test(ua)) os = 'Android'; else if(/iPhone|iPad|iPod/i.test(ua)) os = 'iOS'; else if(/Windows/i.test(ua)) os = 'Windows'; else if(/Mac OS/i.test(ua)) os = 'Mac'; else if(/CrOS/i.test(ua)) os = 'ChromeOS'; else if(/Linux/i.test(ua)) os = 'Linux';
+      var br = 'Browser';
+      if(/Edg\//i.test(ua)) br = 'Edge'; else if(/OPR\//i.test(ua)) br = 'Opera'; else if(/Firefox\//i.test(ua)) br = 'Firefox'; else if(/Chrome\//i.test(ua)) br = 'Chrome'; else if(/Safari\//i.test(ua)) br = 'Safari';
+      var scr = ((window.screen && screen.width) || 0) + 'x' + ((window.screen && screen.height) || 0);
+      return os + ' ' + type + ' · ' + br + ' · ' + scr;
+    } catch(e){ return 'Unknown device'; }
+  }
+  function deviceCapExempt(rec){
+    try {
+      if(rec && rec.uid && typeof isOwnerUid === 'function' && isOwnerUid(rec.uid)) return true;
+      if(rec && rec.email && String(rec.email).trim().toLowerCase().indexOf('gizmo-') === 0) return true;
+    } catch(e){}
+    return false;
+  }
+  function fetchRegisteredDevices(rec, token){
+    /* Resolves to the device map, or null when the node does not
+       exist yet — RTDB returns null for a missing path, and that
+       is an EMPTY map, not a failure (a fresh account has no
+       registeredDevices node at all). Resolves to false only
+       when the read itself failed (network / non-OK status). */
+    try {
+      if(!rec || !rec.uid || !token || typeof fetch !== 'function') return Promise.resolve(false);
+      return fetch(FB_RTDB + '/users/' + encodeURIComponent(rec.uid) + '/registeredDevices.json?auth=' + encodeURIComponent(token))
+        .then(function(r){ return r.ok ? r.json() : false; }).catch(function(){ return false; });
+    } catch(e){ return Promise.resolve(false); }
+  }
+  function checkDeviceCap(rec){
+    /* Returns a Promise of {allowed, count, ...}. allowed:false
+       only when 5 OTHER devices are already registered. Any
+       failure to read or write fails OPEN (allowed:true) so a
+       network or rules hiccup never locks a tester out. */
+    try {
+      if(!rec || !rec.uid) return Promise.resolve({ allowed:true, checked:false });
+      if(deviceCapExempt(rec)) return Promise.resolve({ allowed:true, exempt:true });
+      var deviceId = getDeviceId();
+      var now = new Date().toISOString();
+      return freshToken().then(function(token){
+        if(!token) return { allowed:true, checked:false };
+        return fetchRegisteredDevices(rec, token).then(function(devs){
+          if(devs === false) return { allowed:true, checked:false };
+          var list = devs || {};
+          var keys = Object.keys(list);
+          if(list[deviceId]){
+            patchUserPath(rec, 'registeredDevices/' + encodeURIComponent(deviceId), { lastSeen: now });
+            return { allowed:true, existing:true, count: keys.length };
+          }
+          if(keys.length < DEVICE_CAP){
+            var entry = {}; entry[deviceId] = { label: deviceLabel(), firstSeen: now, lastSeen: now };
+            return patchUserPath(rec, 'registeredDevices', entry).then(function(){
+              return { allowed:true, registered:true, count: keys.length + 1 };
+            });
+          }
+          return { allowed:false, count: keys.length };
+        });
+      }).catch(function(){ return { allowed:true, checked:false }; });
+    } catch(e){ return Promise.resolve({ allowed:true, checked:false }); }
+  }
+  window.betaCheckDeviceCap = function(){
+    var rec = loadAuth();
+    if(!rec) return Promise.resolve(null);
+    return checkDeviceCap(rec);
+  };
   function patchUser(rec, payload){
     try {
       if(!rec || !rec.uid || !rec.idToken || typeof fetch !== 'function') return Promise.resolve(false);
@@ -17786,11 +17917,17 @@ function renderTesterAuth(){
         try { if((typeof isOwnerMode === 'function' && isOwnerMode()) && isOwnerUid(rec.uid)) ownerRole = 'owner'; } catch(e){}
         if(ownerRole) patch.role = ownerRole;
         return patchUser(rec, patch).then(function(){
-          writeUsernameIndex(rec, username);
-          writeDevice(rec, 'register');
-          sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); });
-          pushFeedback();
-          return { ok:true, uid:rec.uid, email:email, username:String(username || ''), inviteCode:notedCode, role:ownerRole, emailVerified:false, needsReverify:false };
+          return checkDeviceCap(rec).then(function(cap){
+            if(cap && cap.allowed === false){
+              clearLocalAuth();
+              return { ok:false, code:'DEVICE_LIMIT', deviceLimit:true, error:'This account is already signed in on 5 devices. Contact Holo if you need another one.' };
+            }
+            writeUsernameIndex(rec, username);
+            writeDevice(rec, 'register');
+            sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); });
+            pushFeedback();
+            return { ok:true, uid:rec.uid, email:email, username:String(username || ''), inviteCode:notedCode, role:ownerRole, emailVerified:false, needsReverify:false };
+          });
         });
       }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
@@ -18044,8 +18181,17 @@ function renderTesterAuth(){
             needsReverify = true;
             patchUser(rec, { needsReverify:true, needsReverifyAt:String(pend.at || new Date().toISOString()), needsReverifyReason:'password-reset' });
           }
-          return lookupAccount(rec.idToken).then(function(verified){
-            return { ok:true, uid:rec.uid, email:email, username:(u && u.username) ? String(u.username) : '', inviteCode:notedCode, role:userRole, emailVerified:verified, needsReverify:needsReverify };
+          /* DEVICE-CAP-2026-11-23: register this device before
+             the hub unlocks. A 6th device is signed straight back
+             out with the contact-Holo message. */
+          return checkDeviceCap(rec).then(function(cap){
+            if(cap && cap.allowed === false){
+              clearLocalAuth();
+              return { ok:false, code:'DEVICE_LIMIT', deviceLimit:true, error:'This account is already signed in on 5 devices. Contact Holo if you need another one.' };
+            }
+            return lookupAccount(rec.idToken).then(function(verified){
+              return { ok:true, uid:rec.uid, email:email, username:(u && u.username) ? String(u.username) : '', inviteCode:notedCode, role:userRole, emailVerified:verified, needsReverify:needsReverify };
+            });
           });
         });
       }
@@ -18408,6 +18554,24 @@ function renderTesterAuth(){
       try { reportError(ev.reason && (ev.reason.message || String(ev.reason)), '', 0); } catch(e){}
     });
   } catch(e){}
+  /* DEVICE-CAP-2026-11-23 (load path — grandfathering): a device
+     signed in before the cap shipped registers itself here, on
+     its next load, so the count is real without anyone having to
+     sign in again. A blocked result is ignored on purpose: a
+     pre-cap device is never kicked off by this check — the cap
+     bites at the next explicit sign-in instead. */
+  function registerDeviceOnLoad(){
+    try {
+      var rec = loadAuth();
+      if(!rec || !rec.uid) return;
+      var t = null;
+      try { t = (typeof getTester === 'function') ? getTester() : null; } catch(e){}
+      if(!t) return;
+      checkDeviceCap(rec).catch(function(){});
+    } catch(e){}
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', registerDeviceOnLoad);
+  else registerDeviceOnLoad();
 })();
 </script>
 
