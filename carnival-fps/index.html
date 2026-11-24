@@ -1,0 +1,1127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>Carnival FPS</title>
+<style>
+  :root{
+    --bg:#eef3f6; --surface:#ffffff; --surface2:#e6eef3; --ink:#10222e; --muted:#5a6f7c;
+    --line:#cfdde6; --accent:#0e7c86; --accent-ink:#fff; --red:#d93a2b; --blue:#1769c2;
+    --gold:#e8a317; --rink:#f7fbfd; --rink-line:#c9dbe8; --shadow:0 10px 28px rgba(16,34,46,.12);
+    --radius:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0c171f; --surface:#13242f; --surface2:#1a303f; --ink:#eaf3f7; --muted:#9db4c0;
+      --line:#2a4354; --accent:#2bb3bf; --accent-ink:#06222a; --rink:#eef7fb; --rink-line:#b9d2e2;
+      --shadow:0 10px 28px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:ui-rounded,"Avenir Next","Segoe UI",system-ui,-apple-system,sans-serif;line-height:1.45;-webkit-tap-highlight-color:transparent}
+  button,[role="button"],select,summary,input,textarea{font:inherit}
+  button{min-height:44px;min-width:44px;cursor:pointer}
+  .wrap{max-width:560px;margin:0 auto;padding:14px 14px 28px}
+  /* Top bar */
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0 12px}
+  .brand{display:flex;align-items:center;gap:10px;min-width:0}
+  .target-dot{width:40px;height:40px;flex:0 0 40px;border-radius:50%;background:#ff4d4d;display:grid;place-items:center;box-shadow:inset 0 0 0 5px #fff, inset 0 0 0 9px #ff4d4d, inset 0 0 0 12px #ffe14d}
+  .target-dot i{width:8px;height:8px;border-radius:50%;background:#ff4d4d;display:block}
+  h1{font-size:28px;line-height:1;margin:0;letter-spacing:-.02em;font-weight:900}
+  .brand p{margin:2px 0 0;color:var(--muted);font-size:13px;font-weight:600}
+  .nav{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  .nav button,.btn{border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:8px 14px;font-weight:700;font-size:14px}
+  .nav button[aria-pressed="true"],.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .btn.primary{font-size:15px;padding:10px 20px}
+  .btn.danger{border-color:#e5b3ad;color:var(--red)}
+  /* Scoreboard */
+  .scoreboard{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;text-align:center}
+  .side .who{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+  .side.you .who{color:var(--blue)} .side.cpu .who{color:var(--red)}
+  .side .score{font-size:44px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+  .side .sub{font-size:12px;color:var(--muted);font-weight:600}
+  .mid{text-align:center}
+  .mid .target{font-size:12px;color:var(--muted);font-weight:700}
+  .mid .clock{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+  .mid .status{font-size:12px;font-weight:800;color:var(--accent)}
+  /* Rink */
+  .range-wrap{margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:10px;position:relative}
+  canvas{display:block;width:100%;height:auto;border-radius:12px;background:var(--rink);touch-action:none;cursor:crosshair}
+  canvas:active{cursor:crosshair}
+  .overlay{position:absolute;inset:10px;border-radius:12px;display:none;place-items:center;text-align:center;background:rgba(10,25,35,.55);color:#fff;padding:20px}
+  .overlay.show{display:grid}
+  .overlay h2{margin:0 0 6px;font-size:30px;font-weight:900}
+  .overlay p{margin:0 0 14px;font-size:15px;opacity:.92;max-width:32ch}
+  .overlay .btn{border:none}
+  .goalflash{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) scale(.8);font-size:52px;font-weight:900;color:#fff;text-shadow:0 3px 0 var(--red),0 10px 30px rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:all .18s}
+  .goalflash.pop{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  /* Controls */
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .controls .btn{flex:1 1 auto}
+  .diff-row{margin-top:14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+  .diff-row label,.diff-row .lab{font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px}
+  .seg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .seg button{border:1.5px solid var(--line);background:var(--surface2);color:var(--ink);border-radius:10px;padding:10px 6px;font-weight:800;font-size:15px;min-height:48px}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .diff-note{font-size:13px;color:var(--muted);margin:8px 0 0;min-height:1.4em}
+  .sound-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;font-size:14px;font-weight:600}
+  /* Practice round */
+  .practice-bar{margin-top:12px;background:var(--surface2);border:1.5px dashed var(--accent);border-radius:var(--radius);padding:10px 14px;display:flex;gap:10px;align-items:flex-start}
+  .practice-bar .tag{flex:0 0 auto;background:var(--accent);color:var(--accent-ink);font-size:11px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:3px 9px;margin-top:1px}
+  .practice-bar p{margin:0;font-size:14px;font-weight:600}
+  .practice-bar p span{color:var(--muted);font-weight:600}
+  .btn[aria-pressed="true"].practice-on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  /* Bests */
+  .bests{margin-top:14px}
+  .bests h2,.panel h2{font-size:19px;margin:0 0 8px;font-weight:900}
+  .bests-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 8px;text-align:center}
+  .stat b{display:block;font-size:22px;font-weight:900;font-variant-numeric:tabular-nums}
+  .stat span{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+  @media(max-width:420px){.bests-grid{grid-template-columns:repeat(2,1fr)} h1{font-size:24px}}
+  .hint{font-size:13px;color:var(--muted);text-align:center;margin:10px 4px 0}
+  kbd{background:var(--surface2);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;font-size:12px;font-family:inherit;font-weight:700}
+  /* Panels (tutorial/rules/feedback) */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;margin-top:4px}
+  .panel h3{margin:16px 0 6px;font-size:16px}
+  .panel p,.panel li{font-size:15px}
+  .panel ul,.panel ol{padding-left:22px;margin:6px 0}
+  .panel li{margin:5px 0}
+  .steps{display:grid;gap:10px;margin-top:10px}
+  .step{display:flex;gap:12px;background:var(--surface2);border-radius:12px;padding:12px}
+  .step .n{width:36px;height:36px;flex:0 0 36px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:900;font-size:17px}
+  .step b{display:block;font-size:15px}
+  .step p{margin:2px 0 0;font-size:14px;color:var(--muted)}
+  .backrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+  /* Feedback */
+  .stars{display:flex;gap:6px;margin:6px 0 4px}
+  .stars button{width:52px;height:52px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface2);font-size:26px;line-height:1;color:var(--muted);padding:0}
+  .stars button.on{color:var(--gold);border-color:var(--gold);background:var(--surface)}
+  textarea{width:100%;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);padding:12px;min-height:96px;resize:vertical}
+  .saved-note{font-size:14px;font-weight:700;color:var(--accent);min-height:1.4em;margin:8px 0 0}
+  .prev{background:var(--surface2);border-radius:12px;padding:12px;margin-top:12px;font-size:14px}
+  .prev:empty{display:none}
+  footer{margin-top:22px;text-align:center;color:var(--muted);font-size:13px;font-weight:600;padding:14px 8px 4px;border-top:1px solid var(--line)}
+  [hidden]{display:none !important}
+/* vtut visual steps */
+.vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
+@media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
+.vtut-card{position:relative;border-radius:14px;padding:12px 10px 10px;text-align:center;background:rgba(128,128,128,.10);border:1px solid rgba(128,128,128,.28)}
+.vtut-num{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;background:#ff5fa2;color:#fff;font-size:12px;font-weight:800;line-height:20px}
+.vtut-pic{height:52px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.vtut-pic svg{width:44px;height:44px}
+.vtut-card b{display:block;font-size:.92rem;margin-bottom:2px}
+.vtut-card p{margin:0;font-size:.85rem;line-height:1.35;opacity:.92}
+
+/* ================= GAME-THEME-2026-11-22 =================
+   Holo 2026-11-22 21:18: games themed too - shared Arcade
+   theme layer on every standalone game. Unique per game
+   (own colours, art and board untouched) inside the Arcade
+   theme family: navy cabinet frame, pixel gradient title,
+   cyan accents, 3-tier chrome buttons, console-framed stage.
+   CSS only - no JS or gameplay changes. */
+:root{--ha-navy:#0a0620;--ha-pink:#ff3ec8;--ha-violet:#8b5cff;--ha-blue:#3b82f6;--ha-cyan:#38e1ff;--ha-gold:#ffb020;--ha-grad:linear-gradient(92deg,#ff3ec8 0%,#ff7ad9 22%,#8b5cff 52%,#3b82f6 82%,#38e1ff 100%);--ha-pixel:"Press Start 2P","Courier New",monospace}
+html{background:#0a0620}
+h1{font-family:var(--ha-pixel);font-size:clamp(15px,4.5vw,24px);line-height:1.7;letter-spacing:0;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(2px 2px 0 rgba(139,92,255,.45))}
+canvas{outline:3px solid var(--ha-violet);box-shadow:0 0 0 3px #0a0620,0 0 26px rgba(139,92,255,.4);border-radius:10px}
+#btnStart,#startBtn,#playBtn,#btnPlay,#newBtn,#newGameBtn,#btnNew,#againBtn,#btnAgain,#btnPlayAgain,#fbSave,#btnSaveFeedback{background:linear-gradient(92deg,#ffb020 0%,#ffd43b 50%,#ffb020 100%);color:#140b33;border:3px solid #fff;border-radius:12px;font-family:var(--ha-pixel);font-size:11px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #b45309,0 0 18px rgba(255,176,32,.5);cursor:pointer}
+#btnRules,#rulesBtn,#btnFeedback,#feedbackBtn,#btnFeedbackFooter,#btnTutorial,#tutorialBtn,#howBtn,#btnHow,#ovHow,#btnPractice,#practiceBtn{background:var(--ha-grad);color:#fff;border:none;border-radius:10px;font-family:var(--ha-pixel);font-size:10px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #4c1d95,0 8px 20px rgba(255,62,200,.3);cursor:pointer}
+.vtut-card{border:2px solid rgba(139,92,255,.55);background:linear-gradient(180deg,#1e1247,#140b33);color:#e9e4ff;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+.vtut-num{background:var(--ha-grad)}
+a{color:var(--ha-cyan)}
+
+/* TUT-POPUP-2026-11-22 (Holo 22:24): How to play popup sized for
+   the device + pixel title header bar. CSS only. */
+.modal:has(.vtut-grid),.sheet:has(.vtut-grid),.card:has(.vtut-grid),.box:has(.vtut-grid),.panel:has(.vtut-grid),.tut-card,.tutorial-backdrop{max-width:min(92vw,560px);max-height:88dvh;overflow-y:auto;box-sizing:border-box}
+.vtut-grid{grid-template-columns:1fr}
+@media (min-width:521px){.vtut-grid{grid-template-columns:1fr 1fr}}
+.modal:has(.vtut-grid) :is(h2,h3),.sheet:has(.vtut-grid) :is(h2,h3),.card:has(.vtut-grid) :is(h2,h3),.box:has(.vtut-grid) :is(h2,h3),.panel:has(.vtut-grid) :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;color:#fff;background:#0a0620;border:2px solid rgba(139,92,255,.65);border-radius:10px;padding:10px 12px;margin:0 0 12px}
+.modal:has(.vtut-grid) :is(h2,h3)::before,.sheet:has(.vtut-grid) :is(h2,h3)::before,.card:has(.vtut-grid) :is(h2,h3)::before,.box:has(.vtut-grid) :is(h2,h3)::before,.panel:has(.vtut-grid) :is(h2,h3)::before{content:"Carnival FPS — ";background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tut-card .tut-head{background:#0a0620}
+.tut-card .tut-head :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* INSERT-COIN-2026-11-22 (Holo 23:13): old-school title-screen
+   blink line on game start/title areas. Same blink as the 404
+   page .coin. CSS + one tiny guarded script; no gameplay change. */
+@keyframes haCoinBlink{50%{opacity:.25}}
+.insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
+@media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+
+#btnFire{background:linear-gradient(92deg,#ffb020 0%,#ffd43b 50%,#ffb020 100%);color:#140b33;border:3px solid #fff;border-radius:12px;font-family:var(--ha-pixel);font-size:11px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #b45309,0 0 18px rgba(255,176,32,.5)}
+.scoreboard .score{font-size:36px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">
+      <div class="target-dot" aria-hidden="true"><i></i></div>
+      <div><h1>Carnival FPS</h1><p>First-person carnival range · 60 seconds</p></div>
+    </div>
+  </div>
+  <nav class="nav" aria-label="Game sections" style="justify-content:flex-start;padding-bottom:12px">
+    <button type="button" data-view="game" aria-pressed="true">🏒 Play</button>
+    <button type="button" data-view="tutorial" aria-pressed="false">Tutorial</button>
+    <button type="button" data-view="rules" aria-pressed="false">Rules</button>
+    <button type="button" data-view="feedback" aria-pressed="false">★ Feedback</button>
+  </nav>
+
+  <!-- GAME VIEW -->
+  <section id="view-game">
+    <div class="scoreboard" aria-live="polite">
+      <div class="side you"><div class="who">★ Score</div><div class="score" id="hudScore">0</div><div class="sub"><span id="hudHits">0</span> hits · <span id="hudShots">0</span> shots</div></div>
+      <div class="mid"><div class="target" id="targetLab">60-SECOND ROUND</div><div class="clock" id="hudClock">1:00</div><div class="status" id="hudStatus">Ready</div></div>
+      <div class="side cpu"><div class="who">◎ Accuracy</div><div class="score" id="hudAcc">—</div><div class="sub">Ducks 10 · Stars 30</div></div>
+    </div>
+
+    <div class="practice-bar" id="practiceBar" hidden>
+      <span class="tag">Practice</span>
+      <p><span id="practiceHint">No score, no clock — just reps. Tip: bullseyes are worth 50 but rare — don't chase them, take the ducks.</span></p>
+    </div>
+
+    <div class="range-wrap">
+      <canvas id="range" width="560" height="360" aria-label="Carnival shooting range. Click to look around, press Space or tap FIRE to shoot the ducks, balloons, stars and bullseyes."></canvas>
+      <div class="overlay show" id="overlay">
+        <div>
+          <h2 id="ovTitle">Step right up!</h2>
+          <p id="ovText">Pop ducks, balloons, stars and bullseyes before the clock runs out. Click the range to look around, then FIRE or press Space to shoot.</p>
+          <button type="button" class="btn primary" id="ovBtn">▶ Start round</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button type="button" class="btn primary" id="btnPlay">▶ Start</button>
+      <button type="button" class="btn" id="btnPause" disabled>⏸ Pause</button>
+      <button type="button" class="btn" id="btnFire">🔥 FIRE</button>
+      <button type="button" class="btn" id="btnPractice" aria-pressed="false">🎯 Practice round</button>
+      <button type="button" class="btn danger" id="btnReset">↺ Reset</button>
+    </div>
+
+    <div class="diff-row">
+      <span class="lab" id="diffLab">Difficulty — target speed &amp; spawn rate</span>
+      <div class="seg" role="group" aria-labelledby="diffLab">
+        <button type="button" data-diff="easy" aria-pressed="false">Easy</button>
+        <button type="button" data-diff="medium" aria-pressed="true">Medium</button>
+        <button type="button" data-diff="hard" aria-pressed="false">Hard</button>
+      </div>
+      <p class="diff-note" id="diffNote"></p>
+      <div class="sound-row"><span>Sound effects</span><button type="button" class="btn" id="btnSound" aria-pressed="true" style="min-height:40px;padding:4px 14px">🔊 On</button></div>
+    </div>
+
+    <div class="bests">
+      <h2>Your bests</h2>
+      <div class="bests-grid">
+        <div class="stat"><b id="bBest">0</b><span>Best score</span></div>
+        <div class="stat"><b id="bRounds">0</b><span>Rounds</span></div>
+        <div class="stat"><b id="bAcc">—</b><span>Best accuracy</span></div>
+        <div class="stat"><b id="bHits">0</b><span>Total hits</span></div>
+      </div>
+      <p class="hint">Saved on this device. Ducks 10 · Balloons 20 · Stars 30 · Bullseyes 50.</p>
+    </div>
+
+    <p class="hint">🖱️ Click the range to look with the mouse (ESC to pause) — or drag to look on touch. <kbd>←</kbd><kbd>→</kbd> turn, <kbd>↑</kbd><kbd>↓</kbd> tilt, <kbd>Space</kbd> fires, <kbd>P</kbd> pauses. 🎮 Controller: left stick / D-pad looks, A fires, Start pauses.</p>
+  </section>
+
+  <!-- TUTORIAL VIEW -->
+  <section id="view-tutorial" hidden>
+    <div class="panel">
+      <h2>How to play — 30-second tutorial</h2>
+      <p>No walkthrough is forced on you — this page is here whenever you want it.</p>
+            <div class="vtut-grid">
+        <div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#38e1ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="10" width="36" height="26" rx="3"/><path d="M24 22v10M18 36h12"/></svg></div><b>Look around</b><p>Click the range to lock the mouse and look. On touch, drag to look.</p></div>
+        <div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="24" r="12"/><path d="M24 4v8M24 36v8M4 24h8M36 24h8"/><circle cx="24" cy="24" r="2" fill="#ffffff"/></svg></div><b>Aim with the crosshair</b><p>Line the crosshair up with a target — the nearest one in the middle gets hit.</p></div>
+        <div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#ff5fa2" stroke="#db2777" stroke-width="2" stroke-linejoin="round"><path d="M16 10l22 14-22 14z"/></svg></div><b>FIRE!</b><p>Press Space or tap the big FIRE button to shoot. A hit pops with a starburst.</p></div>
+        <div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#ffd23b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="26" r="9"/><circle cx="28" cy="18" r="6"/><path d="M33 18l6 2-6 3z"/></svg></div><b>Know your targets</b><p>Ducks 10, balloons 20, stars 30, bullseyes 50. Bullseyes are rare — grab them fast.</p></div>
+        <div class="vtut-card"><span class="vtut-num">5</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#38e1ff" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="26" r="16"/><path d="M24 26V14M24 26l8 5M20 4h8"/></svg></div><b>Watch the clock</b><p>60 seconds per round. Pop as many targets as you can before time runs out.</p></div>
+        <div class="vtut-card"><span class="vtut-num">6</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#ff5fa2" stroke="#db2777" stroke-width="2" stroke-linejoin="round"><path d="M16 10l22 14-22 14z"/></svg></div><b>Practice round</b><p>No score, no clock — just reps until your aim feels right.</p></div>
+      </div>
+      <h3>Picking a difficulty</h3>
+      <p><strong>Easy</strong> is for learning to aim. <strong>Medium</strong> is a fair round. <strong>Hard</strong> spawns targets fast and they vanish quickly.</p>
+      <div class="backrow"><button type="button" class="btn primary" data-goto="game">Got it — play</button><button type="button" class="btn" data-goto="rules">Read the rules</button></div>
+    </div>
+  </section>
+
+  <!-- RULES VIEW -->
+  <section id="view-rules" hidden>
+    <div class="panel">
+      <h2>Rules</h2>
+      <h3>The game</h3>
+      <ul>
+        <li>A first-person carnival shooting range. You have <strong>60 seconds</strong> to pop as many targets as you can.</li>
+        <li>All targets are cartoon carnival fun — ducks, balloons, stars and bullseyes. No gore, no blood, no real weapons.</li>
+      </ul>
+      <h3>Points</h3>
+      <ul>
+        <li><strong>Duck</strong> — 10 points. <strong>Balloon</strong> — 20 points. <strong>Star</strong> — 30 points. <strong>Bullseye</strong> — 50 points.</li>
+        <li>Bullseyes are rare and vanish fast. Stars twinkle in place, balloons float up, ducks drift side to side.</li>
+        <li>A shot only counts if the crosshair is on a target — the nearest target in the middle of your view is the one you hit.</li>
+      </ul>
+      <h3>Looking &amp; shooting</h3>
+      <ul>
+        <li>Click the range to lock the mouse and look around (ESC unlocks and pauses). Without mouse lock, drag on the range to look.</li>
+        <li><strong>Arrow keys</strong> turn and tilt the view; <strong>Space</strong> fires; <strong>P</strong> pauses.</li>
+        <li>On touch, drag to look and tap the big <strong>FIRE</strong> button to shoot. A controller works too: stick / D-pad to look, A to fire, Start to pause.</li>
+      </ul>
+      <h3>Difficulty</h3>
+      <ul>
+        <li><strong>Easy:</strong> targets pop up slowly and linger.</li>
+        <li><strong>Medium:</strong> a fair pace of spawns and movement.</li>
+        <li><strong>Hard:</strong> fast spawns, quick targets, short windows.</li>
+        <li>You can change difficulty between rounds — it takes effect on the next round. Your choice is remembered for next time.</li>
+      </ul>
+      <h3>Practice round</h3>
+      <ul>
+        <li>Tap <strong>🎯 Practice round</strong> to switch to a practice session at any time.</li>
+        <li>No score is kept and the clock doesn't run — pop targets for as long as you like.</li>
+        <li>Practice never counts toward your bests. Tap the button again to return to a 60-second round.</li>
+      </ul>
+      <h3>Bests</h3>
+      <ul>
+        <li>Best score, rounds played, best accuracy and total hits are stored on this device only.</li>
+      </ul>
+      <div class="backrow"><button type="button" class="btn primary" data-goto="game">Back to the game</button></div>
+    </div>
+  </section>
+
+  <!-- FEEDBACK VIEW -->
+  <section id="view-feedback" hidden>
+    <div class="panel">
+      <h2>Feedback</h2>
+      <p>How's the game feel? Your rating and comment are saved on this device only.</p>
+      <span class="lab" style="font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)">Your rating</span>
+      <div class="stars" id="stars" role="radiogroup" aria-label="Star rating">
+        <button type="button" data-star="1" aria-label="1 star">★</button>
+        <button type="button" data-star="2" aria-label="2 stars">★</button>
+        <button type="button" data-star="3" aria-label="3 stars">★</button>
+        <button type="button" data-star="4" aria-label="4 stars">★</button>
+        <button type="button" data-star="5" aria-label="5 stars">★</button>
+      </div>
+      <label for="fbText" style="font-size:13px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)">Comment</label>
+      <textarea id="fbText" placeholder="What worked? What was too hard, too easy, or glitchy?" style="margin-top:6px"></textarea>
+      <p style="font-size:13px;color:var(--muted);margin:10px 0 0">By sending feedback you agree to the Terms &amp; Conditions. No personal info needed.</p>
+      <div class="backrow">
+        <button type="button" class="btn primary" id="btnFbSave">Save feedback</button>
+        <button type="button" class="btn" data-goto="game">Back to the game</button>
+      </div>
+      <p class="saved-note" id="fbNote" aria-live="polite"></p>
+      <div class="prev" id="fbPrev"></div>
+    </div>
+  </section>
+
+  <footer>More games at Holo's Arcade</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+var $=function(id){return document.getElementById(id);};
+
+/* ---------- Views ---------- */
+var views={game:$("view-game"),tutorial:$("view-tutorial"),rules:$("view-rules"),feedback:$("view-feedback")};
+function showView(name){
+  Object.keys(views).forEach(function(k){views[k].hidden=(k!==name);});
+  document.querySelectorAll("[data-view]").forEach(function(b){b.setAttribute("aria-pressed", b.getAttribute("data-view")===name?"true":"false");});
+  if(name!=="game" && state==="playing"){pauseGame();}
+  window.scrollTo({top:0});
+}
+document.querySelectorAll("[data-view]").forEach(function(b){b.addEventListener("click",function(){showView(b.getAttribute("data-view"));});});
+document.querySelectorAll("[data-goto]").forEach(function(b){b.addEventListener("click",function(){showView(b.getAttribute("data-goto"));});});
+
+/* ---------- Storage ---------- */
+function load(key,fallback){try{var v=localStorage.getItem(key);return v?JSON.parse(v):fallback;}catch(e){return fallback;}}
+function save(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){}}
+
+/* ---------- Difficulty ---------- */
+var DIFFS={
+  easy:{label:"Easy",spawn:1.15,speed:0.55,life:4.6,max:4,note:"Easy — targets pop up slowly and linger. Great for learning to aim."},
+  medium:{label:"Medium",spawn:0.8,speed:1.0,life:3.6,max:5,note:"Medium — a fair pace. Ducks drift, balloons float, stars twinkle."},
+  hard:{label:"Hard",spawn:0.55,speed:1.6,life:2.7,max:7,note:"Hard — fast spawns, quick targets, short windows. Sharp shooting only."}
+};
+var difficulty=load("carnivalFps_difficulty","medium");
+if(!DIFFS[difficulty])difficulty="medium";
+function applyDiff(){
+  document.querySelectorAll("[data-diff]").forEach(function(b){b.setAttribute("aria-pressed",b.getAttribute("data-diff")===difficulty?"true":"false");});
+  $("diffNote").textContent=DIFFS[difficulty].note;
+  save("carnivalFps_difficulty",difficulty);
+  updateGameState();
+}
+document.querySelectorAll("[data-diff]").forEach(function(b){b.addEventListener("click",function(){difficulty=b.getAttribute("data-diff");applyDiff();beep(660,.05,"sine",.04);});});
+
+/* ---------- Bests ---------- */
+var bests=load("carnivalFps_bests",{best:0,rounds:0,bestAcc:0,totalHits:0});
+function renderBests(){
+  $("bBest").textContent=bests.best;
+  $("bRounds").textContent=bests.rounds;
+  $("bAcc").textContent=bests.bestAcc?bests.bestAcc+"%":"—";
+  $("bHits").textContent=bests.totalHits;
+}
+function fmtClock(s){s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");}
+
+/* ---------- Audio ---------- */
+var audioCtx=null, soundOn=load("carnivalFps_sound",true);
+function beep(freq,dur,type,vol){
+  if(!soundOn)return;
+  try{
+    if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    if(audioCtx.state==="suspended")audioCtx.resume();
+    var o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=type||"square";o.frequency.value=freq;
+    g.gain.setValueAtTime(vol||.05,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.0001,audioCtx.currentTime+(dur||.07));
+    o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+(dur||.07));
+  }catch(e){}
+}
+function popSound(){beep(880,.06,"square",.05);setTimeout(function(){beep(1320,.09,"sine",.05);},40);}
+function missSound(){beep(160,.08,"sine",.04);}
+$("btnSound").textContent=soundOn?"🔊 On":"🔇 Off";
+$("btnSound").setAttribute("aria-pressed",soundOn?"true":"false");
+$("btnSound").addEventListener("click",function(){soundOn=!soundOn;save("carnivalFps_sound",soundOn);this.textContent=soundOn?"🔊 On":"🔇 Off";this.setAttribute("aria-pressed",soundOn?"true":"false");if(soundOn)beep(660,.06,"sine",.05);});
+
+/* ---------- Game state ---------- */
+var cv=$("range"),ctx=null;
+try{ctx=cv.getContext("2d");}catch(e){ctx=null;}
+var W=560,H=360,FOCAL=330,HORIZON=Math.round(H*0.42),CAMH=1.6,ROUND_LEN=60;
+var YAW_MAX=0.85,PITCH_MAX=0.32;
+var state="idle"; // idle | playing | paused | over
+var score=0,hits=0,shots=0,elapsed=0,lastTs=null;
+var yaw=0,pitch=0,keys={};
+var targets=[],particles=[],texts=[];
+var spawnTimer=0.5,flash=0,hitFlash=0;
+var locked=false,hadLock=false,dragging=false,lastPX=0,lastPY=0;
+var practice=false;
+
+var TYPES={
+  duck:{pts:10,color:"#ffd23b"},
+  balloon:{pts:20,color:"#ff5fa2"},
+  star:{pts:30,color:"#ffe14d"},
+  bullseye:{pts:50,color:"#ff4d4d"}
+};
+function pickType(){
+  var r=Math.random();
+  if(r<0.45)return "duck";
+  if(r<0.75)return "balloon";
+  if(r<0.93)return "star";
+  return "bullseye";
+}
+function spawnTarget(type){
+  var d=DIFFS[difficulty];
+  type=type||pickType();
+  var t={type:type,pts:TYPES[type].pts,x:(Math.random()*11-5.5),z:3.2+Math.random()*6.3,
+    y:0.9,baseY:1.2,vx:0,vy:0,r:0.55,ttl:d.life*(0.9+Math.random()*0.2),age:0,phase:Math.random()*6.28};
+  if(type==="duck"){t.y=t.baseY=0.8+Math.random()*0.8;t.r=0.55;t.vx=(0.5+Math.random()*0.7)*d.speed*(Math.random()<0.5?-1:1);}
+  else if(type==="balloon"){t.y=t.baseY=1.2+Math.random()*1.4;t.r=0.5;t.vy=(0.15+Math.random()*0.25)*d.speed;}
+  else if(type==="star"){t.y=t.baseY=1.5+Math.random()*1.5;t.r=0.45;}
+  else{t.y=t.baseY=1.2+Math.random()*1.2;t.r=0.6;}
+  targets.push(t);
+  return t;
+}
+
+/* Pseudo-3D projection: world (x,y,z) -> screen. Scale by depth. */
+function project(t){
+  var c=Math.cos(yaw),s=Math.sin(yaw);
+  var rx=t.x*c-t.z*s, rz=t.x*s+t.z*c;
+  if(rz<0.6)return null;
+  var scale=FOCAL/rz;
+  var sx=W/2+(rx/rz)*FOCAL;
+  var sy=HORIZON-(t.y-CAMH)*scale+pitch*FOCAL;
+  return {x:sx,y:sy,r:t.r*scale,depth:rz};
+}
+function clampView(){
+  if(yaw>YAW_MAX)yaw=YAW_MAX; if(yaw<-YAW_MAX)yaw=-YAW_MAX;
+  if(pitch>PITCH_MAX)pitch=PITCH_MAX; if(pitch<-PITCH_MAX)pitch=-PITCH_MAX;
+}
+
+/* ---------- Practice round (untimed, no score saved) ---------- */
+function applyPractice(){
+  var b=$("btnPractice");
+  b.setAttribute("aria-pressed",practice?"true":"false");
+  b.classList.toggle("practice-on",practice);
+  b.textContent=practice?"🎯 Practice: On":"🎯 Practice round";
+  $("practiceBar").hidden=!practice;
+  $("targetLab").textContent=practice?"PRACTICE — UNTIMED":"60-SECOND ROUND";
+  if(practice){
+    $("hudClock").textContent="—";
+    setStatus("Practice — ready");
+  }else{
+    $("hudClock").textContent=fmtClock(ROUND_LEN-elapsed);
+    setStatus("Ready");
+  }
+  updateGameState();
+}
+$("btnPractice").addEventListener("click",function(){
+  practice=!practice;
+  if(state==="over"){state="idle";}
+  resetRound();
+  applyPractice();
+  beep(practice?720:520,.06,"sine",.05);
+});
+
+/* ---------- Round flow ---------- */
+function updateHUD(){
+  $("hudScore").textContent=score;
+  $("hudHits").textContent=hits;
+  $("hudShots").textContent=shots;
+  $("hudAcc").textContent=shots?Math.round(hits/shots*100)+"%":"—";
+  $("hudClock").textContent=practice?"—":fmtClock(ROUND_LEN-elapsed);
+}
+function setStatus(t){$("hudStatus").textContent=t;}
+function showOverlay(title,text,btn){
+  $("ovTitle").textContent=title;$("ovText").textContent=text;$("ovBtn").textContent=btn;
+  $("overlay").classList.add("show");
+}
+function hideOverlay(){$("overlay").classList.remove("show");}
+function updateGameState(){
+  window.__holoGameState={slug:"carnival-fps",score:score,hits:hits,shots:shots,difficulty:difficulty,mode:practice?"practice":"real"};
+}
+function resetRound(){
+  score=0;hits=0;shots=0;elapsed=0;targets=[];particles=[];texts=[];spawnTimer=0.5;flash=0;hitFlash=0;yaw=0;pitch=0;
+  state="idle";
+  updateHUD();
+  if(practice){
+    showOverlay("Practice round","No score, no clock — just reps. Look around, pop targets, and work on your aim for as long as you like.","▶ Start practice");
+  }else{
+    showOverlay("Step right up!","Pop ducks, balloons, stars and bullseyes before the clock runs out. Click the range to look around, then FIRE or press Space to shoot.","▶ Start round");
+  }
+  setStatus(practice?"Practice — ready":"Ready");
+  $("btnPlay").disabled=false;$("btnPlay").textContent="▶ Start";$("btnPause").disabled=true;
+  updateGameState();
+  draw();
+}
+function raf(fn){
+  if(typeof window.requestAnimationFrame==="function")return window.requestAnimationFrame(fn);
+  return setTimeout(fn,16);
+}
+function startGame(){
+  resetRound();
+  state="playing";hideOverlay();setStatus(practice?"Practice":"Playing");
+  $("btnPlay").textContent="▶ Playing…";$("btnPlay").disabled=true;$("btnPause").disabled=false;$("btnPause").textContent="⏸ Pause";
+  lastTs=null;raf(loop);beep(520,.07,"sine",.05);
+  updateGameState();
+}
+function pauseGame(){
+  if(state!=="playing")return;
+  state="paused";setStatus("Paused");
+  showOverlay("Paused","Take a breather — the targets will wait right where they are.","▶ Resume");
+  $("btnPlay").disabled=false;$("btnPlay").textContent="▶ Resume";$("btnPause").disabled=true;
+}
+function resumeGame(){
+  if(state!=="paused")return;
+  state="playing";hideOverlay();setStatus(practice?"Practice":"Playing");
+  $("btnPlay").textContent="▶ Playing…";$("btnPlay").disabled=true;$("btnPause").disabled=false;
+  lastTs=null;raf(loop);
+}
+function endRound(){
+  state="over";
+  var acc=shots?Math.round(hits/shots*100):0;
+  if(!practice){
+    bests.rounds++;
+    bests.totalHits+=hits;
+    if(score>bests.best)bests.best=score;
+    if(shots&&acc>bests.bestAcc)bests.bestAcc=acc;
+    save("carnivalFps_bests",bests);renderBests();
+  }
+  setStatus("Time's up!");
+  showOverlay(practice?"Practice over":"Time's up! 🎉",
+    "Score "+score+" · "+hits+" hits from "+shots+" shots · Accuracy "+acc+"%"+(practice?" (practice — not saved)":(score>=bests.best&&score>0?" — new best!":" · Best "+bests.best)),
+    "↺ Play again");
+  $("btnPlay").disabled=false;$("btnPlay").textContent="↺ Play again";$("btnPause").disabled=true;
+  beep(880,.2,"sine",.06);setTimeout(function(){beep(1174,.25,"sine",.06);},180);
+  updateGameState();
+}
+$("btnPlay").addEventListener("click",function(){if(state==="paused")resumeGame();else startGame();});
+$("ovBtn").addEventListener("click",function(){if(state==="paused")resumeGame();else startGame();});
+$("btnPause").addEventListener("click",pauseGame);
+$("btnReset").addEventListener("click",function(){resetRound();applyPractice();});
+
+/* ---------- Shooting ---------- */
+function burst(x,y,color,n){
+  for(var i=0;i<(n||10);i++){
+    var a=Math.random()*Math.PI*2,sp=40+Math.random()*120;
+    particles.push({x:x,y:y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.5+Math.random()*0.3,max:0.8,color:color,size:2+Math.random()*4});
+  }
+}
+function floatText(x,y,text,color){texts.push({x:x,y:y,text:text,color:color||"#fff",life:0.9});}
+function fire(){
+  if(state!=="playing")return;
+  shots++;flash=0.09;
+  var cx=W/2,cy=H/2,bestT=null,bestP=null;
+  for(var i=0;i<targets.length;i++){
+    var p=project(targets[i]);
+    if(!p)continue;
+    var d=Math.hypot(p.x-cx,p.y-cy);
+    if(d<=p.r*1.15&&(!bestP||p.depth<bestP.depth)){bestT=targets[i];bestP=p;}
+  }
+  if(bestT){
+    hits++;score+=bestT.pts;hitFlash=0.15;
+    burst(bestP.x,bestP.y,TYPES[bestT.type].color,12);
+    floatText(bestP.x,bestP.y-14,"+"+bestT.pts+" POP!","#ffe14d");
+    targets.splice(targets.indexOf(bestT),1);
+    popSound();
+    try{if(window.holoBuzz)window.holoBuzz(15);}catch(e){}
+  }else{
+    floatText(cx,cy-30,"MISS","#cfdde6");
+    missSound();
+  }
+  updateHUD();updateGameState();
+}
+$("btnFire").addEventListener("click",function(){fire();});
+
+/* ---------- Look: Pointer Lock + drag fallback ---------- */
+function lockSupported(){try{return typeof cv.requestPointerLock==="function";}catch(e){return false;}}
+cv.addEventListener("click",function(){
+  if(state!=="playing")return;
+  if(lockSupported()&&!locked){
+    try{
+      var p=cv.requestPointerLock();
+      if(p&&p.catch)p.catch(function(){/* fallback: drag to look */});
+    }catch(e){/* fallback: drag to look */}
+  }
+});
+document.addEventListener("pointerlockchange",function(){
+  locked=(document.pointerLockElement===cv);
+  if(locked){hadLock=true;}
+  else if(hadLock&&state==="playing"){hadLock=false;pauseGame();}
+});
+document.addEventListener("pointerlockerror",function(){locked=false;hadLock=false;});
+document.addEventListener("mousemove",function(e){
+  if(!locked||state!=="playing")return;
+  yaw-=(e.movementX||0)*0.0028;
+  pitch-=(e.movementY||0)*0.0028;
+  clampView();
+});
+/* Drag to look (touch / no Pointer Lock): */
+cv.addEventListener("pointerdown",function(e){
+  if(locked)return;
+  dragging=true;lastPX=e.clientX;lastPY=e.clientY;
+  try{cv.setPointerCapture(e.pointerId);}catch(err){}
+});
+cv.addEventListener("pointermove",function(e){
+  if(!dragging||locked||state!=="playing")return;
+  yaw-=(e.clientX-lastPX)*0.005;
+  pitch-=(e.clientY-lastPY)*0.005;
+  lastPX=e.clientX;lastPY=e.clientY;
+  clampView();
+});
+["pointerup","pointercancel"].forEach(function(ev){cv.addEventListener(ev,function(){dragging=false;});});
+
+/* ---------- Keyboard ---------- */
+window.addEventListener("keydown",function(e){
+  var k=(e.key||"").toLowerCase();
+  keys[k]=true;
+  if(e.code)keys[e.code]=true;
+  if(state==="playing"&&["arrowup","arrowdown","arrowleft","arrowright"," "].indexOf(k)>=0)e.preventDefault();
+  if((k===" "||e.code==="Space")&&!e.repeat)fire();
+  if((k==="p"||e.code==="KeyP")&&!e.repeat){
+    if(state==="playing")pauseGame();
+    else if(state==="paused")resumeGame();
+  }
+});
+window.addEventListener("keyup",function(e){
+  var k=(e.key||"").toLowerCase();
+  keys[k]=false;
+  if(e.code)keys[e.code]=false;
+});
+
+/* ---------- Update ---------- */
+function update(dt){
+  // keyboard look
+  if(keys["arrowleft"]||keys["a"])yaw+=1.9*dt;
+  if(keys["arrowright"]||keys["d"])yaw-=1.9*dt;
+  if(keys["arrowup"]||keys["w"])pitch+=1.1*dt;
+  if(keys["arrowdown"]||keys["s"])pitch-=1.1*dt;
+  clampView();
+
+  // timer
+  if(!practice){
+    elapsed+=dt;
+    if(elapsed>=ROUND_LEN){elapsed=ROUND_LEN;updateHUD();endRound();return;}
+  }
+
+  // spawn
+  var d=DIFFS[difficulty];
+  spawnTimer-=dt;
+  if(spawnTimer<=0&&targets.length<d.max){
+    spawnTarget();
+    spawnTimer=d.spawn*(0.75+Math.random()*0.5);
+  }
+
+  // targets
+  for(var i=targets.length-1;i>=0;i--){
+    var t=targets[i];
+    t.age+=dt;t.ttl-=dt;
+    if(t.type==="duck"){
+      t.x+=t.vx*dt;
+      if(t.x<-6.5){t.x=-6.5;t.vx=Math.abs(t.vx);}
+      if(t.x>6.5){t.x=6.5;t.vx=-Math.abs(t.vx);}
+      t.y=t.baseY+Math.sin(t.age*3+t.phase)*0.08;
+    }else if(t.type==="balloon"){
+      t.y+=t.vy*dt;
+      t.x+=Math.sin(t.age*1.5+t.phase)*0.15*dt;
+      if(t.y>3.4){targets.splice(i,1);continue;}
+    }
+    if(t.ttl<=0)targets.splice(i,1);
+  }
+
+  // particles + texts
+  for(var j=particles.length-1;j>=0;j--){
+    var pt=particles[j];pt.life-=dt;pt.x+=pt.vx*dt;pt.y+=pt.vy*dt;pt.vy+=160*dt;
+    if(pt.life<=0)particles.splice(j,1);
+  }
+  for(var k=texts.length-1;k>=0;k--){
+    var tx=texts[k];tx.life-=dt;tx.y-=34*dt;
+    if(tx.life<=0)texts.splice(k,1);
+  }
+  if(flash>0)flash-=dt;
+  if(hitFlash>0)hitFlash-=dt;
+
+  updateHUD();
+  draw();
+}
+function loop(ts){
+  if(state!=="playing")return;
+  if(lastTs===null||lastTs===undefined)lastTs=ts;
+  var dt=Math.min(0.05,(ts-lastTs)/1000);lastTs=ts;
+  if(!(dt>0))dt=0.016;
+  update(dt);
+  if(state==="playing")raf(loop);
+}
+
+/* ---------- Draw ---------- */
+function starPath(c,x,y,r,rot){
+  c.beginPath();
+  for(var i=0;i<10;i++){
+    var ang=rot+i*Math.PI/5-Math.PI/2,rr=(i%2===0)?r:r*0.45;
+    var px=x+Math.cos(ang)*rr,py=y+Math.sin(ang)*rr;
+    if(i===0)c.moveTo(px,py);else c.lineTo(px,py);
+  }
+  c.closePath();
+}
+function drawTarget(c,t,p){
+  var x=p.x,y=p.y,r=p.r;
+  if(r<4)return;
+  if(t.type==="duck"){
+    c.fillStyle="#ffd23b";
+    c.beginPath();c.ellipse(x,y,r,r*0.68,0,0,Math.PI*2);c.fill();
+    c.beginPath();c.arc(x+r*0.42,y-r*0.72,r*0.46,0,Math.PI*2);c.fill();
+    c.fillStyle="#ff8c1a";
+    c.beginPath();c.moveTo(x+r*0.75,y-r*0.78);c.lineTo(x+r*1.25,y-r*0.6);c.lineTo(x+r*0.75,y-r*0.45);c.closePath();c.fill();
+    c.fillStyle="#10222e";c.beginPath();c.arc(x+r*0.55,y-r*0.82,r*0.07,0,Math.PI*2);c.fill();
+    c.strokeStyle="#e0a800";c.lineWidth=Math.max(1.5,r*0.08);
+    c.beginPath();c.ellipse(x-r*0.1,y+r*0.05,r*0.5,r*0.32,0,0,Math.PI*2);c.stroke();
+  }else if(t.type==="balloon"){
+    c.fillStyle="#ff5fa2";
+    c.beginPath();c.ellipse(x,y,r*0.8,r,0,0,Math.PI*2);c.fill();
+    c.fillStyle="rgba(255,255,255,.55)";
+    c.beginPath();c.ellipse(x-r*0.28,y-r*0.35,r*0.18,r*0.28,-0.4,0,Math.PI*2);c.fill();
+    c.fillStyle="#d6336c";
+    c.beginPath();c.moveTo(x-r*0.14,y+r*0.95);c.lineTo(x+r*0.14,y+r*0.95);c.lineTo(x,y+r*1.2);c.closePath();c.fill();
+    c.strokeStyle="#e9e4ff";c.lineWidth=Math.max(1,r*0.05);
+    c.beginPath();c.moveTo(x,y+r*1.2);c.quadraticCurveTo(x+Math.sin(t.age*3)*r*0.3,y+r*1.7,x,y+r*2.1);c.stroke();
+  }else if(t.type==="star"){
+    var tw=1+0.12*Math.sin(t.age*6);
+    c.fillStyle="#ffe14d";c.strokeStyle="#e0a800";c.lineWidth=Math.max(1.5,r*0.08);
+    starPath(c,x,y,r*tw,t.age*0.4);c.fill();c.stroke();
+    c.fillStyle="#fff7c0";starPath(c,x,y,r*0.45*tw,t.age*0.4);c.fill();
+  }else{ // bullseye
+    c.fillStyle="#ff4d4d";c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();
+    c.fillStyle="#fff";c.beginPath();c.arc(x,y,r*0.66,0,Math.PI*2);c.fill();
+    c.fillStyle="#ff4d4d";c.beginPath();c.arc(x,y,r*0.36,0,Math.PI*2);c.fill();
+    c.fillStyle="#ffe14d";c.beginPath();c.arc(x,y,r*0.16,0,Math.PI*2);c.fill();
+  }
+}
+function draw(){
+  if(!ctx)return;
+  var i;
+  // sky
+  var sky=ctx.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0,"#241047");sky.addColorStop(0.55,"#6b2d8f");sky.addColorStop(1,"#c94f7c");
+  ctx.fillStyle=sky;ctx.fillRect(0,0,W,H);
+  var ox=-yaw*60;
+  // distant tents
+  ctx.fillStyle="#1b0b38";
+  for(i=-1;i<4;i++){
+    var tx=i*180+((ox*0.4)%180);
+    ctx.beginPath();ctx.moveTo(tx,150);ctx.lineTo(tx+70,60);ctx.lineTo(tx+140,150);ctx.closePath();ctx.fill();
+    ctx.fillStyle="#ff5fa2";ctx.fillRect(tx+66,44,8,16);ctx.fillStyle="#1b0b38";
+  }
+  // striped awning
+  var stripe=28;
+  for(i=-2;i<24;i++){
+    ctx.fillStyle=(i%2===0)?"#ff4d6d":"#fff3e0";
+    ctx.fillRect(i*stripe+((ox*0.6)%stripe),0,stripe,58);
+  }
+  ctx.fillStyle="#ff4d6d";
+  for(i=-2;i<24;i++){
+    ctx.beginPath();ctx.arc(i*stripe+stripe/2+((ox*0.6)%stripe),58,stripe/2,0,Math.PI);ctx.fill();
+  }
+  // wall
+  ctx.fillStyle="#8a4b2a";ctx.fillRect(0,58,W,H-58);
+  ctx.fillStyle="#a05a33";
+  for(i=-2;i<14;i++){ctx.fillRect(i*48+((ox)%48),58,3,H-58);}
+  ctx.fillStyle="rgba(0,0,0,.18)";ctx.fillRect(0,58,W,8);
+  // bunting
+  ctx.strokeStyle="#e9e4ff";ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,86);ctx.quadraticCurveTo(W/2,116+Math.sin(yaw*2)*4,W,86);ctx.stroke();
+  var cols=["#ffd23b","#ff5fa2","#38e1ff","#8b5cff"];
+  for(i=0;i<10;i++){
+    var bx=20+i*56+((ox*0.8)%56),by=92+Math.sin((bx)/90)*10;
+    ctx.fillStyle=cols[i%4];
+    ctx.beginPath();ctx.moveTo(bx-11,by);ctx.lineTo(bx+11,by);ctx.lineTo(bx,by+18);ctx.closePath();ctx.fill();
+  }
+  // shelf / counter
+  ctx.fillStyle="#5b2f16";ctx.fillRect(0,H-64,W,64);
+  ctx.fillStyle="#7a421f";ctx.fillRect(0,H-64,W,8);
+  ctx.fillStyle="#ffd23b";ctx.fillRect(0,H-64,W,3);
+
+  // targets, far first
+  var drawn=[];
+  for(i=0;i<targets.length;i++){
+    var p=project(targets[i]);
+    if(p)drawn.push({t:targets[i],p:p});
+  }
+  drawn.sort(function(a,b){return b.p.depth-a.p.depth;});
+  for(i=0;i<drawn.length;i++)drawTarget(ctx,drawn[i].t,drawn[i].p);
+
+  // particles
+  for(i=0;i<particles.length;i++){
+    var pt=particles[i];
+    ctx.globalAlpha=Math.max(0,pt.life/pt.max);
+    ctx.fillStyle=pt.color;
+    starPath(ctx,pt.x,pt.y,pt.size,0);ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  // floating texts
+  ctx.textAlign="center";ctx.font="900 17px system-ui,sans-serif";
+  for(i=0;i<texts.length;i++){
+    var ft=texts[i];
+    ctx.globalAlpha=Math.max(0,Math.min(1,ft.life/0.5));
+    ctx.lineWidth=4;ctx.strokeStyle="#0a0620";ctx.strokeText(ft.text,ft.x,ft.y);
+    ctx.fillStyle=ft.color;ctx.fillText(ft.text,ft.x,ft.y);
+  }
+  ctx.globalAlpha=1;
+
+  // crosshair
+  var cxp=W/2,cyp=H/2;
+  ctx.strokeStyle=hitFlash>0?"#7dff6a":"#ffffff";ctx.lineWidth=2.5;
+  ctx.beginPath();ctx.arc(cxp,cyp,14,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle=hitFlash>0?"#7dff6a":"#ffffff";
+  ctx.beginPath();ctx.arc(cxp,cyp,2.5,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();
+  [[0,-22,0,-15],[0,15,0,22],[-22,0,-15,0],[15,0,22,0]].forEach(function(l){
+    ctx.moveTo(cxp+l[0],cyp+l[1]);ctx.lineTo(cxp+l[2],cyp+l[3]);
+  });
+  ctx.stroke();
+  if(flash>0){
+    ctx.strokeStyle="rgba(255,209,59,"+Math.min(1,flash/0.09)+")";ctx.lineWidth=4;
+    ctx.beginPath();ctx.arc(cxp,cyp,14+(0.09-flash)*260,0,Math.PI*2);ctx.stroke();
+  }
+}
+
+/* ---------- Feedback ---------- */
+var fb=load("carnivalFps_feedback",null),rating=fb?fb.rating:0;
+function paintStars(){document.querySelectorAll("[data-star]").forEach(function(b){b.classList.toggle("on",+b.getAttribute("data-star")<=rating);});}
+document.querySelectorAll("[data-star]").forEach(function(b){b.addEventListener("click",function(){rating=+b.getAttribute("data-star");paintStars();$("fbNote").textContent="";});});
+if(fb){$("fbText").value=fb.comment||"";renderPrev();}
+function renderPrev(){
+  if(!fb)return;
+  $("fbPrev").innerHTML="<strong>Saved feedback:</strong> "+"★".repeat(fb.rating)+"☆".repeat(5-fb.rating)+"<br>"+(fb.comment?fb.comment.replace(/</g,"&lt;"):"<em>No comment</em>")+"<br><span style='color:var(--muted)'>"+fb.date+"</span>";
+}
+$("btnFbSave").addEventListener("click",function(){
+  if(!rating){$("fbNote").textContent="Please tap a star rating first.";return;}
+  fb={rating:rating,comment:$("fbText").value.trim(),date:new Date().toLocaleDateString()};
+  save("carnivalFps_feedback",fb);renderPrev();
+  /* Also save to the shared Arcade feedback log so this shows in the hub Reviews page. */
+  try { var shared = JSON.parse(localStorage.getItem("holos-arcade-feedback") || "[]"); if (!Array.isArray(shared)) shared = []; shared.push({ game: "carnival-fps", rating: fb.rating||0, text: fb.comment||"", tag: "", mode: "real", level: "", difficulty: "", score: 0, device: (navigator.userAgent||"").slice(0,120), playTime: 0, timestamp: new Date().toISOString() }); localStorage.setItem("holos-arcade-feedback", JSON.stringify(shared)); } catch(e){}
+  $("fbNote").textContent="Thanks! Feedback saved on this device. ✅";beep(760,.08,"sine",.05);
+});
+
+/* ---------- Init ---------- */
+applyDiff();renderBests();paintStars();resetRound();applyPractice();draw();updateGameState();
+
+/* Debug/test handle (harmless in play): */
+window.__carnivalFps={
+  get state(){return state;},
+  get score(){return score;},
+  get hits(){return hits;},
+  get shots(){return shots;},
+  get targets(){return targets;},
+  get yaw(){return yaw;},
+  get pitch(){return pitch;},
+  get practice(){return practice;},
+  start:startGame,pause:pauseGame,resume:resumeGame,fire:fire,reset:resetRound,
+  spawn:spawnTarget,project:project,tick:function(dt){update(dt);},
+  setYaw:function(v){yaw=v;clampView();},
+  setPitch:function(v){pitch=v;clampView();}
+};
+})();
+</script>
+
+<script>
+/* INSERT-COIN-2026-11-22: place the blinking line under the title
+   on games with a start button; remove it once play starts. */
+(function(){try{
+  if(document.querySelector('.insert-coin'))return;
+  var ids=['btnStart','startBtn','playBtn','btnPlay','newBtn','newGameBtn','btnNew'];
+  var start=null,i,b;
+  for(i=0;i<ids.length;i++){start=document.getElementById(ids[i]);if(start)break;}
+  if(!start){var btns=document.querySelectorAll('button');for(i=0;i<btns.length;i++){b=btns[i];if(/^(\u25b6\s*)?(start game|start|play|new game|begin)$/i.test((b.textContent||'').trim())){start=b;break;}}}
+  if(!start)return;
+  var h=document.querySelector('h1')||document.querySelector('h2');if(!h||!h.parentNode)return;
+  var p=document.createElement('p');p.className='insert-coin';p.setAttribute('aria-hidden','true');p.textContent='INSERT COIN TO CONTINUE';
+  h.parentNode.insertBefore(p,h.nextSibling);
+  start.addEventListener('click',function(){if(p.parentNode)p.parentNode.removeChild(p);});
+}catch(e){}})();
+</script>
+<script>
+/* BACK-TO-HUB-2026-11-23: every game gets a way back to the Arcade hub
+   when opened directly (dead-end fix). Hidden inside the hub iframe,
+   where the hub itself provides navigation. */
+(function(){try{
+  if(window.self!==window.top)return;
+  if(document.querySelector('a[href*="games-hub"]'))return;
+  var a=document.createElement('a');a.href='../games-hub/';a.textContent='\u2190 Back to the Arcade';
+  a.style.cssText='position:fixed;left:10px;bottom:10px;z-index:9990;background:rgba(20,16,60,.88);color:#fff;padding:7px 14px;border-radius:999px;font:600 13px system-ui,sans-serif;text-decoration:none;border:1px solid rgba(255,255,255,.4);box-shadow:0 2px 10px rgba(0,0,0,.35)';
+  document.body.appendChild(a);
+}catch(e){}})();
+</script>
+<!-- GAMEPAD-2026-11-23: shared gamepad helper — controller support; keyboard/touch/mouse unchanged. -->
+<script src="../shared/gamepad.js"></script>
+<script>
+if (window.HoloGamepad) HoloGamepad.bind({ keys: { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', action: 'Space', pause: 'KeyP' } });
+</script>
+</body>
+</html>
