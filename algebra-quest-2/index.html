@@ -620,17 +620,27 @@ renderStars();
 function ri(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function shuffle(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i];a[i]=a[j];a[j]=t; } return a; }
-function makeOptions(ans){
+/* ALGEBRA-QUEST-SMART-2026-11-24: answer options must be possible.
+   Before this, makeOptions offered -5 for "x - 2 = 3" and 0 for
+   "x + 6 = 12" — impossible answers a player spots instantly,
+   which is why the game read as "not very smart". Distractors now
+   respect bounds: solve-for-x answers are always >= 2, so options
+   are >= 1; pattern options must sit on the right side of the
+   last shown term (bigger for a rising sequence, smaller for a
+   falling one). */
+function makeOptions(ans,lo,hi){
   var set={}, opts=[ans]; set[ans]=true;
+  var ok=function(v){ if(v===ans||set[v]) return false; if(lo!==undefined&&v<lo) return false; if(hi!==undefined&&v>hi) return false; return true; };
   var tries=0;
-  while(opts.length<4 && tries<60){ tries++;
+  while(opts.length<4 && tries<80){ tries++;
     var delta=pick([-3,-2,-1,1,2,3,4,5,-4,-5,10,-10]);
-    var v=ans+delta; if(v===ans||set[v]) continue; set[v]=true; opts.push(v);
+    var v=ans+delta; if(!ok(v)) continue; set[v]=true; opts.push(v);
   }
-  while(opts.length<4){ var v2=ans+opts.length+6; if(!set[v2]){set[v2]=true;opts.push(v2);} }
+  var d=1;
+  while(opts.length<4 && d<80){ if(ok(ans+d)){set[ans+d]=true;opts.push(ans+d);} if(opts.length<4&&ok(ans-d)){set[ans-d]=true;opts.push(ans-d);} d++; }
   return shuffle(opts);
 }
-function q(type,text,sub,ans,hint,steps){ return {type:type,text:text,sub:sub,ans:ans,options:makeOptions(ans),hint:hint,steps:steps}; }
+function q(type,text,sub,ans,hint,steps,lo,hi){ if(type==="Solve for x"&&lo===undefined) lo=1; return {type:type,text:text,sub:sub,ans:ans,options:makeOptions(ans,lo,hi),hint:hint,steps:steps}; }
 
 /* ---------- generators: Grades 7-9 ---------- */
 function gen79_solvex(){
@@ -645,11 +655,11 @@ function gen79_solvex(){
 function gen79_pattern(){
   var kind=ri(1,3);
   if(kind===1){ var s=ri(1,12), d=ri(2,9), seq=[s,s+d,s+2*d,s+3*d], ans=s+4*d;
-    return q("Patterns",seq.join(", ")+", …","What number comes next?",ans,"Look at the gaps: each step adds "+d+".",seq.join(", ")+"\nEach step adds "+d+".\nNext: "+seq[3]+" + "+d+" = "+ans); }
+    return q("Patterns",seq.join(", ")+", …","What number comes next?",ans,"Look at the gaps: each step adds "+d+".",seq.join(", ")+"\nEach step adds "+d+".\nNext: "+seq[3]+" + "+d+" = "+ans,seq[3]+1); }
   if(kind===2){ var s2=ri(20,60), d2=ri(2,8), seq2=[s2,s2-d2,s2-2*d2,s2-3*d2], ans2=s2-4*d2;
-    return q("Patterns",seq2.join(", ")+", …","What number comes next?",ans2,"The numbers are going down — by how much each time?","Each step subtracts "+d2+".\nNext: "+seq2[3]+" − "+d2+" = "+ans2); }
+    return q("Patterns",seq2.join(", ")+", …","What number comes next?",ans2,"The numbers are going down — by how much each time?","Each step subtracts "+d2+".\nNext: "+seq2[3]+" − "+d2+" = "+ans2,undefined,seq2[3]-1); }
   var s3=ri(1,6), d3=ri(2,5), seq3=[s3,s3+d3,s3+d3+ (d3+1), s3+d3+(d3+1)+(d3+2)], ans3=seq3[3]+(d3+3);
-  return q("Patterns",seq3.join(", ")+", …","The gaps grow — what comes next?",ans3,"Check the gaps between numbers. They grow by 1 each time.","Gaps: +"+d3+", +"+(d3+1)+", +"+(d3+2)+", so next gap is +"+(d3+3)+".\nNext: "+seq3[3]+" + "+(d3+3)+" = "+ans3);
+  return q("Patterns",seq3.join(", ")+", …","The gaps grow — what comes next?",ans3,"Check the gaps between numbers. They grow by 1 each time.","Gaps: +"+d3+", +"+(d3+1)+", +"+(d3+2)+", so next gap is +"+(d3+3)+".\nNext: "+seq3[3]+" + "+(d3+3)+" = "+ans3,seq3[3]+1);
 }
 
 /* ---------- generators: Grades 10-12 ---------- */
@@ -669,22 +679,26 @@ function gen1012_solvex(){
 function gen1012_pattern(){
   var kind=ri(1,3);
   if(kind===1){ var s=ri(1,5), r=pick([2,3]), seq=[s,s*r,s*r*r,s*r*r*r], ans=s*r*r*r*r;
-    return q("Patterns",seq.join(", ")+", …","Each step multiplies. What comes next?",ans,"Check the ratio: each number is ×"+r+" the one before.","Each step multiplies by "+r+".\nNext: "+seq[3]+" × "+r+" = "+ans); }
+    return q("Patterns",seq.join(", ")+", …","Each step multiplies. What comes next?",ans,"Check the ratio: each number is ×"+r+" the one before.","Each step multiplies by "+r+".\nNext: "+seq[3]+" × "+r+" = "+ans,seq[3]+1); }
   if(kind===2){ var n=ri(2,4), seq2=[n*n,(n+1)*(n+1),(n+2)*(n+2),(n+3)*(n+3)], ans2=(n+4)*(n+4);
-    return q("Patterns",seq2.join(", ")+", …","These are square numbers in disguise.",ans2,"Rewrite them: "+n+"², "+(n+1)+"², "+(n+2)+"², "+(n+3)+"²… so next is "+(n+4)+"².","Squares: "+seq2.join(", ")+" are "+n+"² to "+(n+3)+"².\nNext: "+(n+4)+"² = "+ans2); }
+    return q("Patterns",seq2.join(", ")+", …","These are square numbers in disguise.",ans2,"Rewrite them: "+n+"², "+(n+1)+"², "+(n+2)+"², "+(n+3)+"²… so next is "+(n+4)+"².","Squares: "+seq2.join(", ")+" are "+n+"² to "+(n+3)+"².\nNext: "+(n+4)+"² = "+ans2,seq2[3]+1); }
   var s3=ri(1,8), seq3=[s3], gaps=[ri(2,4)]; seq3.push(s3+gaps[0]); gaps.push(gaps[0]+ri(1,3)); seq3.push(seq3[1]+gaps[1]); gaps.push(gaps[1]+ (gaps[1]-gaps[0])); seq3.push(seq3[2]+gaps[2]); var ans3=seq3[3]+(gaps[2]+(gaps[1]-gaps[0]));
-  return q("Patterns",seq3.join(", ")+", …","The gaps themselves follow a pattern.",ans3,"Write the gaps: +"+gaps[0]+", +"+gaps[1]+", +"+gaps[2]+". How do the gaps change?","Gaps grow by "+(gaps[1]-gaps[0])+" each time: +"+gaps[0]+", +"+gaps[1]+", +"+gaps[2]+", next +"+(gaps[2]+(gaps[1]-gaps[0]))+".\nNext: "+seq3[3]+" + "+(gaps[2]+(gaps[1]-gaps[0]))+" = "+ans3);
+  return q("Patterns",seq3.join(", ")+", …","The gaps themselves follow a pattern.",ans3,"Write the gaps: +"+gaps[0]+", +"+gaps[1]+", +"+gaps[2]+". How do the gaps change?","Gaps grow by "+(gaps[1]-gaps[0])+" each time: +"+gaps[0]+", +"+gaps[1]+", +"+gaps[2]+", next +"+(gaps[2]+(gaps[1]-gaps[0]))+".\nNext: "+seq3[3]+" + "+(gaps[2]+(gaps[1]-gaps[0]))+" = "+ans3,seq3[3]+1);
 }
 
 function buildQuestions(){
-  var list=[];
+  var list=[], seen={};
   for(var i=0;i<10;i++){
     var usePattern;
     if(mode==="patterns") usePattern=true;
     else if(mode==="solvex") usePattern=false;
     else usePattern=(i%3===2);
-    if(band==="79") list.push(usePattern?gen79_pattern():gen79_solvex());
-    else list.push(usePattern?gen1012_pattern():gen1012_solvex());
+    /* ALGEBRA-QUEST-SMART-2026-11-24: never repeat a question inside
+       one quest — half of all quests used to show the same question
+       twice, which also reads as "not very smart". */
+    var qq=null, tries=0;
+    while(tries<60){ tries++; qq=(band==="79")?(usePattern?gen79_pattern():gen79_solvex()):(usePattern?gen1012_pattern():gen1012_solvex()); if(!seen[qq.text]) break; }
+    seen[qq.text]=true; list.push(qq);
   }
   return list;
 }
