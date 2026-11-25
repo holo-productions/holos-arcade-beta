@@ -2928,6 +2928,28 @@ setTimeout(function(){
     </form>
     <!-- CODE-NAME-LOGIN-2026-11-25: new-device hint (Holo 2026-11-25 08:12). -->
     <p class="login-helper" id="codeNameSignInHint" style="margin:10px 0 0">On a new device, sign in with your email the first time. After that, your Code Name works too.</p>
+    <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="phoneVerifyToggle">Verify by text (optional)</button></p>
+    <!-- PHONE-VERIFY-2026-11-25 (Holo 2026-11-25 08:30): OPTIONAL phone verification — never required to sign in, no text ever sent unless the tester taps "Send code". Firebase Phone Auth + invisible reCAPTCHA; the Phone provider must be enabled in the Firebase Console first (see the script below). -->
+    <div id="phoneVerifyPanel" hidden>
+      <div class="login-field" style="margin-top:12px">
+        <p class="login-helper" style="margin:0 0 10px">Optional — only if you want it. We use your number only to help get your account back if you ask us to. We never text you out of the blue, and you can still sign in with your email or Code Name without it.</p>
+        <label for="phoneVerifyNumber">Your mobile number</label>
+        <input id="phoneVerifyNumber" type="tel" autocomplete="tel" placeholder="+1 306 555 0123" />
+      </div>
+      <div id="phoneVerifyRecaptcha"></div>
+      <p class="login-error" id="phoneVerifyMsg" role="status" hidden></p>
+      <button class="btn btn-light login-switch" id="phoneVerifySend" type="button">Send code by text</button>
+      <div id="phoneVerifyCodeRow" hidden>
+        <div class="login-field" style="margin-top:12px">
+          <label for="phoneVerifyCode">Code from the text</label>
+          <input id="phoneVerifyCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" maxlength="6" />
+        </div>
+        <button class="btn btn-dark login-btn" id="phoneVerifyConfirm" type="button">Verify code</button>
+        <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="phoneVerifyResend">Send a new code</button></p>
+      </div>
+      <p class="login-helper" id="phoneVerifyDone" hidden></p>
+      <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="phoneVerifyRemove" hidden>Remove my verified number</button></p>
+    </div>
     <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="forgotPwBtn">Forgot password?</button></p>
     <div id="forgotPwPanel" hidden>
       <form id="forgotPwForm" method="post" action="#" novalidate>
@@ -13000,7 +13022,7 @@ window.holoDaily = (function(){
     <details class="legal-section">
       <summary>Can I verify with my phone?</summary>
       <div class="legal-content">
-        <p>Coming soon — you'll be able to add a phone number to your account so we can text you a code to prove it's you (handy if you ever lose email access).</p>
+        <p>Yes — on the sign-in page, tap <strong>Verify by text (optional)</strong>. Pop in your mobile number, we'll text you a 6-digit code, and type it back. It's only for getting your account back if you ever lose email access — it's never required to sign in, and we never text you unless you ask.</p>
       </div>
     </details>
 
@@ -17187,6 +17209,212 @@ function renderTesterAuth(){
     });
   });
   renderTesterAuth();
+})();
+</script>
+
+<script>
+/* PHONE-VERIFY-2026-11-25 (Holo 2026-11-25 08:30): OPTIONAL phone verification via Firebase Phone Auth.
+   - A "Verify by text" option on the sign-in page. The tester CHOOSES it; it is NEVER required
+     to sign in, and no text is ever sent unless they tap "Send code".
+   - The hub's auth layer is REST-based (Identity Toolkit API) with no Firebase JS SDK loaded,
+     so the compat SDK is lazy-loaded from gstatic ONLY when the panel opens — the gate stays
+     fast and nothing phones home until the tester asks.
+   - CONSOLE STILL NEEDED (project holos-arcade): Authentication -> Sign-in method -> Phone ->
+     Enable. Until then every send fails with auth/operation-not-allowed and the panel says so
+     honestly. Also check beta.holosarcade.ca is in Authentication -> Settings -> Authorized
+     domains, or the reCAPTCHA check fails with auth/unauthorized-domain.
+   - The verified number is recorded ON THIS DEVICE ONLY (localStorage + a note on the local
+     account record). Attaching it to the cloud account record (/users/<uid>) for recovery use
+     needs a small beta-layer setter (like betaSetDob) — follow-up, not this batch.
+   - Cost: Firebase gives 10 phone verifications/day free, then pennies per text. */
+(function(){
+  "use strict";
+  var LS_KEY = 'holos-arcade-phone-verified';
+  var SDK_APP = 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js';
+  var SDK_AUTH = 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js';
+  var FIREBASE_CONFIG = { apiKey: "AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak", authDomain: 'holos-arcade.firebaseapp.com', projectId: 'holos-arcade', storageBucket: 'holos-arcade.firebasestorage.app', messagingSenderId: '857220056028', appId: '1:857220056028:web:ff4aa973e2510e583c4519' };
+  var confirmationResult = null, verifier = null, sdkPromise = null, verifiedPhone = null;
+
+  function $(id){ return document.getElementById(id); }
+  function showMsg(t){ var m = $('phoneVerifyMsg'); if(m){ m.textContent = t; m.hidden = false; } }
+  function hideMsg(){ var m = $('phoneVerifyMsg'); if(m) m.hidden = true; }
+  function friendlyError(err){
+    var code = String((err && err.code) || '');
+    if(code.indexOf('operation-not-allowed') >= 0) return "Text verification isn't switched on yet — Holo is turning it on in the Firebase Console. Email or Code Name sign-in still works as normal.";
+    if(code.indexOf('invalid-phone-number') >= 0) return "That number doesn't look right, agent. Use your full mobile number with +1 at the front.";
+    if(code.indexOf('too-many-requests') >= 0) return "Too many tries just now — wait a bit and try again.";
+    if(code.indexOf('unauthorized-domain') >= 0) return "This page isn't on the approved list yet — Holo needs to add beta.holosarcade.ca in the Firebase Console (Authentication → Settings → Authorized domains).";
+    if(code.indexOf('captcha-check-failed') >= 0) return "The robot check didn't pass — try again.";
+    if(code.indexOf('invalid-verification-code') >= 0) return "That code didn't match — check the text and try again, or send a new code.";
+    if(code.indexOf('code-expired') >= 0) return "That code expired — send a new code and try again.";
+    if(code.indexOf('quota-exceeded') >= 0) return "We've used today's free texts — try again tomorrow.";
+    if(code.indexOf('sdk-load') >= 0) return "Couldn't load the text tool — check your internet and try again.";
+    return "That didn't go through — check your internet and try again.";
+  }
+  function normalizePhone(raw){
+    var d = String(raw || '').replace(/[\s\-().]/g, '');
+    if(!d) return '';
+    if(d.charAt(0) !== '+'){
+      if(/^\d{10}$/.test(d)) d = '+1' + d;
+      else if(/^1\d{10}$/.test(d)) d = '+' + d;
+      else return '';
+    }
+    return /^\+[1-9]\d{7,14}$/.test(d) ? d : '';
+  }
+  function loadSdk(){
+    if(window.firebase && window.firebase.auth) return Promise.resolve();
+    if(sdkPromise) return sdkPromise;
+    sdkPromise = new Promise(function(resolve, reject){
+      function load(src){
+        return new Promise(function(res, rej){
+          var s = document.createElement('script');
+          s.src = src; s.async = true;
+          s.onload = function(){ res(); };
+          s.onerror = function(){ rej(new Error('sdk-load')); };
+          document.head.appendChild(s);
+        });
+      }
+      load(SDK_APP).then(function(){ return load(SDK_AUTH); }).then(function(){
+        if(window.firebase && window.firebase.auth) resolve();
+        else reject(new Error('sdk-load'));
+      }, reject);
+    });
+    return sdkPromise;
+  }
+  function getAuth(){
+    if(!window.firebase.apps || !window.firebase.apps.length) window.firebase.initializeApp(FIREBASE_CONFIG);
+    return window.firebase.auth();
+  }
+  function getVerifier(){
+    if(verifier) return verifier;
+    /* Invisible reCAPTCHA — the tester sees nothing unless the check challenges them. */
+    verifier = new window.firebase.auth.RecaptchaVerifier('phoneVerifyRecaptcha', { size: 'invisible' });
+    return verifier;
+  }
+  function resetVerifier(){
+    try { if(verifier && verifier.clear) verifier.clear(); } catch(e){}
+    verifier = null;
+  }
+  function readStored(){
+    try { var v = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); return (v && v.phone) ? v : null; } catch(e){ return null; }
+  }
+  function recordVerified(phone){
+    var rec = { phone: phone, verifiedAt: new Date().toISOString() };
+    try { localStorage.setItem(LS_KEY, JSON.stringify(rec)); } catch(e){}
+    /* Note it on the local account record too (same device only) so it travels with the
+       account's on-device data. The cloud-account write is a follow-up (needs a setter). */
+    try {
+      var sess = null;
+      try { sess = JSON.parse(localStorage.getItem('holos-arcade-tester-login') || 'null') || JSON.parse(sessionStorage.getItem('holos-arcade-tester-login') || 'null'); } catch(e1){}
+      if(sess && sess.email && typeof findLocalAccountByEmail === 'function' && typeof getAccounts === 'function' && typeof saveAccounts === 'function'){
+        var found = findLocalAccountByEmail(sess.email);
+        if(found && found.acct){ var all = getAccounts(); all[found.key].phoneVerified = rec; saveAccounts(all); }
+      }
+    } catch(e2){}
+  }
+  function clearStored(){
+    try { localStorage.removeItem(LS_KEY); } catch(e){}
+    try {
+      var sess = null;
+      try { sess = JSON.parse(localStorage.getItem('holos-arcade-tester-login') || 'null') || JSON.parse(sessionStorage.getItem('holos-arcade-tester-login') || 'null'); } catch(e1){}
+      if(sess && sess.email && typeof findLocalAccountByEmail === 'function' && typeof getAccounts === 'function' && typeof saveAccounts === 'function'){
+        var found = findLocalAccountByEmail(sess.email);
+        if(found && found.acct){ var all = getAccounts(); delete all[found.key].phoneVerified; saveAccounts(all); }
+      }
+    } catch(e2){}
+  }
+  function showDone(){
+    var done = $('phoneVerifyDone'), rm = $('phoneVerifyRemove'), codeRow = $('phoneVerifyCodeRow'), sendBtn = $('phoneVerifySend');
+    if(!done) return;
+    var stored = readStored();
+    if(stored){
+      done.textContent = 'Verified ✓ — ' + stored.phone + '. We will only use this number if you ask us to help get your account back. You can still sign in with your email or Code Name, with or without it.';
+      done.hidden = false;
+      if(rm) rm.hidden = false;
+      if(codeRow) codeRow.hidden = true;
+      if(sendBtn) sendBtn.hidden = true;
+    } else {
+      done.hidden = true;
+      if(rm) rm.hidden = true;
+      if(sendBtn) sendBtn.hidden = false;
+    }
+  }
+  function setBusy(btn, busy, label){
+    if(!btn) return;
+    btn.disabled = !!busy;
+    if(label !== undefined) btn.textContent = label;
+  }
+  function sendCode(){
+    hideMsg();
+    var input = $('phoneVerifyNumber');
+    var phone = normalizePhone(input ? input.value : '');
+    if(!phone){ showMsg("That number doesn't look right, agent. Use your full mobile number with +1 at the front."); if(input) input.focus(); return; }
+    var sendBtn = $('phoneVerifySend');
+    setBusy(sendBtn, true, 'Sending…');
+    loadSdk().then(function(){
+      var auth = getAuth();
+      return auth.signInWithPhoneNumber(phone, getVerifier());
+    }).then(function(cr){
+      confirmationResult = cr;
+      verifiedPhone = phone;
+      var row = $('phoneVerifyCodeRow');
+      if(row) row.hidden = false;
+      showMsg('Code sent to ' + phone + ' — type the 6-digit code from the text below.');
+      var code = $('phoneVerifyCode');
+      if(code) code.focus();
+    }).catch(function(err){
+      resetVerifier();
+      showMsg(friendlyError(err));
+    }).then(function(){ setBusy(sendBtn, false, 'Send code by text'); });
+  }
+  function confirmCode(){
+    hideMsg();
+    var input = $('phoneVerifyCode');
+    var code = String(input ? input.value : '').replace(/\D/g, '');
+    if(code.length !== 6){ showMsg('Pop the 6-digit code from the text in first, agent.'); if(input) input.focus(); return; }
+    if(!confirmationResult){ showMsg('Send a code first, then type it in.'); return; }
+    var btn = $('phoneVerifyConfirm');
+    setBusy(btn, true, 'Checking…');
+    confirmationResult.confirm(code).then(function(){
+      recordVerified(verifiedPhone || '');
+      /* The SDK signs the phone number in on its own Auth instance — sign straight back
+         out so no phone session lingers. The hub's own email/Code Name sign-in is untouched. */
+      try { var a = getAuth(); if(a && a.signOut) a.signOut(); } catch(e){}
+      confirmationResult = null;
+      showDone();
+      hideMsg();
+    }).catch(function(err){
+      showMsg(friendlyError(err));
+    }).then(function(){ setBusy(btn, false, 'Verify code'); });
+  }
+  function init(){
+    var toggle = $('phoneVerifyToggle'), panel = $('phoneVerifyPanel');
+    if(!toggle || !panel) return;
+    toggle.addEventListener('click', function(){
+      panel.hidden = !panel.hidden;
+      if(!panel.hidden) showDone();
+    });
+    var sendBtn = $('phoneVerifySend');
+    if(sendBtn) sendBtn.addEventListener('click', sendCode);
+    var confirmBtn = $('phoneVerifyConfirm');
+    if(confirmBtn) confirmBtn.addEventListener('click', confirmCode);
+    var resendBtn = $('phoneVerifyResend');
+    if(resendBtn) resendBtn.addEventListener('click', function(){ resetVerifier(); confirmationResult = null; sendCode(); });
+    var removeBtn = $('phoneVerifyRemove');
+    if(removeBtn) removeBtn.addEventListener('click', function(){
+      clearStored();
+      var codeRow = $('phoneVerifyCodeRow'); if(codeRow) codeRow.hidden = true;
+      var input = $('phoneVerifyNumber'); if(input) input.value = '';
+      var code = $('phoneVerifyCode'); if(code) code.value = '';
+      confirmationResult = null; verifiedPhone = null;
+      hideMsg(); showDone();
+    });
+    /* Expose a tiny read-only hook for the jsdom harness (and future debugging) — no SMS
+       is ever sent through it; it only reports whether a number is verified on this device. */
+    window.holoPhoneVerifyState = function(){ var s = readStored(); return s ? { verified: true, phone: s.phone, verifiedAt: s.verifiedAt } : { verified: false }; };
+  }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
 })();
 </script>
 
