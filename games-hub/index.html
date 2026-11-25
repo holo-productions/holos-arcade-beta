@@ -2928,28 +2928,6 @@ setTimeout(function(){
     </form>
     <!-- CODE-NAME-LOGIN-2026-11-25: new-device hint (Holo 2026-11-25 08:12). -->
     <p class="login-helper" id="codeNameSignInHint" style="margin:10px 0 0">On a new device, sign in with your email the first time. After that, your Code Name works too.</p>
-    <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="phoneVerifyToggle">Verify by text (optional)</button></p>
-    <!-- PHONE-VERIFY-2026-11-25 (Holo 2026-11-25 08:30): OPTIONAL phone verification — never required to sign in, no text ever sent unless the tester taps "Send code". Firebase Phone Auth + invisible reCAPTCHA; the Phone provider must be enabled in the Firebase Console first (see the script below). -->
-    <div id="phoneVerifyPanel" hidden>
-      <div class="login-field" style="margin-top:12px">
-        <p class="login-helper" style="margin:0 0 10px">Optional — only if you want it. We use your number only to help get your account back if you ask us to. We never text you out of the blue, and you can still sign in with your email or Code Name without it.</p>
-        <label for="phoneVerifyNumber">Your mobile number</label>
-        <input id="phoneVerifyNumber" type="tel" autocomplete="tel" placeholder="+1 306 555 0123" />
-      </div>
-      <div id="phoneVerifyRecaptcha"></div>
-      <p class="login-error" id="phoneVerifyMsg" role="status" hidden></p>
-      <button class="btn btn-light login-switch" id="phoneVerifySend" type="button">Send code by text</button>
-      <div id="phoneVerifyCodeRow" hidden>
-        <div class="login-field" style="margin-top:12px">
-          <label for="phoneVerifyCode">Code from the text</label>
-          <input id="phoneVerifyCode" type="text" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" maxlength="6" />
-        </div>
-        <button class="btn btn-dark login-btn" id="phoneVerifyConfirm" type="button">Verify code</button>
-        <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="phoneVerifyResend">Send a new code</button></p>
-      </div>
-      <p class="login-helper" id="phoneVerifyDone" hidden></p>
-      <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="phoneVerifyRemove" hidden>Remove my verified number</button></p>
-    </div>
     <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="forgotPwBtn">Forgot password?</button></p>
     <div id="forgotPwPanel" hidden>
       <form id="forgotPwForm" method="post" action="#" novalidate>
@@ -13019,12 +12997,6 @@ window.holoDaily = (function(){
       </div>
     </details>
 
-    <details class="legal-section">
-      <summary>Can I verify with my phone?</summary>
-      <div class="legal-content">
-        <p>Yes — on the sign-in page, tap <strong>Verify by text (optional)</strong>. Pop in your mobile number, we'll text you a 6-digit code, and type it back. It's only for getting your account back if you ever lose email access — it's never required to sign in, and we never text you unless you ask.</p>
-      </div>
-    </details>
 
     <details class="legal-section">
       <summary>Why does a game have no sound on iPhone?</summary>
@@ -17213,20 +17185,22 @@ function renderTesterAuth(){
 </script>
 
 <script>
-/* PHONE-VERIFY-2026-11-25 (Holo 2026-11-25 08:30): OPTIONAL phone verification via Firebase Phone Auth.
-   - A "Verify by text" option on the sign-in page. The tester CHOOSES it; it is NEVER required
-     to sign in, and no text is ever sent unless they tap "Send code".
-   - The hub's auth layer is REST-based (Identity Toolkit API) with no Firebase JS SDK loaded,
-     so the compat SDK is lazy-loaded from gstatic ONLY when the panel opens — the gate stays
-     fast and nothing phones home until the tester asks.
-   - CONSOLE STILL NEEDED (project holos-arcade): Authentication -> Sign-in method -> Phone ->
-     Enable. Until then every send fails with auth/operation-not-allowed and the panel says so
-     honestly. Also check beta.holosarcade.ca is in Authentication -> Settings -> Authorized
-     domains, or the reCAPTCHA check fails with auth/unauthorized-domain.
-   - The verified number is recorded ON THIS DEVICE ONLY (localStorage + a note on the local
-     account record). Attaching it to the cloud account record (/users/<uid>) for recovery use
-     needs a small beta-layer setter (like betaSetDob) — follow-up, not this batch.
-   - Cost: Firebase gives 10 phone verifications/day free, then pennies per text. */
+/* PHONE-VERIFY-BEHIND-SCENES-2026-11-25 (Holo 2026-11-25 08:53 — final call):
+   Firebase Phone Auth is WIRED IN but HIDDEN. There is NO text-verification option
+   anywhere on the sign-in page, in the FAQ, or anywhere a tester would see it
+   while signing in — Mom must never be offered it when she logs in (Holo 08:52).
+   The capability exists only for a behind-the-scenes flow (e.g. account recovery)
+   that calls window.holoPhoneVerify directly. Nothing on this page calls it today:
+   no SDK load, no reCAPTCHA, no SMS on page load or on sign-in — the compat SDK
+   lazy-loads from gstatic ONLY when a caller invokes start().
+   CONSOLE STILL NEEDED before any real send can work (project holos-arcade):
+   Authentication -> Sign-in method -> Phone -> Enable; also check
+   beta.holosarcade.ca is in Authentication -> Settings -> Authorized domains.
+   Until then start() rejects with the honest "isn't switched on yet" message.
+   The verified number is recorded ON THIS DEVICE ONLY (localStorage + a note on
+   the local account record). Attaching it to the cloud account record
+   (/users/<uid>) for recovery use needs a small beta-layer setter — follow-up.
+   Cost: Firebase gives 10 phone verifications/day free, then pennies per text. */
 (function(){
   "use strict";
   var LS_KEY = 'holos-arcade-phone-verified';
@@ -17235,9 +17209,6 @@ function renderTesterAuth(){
   var FIREBASE_CONFIG = { apiKey: "AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak", authDomain: 'holos-arcade.firebaseapp.com', projectId: 'holos-arcade', storageBucket: 'holos-arcade.firebasestorage.app', messagingSenderId: '857220056028', appId: '1:857220056028:web:ff4aa973e2510e583c4519' };
   var confirmationResult = null, verifier = null, sdkPromise = null, verifiedPhone = null;
 
-  function $(id){ return document.getElementById(id); }
-  function showMsg(t){ var m = $('phoneVerifyMsg'); if(m){ m.textContent = t; m.hidden = false; } }
-  function hideMsg(){ var m = $('phoneVerifyMsg'); if(m) m.hidden = true; }
   function friendlyError(err){
     var code = String((err && err.code) || '');
     if(code.indexOf('operation-not-allowed') >= 0) return "Text verification isn't switched on yet — Holo is turning it on in the Firebase Console. Email or Code Name sign-in still works as normal.";
@@ -17287,7 +17258,16 @@ function renderTesterAuth(){
   }
   function getVerifier(){
     if(verifier) return verifier;
-    /* Invisible reCAPTCHA — the tester sees nothing unless the check challenges them. */
+    /* No visible container exists on the page by design — create a hidden one
+       only when a behind-the-scenes caller actually needs the check. */
+    var box = document.getElementById('phoneVerifyRecaptcha');
+    if(!box){
+      box = document.createElement('div');
+      box.id = 'phoneVerifyRecaptcha';
+      box.setAttribute('aria-hidden', 'true');
+      box.style.display = 'none';
+      document.body.appendChild(box);
+    }
     verifier = new window.firebase.auth.RecaptchaVerifier('phoneVerifyRecaptcha', { size: 'invisible' });
     return verifier;
   }
@@ -17323,98 +17303,66 @@ function renderTesterAuth(){
       }
     } catch(e2){}
   }
-  function showDone(){
-    var done = $('phoneVerifyDone'), rm = $('phoneVerifyRemove'), codeRow = $('phoneVerifyCodeRow'), sendBtn = $('phoneVerifySend');
-    if(!done) return;
-    var stored = readStored();
-    if(stored){
-      done.textContent = 'Verified ✓ — ' + stored.phone + '. We will only use this number if you ask us to help get your account back. You can still sign in with your email or Code Name, with or without it.';
-      done.hidden = false;
-      if(rm) rm.hidden = false;
-      if(codeRow) codeRow.hidden = true;
-      if(sendBtn) sendBtn.hidden = true;
-    } else {
-      done.hidden = true;
-      if(rm) rm.hidden = true;
-      if(sendBtn) sendBtn.hidden = false;
-    }
-  }
-  function setBusy(btn, busy, label){
-    if(!btn) return;
-    btn.disabled = !!busy;
-    if(label !== undefined) btn.textContent = label;
-  }
-  function sendCode(){
-    hideMsg();
-    var input = $('phoneVerifyNumber');
-    var phone = normalizePhone(input ? input.value : '');
-    if(!phone){ showMsg("That number doesn't look right, agent. Use your full mobile number with +1 at the front."); if(input) input.focus(); return; }
-    var sendBtn = $('phoneVerifySend');
-    setBusy(sendBtn, true, 'Sending…');
-    loadSdk().then(function(){
+  /* Headless API — the ONLY way in. No DOM, no buttons, no panel: a caller
+     (today: nobody — the first caller will be the account-recovery flow) drives it:
+       holoPhoneVerify.start('+13065550123') -> Promise<{phone}> (code texted)
+       holoPhoneVerify.confirm('123456')     -> Promise<{phone}> (verified + recorded)
+       holoPhoneVerify.resend()              -> Promise<{phone}> (new code)
+       holoPhoneVerify.clear()               -> forgets the verified number
+       holoPhoneVerify.state()               -> {verified, phone, verifiedAt} | {verified:false}
+     Every rejection carries a plain-English message on err.message. */
+  function start(rawPhone){
+    var phone = normalizePhone(rawPhone);
+    if(!phone) return Promise.reject(Object.assign(new Error("That number doesn't look right, agent. Use your full mobile number with +1 at the front."), { code: 'invalid-phone-number' }));
+    return loadSdk().then(function(){
       var auth = getAuth();
       return auth.signInWithPhoneNumber(phone, getVerifier());
     }).then(function(cr){
       confirmationResult = cr;
       verifiedPhone = phone;
-      var row = $('phoneVerifyCodeRow');
-      if(row) row.hidden = false;
-      showMsg('Code sent to ' + phone + ' — type the 6-digit code from the text below.');
-      var code = $('phoneVerifyCode');
-      if(code) code.focus();
+      return { phone: phone };
     }).catch(function(err){
       resetVerifier();
-      showMsg(friendlyError(err));
-    }).then(function(){ setBusy(sendBtn, false, 'Send code by text'); });
+      var e = new Error(friendlyError(err));
+      if(err && err.code) e.code = err.code;
+      throw e;
+    });
   }
-  function confirmCode(){
-    hideMsg();
-    var input = $('phoneVerifyCode');
-    var code = String(input ? input.value : '').replace(/\D/g, '');
-    if(code.length !== 6){ showMsg('Pop the 6-digit code from the text in first, agent.'); if(input) input.focus(); return; }
-    if(!confirmationResult){ showMsg('Send a code first, then type it in.'); return; }
-    var btn = $('phoneVerifyConfirm');
-    setBusy(btn, true, 'Checking…');
-    confirmationResult.confirm(code).then(function(){
+  function confirm(code){
+    var c = String(code || '').replace(/\D/g, '');
+    if(c.length !== 6) return Promise.reject(Object.assign(new Error('That code needs to be 6 digits from the text.'), { code: 'invalid-verification-code' }));
+    if(!confirmationResult) return Promise.reject(Object.assign(new Error('Send a code first, then type it in.'), { code: 'no-confirmation' }));
+    return confirmationResult.confirm(c).then(function(){
       recordVerified(verifiedPhone || '');
       /* The SDK signs the phone number in on its own Auth instance — sign straight back
          out so no phone session lingers. The hub's own email/Code Name sign-in is untouched. */
       try { var a = getAuth(); if(a && a.signOut) a.signOut(); } catch(e){}
+      var phone = verifiedPhone;
       confirmationResult = null;
-      showDone();
-      hideMsg();
+      return { phone: phone };
     }).catch(function(err){
-      showMsg(friendlyError(err));
-    }).then(function(){ setBusy(btn, false, 'Verify code'); });
-  }
-  function init(){
-    var toggle = $('phoneVerifyToggle'), panel = $('phoneVerifyPanel');
-    if(!toggle || !panel) return;
-    toggle.addEventListener('click', function(){
-      panel.hidden = !panel.hidden;
-      if(!panel.hidden) showDone();
+      var e = new Error(friendlyError(err));
+      if(err && err.code) e.code = err.code;
+      throw e;
     });
-    var sendBtn = $('phoneVerifySend');
-    if(sendBtn) sendBtn.addEventListener('click', sendCode);
-    var confirmBtn = $('phoneVerifyConfirm');
-    if(confirmBtn) confirmBtn.addEventListener('click', confirmCode);
-    var resendBtn = $('phoneVerifyResend');
-    if(resendBtn) resendBtn.addEventListener('click', function(){ resetVerifier(); confirmationResult = null; sendCode(); });
-    var removeBtn = $('phoneVerifyRemove');
-    if(removeBtn) removeBtn.addEventListener('click', function(){
-      clearStored();
-      var codeRow = $('phoneVerifyCodeRow'); if(codeRow) codeRow.hidden = true;
-      var input = $('phoneVerifyNumber'); if(input) input.value = '';
-      var code = $('phoneVerifyCode'); if(code) code.value = '';
-      confirmationResult = null; verifiedPhone = null;
-      hideMsg(); showDone();
-    });
-    /* Expose a tiny read-only hook for the jsdom harness (and future debugging) — no SMS
-       is ever sent through it; it only reports whether a number is verified on this device. */
-    window.holoPhoneVerifyState = function(){ var s = readStored(); return s ? { verified: true, phone: s.phone, verifiedAt: s.verifiedAt } : { verified: false }; };
   }
-  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
+  function resend(){
+    if(!verifiedPhone) return Promise.reject(Object.assign(new Error('Send a code first, then type it in.'), { code: 'no-confirmation' }));
+    resetVerifier();
+    confirmationResult = null;
+    return start(verifiedPhone);
+  }
+  function clear(){
+    clearStored();
+    confirmationResult = null;
+    verifiedPhone = null;
+  }
+  function state(){
+    var s = readStored();
+    return s ? { verified: true, phone: s.phone, verifiedAt: s.verifiedAt } : { verified: false };
+  }
+  window.holoPhoneVerify = { start: start, confirm: confirm, resend: resend, clear: clear, state: state };
+  window.holoPhoneVerifyState = state;
 })();
 </script>
 
