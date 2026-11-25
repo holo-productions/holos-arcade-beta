@@ -237,25 +237,33 @@
 <title>Dots and Boxes - Holo's Arcade</title>
 <style>
   * { box-sizing:border-box; }
-  body { margin:0; background:#171021; color:#f5efff; font-family:monospace,"Courier New",Courier; -webkit-tap-highlight-color:transparent; }
-  .wrap { max-width:390px; margin:0 auto; padding:16px 14px 40px; }
+  /* DOTS-NOSCROLL-2026-11-25: game view fits the screen and locks during
+     gameplay — zero scroll. .wrap is exactly one viewport tall (flex
+     column); the board flexes into the leftover space and the JS sizes it
+     to fit (see fitBoardSize). Only on very short viewports (<480px tall,
+     e.g. landscape phones) does scrolling return as an escape hatch so
+     controls are never clipped out of reach. */
+  html,body { height:100%; }
+  body { margin:0; background:#171021; color:#f5efff; font-family:monospace,"Courier New",Courier; -webkit-tap-highlight-color:transparent; overflow:hidden; }
+  .wrap { max-width:390px; margin:0 auto; padding:10px 14px 10px; height:100vh; height:100dvh; display:flex; flex-direction:column; }
+  @media (max-height:480px){ html,body{overflow:auto;} .wrap{height:auto;min-height:100vh;min-height:100dvh;} }
   a.back { color:#4cc9f0; text-decoration:none; font-size:14px; }
-  h1 { font-size:24px; margin:12px 0 4px; color:#ff6ec7; letter-spacing:1px; text-align:center; text-shadow:2px 2px 0 #9b5de5; }
-  .sub { text-align:center; color:#c9b8ff; font-size:13px; margin:0 0 14px; }
-  .btn { background:#2a1b45; color:#fff; border:3px solid #9b5de5; padding:12px 8px; font-family:inherit; font-size:14px; cursor:pointer; min-height:48px; flex:1; }
+  h1 { font-size:24px; margin:6px 0 2px; color:#ff6ec7; letter-spacing:1px; text-align:center; text-shadow:2px 2px 0 #9b5de5; }
+  .sub { text-align:center; color:#c9b8ff; font-size:13px; margin:0 0 8px; }
+  .btn { background:#2a1b45; color:#fff; border:3px solid #9b5de5; padding:10px 8px; font-family:inherit; font-size:14px; cursor:pointer; min-height:44px; flex:1; }
   .btn:active { transform:scale(.98); }
   .btn.primary { background:#ff6ec7; border-color:#ff6ec7; color:#171021; font-weight:bold; }
   .btn.blue { border-color:#4cc9f0; }
   .btn.activeMode { background:#4cc9f0; color:#171021; border-color:#4cc9f0; font-weight:bold; }
-  .row { display:flex; gap:8px; margin:10px 0; }
-  .card { background:#22163a; border:3px solid #4a2f7a; padding:12px; margin:12px 0; }
-  .turn { text-align:center; font-size:17px; padding:12px; background:#2a1b45; border:3px solid #ff6ec7; margin:12px 0; }
+  .row { display:flex; gap:8px; margin:6px 0; }
+  .card { background:#22163a; border:3px solid #4a2f7a; padding:10px; margin:8px 0; }
+  .turn { text-align:center; font-size:16px; padding:8px 12px; background:#2a1b45; border:3px solid #ff6ec7; margin:8px 0; }
   .turn.p2 { border-color:#4cc9f0; }
-  .pass { text-align:center; color:#ffd166; font-size:14px; min-height:20px; margin:6px 0; }
-  .status { text-align:center; font-size:16px; min-height:24px; margin:8px 0; color:#ffd166; }
+  .pass { text-align:center; color:#ffd166; font-size:14px; min-height:18px; margin:4px 0; }
+  .status { text-align:center; font-size:16px; min-height:22px; margin:6px 0; color:#ffd166; }
   .score { display:flex; justify-content:space-between; text-align:center; font-size:13px; }
   .score b { display:block; font-size:22px; }
-  .boardWrap { display:flex; justify-content:center; margin:14px 0; }
+  .boardWrap { display:flex; justify-content:center; align-items:center; flex:1 1 auto; min-height:0; margin:6px 0; position:relative; }
   .board { position:relative; width:340px; height:340px; background:#22163a; border:3px solid #4a2f7a; }
   .dot { position:absolute; width:14px; height:14px; background:#fff; border-radius:50%; transform:translate(-50%,-50%); z-index:3; pointer-events:none; }
   .edge { position:absolute; background:transparent; border:none; cursor:pointer; z-index:2; padding:0; }
@@ -277,6 +285,17 @@
   .modal li { margin:8px 0; line-height:1.5; }
   textarea { width:100%; min-height:90px; background:#171021; color:#fff; border:2px solid #9b5de5; font-family:inherit; padding:10px; font-size:15px; }
   .small { font-size:12px; color:#c9b8ff; text-align:center; }
+/* DOTS-PERFECT-2026-11-25: "PERFECT!" banner. Absolutely positioned over
+   the board inside .boardWrap, so showing it adds zero layout height and
+   can never reintroduce a scroll. */
+.perfect-banner{display:none;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-4deg);z-index:5;pointer-events:none;background:rgba(10,6,32,.88);border:3px solid #ffb020;border-radius:14px;padding:10px 18px;box-shadow:0 0 26px rgba(255,176,32,.55);white-space:nowrap}
+.perfect-banner span{font-family:var(--ha-pixel);font-size:clamp(18px,6vw,28px);line-height:1.6;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.perfect-banner.show{display:block}
+/* Confetti canvas (hub celebrateConfetti): fixed fullscreen, never
+   outlined by the theme canvas rule below. */
+#confettiCanvas{position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:70;outline:none !important;box-shadow:none !important;border-radius:0 !important}
+/* Very short viewports: shed the niceties so the board keeps room. */
+@media (max-height:560px){ .sub,.small{display:none} h1{font-size:15px} .card{padding:6px 10px} .btn{min-height:40px} .turn{padding:6px 10px} }
 /* vtut visual steps */
 .vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
 @media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
@@ -337,7 +356,7 @@ a{color:var(--ha-cyan)}
   <div class="pass" id="passMsg"></div>
   <div class="status" id="status"></div>
 
-  <div class="boardWrap"><div class="board" id="board" aria-label="Dots and Boxes board"></div></div>
+  <div class="boardWrap"><div class="board" id="board" aria-label="Dots and Boxes board"></div><div id="perfectBanner" class="perfect-banner" role="status" aria-live="polite"><span>&#9733; PERFECT! &#9733;</span></div></div>
 
   <div class="card">
     <div style="text-align:center;font-size:13px;margin-bottom:6px">Boxes this round</div>
@@ -455,10 +474,104 @@ function playerName(p) {
 }
 function playerInitial(p) { return p===1 ? "1" : "2"; }
 
+
+/* DOTS-NOSCROLL-2026-11-25: board sizing. The chrome (everything in
+   .wrap except the board) is measured live from the DOM, so the board
+   takes exactly the leftover viewport height — never more, so the page
+   never scrolls. */
+function outerH(el){ var s = window.getComputedStyle ? getComputedStyle(el) : {marginTop:0,marginBottom:0}; return (el.offsetHeight||0) + (parseFloat(s.marginTop)||0) + (parseFloat(s.marginBottom)||0); }
+function fitBoardSize(){
+  var wrap = document.querySelector('.wrap');
+  var contentW = 340;
+  if (wrap) contentW = Math.max(180, wrap.clientWidth - 28);
+  var chrome = 20;
+  try {
+    chrome = 0;
+    var kids = wrap ? wrap.children : [];
+    for (var i=0;i<kids.length;i++){
+      var el = kids[i];
+      if (el.classList && el.classList.contains('boardWrap')) {
+        var bs = getComputedStyle(el);
+        chrome += (parseFloat(bs.marginTop)||0) + (parseFloat(bs.marginBottom)||0);
+        continue;
+      }
+      chrome += outerH(el);
+    }
+    var ws = getComputedStyle(wrap);
+    chrome += (parseFloat(ws.paddingTop)||0) + (parseFloat(ws.paddingBottom)||0);
+  } catch(e){ chrome = 470; }
+  var availH = (window.innerHeight || 800) - chrome - 8;
+  return Math.max(180, Math.min(340, contentW, availH));
+}
+var __dotsResizeT = null;
+window.addEventListener('resize', function(){
+  if (__dotsResizeT) clearTimeout(__dotsResizeT);
+  __dotsResizeT = setTimeout(function(){ render(); }, 120);
+});
+
+/* DOTS-PERFECT-2026-11-25: confetti — the hub's celebrateConfetti
+   (games-hub), ported verbatim so a perfect game celebrates exactly like
+   the Arcade's other celebrations. Same colours, same motion, same
+   prefers-reduced-motion guard. */
+function celebrateConfetti(count){
+  try {
+    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var canvas = document.getElementById('confettiCanvas');
+    if(!canvas){ canvas = document.createElement('canvas'); canvas.id = 'confettiCanvas'; document.body.appendChild(canvas); }
+    var ctx = canvas.getContext('2d'); if(!ctx) return;
+    canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+    var colors = ['#ffbe0b','#0e7569','#e4572e','#7c5cbf','#ffd166','#3d9d4e'];
+    var n = count || 120, parts = [], i;
+    for(i = 0; i < n; i++){
+      parts.push({
+        x: Math.random() * canvas.width,
+        y: -20 - Math.random() * canvas.height * 0.35,
+        w: 6 + Math.random() * 6, h: 8 + Math.random() * 8,
+        vy: 2.2 + Math.random() * 3.2, vx: -1.4 + Math.random() * 2.8,
+        rot: Math.random() * Math.PI, vr: -0.12 + Math.random() * 0.24,
+        color: colors[i % colors.length], circle: Math.random() < 0.3,
+        sparkle: Math.random() < 0.22
+      });
+    }
+    var start = null;
+    function frame(ts){
+      if(!start) start = ts;
+      var t = ts - start;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      var alive = false;
+      parts.forEach(function(pt){
+        pt.y += pt.vy; pt.x += pt.vx + Math.sin((t / 300) + pt.rot) * 0.6; pt.rot += pt.vr;
+        if(pt.y < canvas.height + 30) alive = true;
+        ctx.save(); ctx.translate(pt.x, pt.y); ctx.rotate(pt.rot);
+        ctx.globalAlpha = Math.max(0, 1 - (t / 2600));
+        ctx.fillStyle = pt.color;
+        if(pt.sparkle){ ctx.font = '14px serif'; ctx.fillText('\u2726', -7, 5); }
+        else if(pt.circle){ ctx.beginPath(); ctx.arc(0, 0, pt.w / 2, 0, Math.PI * 2); ctx.fill(); }
+        else ctx.fillRect(-pt.w / 2, -pt.h / 2, pt.w, pt.h);
+        ctx.restore();
+      });
+      if(alive && t < 2800) requestAnimationFrame(frame);
+      else ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    requestAnimationFrame(frame);
+  } catch(e){}
+}
+function showPerfect(){
+  var b = document.getElementById('perfectBanner');
+  if (b) b.classList.add('show');
+  try { celebrateConfetti(160); } catch(e){}
+}
+function hidePerfect(){
+  var b = document.getElementById('perfectBanner');
+  if (b) b.classList.remove('show');
+}
+
 function render() {
   var boardEl = document.getElementById("board");
   boardEl.innerHTML = "";
-  var size = 340;
+  var size = fitBoardSize();
+  boardEl.style.width = size + "px";
+  boardEl.style.height = size + "px";
   var step = size / (DOTS - 1); // distance between dots, but pad inside
   var pad = 30;
   var inner = size - pad*2;
@@ -532,9 +645,14 @@ function applyEdge(type, r, c) {
   var counts = countBoxes(boxes);
   if (counts.left===0) {
     gameOver = true;
-    if (counts.p1 > counts.p2) { scores.p1++; document.getElementById("status").textContent = playerName(1) + " wins " + counts.p1 + " to " + counts.p2 + "."; }
-    else if (counts.p2 > counts.p1) { scores.p2++; document.getElementById("status").textContent = playerName(2) + " wins " + counts.p2 + " to " + counts.p1 + "."; }
+    /* DOTS-PERFECT-2026-11-25: a perfect game is a shutout — one player
+       claims all 9 boxes and the other scores 0. In vs-Computer the
+       computer's own 9-0 is NOT celebrated (the human lost). */
+    var perfect = (counts.p1===9 || counts.p2===9) && !(mode==="cpu" && counts.p2===9);
+    if (counts.p1 > counts.p2) { scores.p1++; document.getElementById("status").textContent = (perfect ? "Perfect! " : "") + playerName(1) + " wins " + counts.p1 + " to " + counts.p2 + "."; }
+    else if (counts.p2 > counts.p1) { scores.p2++; document.getElementById("status").textContent = (perfect ? "Perfect! " : "") + playerName(2) + " wins " + counts.p2 + " to " + counts.p1 + "."; }
     else { scores.draws++; document.getElementById("status").textContent = "It is a draw " + counts.p1 + " to " + counts.p2 + "."; }
+    if (perfect) showPerfect();
     document.getElementById("passMsg").textContent = "";
     saveScores();
     render();
@@ -582,6 +700,7 @@ function cpuMove() {
   if (edge) applyEdge(edge.type, edge.r, edge.c);
 }
 function newRound() {
+  hidePerfect();
   initState();
   current = 1;
   gameOver = false;
