@@ -2224,6 +2224,8 @@ body.in-game .rff-frame{height:calc(100dvh - 150px)}
 #pane-werewolf .w-flow-start-row{display:flex;gap:8px;flex-wrap:wrap}
 #pane-werewolf .w-flow-start-row .g-btn{flex:1 1 40%;min-height:48px}
 #pane-werewolf .w-flow-start-row .g-btn.primary{flex:1 1 100%}
+#wFlowStepStart .w-flow-start-row .g-btn.primary{flex:1 1 40%} /* WFLOW-PAIR-2026-11-25: Practice + Start sit together side by side as a pair on the start menu; Rules takes its own full row below. */
+#wFlowStepStart .w-flow-start-row #wRulesBtn{flex:1 1 100%}
 #pane-werewolf .w-char-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 #pane-werewolf .w-char-btn{appearance:none;border:2px solid var(--line);background:var(--bg2);color:var(--ink);border-radius:14px;padding:10px 6px 12px;cursor:pointer;font-family:inherit;min-height:44px}
 #pane-werewolf .w-char-btn svg{display:block;width:100%;height:auto;max-height:120px}
@@ -6262,8 +6264,8 @@ setTimeout(function(){
           <p class="w-flow-tip"><strong>Hunter&rsquo;s tip:</strong> a paw print means the werewolf WAS there — follow the arrow to where it went. Innocent villagers tell the truth. The werewolf lies.</p>
           <div class="w-flow-start-row">
             <button class="g-btn" id="wPracticeBtn" type="button">🎓 Practice hunt<small>No dawn, no clock · score not saved · unlimited clue charm</small></button>
-            <button class="g-btn" id="wRulesBtn" type="button">📜 Rules<small>Moon, evidence &amp; winning</small></button>
             <button class="g-btn primary" id="wFlowStartBtn" type="button">Start the hunt</button>
+            <button class="g-btn" id="wRulesBtn" type="button">📜 Rules<small>Moon, evidence &amp; winning</small></button>
           </div>
           <div class="w-flow-nav">
             <button class="g-btn" type="button" data-wflow-back="tut">Back</button>
@@ -27810,7 +27812,16 @@ footer .egg-row .egg{width:32px;height:32px}
    above, and sectionOf + tourFindBriefing match the reportId so it still
    files under Messages and the tour still finds it. Local-only accounts (no Firebase
    auth) can't receive it — notifySelf resolves null and we retry on a
-   later load in case the account gains Firebase auth. */
+   later load in case the account gains Firebase auth.
+   BRIEFING-SELFHEAL-2026-11-25: the send only polled for 60s after page
+   load, so an account that signed in late (or a session-only login) never
+   got the briefing — and a stale sent-flag or an archived briefing also
+   stranded it. Now: the poll runs until delivered (5s, then 60s after
+   2 min), the server state is reconciled on every attempt (an archived
+   briefing is un-archived and surfaced instead of re-sent; a stale flag
+   with no briefing on the server is cleared and the briefing is sent),
+   and a send only happens when no briefing exists on the server, so no
+   duplicates. */
 (function(){
   var BODY = 'Welcome to Glitch Squad, agent! Your mission: play whatever you like \u2014 no deadlines, no homework.\n\nReview = your opinion: stars, tags and comments on any game you try. Fun? Boring? Too hard?\n\nBug = something broken: a game won\u2019t load, a button does nothing, sound is missing, a score looks wrong. Use the help chat in the Arcade for bugs.\n\nPhone tip: tap Share or your browser menu and choose Add to Home Screen \u2014 the Arcade gets its own icon, just like an app.';
   function flagKey(){
@@ -27819,6 +27830,7 @@ footer .egg-row .egg{width:32px;height:32px}
   }
   function done(){ try { return localStorage.getItem(flagKey()) === '1'; } catch(e){ return true; } }
   function markDone(){ try { localStorage.setItem(flagKey(), '1'); } catch(e){} }
+  function clearDone(){ try { localStorage.removeItem(flagKey()); } catch(e){} }
   function signedIn(){
     try { return !!(typeof getTester === 'function' && getTester()); } catch(e){ return false; }
   }
@@ -27827,28 +27839,43 @@ footer .egg-row .egg{width:32px;height:32px}
     if(lv && !lv.hidden) return false;
     return true;
   }
-  var tried = false;
+  function isBriefing(n){ return !!(n && (n.reportId === 'mission-briefing-v1' || n.type === 'mission-briefing')); }
+  var tried = false, healed = false, iv = null, slowIv = null;
+  function stop(){ if(iv){ clearInterval(iv); iv = null; } if(slowIv){ clearInterval(slowIv); slowIv = null; } }
   function maybeSend(){
-    if(tried || done() || !signedIn() || !hubVisible()) return;
+    if(tried || !signedIn() || !hubVisible()) return;
     if(!window.holoInbox || typeof window.holoInbox.notifySelf !== 'function') return;
+    if(done() && healed) return;
     tried = true;
     var check = (typeof window.holoInbox.refresh === 'function') ? window.holoInbox.refresh() : Promise.resolve();
     Promise.resolve(check).then(function(){
       var existing = [];
       try { existing = window.holoInbox.items() || []; } catch(e){}
-      var has = existing.some(function(n){ return n && (n.reportId === 'mission-briefing-v1' || n.type === 'mission-briefing'); });
-      if(has){ markDone(); return null; }
+      var vis = null, arch = null;
+      existing.forEach(function(n){ if(isBriefing(n)){ if(n.archived){ if(!arch) arch = n; } else if(!vis) vis = n; } });
+      if(vis){ markDone(); healed = true; stop(); return null; }
+      if(arch){
+        /* Delivered once but archived (hidden from the main list) — surface it again instead of sending a duplicate. */
+        var unarch = (typeof window.holoInbox.archiveItem === 'function') ? window.holoInbox.archiveItem(arch.id, false) : Promise.resolve(false);
+        return Promise.resolve(unarch).then(function(ok){
+          if(ok){ markDone(); healed = true; stop(); }
+          else { tried = false; }
+        });
+      }
+      healed = true;
+      if(done()) clearDone(); /* stale flag, no briefing on the server — send it */
       return window.holoInbox.notifySelf('system', 'Your mission briefing', BODY, null, 'mission-briefing-v1').then(function(r){
-        if(r) markDone(); else tried = false; /* no Firebase auth yet — retry next load */
+        if(r){ markDone(); stop(); } else tried = false; /* no Firebase auth yet — retry next tick */
         return r;
       });
     }).catch(function(){ tried = false; });
   }
-  var iv = setInterval(function(){ maybeSend(); }, 2000);
-  setTimeout(function(){ clearInterval(iv); }, 60000);
+  iv = setInterval(function(){ maybeSend(); }, 5000);
+  setTimeout(function(){ if(iv){ clearInterval(iv); iv = null; slowIv = setInterval(function(){ maybeSend(); }, 60000); } }, 120000);
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', maybeSend);
   else maybeSend();
 })();
+
 /* DEVICE-QUESTIONNAIRE-2026-11-23 (Holo 22:27): "What are you playing on?"
    DORMANT — nothing is sent while DEVICE_QUESTIONNAIRE_LIVE is false.
    How Holo triggers the send: she says "send it out" and Gizmo flips the
