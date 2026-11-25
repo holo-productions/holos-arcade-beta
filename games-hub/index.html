@@ -15449,6 +15449,31 @@ function renderTesterAuth(){
       try { renderTesterBadges(); } catch(e){}
     }
     document.body.classList.remove('auth-locked');
+    /* GATE-REPORT-WIRING-2026-11-24: the gate guard's Report pill on a standalone
+       game page links back here with ?report=<slug>. Open the feedback form for
+       that game once, signed-in only — the gate shows first when signed out, and
+       this branch only runs after sign-in. The form helpers live in another
+       script block's IIFE, so this calls the global window.openFeedbackForm
+       (which normalizes the slug itself). Unknown slugs are ignored — a real
+       game has a .game-card [data-game] or is a hub-native title (trivia,
+       werewolf, madcow, dj) or the hub itself. The param is stripped from the
+       URL so a refresh does not reopen the form. */
+    try {
+      if(!window.__holoReportOpened){
+        var rp = null;
+        try { rp = new URLSearchParams(window.location.search || '').get('report'); } catch(e){ rp = null; }
+        if(rp){
+          var rslug = String(rp).trim().toLowerCase();
+          var rknown = rslug === 'games-hub' || rslug === 'trivia' || rslug === 'werewolf' || rslug === 'madcow' || rslug === 'dj';
+          if(!rknown){ try { rknown = !!document.querySelector('.game-card [data-game="' + rslug + '"]'); } catch(e){ rknown = false; } }
+          if(rknown){
+            window.__holoReportOpened = true;
+            try { var ru = new URL(window.location.href); ru.searchParams.delete('report'); history.replaceState(null, '', ru.pathname + ru.search + ru.hash); } catch(e){}
+            try { if(typeof window.openFeedbackForm === 'function') window.openFeedbackForm(rslug); } catch(e){}
+          }
+        }
+      }
+    } catch(e){}
     /* MOM-MIGRATE-REMOVE-LOCAL-2026-11-24: a signed-in local-only session (no Firebase uid) gets the one-time migration prompt + the Account-box re-entry button. */
     try { if(window.holoOnAuthForMigrate) window.holoOnAuthForMigrate(t); } catch(e){}
     var pl = document.getElementById('player'), lg = document.getElementById('legalView'), rv = document.getElementById('reviewsView'), fq = document.getElementById('faqView'), lfq = document.getElementById('loginFaqView');
