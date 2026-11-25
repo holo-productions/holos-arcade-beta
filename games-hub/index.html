@@ -21307,6 +21307,53 @@ function renderTesterAuth(){
       }).catch(function(){});
     } catch(e){}
   }
+  /* ACTIVE-ACCOUNT-2026-11-25 (Holo standing rule: must have an ACTIVE user account to get in): a disabled or deleted Firebase account must not keep hub access from an old session on this device. The gate (openGame) only reads the local tester session, so on load we check the stored Firebase session against accounts:lookup — a missing user (deleted) or disabled:true (disabled in Console) signs this device out and drops it back to the Coming Soon gate. Fail-open everywhere: any network failure, or a refresh error that is not a clear disabled-account signal, leaves the session alone — a glitch never locks a verified tester out. Runs once per load (5-minute throttle), next to checkSessionRevoked. */
+  var lastActiveCheckAt = 0;
+  function signOutDisabledAccount(){
+    try { clearLocalAuth(); } catch(e){}
+    try {
+      if(typeof signOutTester === 'function'){ signOutTester(); }
+      else {
+        try { localStorage.removeItem('holos-arcade-tester-login'); } catch(e){}
+        try { sessionStorage.removeItem('holos-arcade-tester-login'); } catch(e){}
+        if(typeof renderTesterAuth === 'function') renderTesterAuth();
+      }
+    } catch(e){}
+  }
+  function checkAccountActive(){
+    try {
+      var a = loadAuth();
+      if(!a || !a.uid || typeof fetch !== 'function') return;
+      var now = Date.now();
+      if(now - lastActiveCheckAt < 300000) return;
+      lastActiveCheckAt = now;
+      function lookupWith(token){
+        return postJSON('https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=' + FB_API_KEY, { idToken: token })
+          .then(function(r){
+            if(!r.ok || !r.json) return; /* fail open */
+            var users = (r.json && r.json.users) || [];
+            if(!users.length){ signOutDisabledAccount(); return; } /* deleted account */
+            if(users[0] && users[0].disabled){ signOutDisabledAccount(); } /* disabled in Console */
+          }).catch(function(){});
+      }
+      if(a.idToken && a.exp && a.exp > Date.now() + 60000){ lookupWith(a.idToken); return; }
+      if(!a.refreshToken) return;
+      fetch('https://securetoken.googleapis.com/v1/token?key=' + FB_API_KEY, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:'grant_type=refresh_token&refresh_token=' + encodeURIComponent(a.refreshToken) })
+        .then(function(res){ return res.json().then(function(j){ return { ok:res.ok, j:j }; }); })
+        .then(function(pair){
+          var j = pair.j || {};
+          if(pair.ok && j.id_token){
+            a.idToken = j.id_token; a.refreshToken = j.refresh_token || a.refreshToken; a.exp = Date.now() + ((parseInt(j.expires_in,10)||3600)*1000);
+            try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e){}
+            lookupWith(a.idToken);
+            return;
+          }
+          var err = String((j.error && (j.error.message || j.error)) || j.error_description || '').toLowerCase();
+          if(err.indexOf('user_disabled') >= 0 || err.indexOf('disabled') >= 0){ signOutDisabledAccount(); }
+          /* Any other refresh failure (network hiccup, revoked token, password changed) fails open — the session stays until the next sign-in sorts it out. */
+        }).catch(function(){});
+    } catch(e){}
+  }
   /* USERNAMES-INDEX-2026-11-22: /usernames/<lowercase Code Name>
      = uid, written on register + sign-in (fail-soft; needs RTDB
      rules for /usernames — see manual). Powers the Code Name
@@ -21468,18 +21515,12 @@ function renderTesterAuth(){
     }).catch(function(){ betaAuthNotice(betaAuthErrorText('')); });
   };
   window.betaSignIn = function(email, password){
+    /* NO-CODE-REGISTER-2026-11-25 (Holo standing rule: no registration without an invite code until we go live): a failed sign-in NEVER creates an account here. The old auto-provision branch (doSignUp on EMAIL_NOT_FOUND / INVALID_PASSWORD) is removed — it created Firebase accounts with no invite code. Sign-in failure now just shows the friendly error; registration happens only through createAccount / the migration form, both of which refuse without a code. This function has no in-page callers (signInAccount uses betaSignInAsync); it stays only as a safe sign-in helper. */
     if(!email || !password || typeof fetch !== 'function') return;
     doSignIn(email, password).then(function(r){
       if(r.ok && r.json && r.json.idToken){ var rec2 = saveAuth(r.json, email); if(rec2) writeDevice(rec2, 'sign-in'); pushFeedback(); return; }
       var msg = (r.json && r.json.error && r.json.error.message) || '';
-      if(msg.indexOf('EMAIL_NOT_FOUND') >= 0 || msg.indexOf('INVALID_LOGIN_CREDENTIALS') >= 0 || msg.indexOf('INVALID_PASSWORD') >= 0){
-        /* Existing local tester with no Firebase user yet: provision. */
-        doSignUp(email, password).then(function(r2){
-          if(r2.ok && r2.json && r2.json.idToken){ var rec = saveAuth(r2.json, email); if(rec){ var migCode = localInviteCodeFor(email); if(migCode) patchUser(rec, { inviteCode: migCode }); sendVerify(rec.idToken).then(function(v){ if(!v || !v.sent) betaAuthNotice(betaAuthErrorText('')); }); writeDevice(rec, 'register'); } pushFeedback(); return; }
-          var msg2 = (r2.json && r2.json.error && r2.json.error.message) || '';
-          betaAuthNotice(betaAuthErrorText(msg2));
-        }).catch(function(){ betaAuthNotice(betaAuthErrorText('')); });
-      }
+      betaAuthNotice(betaFriendlyError(msg));
     }).catch(function(){});
   };
   function freshToken(){
@@ -21806,6 +21847,7 @@ function renderTesterAuth(){
       var t = null;
       try { t = (typeof getTester === 'function') ? getTester() : null; } catch(e){}
       if(!t) return;
+      try { checkAccountActive(); } catch(e){} /* ACTIVE-ACCOUNT-2026-11-25: disabled/deleted accounts sign themselves out on load */
       checkDeviceCap(rec).catch(function(){});
     } catch(e){}
   }
