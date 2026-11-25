@@ -15945,6 +15945,21 @@ function renderTesterAuth(){
       chip.hidden = false;
       var g = document.getElementById('testerGreeting');
       if(g) g.textContent = 'Hi, ' + t.name;
+      /* CODE-NAME-LIVE-RESOLVE-2026-11-25: the greeting reads the local
+         account record, which goes stale when the Code Name changes
+         (honeybear -> MamaBear). Re-resolve MY name live from my own
+         /users record — a self-read is allowed under live rules, so
+         this works today — and patch the greeting + account line when
+         it differs. Stored records are untouched. */
+      try {
+        if(window.holoFriends && typeof window.holoFriends.myName === 'function'){
+          window.holoFriends.myName().then(function(fresh){
+            if(!fresh || fresh === 'A tester' || fresh === t.name) return;
+            var g2 = document.getElementById('testerGreeting'); if(g2) g2.textContent = 'Hi, ' + fresh;
+            var who2 = document.getElementById('accountWho'); if(who2) who2.textContent = 'Signed in as ' + fresh + '.';
+          }).catch(function(){});
+        }
+      } catch(e){}
       var b = document.getElementById('testerBadge');
       if(b){
         if(isBossTester(t)){ b.innerHTML = '👑 Final Boss'; b.hidden = false; }
@@ -17865,13 +17880,27 @@ function renderTesterAuth(){
       else if(st === 'incoming') action = '<button type="button" class="btn btn-dark" data-owner-accept="' + escO(t.uid) + '">\u2705 Accept theirs</button>';
       else action = '<button type="button" class="btn btn-dark" data-owner-add="' + escO(t.uid) + '" data-owner-add-name="' + escO(t.name) + '">\uD83D\uDCE8 Add friend</button>';
       return '<div class="freq-card"><span class="friend-avatar" aria-hidden="true">\uD83E\uDD86</span>' +
-        '<div class="friend-main"><b>' + escO(t.name) + '</b></div>' +
+        '<div class="friend-main"><b data-owner-tester-uid="' + escO(t.uid) + '">' + escO(t.name) + '</b></div>' +
         '<div class="freq-actions">' + action + '</div></div>';
     }).join('');
     box.innerHTML = '<p style="margin:0 0 6px;font-weight:800">Registered testers (owner only)</p>' + rows +
       '<p style="margin:8px 0 0;color:var(--muted);font-size:12.5px">One tap sends a friend request from your signed-in owner account \u2014 nothing is sent until you tap. New testers get a button here when the registration watch reports them. Kevin registered Nov 24 but hasn\u2019t picked a Code Name yet, so his button waits on that.</p>' +
       '<p style="margin:4px 0 0;color:var(--muted);font-size:12.5px" role="status" id="ownerTestersStatus"></p>';
     wireOwnerTesters(box);
+    /* CODE-NAME-LIVE-RESOLVE-2026-11-25: the seed above is a snapshot —
+       re-resolve each tester's Code Name live and patch the row when
+       it differs (the seed stays the fallback). */
+    try {
+      if(window.holoFriends && typeof window.holoFriends.resolveLiveName === 'function'){
+        list.forEach(function(t){
+          window.holoFriends.resolveLiveName(t.uid).then(function(fresh){
+            if(!fresh || fresh === t.name) return;
+            try { t.name = fresh; } catch(e){}
+            try { var n = box.querySelector('[data-owner-tester-uid="' + t.uid + '"]'); if(n) n.textContent = fresh; } catch(e){}
+          }).catch(function(){});
+        });
+      }
+    } catch(e){}
     if(statusMsg){ var st2 = document.getElementById('ownerTestersStatus'); if(st2) st2.textContent = statusMsg; }
   }
   function wireOwnerTesters(box){
@@ -20167,12 +20196,38 @@ function renderTesterAuth(){
            code read the friend's whole on-device account
            record for stats; that read is gone.) */
         return '<div class="friend-card"><div class="friend-top"><span class="friend-avatar" aria-hidden="true">' + AVATAR_SVGS[avatarFor(f.name || code)] + '</span>' +
-          '<div class="friend-main"><b>' + esc(f.name || plainUsername({ code:code })) + '</b><span class="fc">' + esc(String(code).replace(/^acct-/i, '')) + '</span></div></div>' +
+          '<div class="friend-main"><b data-local-code="' + esc(code) + '">' + esc(f.name || plainUsername({ code:code })) + '</b><span class="fc">' + esc(String(code).replace(/^acct-/i, '')) + '</span></div></div>' +
           '<div class="friend-bottom-actions"><button type="button" class="friend-remove" data-friend-remove="' + esc(code) + '" aria-label="Unfriend ' + esc(f.name || code) + '" title="Unfriend">Unfriend</button></div></div>'; /* FRIEND-ROW-2026-11-24: labelled Unfriend, not a bare × — same removeFriend flow; same two-row layout as the cloud card (top: avatar + name; bottom: Unfriend, half-size). */
       }).join('');
       grid.querySelectorAll('[data-friend-remove]').forEach(function(b){
         b.addEventListener('click', function(){ removeFriend(b.getAttribute('data-friend-remove')); });
       });
+      /* CODE-NAME-LIVE-RESOLVE-2026-11-25: local entries are keyed by
+         Code Name; re-resolve each one live (on-device uid first, else
+         the /usernames exact lookup) and patch the card + the saved
+         entry when the live name differs. Falls back to the stored name
+         when the live read fails. */
+      try {
+        if(window.holoFriends && typeof window.holoFriends.resolveLiveNameForCode === 'function'){
+          codes.forEach(function(code){
+            var shown = (friends[code] || {}).name || plainUsername({ code:code });
+            var uidFromDevice = null;
+            try { var st = otherState(code); if(st && st.uid) uidFromDevice = String(st.uid); } catch(e){}
+            var p = (uidFromDevice && typeof window.holoFriends.resolveLiveName === 'function')
+              ? window.holoFriends.resolveLiveName(uidFromDevice)
+              : window.holoFriends.resolveLiveNameForCode(code);
+            Promise.resolve(p).then(function(fresh){
+              if(!fresh || fresh === shown) return;
+              try { var map = friendsLoad(); if(map[code]){ map[code].name = fresh; friendsSave(map); } } catch(e){}
+              try {
+                grid.querySelectorAll('[data-local-code]').forEach(function(n){
+                  if(n.getAttribute('data-local-code') === code) n.textContent = fresh;
+                });
+              } catch(e){}
+            }).catch(function(){});
+          });
+        }
+      } catch(e){}
     }
   }
   var form = document.getElementById('friendAddForm');
@@ -24795,10 +24850,13 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           jobs.push(api('PUT', '/friends/' + encodeURIComponent(fuid) + '/' + encodeURIComponent(uid), { name:name, ts:now }).catch(function(){ return null; }));
         });
       }
-      /* (2) PULL each friend's current name; denied under live rules. */
+      /* (2) PULL each friend's current name via the shared live resolver
+         (CODE-NAME-LIVE-RESOLVE-2026-11-25). Denied under live rules
+         today (probed 401) — starts working when the rules publish
+         opens the `username` child only; until then the stored name
+         stands and the PUSH above carries renames. */
       friendUids.forEach(function(fuid){
-        jobs.push(api('GET', '/users/' + encodeURIComponent(fuid)).then(function(u){
-          var fresh = (u && (u.username || u.name)) ? String(u.username || u.name) : '';
+        jobs.push(resolveLiveName(fuid).then(function(fresh){
           if(!fresh || !cloudFriends[fuid]) return null;
           if(cloudFriends[fuid].name === fresh) return null;
           cloudFriends[fuid].name = fresh;
@@ -24807,6 +24865,104 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       });
       return Promise.all(jobs).then(function(){ try { renderAll(); } catch(e){} return true; });
     }).catch(function(){ return false; });
+  }
+  /* CODE-NAME-LIVE-RESOLVE-2026-11-25 (Holo 2026-11-25: the Friends list
+     still showed "honeybear" after the rename to MamaBear — the name
+     stored in /friends/<myUid>/<friendUid> at accept time never moves).
+     Re-resolve a friend's Code Name LIVE from /users/<uid>/username at
+     render time; fall back to the stored name when the live read fails.
+     The live read is denied under the rules live today (probed 401 with
+     a throwaway account, 2026-11-25) — it starts working the moment the
+     rules publish opens the `username` child only (see
+     firebase-rules-dms-update-2026-11-24.md, CODE-NAME-LIVE-RESOLVE
+     section; email / DOB / the rest of the record stay self-only).
+     Until then the stored name stands and a rename still propagates
+     via the PUSH in syncFriendNames on the renamer's next sign-in
+     (the cross-write was probed working live, 2026-11-25). A fresh live
+     name is written back into my own /friends copy so it survives
+     offline. NEVER uses accounts:lookup for names — probed 2026-11-25:
+     it returns no displayName for this project and leaks email +
+     passwordHash into the client. */
+  var liveNameCache = {};    /* uid -> fresh name confirmed live, this session */
+  var liveNameDenied = {};   /* uid -> live read failed; retry next session, not this one */
+  var liveNameInflight = {}; /* uid -> in-flight Promise */
+  function resolveLiveName(uid){
+    if(!uid) return Promise.resolve(null);
+    if(liveNameCache[uid]) return Promise.resolve(liveNameCache[uid]);
+    if(liveNameDenied[uid]) return Promise.resolve(null);
+    if(liveNameInflight[uid]) return liveNameInflight[uid];
+    var p = api('GET', '/users/' + encodeURIComponent(uid)).then(function(u){
+      var fresh = (u && (u.username || u.name)) ? String(u.username || u.name).trim() : '';
+      if(fresh){ liveNameCache[uid] = fresh; return fresh; }
+      liveNameDenied[uid] = true; return null;
+    }).catch(function(){ liveNameDenied[uid] = true; return null; });
+    liveNameInflight[uid] = p;
+    p.then(function(){ delete liveNameInflight[uid]; }, function(){ delete liveNameInflight[uid]; });
+    return p;
+  }
+  function resolveLiveNameForCode(code){
+    /* Local friends are keyed by Code Name, not uid: exact-lookup the
+       uid in /usernames (the per-name read works under live rules),
+       then live-resolve the name. A retired code (honeybear) maps to
+       nothing, so a local-only entry keyed by a retired code cannot be
+       reverse-resolved — the cloud list is the source of truth for
+       registered testers. Returns the fresh name or null. */
+    var q = String(code || '').trim().toLowerCase().replace(/^acct-/i, '');
+    if(!q) return Promise.resolve(null);
+    return api('GET', '/usernames/' + encodeURIComponent(q)).then(function(foundUid){
+      if(typeof foundUid !== 'string' || !foundUid) return null;
+      return resolveLiveName(foundUid);
+    }).catch(function(){ return null; });
+  }
+  function refreshLiveNames(){
+    /* Render-time live re-resolution: every UID this view shows gets a
+       live read; a fresh name different from the stored one updates the
+       in-memory maps, writes back into my own /friends copy, and
+       re-renders (friends grid, DM threads, Inbox). Cheap after the
+       first pass: confirmed and denied UIDs are skipped, in-flight
+       reads are shared, so renderAll calling this every time costs
+       nothing once every UID is settled. */
+    var uid = myUid(); if(!uid) return;
+    var seen = {}, uids = [];
+    function add(u){ if(u && !seen[u]){ seen[u] = true; uids.push(u); } }
+    try { Object.keys(cloudFriends || {}).forEach(add); } catch(e){}
+    try { Object.keys(incoming || {}).forEach(add); } catch(e){}
+    try { Object.keys(outgoing || {}).forEach(add); } catch(e){}
+    if(!uids.length) return;
+    var now = Date.now();
+    uids.forEach(function(fuid){
+      if(liveNameCache[fuid] || liveNameDenied[fuid]) return;
+      resolveLiveName(fuid).then(function(fresh){
+        if(!fresh) return;
+        var changed = false;
+        if(cloudFriends[fuid] && cloudFriends[fuid].name !== fresh){
+          cloudFriends[fuid].name = fresh; changed = true;
+          api('PUT', '/friends/' + encodeURIComponent(uid) + '/' + encodeURIComponent(fuid), { name:fresh, ts:now }).catch(function(){});
+        }
+        if(incoming[fuid] && incoming[fuid].fromName !== fresh){ incoming[fuid].fromName = fresh; changed = true; }
+        if(outgoing[fuid] && outgoing[fuid].name !== fresh){ outgoing[fuid].name = fresh; changed = true; }
+        if(!changed) return;
+        try { renderAll(); } catch(e){}
+        try { if(window.holoDMs && typeof window.holoDMs.refresh === 'function') window.holoDMs.refresh(); } catch(e){}
+        try { if(window.holoInbox && typeof window.holoInbox.refresh === 'function') window.holoInbox.refresh(); } catch(e){}
+      }).catch(function(){});
+    });
+  }
+  function refreshOwnGreeting(){
+    /* CODE-NAME-LIVE-RESOLVE-2026-11-25: renderTesterAuth() runs before
+       this module loads, so its in-place greeting patch never fires on
+       first paint. Patch the greeting here, from my own /users record
+       (a self-read is allowed under live rules — this works today).
+       Stored records are untouched; myName() caches per session. */
+    try {
+      myName().then(function(fresh){
+        if(!fresh || fresh === 'A tester') return;
+        var g = document.getElementById('testerGreeting');
+        if(g && g.textContent !== 'Hi, ' + fresh) g.textContent = 'Hi, ' + fresh;
+        var who = document.getElementById('accountWho');
+        if(who && who.textContent.indexOf(fresh) === -1) who.textContent = 'Signed in as ' + fresh + '.';
+      }).catch(function(){});
+    } catch(e){}
   }
   function refresh(){
     var uid = myUid();
@@ -24854,7 +25010,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       }
       renderAll();
       return true;
-    }).then(function(ok){ try { syncFriendNames(); } catch(e){} return ok; });
+    }).then(function(ok){ try { syncFriendNames(); } catch(e){} try { refreshOwnGreeting(); } catch(e){} return ok; });
   }
   function requestCard(fromUid, r){
     return '<div class="freq-card"><span class="friend-avatar" aria-hidden="true">' + CLOUD_DUCK + '</span>' +
@@ -24928,6 +25084,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     /* FRIENDS-MERGE-2026-11-25: the cloud list changed — re-sync the
        shared empty state / nav count (union of local + cloud). */
     try { if(typeof window.holoFriendEmptySync === 'function') window.holoFriendEmptySync(); } catch(e){}
+    /* CODE-NAME-LIVE-RESOLVE-2026-11-25: re-resolve every name on this
+       page live at render time (cheap no-op once each UID is settled
+       this session — see refreshLiveNames). */
+    try { refreshLiveNames(); } catch(e){}
   }
   /* FRIEND-SUGGEST-HOLO-2026-11-24 (Holo 2026-11-24: "show a drop down suggestion with my agent account if were not already friends… Allow them to x it and not show it again"): when a tester focuses the empty friends search bar, suggest HoloElizabeth (the owner, OWNER_UIDS[0]) so they can add her in one tap. Never for Holo herself, never once friends, never once a request is pending either way, never after dismissal. Dismissal persists BOTH ways: an account-level flag at /users/<uid>/dismissedHoloSuggest (writable by the owner under the live DM rules — /users/$uid .write is self-only) AND an on-device localStorage flag, so the × hides it instantly and on every device. Tapping Add sends a friend request through the existing sendRequest flow (same as the Owner Dash Add friend button). Typing takes over: renderCloudResults replaces the results box, so the suggestion only ever shows on focus while the box is empty. */
   var HOLO_UID = (typeof OWNER_UIDS !== 'undefined' && OWNER_UIDS[0]) || 'wQEvX4fiG6QSDMWaxx20JaQwRPP2';
@@ -25045,7 +25205,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   try { new MutationObserver(function(){ var v = document.body.getAttribute('data-view'); if(v === 'friends' || v === 'inbox'){ buildUI(); refresh(); } }).observe(document.body, { attributes:true, attributeFilter:['data-view'] }); } catch(e){}
   setInterval(function(){ if(myUid()) refresh(); }, 60000);
   setTimeout(function(){ buildUI(); refresh(); }, 2500);
-  window.holoFriends = { refresh:refresh, syncFriendNames:syncFriendNames, sendRequest:sendRequest, acceptRequest:acceptRequest, declineRequest:declineRequest, cancelRequest:cancelRequest, removeCloudFriend:removeCloudFriend, searchCloud:searchCloud, incoming:function(){ return incoming; }, cloudFriends:function(){ return cloudFriends; }, outgoing:function(){ return outgoing; } };
+  setTimeout(function(){ try { refreshOwnGreeting(); } catch(e){} }, 1200); /* CODE-NAME-LIVE-RESOLVE-2026-11-25: greeting patch (see above) */
+  window.holoFriends = { refresh:refresh, syncFriendNames:syncFriendNames, resolveLiveName:resolveLiveName, resolveLiveNameForCode:resolveLiveNameForCode, refreshLiveNames:refreshLiveNames, myName:myName, sendRequest:sendRequest, acceptRequest:acceptRequest, declineRequest:declineRequest, cancelRequest:cancelRequest, removeCloudFriend:removeCloudFriend, searchCloud:searchCloud, incoming:function(){ return incoming; }, cloudFriends:function(){ return cloudFriends; }, outgoing:function(){ return outgoing; } };
 })();
 </script>
 <!-- FRIEND-DMS-2026-11-24 (Holo 12:15): friend-only DMs.
@@ -26515,7 +26676,16 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(sentTimes.length >= RATE_MAX) return false;
     sentTimes.push(now); return true;
   }
-  function oppOf(m, me){ return m.aUid === me ? { uid: m.bUid, name: m.bName } : { uid: m.aUid, name: m.aName }; }
+  function oppOf(m, me){ var o = m.aUid === me ? { uid: m.bUid, name: m.bName } : { uid: m.aUid, name: m.aName }; try { var live = friendName(o.uid); if(live && live !== 'Tester') o.name = live; } catch(e){} return o; }
+  function matchName(m, uid, stored){
+    /* CODE-NAME-LIVE-RESOLVE-2026-11-25: match records store both
+       players' Code Names at challenge time, so a rename after the
+       challenge shows stale in the match view. Prefer the friend's
+       current Code Name from the cloud friends list (kept fresh by
+       the live resolver); fall back to the stored match name. */
+    try { var live = friendName(uid); if(live && live !== 'Tester') return live; } catch(e){}
+    return stored;
+  }
   function markOf(m, uid){ return m.xUid === uid ? 'X' : 'O'; }
   function myTurnCount(){
     var me = myUid(); if(!me) return 0;
@@ -26692,15 +26862,15 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     saveMuted(); render();
   }
   function statusText(m, me){
-    if(m.status === 'waiting') return m.bUid === me ? 'Waiting for you to accept' : 'Waiting for ' + m.bName + ' to accept';
+    if(m.status === 'waiting') return m.bUid === me ? 'Waiting for you to accept' : 'Waiting for ' + matchName(m, m.bUid, m.bName) + ' to accept';
     if(m.status === 'declined') return 'Declined';
     if(m.status === 'draw') return 'Draw';
     if(m.status === 'won'){
-      var w = m.winner === me ? 'You' : (m.winner === m.aUid ? m.aName : m.bName);
+      var w = m.winner === me ? 'You' : (m.winner === m.aUid ? matchName(m, m.aUid, m.aName) : matchName(m, m.bUid, m.bName));
       return w + ' won';
     }
     if(m.turn === me) return 'Your turn';
-    return 'Waiting for ' + (m.turn === m.aUid ? m.aName : m.bName);
+    return 'Waiting for ' + matchName(m, m.turn, m.turn === m.aUid ? m.aName : m.bName);
   }
   function summaryHtml(m, me){
     var board = m.board || [];
@@ -26709,11 +26879,11 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var youMark = markOf(m, me), opp = oppOf(m, me);
     var who = m.status === 'playing' ? (m.turn === me ? 'Your turn' : opp.name + '’s turn') : statusText(m, me);
     /* TTT-XO-2026-11-24: the match view names both players with their marks — the host (challenger) is X, the joiner is O, X moves first; marks never swap mid-match. */
-    return '<p class="turn-summary">' + esc(m.aName) + ' — X · ' + esc(m.bName) + ' — O<br><span class="turn-you">You are ' + youMark + '</span> · X: ' + x + ' · O: ' + o + ' · ' + esc(who) + '</p>';
+    return '<p class="turn-summary">' + esc(matchName(m, m.aUid, m.aName)) + ' — X · ' + esc(matchName(m, m.bUid, m.bName)) + ' — O<br><span class="turn-you">You are ' + youMark + '</span> · X: ' + x + ' · O: ' + o + ' · ' + esc(who) + '</p>';
   }
   function lastMoveHtml(m){
     if(!m.lastMoveAt || m.lastMoveCell == null || m.lastMoveCell < 0) return '';
-    var who = m.lastMoveBy === m.aUid ? m.aName : m.bName;
+    var who = matchName(m, m.lastMoveBy, m.lastMoveBy === m.aUid ? m.aName : m.bName);
     var mark = m.lastMoveBy === m.xUid ? 'X' : 'O';
     return '<p class="turn-lastmove">Last move: ' + esc(who) + ' (' + mark + ') played ' + CELL_NAMES[m.lastMoveCell] + ' at ' + timeShort(m.lastMoveAt) + '</p>';
   }
@@ -26831,8 +27001,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var wins = st.wins || {};
     var myWins = wins[me] || 0, oppWins = wins[opp.uid] || 0;
     var need = st.need || 3, bestOf = st.bestOf || 5, round = st.round || 1;
-    var h = '<div class="turn-board-wrap"><p class="turn-summary">' + esc(m.aName) + ' vs ' + esc(m.bName) + ' — Rock Paper Scissors<br>' + esc(statusText(m, me)) + '</p>' +
-      '<p class="turn-sub">Best of ' + bestOf + ' — first to ' + need + ' round wins · Round ' + round + '<br>' + esc(m.aName) + ' ' + myWins + ' — ' + oppWins + ' ' + esc(m.bName) + '</p>';
+    var h = '<div class="turn-board-wrap"><p class="turn-summary">' + esc(matchName(m, m.aUid, m.aName)) + ' vs ' + esc(matchName(m, m.bUid, m.bName)) + ' — Rock Paper Scissors<br>' + esc(statusText(m, me)) + '</p>' +
+      '<p class="turn-sub">Best of ' + bestOf + ' — first to ' + need + ' round wins · Round ' + round + '<br>' + esc(matchName(m, m.aUid, m.aName)) + ' ' + myWins + ' — ' + oppWins + ' ' + esc(matchName(m, m.bUid, m.bName)) + '</p>';
     if(st.lastResult && st.lastResult.text) h += '<p class="turn-lastmove">' + esc(st.lastResult.text) + '</p>';
     h += '<p class="turn-sub">Play it in Rock Paper Scissors — your match is listed there under Play with a Friend.</p><div class="turn-actions">';
     if(m.status === 'waiting' && m.bUid === me){
@@ -27481,21 +27651,28 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
      endgame row — Rematch, Play a different game, Reset match. The
      room survives an endgame choice (Replay / different game); if
      neither is picked, the room dies via Close room. */
+  function poolMatchName(m, uid, stored){
+    /* CODE-NAME-LIVE-RESOLVE-2026-11-25: see matchName in the turn
+       module — prefer the friend's current Code Name from the cloud
+       friends list (kept fresh by the live resolver). */
+    try { var live = friendName(uid); if(live && live !== 'Tester') return live; } catch(e){}
+    return stored;
+  }
   function poolStatusLine(m, me){
-    if(m.status === 'waiting') return (m.bUid === me) ? 'Challenge from ' + m.aName + ' — accept?' : 'Waiting for ' + m.bName + ' to accept';
+    if(m.status === 'waiting') return (m.bUid === me) ? 'Challenge from ' + poolMatchName(m, m.aUid, m.aName) + ' — accept?' : 'Waiting for ' + poolMatchName(m, m.bUid, m.bName) + ' to accept';
     if(m.status === 'declined') return 'Declined';
     if(m.status === 'draw') return 'Draw';
-    if(m.status === 'left') return ((m.aUid === me) ? m.bName : m.aName) + ' left the match';
+    if(m.status === 'left') return poolMatchName(m, m.aUid === me ? m.bUid : m.aUid, (m.aUid === me) ? m.bName : m.aName) + ' left the match';
     if(m.status === 'won'){
-      var w = m.winner === me ? 'You' : (m.winner === m.aUid ? m.aName : m.bName);
+      var w = m.winner === me ? 'You' : (m.winner === m.aUid ? poolMatchName(m, m.aUid, m.aName) : poolMatchName(m, m.bUid, m.bName));
       return w + ' won';
     }
     if(m.turn === me) return 'Your turn — shoot!';
-    return 'Waiting for ' + (m.turn === m.aUid ? m.aName : m.bName) + '…';
+    return 'Waiting for ' + poolMatchName(m, m.turn, m.turn === m.aUid ? m.aName : m.bName) + '…';
   }
   function poolMatchHtml(mid, m, me){
     var h = '<div class="turn-board-wrap">';
-    h += '<p class="turn-summary">' + esc(m.aName) + ' vs ' + esc(m.bName) + ' — 8-Ball Pool<br><span class="turn-you">' + esc(poolStatusLine(m, me)) + '</span></p>';
+    h += '<p class="turn-summary">' + esc(poolMatchName(m, m.aUid, m.aName)) + ' vs ' + esc(poolMatchName(m, m.bUid, m.bName)) + ' — 8-Ball Pool<br><span class="turn-you">' + esc(poolStatusLine(m, me)) + '</span></p>';
     if(m.lastMoveAt) h += '<p class="turn-lastmove">Last move at ' + timeShort(m.lastMoveAt) + (m.moves ? ' · ' + m.moves + ' shot' + (m.moves === 1 ? '' : 's') : '') + '</p>';
     if(isStuck(m)) h += '<p class="turn-lastmove">Looks stuck — Reset?</p>';
     h += '<div class="turn-actions">';
