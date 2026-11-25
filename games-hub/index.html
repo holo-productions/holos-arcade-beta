@@ -8747,6 +8747,9 @@ setTimeout(function(){
     if(isComingSoon(c)){ soonCount++; if(c.parentNode) c.parentNode.removeChild(c); return false; }
     return true;
   });
+  /* SHOW-200-HIDE-2026-11-25 (Holo 2026-11-25 07:03): staged release — the 15 Nov 23 new games + firefighter-rescue stay hidden until their drop (Drop 1 Fri Nov 27, then weekly Fridays). Releasing a game = deleting its slug from this list. Hidden games never show in the Library, search, filters, GOTD, Shuffle, Recents, Trending or Favourites (a favourite stays stored and reappears on release). Tic Tac Toe stays visible by design. On window so the other hub scripts (GOTD, Favourites, hero count) can use it. */
+  window.HIDDEN_GAMES = { 'sailboat-slalom':1, 'wrestling-bout':1, 'canoe-rapids':1, 'sumo-slam':1, 'top-down-racer':1, 'carnival-fps':1, 'table-tennis':1, 'road-crossing':1, 'foosball':1, 'vending-machine':1, 'escape-kitchen':1, 'archery':1, 'fruit-slice':1, 'slingshot':1, 'cops-and-robbers':1, 'firefighter-rescue':1 };
+  window.isHiddenGame = function(slug){ return !!slug && !!window.HIDDEN_GAMES[slug]; };
   var pills = Array.prototype.slice.call(document.querySelectorAll('.pill[data-filter]'));
   var search = $('search'), empty = $('empty'), filter = 'all';
   function isComingSoon(c){
@@ -8802,7 +8805,7 @@ setTimeout(function(){
     cards.forEach(function(c){ playable[cardSlugOf(c)] = true; });
     trendingData.games.forEach(function(g){
       if(trendingRank.length >= TRENDING_SHOW) return;
-      if(playable[g.slug]) trendingRank.push(g.slug);
+      if(playable[g.slug] && !(window.isHiddenGame && window.isHiddenGame(g.slug))) trendingRank.push(g.slug); /* SHOW-200-HIDE-2026-11-25 */
     });
   }
   function loadTrending(){
@@ -8854,6 +8857,7 @@ setTimeout(function(){
       var show = (filter==='all' || (filter==='recent' ? !!recentSet[cardSlugOf(c)] : filter==='trending' ? !!trendingCounts[cardSlugOf(c)] : cat.indexOf(filter)!==-1)) && (!q || txt.indexOf(q)!==-1);
       if(q && isComingSoon(c)) show = false;
       if(show && age18Hidden && window.holoAge18.isAdultCard(c)) show = false;
+      if(show && window.isHiddenGame && window.isHiddenGame(cardSlugOf(c))) show = false; /* SHOW-200-HIDE-2026-11-25 */
       if(show){
         visible++;
       }
@@ -8887,8 +8891,9 @@ setTimeout(function(){
        finished testing and moved to live (0 until launch). */
     var lc = $('libCount');
     if(lc){
-      /* LIB-COUNT-UNIQUE-2026-11-23: count distinct games, not cards — 5 games sit on two shelves, so the card count runs high (220 cards, 216 games). */
-      var totalGames = (function(){ var seen = {}, n = 0; cards.forEach(function(c){ if(age18Hidden && window.holoAge18.isAdultCard(c)) return; var b = c.querySelector('[data-game]'); var sg = b && b.getAttribute('data-game'); if(!sg || seen[sg]) return; seen[sg] = 1; n++; }); return n; })();
+      /* LIB-COUNT-UNIQUE-2026-11-23: count distinct games, not cards — 5 games sit on two shelves, so the card count runs high (220 cards, 215 games; 200 visible while SHOW-200-HIDE hides the 15 Nov 23 games + firefighter-rescue). */
+      var totalGames = (function(){ var seen = {}, n = 0; cards.forEach(function(c){ if(age18Hidden && window.holoAge18.isAdultCard(c)) return; var b = c.querySelector('[data-game]'); var sg = b && b.getAttribute('data-game'); if(!sg || seen[sg]) return;
+      if(window.isHiddenGame && window.isHiddenGame(sg)) return; /* SHOW-200-HIDE-2026-11-25 */ seen[sg] = 1; n++; }); return n; })();
       var LIVE_GAMES = 0; /* WEREWOLF-BOX3-2026-11-24: "live" = finished testing and moved to live — 0 until launch, by design, so the "· N live so far" suffix only shows once N > 0 and the line never reads "0 live so far" while everything is still in the Lab. */
       lc.textContent = (!q && filter === 'all')
         ? ('🧪 ' + totalGames + (totalGames === 1 ? ' game' : ' games') + ' in the Glitch Lab' + (LIVE_GAMES > 0 ? ' · 🚀 ' + LIVE_GAMES + ' live so far' : ''))
@@ -9201,6 +9206,8 @@ setTimeout(function(){
     var live = ['trivia','werewolf','madcow','dj','poker','solitaire'].concat(Object.keys(NEW_GAMES));
     /* AGE18-2026-11-23: Shuffle never lands on a hidden 18+ game. */
     if(window.holoAge18 && !window.holoAge18.adultGamesVisible()) live = live.filter(function(s){ return !window.holoAge18.isAdultSlug(s); });
+    /* SHOW-200-HIDE-2026-11-25: Shuffle never lands on a hidden staged-release game. */
+    if(window.isHiddenGame) live = live.filter(function(s){ return !window.isHiddenGame(s); });
     /* DAILY-DEVICE-2026-11-24: on a phone/tablet, Shuffle never lands
        on a game that needs a desktop. */
     try { if(window.holoDaily && window.holoDaily.isTouchDevice()) live = live.filter(function(s){ return !window.holoDaily.phoneBlocked(s); }); } catch(e){}
@@ -12285,8 +12292,7 @@ window.holoDaily = (function(){
      need a desktop: keyboard-only movement with no touch alternative,
      or mouse-move-only aiming. A game lands here only after a real
      phone check, never on suspicion. EMPTY today — the 2026-11-24
-     audit of all 215 games (180 standalone + 10 extra folders +
-     9 hub-native + 8 duels) found every game phone-playable
+     audit of all 216 games found every game phone-playable
      (tap/click/pointer controls; the one suspect, bubble-pop-bay,
      aims + shoots on tap). Daily picks, challenge targets, Shuffle
      and the weekly tournament never send a phone/tablet tester to a
@@ -12620,6 +12626,7 @@ window.holoDaily = (function(){
   function untestedGotdPool(){
     var pool = GOTD_GAMES.filter(function(g){ return !window.holoDaily.isTested(g.id); });
     if(window.holoDaily.adultHidden()) pool = pool.filter(function(g){ return !window.holoDaily.isAdultSlug(g.id); });
+    if(window.isHiddenGame) pool = pool.filter(function(g){ return !window.isHiddenGame(g.id); }); /* SHOW-200-HIDE-2026-11-25 */
     /* DAILY-DEVICE-2026-11-24: on a phone/tablet, never pick a game
        that needs a desktop. Same filter on the fallback so the
        fallback cannot reintroduce a blocked game; last resort is
@@ -12630,8 +12637,10 @@ window.holoDaily = (function(){
          fall back to the whole list, 18+ filter still applied. */
       pool = GOTD_GAMES.slice();
       if(window.holoDaily.adultHidden()) pool = pool.filter(function(g){ return !window.holoDaily.isAdultSlug(g.id); });
+    if(window.isHiddenGame) pool = pool.filter(function(g){ return !window.isHiddenGame(g.id); }); /* SHOW-200-HIDE-2026-11-25 */
       if(window.holoDaily.isTouchDevice()) pool = pool.filter(function(g){ return !window.holoDaily.phoneBlocked(g.id); });
       if(!pool.length) pool = GOTD_GAMES.slice();
+      if(window.isHiddenGame) pool = pool.filter(function(g){ return !window.isHiddenGame(g.id); }); /* SHOW-200-HIDE-2026-11-25 */
     }
     return pool;
   }
@@ -12642,6 +12651,7 @@ window.holoDaily = (function(){
   function pickGameFor(dayNum, prevPick){
     var pool = untestedGotdPool();
     if(!pool.length) pool = GOTD_GAMES.slice();
+    if(window.isHiddenGame) pool = pool.filter(function(g){ return !window.isHiddenGame(g.id); }); /* SHOW-200-HIDE-2026-11-25 */
     var idx = seededGotdIndex(dayNum, pool.length);
     var pick = pool[idx];
     /* No repeat of yesterday's pick, and no same-genre two days
@@ -12671,6 +12681,8 @@ window.holoDaily = (function(){
       var guard = 0;
       while(window.holoAge18.isAdultSlug(game.id) && guard++ < GOTD_GAMES.length){ idx = (idx + 1) % GOTD_GAMES.length; game = GOTD_GAMES[idx]; }
     }
+    /* SHOW-200-HIDE-2026-11-25: a hidden game can never be Game of the Day (backstop — the pool above already filters hidden games). */
+    if(window.isHiddenGame){ var hguard = 0; while(window.isHiddenGame(game.id) && hguard++ < GOTD_GAMES.length){ idx = (idx + 1) % GOTD_GAMES.length; game = GOTD_GAMES[idx]; } }
     $('gotdIcon').textContent = ''; /* NO-TILE-EMOJI-2026-11-22 */
     $('gotdName').textContent = game.name;
     var li = $('libGotdIcon'); if(li) li.textContent = ''; /* NO-TILE-EMOJI-2026-11-22 */
@@ -14421,7 +14433,7 @@ window.holoDaily = (function(){
     // Count the game cards on the shelves — a few games sit on two
     // shelves (e.g. Sudoku in Puzzles and in the puzzle books lane),
     // so counting unique slugs would under-report the shelf total.
-    var n = document.querySelectorAll('.game-card').length;
+    var n = 0; document.querySelectorAll('.game-card').forEach(function(c){ var b = c.querySelector('[data-game]'); var sg = b && b.getAttribute('data-game'); if(window.isHiddenGame && window.isHiddenGame(sg)) return; n++; }); /* SHOW-200-HIDE-2026-11-25: hidden games never count */
     var el = $('heroGameCount'); if(el && n) el.textContent = n;
   })();
 
@@ -18207,7 +18219,7 @@ function renderTesterAuth(){
   function renderFavorites(){
     var favs = favLoad();
     /* AGE18-2026-11-23: hidden 18+ games never list in Favourites. */
-    var slugs = Object.keys(favs).filter(function(s){ return !(window.holoAge18 && window.holoAge18.isAdultSlug(s) && !window.holoAge18.adultGamesVisible()); });
+    var slugs = Object.keys(favs).filter(function(s){ return !(window.holoAge18 && window.holoAge18.isAdultSlug(s) && !window.holoAge18.adultGamesVisible()) && !(window.isHiddenGame && window.isHiddenGame(s)); }); /* SHOW-200-HIDE-2026-11-25 */
     document.querySelectorAll('.fav-btn').forEach(function(btn){
       var on = !!favs[btn.getAttribute('data-fav-slug')];
       btn.setAttribute('aria-pressed', on ? 'true' : 'false');
