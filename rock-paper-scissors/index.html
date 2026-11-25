@@ -320,89 +320,133 @@ a{color:var(--ha-cyan)}
 @keyframes haCoinBlink{50%{opacity:.25}}
 .insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
 @media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+
+/* ROCK-PAPER-SCISSORS-2026-11-24: menu screen, drawn hands, friend
+   panel, fit-to-size play (no scroll while playing). */
+html,body{min-height:100%}
+body{display:flex;flex-direction:column}
+.wrap{max-width:560px;width:100%;margin:0 auto;padding:14px 14px 30px;flex:1;display:flex;flex-direction:column;justify-content:center}
+.menu-title{text-align:center;font-weight:700;color:#4cc9f0;margin-bottom:10px}
+.big-play{font-size:16px;padding:14px 34px;min-height:52px}
+.choice .hand{display:block;margin-bottom:6px}
+.choice .hand svg{width:64px;height:64px}
+.choice{min-height:104px}
+.reveal .big svg{width:72px;height:72px}
+.reveal .big{font-size:52px;display:block;min-height:76px}
+#passPhone svg{width:44px;height:44px}
+.friend-row{display:flex;justify-content:space-between;align-items:center;gap:8px;background:#2a1a42;border:2px solid #3a2554;border-radius:8px;padding:8px 10px;margin:8px 0}
+.friend-row b{display:block}
+.friend-row span{font-size:12px;color:#c9b8ff}
+.friend-row div:last-child{display:flex;gap:6px;flex-wrap:wrap}
+.friend-row button{padding:8px 10px;font-size:13px}
+@media (max-width:480px){ .choice .hand svg{width:56px;height:56px} .choice{min-height:96px} }
+
 </style>
 </head>
 <body>
+<!-- ROCK-PAPER-SCISSORS-2026-11-24 -->
 <div class="wrap">
   <a class="back" href="../games-hub/">&lt; Back to Games Hub</a>
   <h1>ROCK PAPER SCISSORS</h1>
   <div class="sub">Best Of Showdown - Holo's Arcade</div>
 
-  <div class="bar">
-    <button id="mode2p" class="active">2 Players</button>
-    <button id="modeCpu">vs Computer</button>
+  <!-- Menu screen: pick a mode, then hit Play. -->
+  <div class="card" id="menuScreen">
+    <div class="menu-title">Choose how to play</div>
+    <div class="bar">
+      <button id="modeCpu" class="active" type="button">vs Computer</button>
+      <button id="mode2p" type="button">2 Players</button>
+      <button id="modeFriend" type="button">Play with a Friend</button>
+    </div>
+    <div class="bar">
+      <label>Best of
+        <select id="bestOfSel">
+          <option value="3">3</option>
+          <option value="5" selected>5</option>
+          <option value="7">7</option>
+        </select>
+      </label>
+      <button id="lsToggle" type="button">Lizard-Spock: OFF</button>
+    </div>
+    <div class="bar"><button id="btnPlay" class="primary big-play" type="button">Play</button></div>
+    <div class="bar">
+      <button id="btnTutorial" class="blue" type="button">How to play</button>
+      <button id="btnRules" class="blue" type="button">Rules</button>
+      <button id="btnFeedback" class="blue" type="button">Feedback</button>
+    </div>
+    <p class="small">Best of 5 — first to 3 wins the match. Draws replay. Friend matches are turn-based: pick in secret, your friend picks back whenever they like.</p>
   </div>
-  <div class="bar">
-    <label>Best of
-      <select id="bestOfSel">
-        <option value="3">3</option>
-        <option value="5" selected>5</option>
-        <option value="7">7</option>
-      </select>
-    </label>
-    <button id="lsToggle">Lizard-Spock: OFF</button>
-  </div>
-  <div class="bar">
-    <button id="btnTutorial" class="blue">How to play</button>
-    <button id="btnRules" class="blue">Rules</button>
-    <button id="btnFeedback" class="blue">Feedback</button>
-    <button id="btnRestart">Restart</button>
+
+  <!-- Game screen -->
+  <div id="gameScreen" style="display:none;">
+    <div class="bar">
+      <button id="btnRestart" type="button">Restart</button>
+    </div>
+
+    <div class="card">
+      <div class="score">
+        <div id="scP1"><span id="nameP1">You</span><b id="winsP1">0</b><span class="small">round wins</span></div>
+        <div><span>Draws</span><b id="draws">0</b><span class="small">this match</span></div>
+        <div id="scP2"><span id="nameP2">Computer</span><b id="winsP2">0</b><span class="small">round wins</span></div>
+      </div>
+      <div class="small" style="margin-top:8px;" id="matchLine">First to 3 wins the match (Best of 5)</div>
+      <div class="small" id="allTimeLine">Matches won all time: You: 0 - Computer: 0</div>
+    </div>
+
+    <div class="card" id="gameCard">
+      <div class="turn" id="turnText">Your turn — pick in secret</div>
+
+      <div id="pickArea">
+        <div class="choices" id="choices"></div>
+        <div class="small">Your pick stays hidden until the reveal.</div>
+      </div>
+
+      <div id="passArea" class="pass" style="display:none;">
+        <div class="big"><span id="passPhone"></span></div>
+        <p id="passText">Pass the phone to Player 2</p>
+        <p class="small">Player 1 pick is locked and hidden.</p>
+        <button id="btnPassReady" class="primary" type="button">I am Player 2 - Ready</button>
+      </div>
+
+      <div id="revealArea" style="display:none;">
+        <div class="reveal">
+          <div class="side"><span class="lbl" id="revName1">You</span><span class="big" id="revHand1">?</span><span id="revTxt1"></span></div>
+          <div style="font-size:20px;color:#ff6ec7;">VS</div>
+          <div class="side"><span class="lbl" id="revName2">Computer</span><span class="big" id="revHand2">?</span><span id="revTxt2"></span></div>
+        </div>
+        <div class="msg" id="roundMsg"></div>
+        <div class="bar"><button id="btnNext" class="primary" type="button">Next Round</button></div>
+      </div>
+
+      <div id="endArea" style="display:none;text-align:center;">
+        <div class="msg" id="endMsg" style="font-size:20px;color:#ff6ec7;"></div>
+        <div class="bar"><button id="btnRematch" class="primary" type="button">Play again</button><button id="btnMainMenu" type="button">Main menu</button></div>
+      </div>
+    </div>
+
+    <div class="card" id="friendPanel" style="display:none;">
+      <div style="font-weight:bold;color:#4cc9f0;margin-bottom:6px;">Play with a Friend</div>
+      <div class="small" id="friendStatus">Turn-based, no live server needed — pick in secret, your friend picks back whenever they like. Code names only, friends only.</div>
+      <div id="friendMatchBar" style="display:none;margin-top:10px;"></div>
+      <div id="friendList" style="margin-top:10px;"></div>
+      <div id="friendMatches" style="margin-top:10px;"></div>
+    </div>
   </div>
 
   <div class="card fb" id="fbCard">
     <div style="margin-bottom:8px;">Send feedback</div>
     <textarea id="fbText" placeholder="What did you think?"></textarea>
-    <div class="bar"><button id="fbSend" class="primary">Send Feedback</button></div>
+    <div class="bar"><button id="fbSend" class="primary" type="button">Send Feedback</button></div>
     <div class="small" id="fbMsg"></div>
   </div>
-
-  <div class="card">
-    <div class="score">
-      <div id="scP1"><span id="nameP1">Player 1</span><b id="winsP1">0</b><span class="small">round wins</span></div>
-      <div><span>Draws</span><b id="draws">0</b><span class="small">this match</span></div>
-      <div id="scP2"><span id="nameP2">Player 2</span><b id="winsP2">0</b><span class="small">round wins</span></div>
-    </div>
-    <div class="small" style="margin-top:8px;" id="matchLine">First to 3 wins the match (Best of 5)</div>
-    <div class="small" id="allTimeLine">Matches won all time: Player 1: 0 - Player 2: 0</div>
-  </div>
-
-  <div class="card" id="gameCard">
-    <div class="turn" id="turnText">Player 1, pick in secret</div>
-
-    <div id="pickArea">
-      <div class="choices" id="choices"></div>
-      <div class="small">Your pick stays hidden until the reveal.</div>
-    </div>
-
-    <div id="passArea" class="pass" style="display:none;">
-      <div class="big">&#128241;</div>
-      <p id="passText">Pass the phone to Player 2</p>
-      <p class="small">Player 1 pick is locked and hidden.</p>
-      <button id="btnPassReady" class="primary">I am Player 2 - Ready</button>
-    </div>
-
-    <div id="revealArea" style="display:none;">
-      <div class="reveal">
-        <div class="side"><span class="lbl" id="revName1">Player 1</span><span class="big" id="revIco1">?</span><span id="revTxt1"></span></div>
-        <div style="font-size:20px;color:#ff6ec7;">VS</div>
-        <div class="side"><span class="lbl" id="revName2">Player 2</span><span class="big" id="revIco2">?</span><span id="revTxt2"></span></div>
-      </div>
-      <div class="msg" id="roundMsg"></div>
-      <div class="bar"><button id="btnNext" class="primary">Next Round</button></div>
-    </div>
-
-    <div id="endArea" style="display:none;text-align:center;">
-      <div class="msg" id="endMsg" style="font-size:20px;color:#ff6ec7;"></div>
-      <div class="bar"><button id="btnRematch" class="primary">Rematch</button></div>
-    </div>
-  </div>
 </div>
+
 
 <div class="overlay" id="tutorialOverlay">
   <div class="sheet">
     <h2>How to play</h2>
 <div class="vtut-grid">
-<div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#ff5fa2" stroke="#db2777" stroke-width="2" stroke-linejoin="round"><path d="M16 10l22 14-22 14z"/></svg></div><b>Pick mode</b><p>2 Players on one phone, or vs Computer.</p></div>
+<div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#ff5fa2" stroke="#db2777" stroke-width="2" stroke-linejoin="round"><path d="M16 10l22 14-22 14z"/></svg></div><b>Pick mode</b><p>2 Players on one phone, vs Computer, or Play with a Friend.</p></div>
 <div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"><path d="M14 8h20v10a10 10 0 0 1-20 0zM14 12H8a6 6 0 0 0 6 6M34 12h6a6 6 0 0 1-6 6M24 28v6M16 40h16M20 34h8v6h-8z"/></svg></div><b>Best of</b><p>Best of 3, 5 or 7. Majority wins.</p></div>
 <div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#a78bfa" stroke-width="3"><path d="M4 24S12 10 24 10s20 14 20 14-8 14-20 14S4 24 4 24z"/><circle cx="24" cy="24" r="6"/></svg></div><b>Secret pick</b><p>Player 1 picks in secret. Pick stays hidden.</p></div>
 <div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#a78bfa" stroke-width="3" stroke-linecap="round"><rect x="15" y="5" width="18" height="38" rx="4"/><path d="M21 37h6"/></svg></div><b>Pass phone</b><p>Pass to Player 2. Tap Ready, then pick.</p></div>
@@ -432,8 +476,25 @@ a{color:var(--ha-cyan)}
   </div>
 </div>
 
+
 <script>
 "use strict";
+/* ROCK-PAPER-SCISSORS-2026-11-24: drawn hand art (no emoji), menu
+   screen with Play button, Play again + Main menu end screen, and
+   Play with a Friend — turn-based multiplayer on the same
+   /turnMatches protocol as Tic Tac Toe and 8-ball pool.
+   Friend matches: best of 5, first to 3 round wins. Each player
+   picks in secret; the turn passes automatically when a pick is
+   made (TURN-AUTO-PASS-2026-11-24 — no Send button). When both
+   picks are in, the round resolves and the next round starts with
+   the other player picking first. Match survives reload
+   (localStorage rps_friend_match + ?match=<mid>).
+   RULES GATE: the live /turnMatches rules only allow game
+   'tic-tac-toe' and '8-ball-pool' — Holo must publish
+   firebase-rules-turnmatches-rps-update-2026-11-24.md before any
+   friend match can be created live. Until then every cloud call
+   fails soft with a plain message, and solo play is unaffected.
+   Code names only in every match UI. Beta friends only. */
 var CLASSIC = ["rock","paper","scissors"];
 var EXTENDED = ["rock","paper","scissors","lizard","spock"];
 var BEATS = {
@@ -443,8 +504,16 @@ var BEATS = {
   lizard: ["spock","paper"],
   spock: ["scissors","rock"]
 };
-var ICONS = { rock:"\u270A", paper:"\u270B", scissors:"\u270C\uFE0F", lizard:"\uD83E\uDD8E", spock:"\uD83D\uDD96" };
 var LABELS = { rock:"Rock", paper:"Paper", scissors:"Scissors", lizard:"Lizard", spock:"Spock" };
+/* Drawn hands (SVG, Arcade palette) — no emoji anywhere in the game. */
+var HAND_SVG = {
+  rock: '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#ffb020" stroke="#b45309" stroke-width="2.5" stroke-linejoin="round"><circle cx="18" cy="22" r="6"/><circle cx="28" cy="20" r="6"/><circle cx="38" cy="20" r="6"/><circle cx="48" cy="22" r="6"/><rect x="12" y="24" width="40" height="28" rx="10"/><ellipse cx="24" cy="46" rx="11" ry="5" transform="rotate(-18 24 46)"/></g></svg>',
+  paper: '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#38e1ff" stroke="#0e7490" stroke-width="2.5" stroke-linejoin="round"><rect x="16" y="6" width="7" height="26" rx="3.5"/><rect x="25" y="4" width="7" height="28" rx="3.5"/><rect x="34" y="4" width="7" height="28" rx="3.5"/><rect x="43" y="6" width="7" height="26" rx="3.5"/><rect x="16" y="28" width="32" height="24" rx="9"/><rect x="44" y="30" width="14" height="7" rx="3.5" transform="rotate(35 46 34)"/></g></svg>',
+  scissors: '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#ff3ec8" stroke="#be185d" stroke-width="2.5" stroke-linejoin="round"><rect x="13" y="6" width="8" height="28" rx="4" transform="rotate(-18 17 32)"/><rect x="37" y="6" width="8" height="28" rx="4" transform="rotate(18 41 32)"/><rect x="18" y="30" width="28" height="22" rx="9"/><circle cx="34" cy="46" r="4"/><circle cx="44" cy="46" r="4"/><ellipse cx="22" cy="46" rx="8" ry="4" transform="rotate(-15 22 46)"/></g></svg>',
+  lizard: '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#4ade80" stroke="#166534" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 38 Q8 40 6 30" fill="none"/><ellipse cx="32" cy="38" rx="16" ry="8"/><circle cx="50" cy="34" r="7"/><circle cx="52" cy="32" r="1.8" fill="#14532d" stroke="none"/><path d="M22 44 L18 52 M30 46 L28 54 M38 46 L40 54 M46 44 L50 52" fill="none"/></g></svg>',
+  spock: '<svg viewBox="0 0 64 64" aria-hidden="true"><g fill="#8b5cff" stroke="#5b21b6" stroke-width="2.5" stroke-linejoin="round"><rect x="15" y="6" width="7" height="26" rx="3.5" transform="rotate(-12 19 30)"/><rect x="25" y="6" width="7" height="26" rx="3.5" transform="rotate(-12 29 30)"/><rect x="34" y="6" width="7" height="26" rx="3.5" transform="rotate(12 38 30)"/><rect x="44" y="6" width="7" height="26" rx="3.5" transform="rotate(12 48 30)"/><rect x="16" y="28" width="32" height="24" rx="9"/><rect x="46" y="30" width="13" height="7" rx="3.5" transform="rotate(35 47 34)"/></g></svg>'
+};
+var PHONE_SVG = '<svg viewBox="0 0 48 48" aria-hidden="true" style="width:44px;height:44px"><g fill="none" stroke="#a78bfa" stroke-width="3" stroke-linecap="round"><rect x="15" y="5" width="18" height="38" rx="4"/><path d="M21 37h6"/></g></svg>';
 
 function determineWinner(a, b) {
   if (a === b) return 0;
@@ -460,12 +529,12 @@ if (typeof module !== "undefined" && module.exports) {
 
 if (typeof document !== "undefined" && document.getElementById && document.getElementById("choices")) {
   var state = {
-    mode: "2p",
+    mode: "cpu",
     bestOf: 5,
     lizardSpock: false,
     wins1: 0, wins2: 0, draws: 0,
     pick1: null, pick2: null,
-    phase: "p1"
+    phase: "menu"
   };
   var allTime = { p1:0, p2:0 };
   try {
@@ -475,8 +544,15 @@ if (typeof document !== "undefined" && document.getElementById && document.getEl
 
   function $(id){ return document.getElementById(id); }
   function choicesList(){ return state.lizardSpock ? EXTENDED : CLASSIC; }
-  function name1(){ return "Player 1"; }
-  function name2(){ return state.mode === "cpu" ? "Computer" : "Player 2"; }
+  function isFriendMode(){ return state.mode === "friend"; }
+  function name1(){
+    if (isFriendMode() && rpsMatch) return rpsMySeatName();
+    return state.mode === "cpu" ? "You" : "Player 1";
+  }
+  function name2(){
+    if (isFriendMode() && rpsMatch) return rpsOtherName(rpsMatch, rpsUid());
+    return state.mode === "cpu" ? "Computer" : "Player 2";
+  }
   function saveAllTime(){ try { localStorage.setItem("rps-match-score", JSON.stringify(allTime)); } catch(e){} }
 
   function renderScore() {
@@ -485,10 +561,15 @@ if (typeof document !== "undefined" && document.getElementById && document.getEl
     $("draws").textContent = state.draws;
     $("nameP1").textContent = name1();
     $("nameP2").textContent = name2();
-    $("matchLine").textContent = "First to " + winsNeeded(state.bestOf) + " wins the match (Best of " + state.bestOf + ")";
-    $("allTimeLine").textContent = "Matches won all time: " + name1() + ": " + allTime.p1 + " - " + name2() + ": " + allTime.p2;
-    $("scP1").className = state.phase === "p1" ? "hl" : "";
-    $("scP2").className = state.phase === "p2" ? "hl" : "";
+    if (isFriendMode()) {
+      $("matchLine").textContent = "First to 3 round wins takes the match (Best of 5)";
+      $("allTimeLine").textContent = rpsMatch ? ("Friend match — round " + (rpsMatch.state.round || 1) + " of the match") : "";
+    } else {
+      $("matchLine").textContent = "First to " + winsNeeded(state.bestOf) + " wins the match (Best of " + state.bestOf + ")";
+      $("allTimeLine").textContent = "Matches won all time: " + name1() + ": " + allTime.p1 + " - " + name2() + ": " + allTime.p2;
+    }
+    $("scP1").className = (state.phase === "p1") ? "hl" : "";
+    $("scP2").className = (state.phase === "p2") ? "hl" : "";
   }
 
   function renderChoices() {
@@ -498,19 +579,36 @@ if (typeof document !== "undefined" && document.getElementById && document.getEl
     choicesList().forEach(function(c){
       var b = document.createElement("button");
       b.className = "choice";
-      b.innerHTML = "<span class='ico'>" + ICONS[c] + "</span>" + LABELS[c];
+      b.setAttribute("type", "button");
+      b.innerHTML = "<span class='hand'>" + HAND_SVG[c] + "</span>" + LABELS[c];
       b.addEventListener("click", function(){ onPick(c); });
       box.appendChild(b);
     });
   }
 
   function showPhase() {
-    $("pickArea").style.display = (state.phase === "p1" || state.phase === "p2") ? "block" : "none";
+    var inGame = (state.phase !== "menu");
+    $("menuScreen").style.display = inGame ? "none" : "block";
+    $("gameScreen").style.display = inGame ? "block" : "none";
+    $("friendPanel").style.display = (isFriendMode() && inGame) ? "block" : "none";
+    if (!inGame) { renderScore(); return; }
+    var showPick = (state.phase === "p1" || state.phase === "p2");
+    if (isFriendMode() && state.phase === "p2") showPick = false;
+    $("pickArea").style.display = showPick ? "block" : "none";
     $("passArea").style.display = state.phase === "pass" ? "block" : "none";
     $("revealArea").style.display = state.phase === "reveal" ? "block" : "none";
     $("endArea").style.display = state.phase === "end" ? "block" : "none";
-    if (state.phase === "p1") $("turnText").textContent = name1() + ", pick in secret";
-    else if (state.phase === "p2") $("turnText").textContent = name2() + ", pick in secret";
+    if (isFriendMode() && rpsMatch) {
+      var mm = rpsMatch, me = rpsUid();
+      if (mm.status === "waiting") $("turnText").textContent = mm.aUid===me ? "Waiting for your friend to accept…" : "Your friend challenged you — accept below to play.";
+      else if (mm.status === "won") $("turnText").textContent = "Match over";
+      else if (state.phase === "p1") $("turnText").textContent = "Your turn — pick in secret";
+      else if (state.phase === "p2") $("turnText").textContent = (mm.state&&mm.state.picks&&mm.state.picks[me]) ? "Pick locked in — waiting for "+rpsOtherName(mm,me)+"…" : "Waiting for your friend to pick…";
+      else if (state.phase === "reveal") $("turnText").textContent = "Reveal";
+      else if (state.phase === "end") $("turnText").textContent = "Match over";
+    }
+    else if (state.phase === "p1") $("turnText").textContent = state.mode === "cpu" ? "Your turn — pick in secret" : name1() + ", pick in secret";
+    else if (state.phase === "p2") $("turnText").textContent = isFriendMode() ? "Waiting for your friend to pick…" : name2() + ", pick in secret";
     else if (state.phase === "pass") $("turnText").textContent = "Pass the phone";
     else if (state.phase === "reveal") $("turnText").textContent = "Reveal";
     else if (state.phase === "end") $("turnText").textContent = "Match over";
@@ -518,7 +616,14 @@ if (typeof document !== "undefined" && document.getElementById && document.getEl
     renderChoices();
   }
 
+  function showMenu() {
+    if (isFriendMode()) rpsStopPoll();
+    state.phase = "menu";
+    showPhase();
+  }
+
   function onPick(c) {
+    if (isFriendMode()) { rpsPick(c); return; }
     if (state.phase === "p1") {
       state.pick1 = c;
       if (state.mode === "cpu") {
@@ -544,12 +649,12 @@ if (typeof document !== "undefined" && document.getElementById && document.getEl
     else state.draws++;
     $("revName1").textContent = name1();
     $("revName2").textContent = name2();
-    $("revIco1").textContent = ICONS[state.pick1];
-    $("revIco2").textContent = ICONS[state.pick2];
+    $("revHand1").innerHTML = HAND_SVG[state.pick1];
+    $("revHand2").innerHTML = HAND_SVG[state.pick2];
     $("revTxt1").textContent = LABELS[state.pick1];
     $("revTxt2").textContent = LABELS[state.pick2];
-    $("revIco1").className = "big pop shake";
-    $("revIco2").className = "big pop shake";
+    $("revHand1").className = "big pop shake";
+    $("revHand2").className = "big pop shake";
     if (w === 0) $("roundMsg").textContent = "Draw. No point. Go again.";
     else if (w === 1) $("roundMsg").textContent = LABELS[state.pick1] + " beats " + LABELS[state.pick2] + ". " + name1() + " wins the round.";
     else $("roundMsg").textContent = LABELS[state.pick2] + " beats " + LABELS[state.pick1] + ". " + name2() + " wins the round.";
@@ -575,14 +680,416 @@ if (typeof document !== "undefined" && document.getElementById && document.getEl
     showPhase();
   }
 
-  $("mode2p").addEventListener("click", function(){ state.mode="2p"; $("mode2p").className="active"; $("modeCpu").className=""; restart(); });
-  $("modeCpu").addEventListener("click", function(){ state.mode="cpu"; $("modeCpu").className="active"; $("mode2p").className=""; restart(); });
-  $("bestOfSel").addEventListener("change", function(){ state.bestOf = parseInt(this.value,10); restart(); });
-  $("lsToggle").addEventListener("click", function(){ state.lizardSpock = !state.lizardSpock; this.textContent = "Lizard-Spock: " + (state.lizardSpock ? "ON" : "OFF"); this.className = state.lizardSpock ? "active" : ""; restart(); });
+  function startGame() {
+    if (isFriendMode()) { rpsEnterFriend(); return; }
+    restart();
+  }
+
+  function setMode(m) {
+    state.mode = m;
+    ["modeCpu","mode2p","modeFriend"].forEach(function(id){ $(id).className = ""; });
+    $(m === "cpu" ? "modeCpu" : m === "2p" ? "mode2p" : "modeFriend").className = "active";
+  }
+
+  /* ---------- Play with a Friend (turn-based, same protocol as pool) ---------- */
+  var FB_RTDB = "https://holos-arcade-default-rtdb.firebaseio.com";
+  var FB_API_KEY = "AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak";
+  var AUTH_KEY = "holos-firebase-auth";
+  var GAME = "rock-paper-scissors";
+  var POLL_MS = 4000;
+  var LS_MATCH = "rps_friend_match";
+  var rpsMatch = null, rpsMid = null, rpsPollTimer = null, rpsMatchList = {};
+  var rpsSeenMoves = -1, rpsSeenUpdated = 0, rpsBusy = false;
+
+  function rpsAuth(){ try{ var v=JSON.parse(localStorage.getItem(AUTH_KEY)||"null"); if(v&&v.idToken&&v.uid) return v; }catch(e){} return null; }
+  function rpsUid(){ var a=rpsAuth(); return a?a.uid:null; }
+  function rpsFreshToken(){
+    var a=rpsAuth(); if(!a) return Promise.resolve(null);
+    if(a.exp&&a.exp>Date.now()+60000) return Promise.resolve(a.idToken);
+    if(!a.refreshToken) return Promise.resolve(null);
+    return fetch("https://securetoken.googleapis.com/v1/token?key="+FB_API_KEY,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"grant_type=refresh_token&refresh_token="+encodeURIComponent(a.refreshToken)})
+      .then(function(r){return r.json();})
+      .then(function(j){ if(j&&j.id_token){ a.idToken=j.id_token; a.refreshToken=j.refresh_token||a.refreshToken; a.exp=Date.now()+((parseInt(j.expires_in,10)||3600)*1000); try{localStorage.setItem(AUTH_KEY,JSON.stringify(a));}catch(e){} return a.idToken; } return null; })
+      .catch(function(){return null;});
+  }
+  function rpsApi(method,path,body){
+    return rpsFreshToken().then(function(tok){
+      if(!tok) return null;
+      var opts={method:method,headers:{"Content-Type":"application/json"}};
+      if(body!==undefined) opts.body=JSON.stringify(body);
+      return fetch(FB_RTDB+path+".json?auth="+encodeURIComponent(tok),opts)
+        .then(function(r){ return r.ok?r.json().catch(function(){return true;}):null; })
+        .catch(function(){return null;});
+    }).catch(function(){return null;});
+  }
+  function rpsEsc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  var rpsNameCache = null;
+  function rpsMyName(){
+    if(rpsNameCache) return Promise.resolve(rpsNameCache);
+    var uid=rpsUid(); if(!uid) return Promise.resolve("A tester");
+    return rpsApi("GET","/users/"+encodeURIComponent(uid)).then(function(u){
+      var n=(u&&(u.username||u.name))?String(u.username||u.name):"A tester";
+      rpsNameCache=n; return n;
+    });
+  }
+  function rpsNotice(toUid,notice){
+    if(!toUid||!notice) return Promise.resolve(null);
+    var body={type:String(notice.type||"system").slice(0,40),title:String(notice.title||"").slice(0,120),body:String(notice.body||"").slice(0,600),createdAt:Date.now(),read:false};
+    if(notice.link) body.link=String(notice.link).slice(0,120);
+    if(notice.fromName) body.fromName=String(notice.fromName).slice(0,60);
+    if(notice.fromUid) body.fromUid=String(notice.fromUid).slice(0,80);
+    return rpsApi("POST","/users/"+encodeURIComponent(toUid)+"/notifications",body);
+  }
+  function rpsOtherUid(m,me){ if(!m) return null; return m.aUid===me?m.bUid:m.aUid; }
+  function rpsOtherName(m,me){ if(!m) return "Tester"; return m.aUid===me?(m.bName||"Tester"):(m.aName||"Tester"); }
+  function rpsMySeatName(){ if(!rpsMatch) return "You"; var me=rpsUid(); return me===rpsMatch.aUid?(rpsMatch.aName||"You"):(rpsMatch.bName||"You"); }
+  function rpsSetStatus(html){ var el=$("friendStatus"); if(el) el.innerHTML=html; }
+  function rpsRulesPending(){ rpsSetStatus("Friend matches need one more Arcade update — the new rules publish is still pending. Solo play still works."); }
+
+  function rpsEnterFriend(){
+    state.phase = "p1";
+    showPhase();
+    rpsRenderPanel();
+    var q = null;
+    try { q = new URLSearchParams(window.location.search).get("match"); } catch(e){}
+    if (q) { rpsOpenMatch(q); return; }
+    try { var saved = localStorage.getItem(LS_MATCH); if (saved) rpsOpenMatch(saved); } catch(e){}
+  }
+
+  function rpsRenderPanel(){
+    var me = rpsUid();
+    var fl = $("friendList"), ml = $("friendMatches");
+    if(!me){ rpsSetStatus("Sign in to play with a friend."); if(fl) fl.innerHTML=""; if(ml) ml.innerHTML=""; return; }
+    rpsSetStatus("Turn-based, no live server needed — pick in secret, your friend picks back whenever they like. Code names only, friends only.");
+    rpsApi("GET","/friends/"+encodeURIComponent(me)).then(function(fr){
+      var cache=(fr&&typeof fr==="object")?fr:{};
+      var keys=Object.keys(cache);
+      fl.innerHTML=keys.length?keys.map(function(uid){
+        var nm=(cache[uid]&&cache[uid].name)||"Tester";
+        return '<div class="friend-row"><b>'+rpsEsc(nm)+'</b><button type="button" data-rps-challenge="'+rpsEsc(uid)+'" data-rps-name="'+rpsEsc(nm)+'">Challenge</button></div>';
+      }).join(""):'<p class="small">No friends yet — add a friend in the Arcade first, then challenge them here.</p>';
+      fl.querySelectorAll("[data-rps-challenge]").forEach(function(b){
+        b.addEventListener("click",function(){ rpsChallenge(b.getAttribute("data-rps-challenge"),b.getAttribute("data-rps-name")); });
+      });
+    });
+    rpsLoadMyMatches().then(function(){
+      var mids=Object.keys(rpsMatchList).sort(function(a,b){ return (rpsMatchList[b].updatedAt||0)-(rpsMatchList[a].updatedAt||0); });
+      ml.innerHTML=mids.length?mids.map(function(mid){
+        var m=rpsMatchList[mid];
+        var txt=rpsMatchStatusText(m,me);
+        var acts="";
+        if(m.status==="waiting"&&m.bUid===me) acts+='<button type="button" data-rps-accept="'+mid+'">Accept</button><button type="button" data-rps-decline="'+mid+'">Decline</button>';
+        else if(m.status==="waiting"&&m.aUid===me) acts+='<button type="button" data-rps-cancel="'+mid+'">Cancel</button>';
+        else if(m.status==="playing"||m.status==="won") acts+='<button type="button" data-rps-open="'+mid+'">Open</button>';
+        if(m.status==="won") acts+='<button type="button" data-rps-rematch="'+mid+'">Rematch</button>';
+        return '<div class="friend-row"><div><b>'+rpsEsc(rpsOtherName(m,me))+'</b><span>'+rpsEsc(txt)+'</span></div><div>'+acts+'</div></div>';
+      }).join(""):'<p class="small">No Rock Paper Scissors matches yet — challenge a friend above.</p>';
+      ml.querySelectorAll("[data-rps-accept]").forEach(function(b){ b.addEventListener("click",function(){ rpsAccept(b.getAttribute("data-rps-accept")); }); });
+      ml.querySelectorAll("[data-rps-decline]").forEach(function(b){ b.addEventListener("click",function(){ rpsDecline(b.getAttribute("data-rps-decline")); }); });
+      ml.querySelectorAll("[data-rps-cancel]").forEach(function(b){ b.addEventListener("click",function(){ rpsDecline(b.getAttribute("data-rps-cancel")); }); });
+      ml.querySelectorAll("[data-rps-open]").forEach(function(b){ b.addEventListener("click",function(){ rpsOpenMatch(b.getAttribute("data-rps-open")); }); });
+      ml.querySelectorAll("[data-rps-rematch]").forEach(function(b){ b.addEventListener("click",function(){ var m=rpsMatchList[b.getAttribute("data-rps-rematch")]; if(m){ rpsMatch=m; rpsRematch(); } }); });
+    });
+  }
+
+  function rpsMatchStatusText(m,me){
+    var opp=rpsOtherName(m,me);
+    var sc=m.state&&m.state.wins?((m.state.wins[m.aUid]||0)+"–"+(m.state.wins[m.bUid]||0)):"0–0";
+    if(m.status==="waiting") return m.aUid===me?("Waiting for "+opp+" to accept"):(opp+" challenged you");
+    if(m.status==="playing") return (m.turn===me?"Your turn — pick!":opp+" is picking")+" · "+sc+" · round "+(m.state?m.state.round||1:1);
+    if(m.status==="won") return (m.winner===me?"You won ":""+opp+" won ")+sc;
+    if(m.status==="draw") return "Draw · "+sc;
+    if(m.status==="declined") return "Declined";
+    if(m.status==="left") return "Match ended";
+    return m.status||"";
+  }
+
+  function rpsLoadMyMatches(){
+    var me=rpsUid(); if(!me) return Promise.resolve({});
+    return rpsApi("GET","/users/"+encodeURIComponent(me)+"/turnMatches").then(function(idx){
+      if(!idx||typeof idx!=="object") return {};
+      var keys=Object.keys(idx);
+      var jobs=keys.map(function(mid){
+        return rpsApi("GET","/turnMatches/"+encodeURIComponent(mid)).then(function(m){
+          if(m&&typeof m==="object"&&m.game===GAME) rpsMatchList[mid]=m;
+        });
+      });
+      return Promise.all(jobs).then(function(){ return rpsMatchList; });
+    });
+  }
+
+  function rpsChallenge(uid,name){
+    var me=rpsUid(); if(!me||!uid||uid===me||rpsBusy) return;
+    rpsBusy=true;
+    rpsMyName().then(function(myN){
+      var now=Date.now();
+      var wins={}; wins[me]=0; wins[uid]=0;
+      var match={game:GAME,aUid:me,bUid:uid,aName:myN,bName:String(name||"Tester"),xUid:me,oUid:uid,board:[],turn:me,status:"waiting",winner:null,lastMoveAt:0,lastMoveBy:"",lastMoveCell:-1,history:[],moves:0,state:{round:1,first:me,need:3,bestOf:5,wins:wins,picks:{},lastResult:null},createdAt:now,updatedAt:now};
+      return rpsApi("POST","/turnMatches",match).then(function(r){
+        rpsBusy=false;
+        if(!r||!r.name){ rpsRulesPending(); rpsRenderPanel(); return null; }
+        var mid=r.name;
+        rpsApi("PUT","/users/"+encodeURIComponent(me)+"/turnMatches/"+encodeURIComponent(mid),true);
+        rpsApi("PUT","/users/"+encodeURIComponent(uid)+"/turnMatches/"+encodeURIComponent(mid),true);
+        rpsNotice(uid,{type:"turn-invite",title:"Rock Paper Scissors challenge!",body:myN+" challenged you to Rock Paper Scissors.",link:"game:rock-paper-scissors?match="+mid,fromName:myN,fromUid:me});
+        rpsMid=mid; rpsMatch=match; rpsSeenMoves=0; rpsSeenUpdated=now;
+        try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
+        rpsMatchList[mid]=match;
+        rpsSetStatus("Challenge sent to <strong>"+rpsEsc(name||"your friend")+"</strong>! You pick first when they accept.");
+        rpsRenderPanel(); rpsApplyMatch(match); rpsStartPoll();
+        return mid;
+      });
+    }).catch(function(){ rpsBusy=false; return null; });
+  }
+
+  function rpsAccept(mid){
+    var me=rpsUid(); if(!me) return Promise.resolve(false);
+    function go(){
+      var m=rpsMatchList[mid];
+      if(!m||m.status!=="waiting"||m.bUid!==me) return Promise.resolve(false);
+      return rpsApi("PATCH","/turnMatches/"+encodeURIComponent(mid),{status:"playing",updatedAt:Date.now()}).then(function(r){
+        if(r===null){ rpsRulesPending(); return false; }
+        m.status="playing"; m.updatedAt=Date.now();
+        rpsMid=mid; rpsMatch=m; rpsSeenMoves=m.moves||0; rpsSeenUpdated=m.updatedAt;
+        try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
+        rpsApplyMatch(m); rpsStartPoll();
+        rpsMyName().then(function(myN){
+          rpsNotice(m.aUid,{type:"turn",title:"Your turn in Rock Paper Scissors",body:"Your turn in Rock Paper Scissors vs "+myN+" — "+myN+" accepted.",link:"game:rock-paper-scissors?match="+mid,fromName:myN,fromUid:me});
+        });
+        rpsSetStatus("Match on! <strong>"+rpsEsc(rpsOtherName(m,me))+"</strong> picks first — watch for your turn.");
+        return true;
+      });
+    }
+    if(rpsMatchList[mid]) return go();
+    return rpsApi("GET","/turnMatches/"+encodeURIComponent(mid)).then(function(m){
+      if(m&&typeof m==="object") rpsMatchList[mid]=m;
+      return go();
+    });
+  }
+
+  function rpsDecline(mid){
+    var me=rpsUid(); if(!me) return Promise.resolve(false);
+    var m=rpsMatchList[mid]; if(!m||m.status!=="waiting") return Promise.resolve(false);
+    return rpsApi("PATCH","/turnMatches/"+encodeURIComponent(mid),{status:"declined",updatedAt:Date.now()}).then(function(r){
+      if(r===null){ rpsRulesPending(); return false; }
+      m.status="declined"; rpsRenderPanel(); return true;
+    });
+  }
+
+  function rpsLeave(){
+    if(!rpsMatch||!rpsMid) return Promise.resolve(false);
+    var me=rpsUid(); var m=rpsMatch, mid=rpsMid;
+    if(m.status!=="playing"&&m.status!=="waiting") return Promise.resolve(false);
+    return rpsApi("PATCH","/turnMatches/"+encodeURIComponent(mid),{status:"left",winner:null,updatedAt:Date.now()}).then(function(r){
+      if(r===null){ rpsRulesPending(); return false; }
+      var opp=rpsOtherUid(m,me);
+      rpsMyName().then(function(myN){
+        rpsNotice(opp,{type:"turn",title:"Rock Paper Scissors match ended",body:myN+" left your Rock Paper Scissors match.",link:"game:rock-paper-scissors",fromName:myN,fromUid:me});
+      });
+      rpsStopPoll(); rpsMatch=null; rpsMid=null;
+      try{localStorage.removeItem(LS_MATCH);}catch(e){}
+      state.phase="p1"; state.wins1=0; state.wins2=0; state.draws=0;
+      rpsRenderPanel(); showPhase();
+      return true;
+    });
+  }
+
+  function rpsRematch(){
+    if(!rpsMatch) return;
+    var me=rpsUid(); var opp=rpsOtherUid(rpsMatch,me), name=rpsOtherName(rpsMatch,me);
+    rpsStopPoll(); rpsMatch=null; rpsMid=null;
+    try{localStorage.removeItem(LS_MATCH);}catch(e){}
+    rpsChallenge(opp,name);
+  }
+
+  function rpsOpenMatch(mid){
+    var me=rpsUid(); if(!me) return Promise.resolve(false);
+    function go(){
+      var m=rpsMatchList[mid];
+      if(!m) return Promise.resolve(false);
+      rpsMid=mid; rpsMatch=m; rpsSeenMoves=m.moves||0; rpsSeenUpdated=m.updatedAt||0;
+      try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
+      rpsApplyMatch(m); rpsStartPoll();
+      return Promise.resolve(true);
+    }
+    if(rpsMatchList[mid]) return go();
+    return rpsApi("GET","/turnMatches/"+encodeURIComponent(mid)).then(function(m){
+      if(m&&typeof m==="object"&&m.game===GAME) rpsMatchList[mid]=m;
+      return go();
+    });
+  }
+
+  /* A pick in friend mode. Only the player whose turn it is may write
+     (rules enforce turn === auth.uid). First picker: pick stored,
+     turn passes to the opponent. Second picker: round resolves in
+     the same PATCH — wins update, next round starts with the other
+     player picking first, or the match ends at 3 round wins. */
+  function rpsPick(choice){
+    var me=rpsUid(), m=rpsMatch;
+    if(!me||!m||!rpsMid) return;
+    if(m.status!=="playing"||m.turn!==me) return;
+    if(!choicesList().length || choicesList().indexOf(choice)===-1) return;
+    var st=m.state||{round:1,first:m.aUid,need:3,bestOf:5,wins:{},picks:{},lastResult:null};
+    if(st.picks&&st.picks[me]) return;
+    var now=Date.now();
+    var opp=rpsOtherUid(m,me);
+    var picks={}; if(st.picks) { picks.a=st.picks[m.aUid]; picks.b=st.picks[m.bUid]; }
+    var myKey = (me===m.aUid)?"a":"b", oppKey = (me===m.aUid)?"b":"a";
+    picks[myKey]=choice;
+    var newState={round:st.round||1,first:st.first||m.aUid,need:st.need||3,bestOf:st.bestOf||5,wins:{},picks:{},lastResult:st.lastResult||null};
+    newState.wins[m.aUid]=(st.wins&&st.wins[m.aUid])||0;
+    newState.wins[m.bUid]=(st.wins&&st.wins[m.bUid])||0;
+    var patch={updatedAt:now,lastMoveAt:now,lastMoveBy:me,moves:(m.moves||0)+1,history:(m.history||[]).slice()};
+    patch.history.push({by:me,pick:choice,at:now});
+    var resultText="";
+    if(picks[oppKey]){
+      /* Both picks in — resolve the round now. */
+      var aPick=picks.a, bPick=picks.b;
+      var w=determineWinner(aPick,bPick);
+      var winnerUid=null;
+      if(w===1){ newState.wins[m.aUid]++; winnerUid=m.aUid; resultText=LABELS[aPick]+" beats "+LABELS[bPick]+". "+(m.aName||"Player 1")+" wins round "+newState.round+"."; }
+      else if(w===2){ newState.wins[m.bUid]++; winnerUid=m.bUid; resultText=LABELS[bPick]+" beats "+LABELS[aPick]+". "+(m.bName||"Player 2")+" wins round "+newState.round+"."; }
+      else { resultText="Round "+newState.round+" is a draw — "+LABELS[aPick]+" vs "+LABELS[bPick]+"."; }
+      newState.lastResult={round:newState.round,aPick:aPick,bPick:bPick,winner:winnerUid,text:resultText};
+      newState.picks={};
+      if(winnerUid && newState.wins[winnerUid]>=newState.need){
+        patch.status="won"; patch.winner=winnerUid; patch.turn=winnerUid;
+        patch.state=newState;
+        rpsMyName().then(function(myN){
+          rpsNotice(opp,{type:"turn",title:"Rock Paper Scissors result",body:(winnerUid===me?myN:rpsOtherName(m,me))+" won the match "+newState.wins[m.aUid]+"–"+newState.wins[m.bUid]+" in Rock Paper Scissors.",link:"game:rock-paper-scissors?match="+rpsMid,fromName:myN,fromUid:me});
+        });
+      } else {
+        newState.round=(newState.round||1)+1;
+        newState.first=(st.first===m.aUid)?m.bUid:m.aUid;
+        patch.turn=newState.first;
+        patch.state=newState;
+        rpsMyName().then(function(myN){
+          var firstName = newState.first===me ? "you" : rpsOtherName(m,me);
+          rpsNotice(opp,{type:"turn",title:"Rock Paper Scissors — round revealed",body:resultText+" "+(newState.first===opp?"Your turn — you pick first next round.":"Waiting for "+myN+" to pick first next round."),link:"game:rock-paper-scissors?match="+rpsMid,fromName:myN,fromUid:me});
+        });
+      }
+    } else {
+      /* Only my pick so far — store it, pass the turn. */
+      newState.picks={}; newState.picks[me]=choice;
+      patch.turn=opp;
+      patch.state=newState;
+      rpsMyName().then(function(myN){
+        rpsNotice(opp,{type:"turn",title:"Your turn in Rock Paper Scissors",body:"Your turn in Rock Paper Scissors vs "+myN+" — "+myN+" picked. Your turn to pick.",link:"game:rock-paper-scissors?match="+rpsMid,fromName:myN,fromUid:me});
+      });
+    }
+    rpsApi("PATCH","/turnMatches/"+encodeURIComponent(rpsMid),patch).then(function(r){
+      if(r===null){ rpsRulesPending(); return; }
+      Object.keys(patch).forEach(function(k){ m[k]=patch[k]; });
+      rpsSeenMoves=m.moves; rpsSeenUpdated=m.updatedAt;
+      rpsApplyMatch(m);
+    });
+  }
+
+  function rpsApplyMatch(m){
+    if(!m) return;
+    var me=rpsUid();
+    state.wins1=(m.state&&m.state.wins)?(m.state.wins[m.aUid]||0):0;
+    state.wins2=(m.state&&m.state.wins)?(m.state.wins[m.bUid]||0):0;
+    state.draws=0;
+    var bar=$("friendMatchBar");
+    if(bar){
+      bar.style.display="block";
+      bar.innerHTML="<b>"+rpsEsc(rpsOtherName(m,me))+"</b> · "+rpsEsc(rpsMatchStatusText(m,me))+" <button type=\"button\" id=\"btnFriendLeave\">Leave match</button>";
+      var lv=$("btnFriendLeave");
+      if(lv) lv.addEventListener("click",function(){ rpsLeave(); });
+    }
+    if(m.status==="won"&&m.winner){
+      state.phase="end";
+      var iWon=m.winner===me;
+      $("endMsg").textContent=(iWon?"You win the match ":""+rpsOtherName(m,me)+" wins the match ")+state.wins1+" to "+state.wins2+"!";
+      showPhase();
+      return;
+    }
+    if(m.status==="left"||m.status==="declined"){
+      rpsSetStatus("<strong>"+rpsEsc(rpsOtherName(m,me))+"</strong> "+(m.status==="left"?"left the match.":"declined the challenge."));
+      rpsStopPoll(); rpsMatch=null; rpsMid=null;
+      try{localStorage.removeItem(LS_MATCH);}catch(e){}
+      showPhase();
+      return;
+    }
+    if(m.status==="waiting"){
+      state.phase="p1";
+      $("turnText").textContent = m.aUid===me ? "Waiting for your friend to accept…" : "Your friend challenged you — accept below to play.";
+      showPhase();
+      return;
+    }
+    /* playing */
+    var st=m.state||{};
+    if(st.lastResult && (!st.picks || (!st.picks[m.aUid] && !st.picks[m.bUid]))){
+      /* A round just resolved — show the reveal until Continue. */
+      var lr=st.lastResult;
+      state.phase="reveal";
+      $("revName1").textContent=m.aName||"Player 1";
+      $("revName2").textContent=m.bName||"Player 2";
+      $("revHand1").innerHTML=HAND_SVG[lr.aPick]||"";
+      $("revHand2").innerHTML=HAND_SVG[lr.bPick]||"";
+      $("revTxt1").textContent=LABELS[lr.aPick]||"";
+      $("revTxt2").textContent=LABELS[lr.bPick]||"";
+      $("revHand1").className="big pop shake";
+      $("revHand2").className="big pop shake";
+      $("roundMsg").textContent=lr.text||"";
+      $("btnNext").textContent="Continue";
+      showPhase();
+      return;
+    }
+    if(st.picks&&st.picks[me]){
+      state.phase="p2";
+      $("turnText").textContent="Pick locked in — waiting for "+rpsOtherName(m,me)+"…";
+      showPhase();
+      return;
+    }
+    if(m.turn===me){ state.phase="p1"; showPhase(); }
+    else { state.phase="p2"; showPhase(); }
+  }
+
+  function rpsStartPoll(){ rpsStopPoll(); rpsPollTimer=setInterval(rpsPollTick,POLL_MS); }
+  function rpsStopPoll(){ if(rpsPollTimer){ clearInterval(rpsPollTimer); rpsPollTimer=null; } }
+  function rpsPollTick(){
+    if(!rpsMatch||!rpsMid) return;
+    if(document.hidden) return;
+    if(rpsMatch.status!=="waiting"&&rpsMatch.status!=="playing") return;
+    rpsApi("GET","/turnMatches/"+encodeURIComponent(rpsMid)).then(function(m){
+      if(!m||typeof m!=="object") return;
+      if(m.updatedAt===rpsSeenUpdated&&(m.moves||0)===rpsSeenMoves) return;
+      rpsMatch=m; rpsSeenMoves=m.moves||0; rpsSeenUpdated=m.updatedAt||0;
+      if(m.status==="won"&&m.winner){ rpsApplyMatch(m); return; }
+      if(m.status==="left"||m.status==="declined"){ rpsApplyMatch(m); return; }
+      rpsApplyMatch(m);
+    });
+  }
+
+  /* ---------- wire up ---------- */
+  $("passPhone").innerHTML = PHONE_SVG;
+  $("modeCpu").addEventListener("click", function(){ setMode("cpu"); });
+  $("mode2p").addEventListener("click", function(){ setMode("2p"); });
+  $("modeFriend").addEventListener("click", function(){ setMode("friend"); });
+  $("btnPlay").addEventListener("click", startGame);
+  $("bestOfSel").addEventListener("change", function(){ state.bestOf = parseInt(this.value,10); });
+  $("lsToggle").addEventListener("click", function(){ state.lizardSpock = !state.lizardSpock; this.textContent = "Lizard-Spock: " + (state.lizardSpock ? "ON" : "OFF"); this.className = state.lizardSpock ? "active" : ""; });
   $("btnPassReady").addEventListener("click", function(){ state.phase = "p2"; showPhase(); });
-  $("btnNext").addEventListener("click", nextRound);
-  $("btnRematch").addEventListener("click", restart);
-  $("btnRestart").addEventListener("click", restart);
+  $("btnNext").addEventListener("click", function(){
+    if (isFriendMode()) { /* reveal seen — back to pick/wait view */
+      var m=rpsMatch; if(!m) return;
+      var me=rpsUid(); var st=m.state||{};
+      if(m.turn===me){ state.phase="p1"; }
+      else if(st.picks&&st.picks[me]){ state.phase="p2"; }
+      else { state.phase="p2"; }
+      showPhase();
+      return;
+    }
+    nextRound();
+  });
+  $("btnRematch").addEventListener("click", function(){
+    if (isFriendMode()) { rpsRematch(); return; }
+    restart();
+  });
+  $("btnMainMenu").addEventListener("click", showMenu);
+  $("btnRestart").addEventListener("click", function(){ if (isFriendMode()) { rpsApplyMatch(rpsMatch); return; } restart(); });
   $("btnTutorial").addEventListener("click", function(){ $("tutorialOverlay").className = "overlay open"; });
   $("btnRules").addEventListener("click", function(){ $("rulesOverlay").className = "overlay open"; });
   Array.prototype.forEach.call(document.querySelectorAll("[data-close]"), function(b){
@@ -599,6 +1106,16 @@ if (typeof document !== "undefined" && document.getElementById && document.getEl
     $("fbText").value = "";
     $("fbMsg").textContent = "Thanks. Feedback saved on this device.";
   });
+
+  /* Deep link: ?match=<mid> opens the friend match straight away. */
+  (function(){
+    var q=null;
+    try { q = new URLSearchParams(window.location.search).get("match"); } catch(e){}
+    if(q && rpsUid()){
+      setMode("friend");
+      startGame();
+    }
+  })();
 
   showPhase();
 }
