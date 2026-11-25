@@ -22618,15 +22618,41 @@ function renderTesterAuth(){
   var libHead = document.getElementById('libCount'); if(libHead && libHead.previousElementSibling) addClass(libHead.previousElementSibling, 'view-library');
   addClass(document.getElementById('flatGrid'), 'view-library');
   LIB_IDS.forEach(function(id){ addClass(document.getElementById(id), 'view-library'); });
-  /* CATEGORIES-SHELF-FIX-2026-11-25: placeRecentShelf is RETIRED.
-     It re-parented #recentShelf into main.wrap on every view switch, so
-     the shelf (no view class) rendered in EVERY view and stole 298px
-     from the active stage — #categories showed Recently Played instead
-     of categories, and the stage's own content was clipped. The shelf
-     is stage-owned now: Main rails it (desktop) / steps it (narrow),
-     Library steps it, and the view CSS hides it everywhere else. This
-     function stays as a no-op so older call sites keep working. */
-  function placeRecentShelf(v){ return; }
+  /* LIBRARY-REVERT-2026-11-25 (Holo 2026-11-25 16:10): placeRecentShelf
+     is REVIVED from the pre-walk-through version (LIBRARY-ABOVE-RECENT-
+     2026-11-25: "hero -> Library -> Recently Played"). The CATEGORIES-
+     SHELF-FIX retirement made it a no-op because the shelf had become
+     stage-owned — Main railed it, Library stepped it — and re-parenting
+     it on every view switch stole 298px from the active stage. Both
+     stages are gone now (Main reverted 15:45, Library reverted 16:10),
+     so the shelf goes back to being placed by view: below the Library
+     on the library view, right under the hero everywhere else. The view
+     CSS still hides it on every view except main and library, so it can
+     never leak into a walk stage. One difference from the pre-WT code:
+     #categories itself is stage-owned now (the Categories walk moves it
+     into its step on first visit), so "insert before #categories" would
+     strand the shelf inside the hidden Categories stage — when
+     #categories is no longer a direct child of main.wrap, the shelf
+     goes after the last Library section instead, which is the same
+     spot in the static order. */
+  function placeRecentShelf(v){
+    var rs = document.getElementById('recentShelf');
+    if(!rs || !rs.parentNode) return;
+    if(v === 'library'){
+      var tail = document.getElementById('categories');
+      if(tail && tail.parentNode === document.querySelector('main.wrap')){
+        tail.parentNode.insertBefore(rs, tail);
+      } else {
+        var wrap = document.querySelector('main.wrap');
+        var libs = wrap ? Array.prototype.slice.call(wrap.children).filter(function(n){ return n.classList && n.classList.contains('view-library'); }) : [];
+        var lastLib = libs[libs.length - 1];
+        if(wrap && lastLib) wrap.insertBefore(rs, lastLib.nextSibling);
+      }
+    } else {
+      var hero = document.querySelector('.hero');
+      if(hero) hero.parentNode.insertBefore(rs, hero.nextSibling);
+    }
+  }
   window.holoPlaceRecentShelf = placeRecentShelf;
   placeRecentShelf(document.body.getAttribute('data-view') || 'main');
   var VIEWS = { main:'#top', library:'#library', categories:'#categories', friends:'#friends', account:'#account', settings:'#settings', daily:'#daily', favourites:'#favorites', about:'#about', inbox:'#inbox' };
@@ -30833,14 +30859,32 @@ body.wt-on #loginView.wt-gate-steps .login-card .gate-form-title{margin:0 0 6px;
    banners, featured game and #recentShelf stay in their original
    places in main.wrap and the page scrolls like it did before
    commit 6ee1d0a6. The single-window shell (100dvh flex column)
-   must not constrain main, so on the main view only the shell
-   becomes a plain scrolling block. Every other view keeps the
+   must not constrain main, so on the main view the shell
+   becomes a plain scrolling block (the library view joined it in
+   LIBRARY-REVERT-2026-11-25 below). Every other view keeps the
    shell and its walk stage. No stage ever shows on main. */
 body[data-view="main"].wt-shell{display:block;height:auto;min-height:100dvh;}
 body[data-view="main"].wt-shell>header.topbar{flex:none;}
 body[data-view="main"].wt-shell main.wrap{display:block;flex:none;min-height:0;}
 body[data-view="main"].wt-shell>footer{flex:none;}
 body[data-view="main"] .wt-stage{display:none!important;}
+
+/* ============ LIBRARY-REVERT-2026-11-25 (Holo 2026-11-25 16:10) ============
+   "The formatting is all wrong can we go back" (photo of #library) —
+   the Library view goes back to its pre-walk-through layout, same as
+   the main page did at 15:45: search box, category pills, sort
+   controls and the full game grid as a normal scrolling page. The
+   walk-through paged the games 8 at a time into one fixed window, so
+   full cards (name + art + Play) never fit — only the art strip
+   showed — and the filter pills became a sideways-swipe row cut off
+   at the right edge. The library stage is not built (see the script
+   below); the shell becomes a plain scrolling block on library too,
+   exactly as on main. Every other view keeps the shell + walk stage. */
+body[data-view="library"].wt-shell{display:block;height:auto;min-height:100dvh;}
+body[data-view="library"].wt-shell>header.topbar{flex:none;}
+body[data-view="library"].wt-shell main.wrap{display:block;flex:none;min-height:0;}
+body[data-view="library"].wt-shell>footer{flex:none;}
+body[data-view="library"] .wt-stage{display:none!important;}
 </style>
 
 <script>
@@ -31025,9 +31069,15 @@ function watchViews(){
       lastView=v;activate(v);
       /* MAIN-REVERT-2026-11-25: no main stage — put the shelf home. */
       if(v==='main')restoreMain();
+      /* LIBRARY-REVERT-2026-11-25: no library stage either — place the
+         shelf below the library, as before the walk-through. showView
+         already calls holoPlaceRecentShelf on a normal switch; this
+         covers hash/back-forward switches, which set data-view without
+         going through showView. */
+      if(v==='library'&&window.holoPlaceRecentShelf)window.holoPlaceRecentShelf('library');
     });
   }).observe(document.body,{attributes:true,attributeFilter:['data-view']});
-  setTimeout(function(){activate(viewOf());if(viewOf()==='main')restoreMain();},50);
+  setTimeout(function(){activate(viewOf());if(viewOf()==='main')restoreMain();if(viewOf()==='library'&&window.holoPlaceRecentShelf)window.holoPlaceRecentShelf('library');},50);
 }
 on(window,'resize',function(){var S=stages[viewOf()];if(S)guardOverflow(S);});
 
@@ -31095,7 +31145,8 @@ function tilePager(tiles){
    walk-through steps/panes on the main page. The main stage is NOT
    built: the hero, banners, featured game and #recentShelf stay in
    their original places in main.wrap and the page scrolls like it did
-   before commit 6ee1d0a6. Every other view keeps its walk stage.
+   before commit 6ee1d0a6. Every other view keeps its walk stage
+   (the Library view was reverted the same way at 16:10 — see below).
    Two leftovers from the old main stage still need a home on main:
    (1) #recentShelf — the Library stage moves it into its Recently
    played step on visit; restoreMain() puts it back in flow whenever
@@ -31109,12 +31160,54 @@ var __mainShelfHome=(function(){var rs=document.getElementById('recentShelf');re
 function restoreMain(){
   var rs=document.getElementById('recentShelf');if(!rs||!__mainShelfHome)return;
   var h=__mainShelfHome;
-  if(rs.parentNode!==h.parent||rs.nextSibling!==h.next)h.parent.insertBefore(rs,h.next);
+  if(rs.parentNode!==h.parent||rs.nextSibling!==h.next){
+    /* LIBRARY-REVERT-2026-11-25: the captured "next" node can stop
+       being a child of the home parent — landing on #library captures
+       next=#categories (placeRecentShelf parks the shelf there), and
+       the Categories walk later moves #categories into its step, so a
+       bare insertBefore(rs,h.next) throws "not a child of this node"
+       (caught live 2026-11-25 in the library-revert probe). Fall back
+       to the shelf's static home, right under the hero. */
+    if(h.next&&h.next.parentNode===h.parent)h.parent.insertBefore(rs,h.next);
+    else{var hero=document.querySelector('.hero');if(hero&&hero.parentNode)hero.parentNode.insertBefore(rs,hero.nextSibling);}
+  }
 }
 
-/* ---------- LIBRARY: Pick a shelf / Games (paged) ---------- */
-var libPager={page:0,per:8,list:[]};
-function libPer(){return MQ_DESK.matches?8:4;}
+/* ---------- LIBRARY: REVERTED to the pre-walk-through layout ----------
+   LIBRARY-REVERT-2026-11-25 (Holo 2026-11-25 16:10): "The formatting
+   is all wrong can we go back" (photo of #library). Same call as the
+   main page at 15:45 — the Library view goes back to the layout from
+   just before commit 6ee1d0a6: search box, category pills row, sort
+   controls (Category / A-Z / Z-A / Most played / Newest) and the full
+   game grid with tiles showing names + art, as a normal scrolling
+   page. No walk-through steps/panes/dots/Back/Next on library, no
+   tile pager. The library stage is NOT built, exactly like the main
+   stage: the hub's own library code (search/filter/sort in the
+   library IIFE, #flatGrid, the per-category sections) renders the
+   view, and activate() already drops every stage's active class for
+   a view with no stage (see the MAIN-REVERT note in activate()).
+   Why the walk broke it: the Games step paged full cards 8 at a time
+   into one fixed-height window, so only the art strip fit and the
+   names + descriptions + Play buttons fell below the fold (the big
+   empty coloured rectangles in Holo's photo); the filter pills
+   became a sideways-swipe row cut off at the right edge ("Calm and
+   Min..."). The original .controls row wraps (flex-wrap:wrap), so
+   the pills fit at 1280 with no cut-off and no horizontal overflow.
+   Recently Played on library is the pre-WT pair: the "Recently
+   Played" filter pill gathers recent cards into #flatGrid newest-
+   first (RECENT-PLAYED-2026-11-23), and #recentShelf sits below the
+   library (placeRecentShelf, revived above) — the walk step that
+   borrowed the shelf is gone, and the shelf stays home on main via
+   restoreMain(). The hub's own Library nav link still opens the
+   whole library as one A-Z list; the Categories nav link still opens
+   it grouped by shelf. Every other view keeps its walk stage, and
+   every post-6ee1d0a6 fix stays (Duck Pond player-body fix, neon
+   B+E, INSERT COIN blink, categories shelf fix, tour fixes, DMs,
+   turn-based, pop-ups, Code Names resolver, Message/Duel/Rooms).
+   collect() stays: it is part of the public window.holoWalk API and
+   reads .game-card globally (its stages.library guard already
+   handles a missing library stage). tilePager()/cloneTiles() stay
+   too — unused now, but shared walk helpers; do not delete them. */
 function collect(){
   /* Cards count when the hub's filter/search/sort shows them; nodes
      this script itself hides (source sections, the hold) are ignored. */
@@ -31132,90 +31225,6 @@ function collect(){
     return shownIgnoringMine(c);
   });
 }
-makeStage('library',function(S){
-  S.addStep('Pick a shelf',function(b){
-    var src=$('#catGrid');if(src){b.appendChild(tilePager(cloneTiles(src)));}
-  });
-  var ctrl=$('#all-games');
-  S.addStep('Games',function(b){
-    var wrap=el('div','wt-controls');
-    if(ctrl){
-      /* Search full width; filter pills + sort become sideways-swipe
-         rows (one row each) instead of stacking 4 rows tall on phone. */
-      var pills=el('div','wt-pills');
-      $$('.pill[data-filter]',ctrl).forEach(function(p){pills.appendChild(p);});
-      var sortRow=el('div','wt-sortrow');
-      $$('.sort-group',ctrl).forEach(function(g){sortRow.appendChild(g);});
-      wrap.appendChild(ctrl);ctrl.appendChild(pills);ctrl.appendChild(sortRow);
-      b.appendChild(wrap);
-    }
-    var grid=el('div','wt-grid');b.appendChild(grid);
-    var hold=el('div','wt-hold');hold.style.display='none';b.appendChild(hold);
-    var bar=el('div','wt-pagerbar');
-    var prev=document.createElement('button');prev.type='button';prev.className='btn wt-lib-prev';prev.textContent='← Prev';
-    var info=el('div','wt-pageinfo');
-    var next=document.createElement('button');next.type='button';next.className='btn btn-primary wt-lib-next';next.textContent='Next →';
-    bar.appendChild(prev);bar.appendChild(info);bar.appendChild(next);b.appendChild(bar);
-    on(prev,'click',function(){if(libPager.page>0){libPager.page--;renderPage(S);}});
-    on(next,'click',function(){var pages=Math.max(1,Math.ceil(libPager.list.length/libPager.per));if(libPager.page<pages-1){libPager.page++;renderPage(S);}});
-    S.__grid=grid;S.__hold=hold;S.__info=info;S.__prev=prev;S.__next=next;
-  });
-  /* CATEGORIES-SHELF-FIX-2026-11-25: Recently Played is a step of the
-     Library stage (Holo: hero -> Library -> Recently Played). The node
-     moves in onShow, not in the fill, so build order can't strand it
-     in another stage; Main's onShow rails it back on return. */
-  S.addStep('Recently played',function(b){});
-  S.__recentStep=S.steps[S.steps.length-1];
-  function renderPage(S){
-    var g=S.__grid,h=S.__hold;if(!g)return;
-    S.__moving=true;
-    libPager.per=libPer();
-    var pages=Math.max(1,Math.ceil(libPager.list.length/libPager.per));
-    if(libPager.page>=pages)libPager.page=pages-1;if(libPager.page<0)libPager.page=0;
-    libPager.list.forEach(function(c){h.appendChild(c);});
-    libPager.list.slice(libPager.page*libPager.per,(libPager.page+1)*libPager.per).forEach(function(c){g.appendChild(c);});
-    if(S.__info)S.__info.textContent=libPager.list.length?('Page '+(libPager.page+1)+' of '+pages+' — '+libPager.list.length+' games'):'No games match that search.';
-    if(S.__prev)S.__prev.disabled=(libPager.page===0);
-    if(S.__next)S.__next.disabled=(libPager.page>=pages-1);
-    setTimeout(function(){S.__moving=false;},0);
-    guardOverflow(S);
-  }
-  function recollect(){
-    S.__moving=true;
-    libPager.list=collect();
-    var pages=Math.max(1,Math.ceil(libPager.list.length/libPager.per));
-    if(libPager.page>=pages)libPager.page=pages-1;
-    renderPage(S);
-  }
-  S.__recollect=recollect;S.__renderPage=renderPage;
-  /* While the walk stage is active, the hub's own library chrome
-     (heading, count line, daily tiles, empty note, flat grid and the
-     per-category sections) stays hidden; the pager is the only copy
-     of the cards. Cards stay in the stage's grid/hold between
-     visits — the hub reads .game-card globally, so nothing else
-     notices. On leaving, restore the chrome. */
-  S.onShow=function(){
-    S.__hiddenSrc=$$('section.section.view-library').slice();
-    ['.section-head.view-library','#libCount','#libraryDailyTiles','#empty','#flatGrid'].forEach(function(sel){
-      var n=$(sel);if(n)S.__hiddenSrc.push(n);
-    });
-    hideList(S.__hiddenSrc);
-    libPager.page=0;recollect();
-    /* CATEGORIES-SHELF-FIX-2026-11-25: bring the shelf into this
-       stage's Recently played step (Main's onShow rails it back). */
-    (function(){var rs=document.getElementById('recentShelf');var st=S.__recentStep;if(rs&&st&&st.body&&rs.parentNode!==st.body)st.body.appendChild(rs);})();
-  };
-  S.onHide=function(){showList(S.__hiddenSrc);};
-  /* Hub filters/search/sort re-collect the pager (debounced). The
-     __moving guard stops our own card moves from re-triggering it. */
-  var reT=null;
-  function reLater(){clearTimeout(reT);reT=setTimeout(function(){if(S.el.classList.contains('active'))recollect();},90);}
-  ['input','click','change'].forEach(function(ev){on(document,ev,function(e){if(e.target&&e.target.closest&&e.target.closest('#all-games'))reLater();},true);});
-  new MutationObserver(function(){if(!S.__moving)reLater();}).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['style']});
-  on(MQ_DESK,'change',function(){if(S.el.classList.contains('active')){libPager.page=0;recollect();}});
-  /* Tapping a category tile (hub's own #catGrid) lands on the games step. */
-  on($('#catGrid'),'click',function(e){if(e.target&&e.target.closest&&e.target.closest('.cat-tile'))pendingStep.library=1;},true);
-});
 
 /* ---------- CATEGORIES: the hub's own tile grid, paged on both widths ---------- */
 makeStage('categories',function(S){
@@ -31358,12 +31367,14 @@ makeStage('about',function(S){
   watchViews();
 })();
 
-/* ---------- Library link from the hero + nav ---------- */
-$$('a[href="#all-games"]').forEach(function(a){
-  if(!a.__wtBound){a.__wtBound=true;on(a,'click',function(){pendingStep.library=1;},true);}
-});
-var libNav=$$('#navInside a[href="#library"]')[0];
-if(libNav&&!libNav.__wtBound){libNav.__wtBound=true;on(libNav,'click',function(){pendingStep.library=0;},true);}
+/* ---------- Library link from the hero + nav ----------
+   LIBRARY-REVERT-2026-11-25: the two bindings that lived here set
+   pendingStep.library (1 = Games step from the hero, 0 = Pick-a-
+   shelf step from the nav) — there is no library stage any more, so
+   nothing consumes a pending library step and the bindings are gone.
+   The hub's own handlers do the work: a[href="#all-games"] opens the
+   library view (view IIFE), and #libraryNavLink opens the whole
+   library as one A-Z list (library IIFE). */
 /* Owner Dash button: REMOVED 2026-11-25 — the WT handler landed on
    the Owner Dash step, which Holo removed (14:04). The hub's own
    handler still opens the Tester Live View from the crown button. */
