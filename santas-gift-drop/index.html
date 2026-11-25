@@ -1,0 +1,1111 @@
+<!-- SANTA-GIFT-DROP-2026-11-25 -->
+<!-- December drop: hidden from the Arcade count until the hub agent cards it. -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Santa's Gift Drop — Holo's Arcade</title>
+<!-- GATE-GUARD-2026-11-24 -->
+<script src="../shared/gate-guard.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+<style>
+  :root{
+    --navy:#0a0620; --panel:#1a1033; --yellow:#ffd93b; --violet:#7c3aed;
+    --pink:#ff3ec8; --ink:#fff; --muted:#b9aee6; --teal:#2dd4bf; --red:#e63946; --green:#2fbf71;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #2a1b5e, var(--navy) 62%);
+    color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    height:100dvh; overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  .wrap{ width:100%; max-width:560px; margin:0 auto; height:100dvh; display:flex; flex-direction:column; padding:10px 12px 12px; }
+  header{ text-align:center; }
+  .title{ font-family:'Press Start 2P',monospace; font-size:20px; line-height:1.5; color:var(--yellow); text-shadow:0 2px 0 #7a4d00, 0 0 18px rgba(255,217,59,.45); }
+  .title .santa-red{ color:#ff5b5b; }
+  .sub{ font-size:13px; color:var(--muted); margin-top:6px; }
+  .hud{ display:flex; gap:8px; align-items:stretch; margin:10px 0; }
+  .stat{ flex:1; background:rgba(255,255,255,.08); border:2px solid var(--violet); border-radius:10px; padding:4px 6px; text-align:center; min-width:0; }
+  .stat .lbl{ display:block; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
+  .stat .val{ display:block; font-size:18px; font-weight:800; line-height:1.2; }
+  .lives{ display:flex; gap:3px; justify-content:center; align-items:center; min-height:20px; }
+  .lives svg{ width:16px; height:16px; }
+  .iconbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:10px; padding:6px 12px; font-size:15px; font-weight:800; cursor:pointer; }
+  .iconbtn:hover{ border-color:var(--pink); }
+  .stage{ flex:1; min-height:0; position:relative; display:flex; align-items:center; justify-content:center; }
+  canvas{ display:block; border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,.5); touch-action:none; background:#0d0830; }
+  .overlay{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; background:rgba(10,6,32,.88); border-radius:16px; padding:18px; text-align:center; z-index:5; overflow-y:auto; }
+  .hidden{ display:none !important; }
+  .overlay h2{ margin:0; font-family:'Press Start 2P',monospace; font-size:16px; line-height:1.6; color:var(--yellow); }
+  .overlay p{ margin:0; font-size:15px; line-height:1.5; max-width:400px; color:#e9e4ff; }
+  .big{ font-size:34px; font-weight:900; color:var(--yellow); }
+  .card{ background:var(--panel); border:2px solid var(--violet); border-radius:14px; padding:14px 16px; max-width:420px; width:100%; text-align:left; }
+  .card ul{ margin:0; padding-left:20px; font-size:14px; line-height:1.6; color:#e9e4ff; }
+  .card li{ margin-bottom:6px; }
+  .btn{ background:linear-gradient(#ffe45e,#ffc93b); color:#241200; font-weight:800; border:none; border-radius:999px; padding:13px 30px; font-size:18px; box-shadow:0 0 18px rgba(255,217,59,.55), 0 4px 0 #b98a00; cursor:pointer; min-width:200px; }
+  .btn:active{ transform:translateY(2px); box-shadow:0 0 18px rgba(255,217,59,.55), 0 2px 0 #b98a00; }
+  .btn2{ background:linear-gradient(135deg,var(--violet),var(--pink)); color:#fff; border:none; border-radius:999px; padding:11px 24px; font-size:16px; font-weight:700; box-shadow:0 4px 0 rgba(0,0,0,.35); cursor:pointer; min-width:200px; }
+  .btn2:active{ transform:translateY(2px); }
+  .btn3{ background:none; border:none; color:#cfc4ff; text-decoration:underline; cursor:pointer; font-size:15px; padding:6px 10px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .diffbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:999px; padding:7px 14px; font-weight:700; cursor:pointer; }
+  .diffbtn[aria-pressed="true"]{ background:var(--yellow); color:#241200; border-color:var(--yellow); }
+  .hint{ text-align:center; color:var(--muted); font-size:12px; padding-top:8px; }
+  .bestline{ font-size:14px; color:var(--muted); }
+  .bestline b{ color:var(--yellow); }
+  .newbest{ color:#7dff9e; font-weight:800; }
+  .pracbadge{ display:inline-block; background:#0a0620; color:#ffe9a3; border:2px solid var(--pink); border-radius:999px; padding:3px 12px; font-size:12px; font-weight:700; }
+  .pressstart{ font-family:'Press Start 2P',monospace; font-size:11px; color:#fff; letter-spacing:1px; animation:blink 1.1s steps(2,start) infinite; }
+  @keyframes blink{ to{ visibility:hidden; } }
+  .copymsg{ font-size:13px; font-weight:700; color:#7dff9e; min-height:18px; }
+  @media (max-width:360px){ .title{ font-size:16px; } .btn,.btn2{ min-width:170px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title">SANTA'S<br /><span class="santa-red">GIFT DROP</span></div>
+    <div class="sub">Catch the presents. Dodge the coal. Mind the naughty list.</div>
+  </header>
+  <div class="hud">
+    <div class="stat"><span class="lbl">Score</span><span class="val" id="hudScore">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="hudBest">0</span></div>
+    <div class="stat"><span class="lbl">Level</span><span class="val" id="hudLevel">1</span></div>
+    <div class="stat"><span class="lbl">Lives</span><span class="val lives" id="hudLives"></span></div>
+    <button id="btnPause" class="iconbtn" aria-label="Pause game">II</button>
+  </div>
+  <div class="stage" id="stage">
+    <canvas id="game" width="480" height="640"></canvas>
+
+    <div class="overlay" id="ovMenu">
+      <h2>SANTA'S GIFT DROP</h2>
+      <p>Santa's sleigh is loaded and the reindeer are restless. Catch the presents as they tumble from the night sky — but watch out for the coal. That is the naughty list falling on your head.</p>
+      <p class="bestline">Best score: <b id="menuBest">0</b></p>
+      <div class="row" id="diffRow" role="group" aria-label="Difficulty">
+        <button class="diffbtn" data-diff="easy" aria-pressed="false">Easy</button>
+        <button class="diffbtn" data-diff="medium" aria-pressed="true">Medium</button>
+        <button class="diffbtn" data-diff="hard" aria-pressed="false">Hard</button>
+      </div>
+      <p class="bestline" id="menuDiffLine">Medium: steady snow, some coal</p>
+      <div class="pressstart">&#9654; PRESS START</div>
+      <button class="btn" id="btnPlay">Play</button>
+      <div class="row">
+        <button class="btn2" id="btnPractice">Practice</button>
+        <button class="btn2" id="btnRules">How to Play</button>
+      </div>
+      <p class="bestline" id="menuPracticeNote"></p>
+    </div>
+
+    <div class="overlay hidden" id="ovRules">
+      <h2>HOW TO PLAY</h2>
+      <div class="card"><ul>
+        <li><b>Move the sleigh</b> with the arrow keys, your mouse, or a finger drag. Santa does the catching — you do the steering.</li>
+        <li><b>Presents</b> are worth <b>+10</b>. Catch them in the sleigh before they hit the snow.</li>
+        <li><b>Stockings</b> hung by the chimney with care are worth <b>+25</b>.</li>
+        <li><b>Cookies &amp; milk</b> are rare — Santa's fuel. Catch a plate and he shares the energy back: <b>+1 life</b> (or +25 if you are already full).</li>
+        <li><b>Coal</b> is straight off the naughty list. Catch a lump and you lose <b>1 life</b>. Best not to ask whose stocking it was meant for.</li>
+        <li><b>Drop a present</b> and you lose <b>1 life</b> too. Some kid wakes up to an empty stocking. No pressure.</li>
+        <li>You have <b>3 lives</b>. Every <b>10 presents</b> caught, you level up — the snow falls faster — and you earn a <b>+25</b> bonus.</li>
+        <li><b>Practice mode:</b> no lives lost, no score saved — just a rehearsal before the big night.</li>
+        <li>Press <b>P</b> to pause. The reindeer will wait. Probably.</li>
+      </ul></div>
+      <button class="btn" id="btnRulesClose">Got it</button>
+    </div>
+
+    <div class="overlay hidden" id="ovPause">
+      <h2>PAUSED</h2>
+      <p>Take a breath. The reindeer are getting a snack.</p>
+      <button class="btn" id="btnResume">Resume</button>
+      <button class="btn2" id="btnRestart">Restart</button>
+      <button class="btn3" id="btnExitPause">Exit game</button>
+    </div>
+
+    <div class="overlay hidden" id="ovEnd">
+      <h2 id="endTitle">GAME OVER</h2>
+      <p id="endLine">The sleigh is empty and the reindeer are laughing at you.</p>
+      <div class="big" id="endScore">0</div>
+      <p class="bestline">Best: <b id="endBest">0</b> <span class="newbest hidden" id="endNewBest">New best!</span></p>
+      <p class="bestline" id="endStats"></p>
+      <p class="bestline" id="endPracticeNote"></p>
+      <button class="btn" id="btnAgain">Replay</button>
+      <button class="btn2" id="btnStartOver">Start over</button>
+      <button class="btn2" id="btnInvite">Invite friend</button>
+      <button class="btn2" id="btnExit">Exit</button>
+      <div class="copymsg" id="copyMsg" role="status"></div>
+    </div>
+  </div>
+  <div class="hint">Arrow keys, mouse or touch — steer the sleigh under the falling gifts.</div>
+</div>
+<script>
+(function(){
+'use strict';
+/* SANTA-GIFT-DROP-2026-11-25: Santa's Gift Drop — Christmas catcher.
+   Steer Santa's sleigh, catch presents (+10), stockings (+25) and
+   cookies & milk (+1 life, rare). Coal costs a life, and so does a
+   dropped present. 3 lives; every 10 presents = level up, faster falls. */
+var cv = document.getElementById('game');
+var ctx = null;
+try { ctx = cv.getContext && cv.getContext('2d'); } catch (e) { ctx = null; }
+var W = 480, H = 640;
+
+/* ---- state ---- */
+var state = 'menu'; /* menu | playing | paused | over */
+var practiceMode = false;
+var score = 0, best = 0, level = 1, lives = 3;
+var presents = 0, stockings = 0, cookies = 0, coalHits = 0, dropped = 0;
+var items = [];      /* {type,x,y,vy,phase,rot,color} */
+var floats = [];     /* {x,y,txt,color,t} */
+var flakes = [];     /* background snow {x,y,r,vy,ph} */
+var sleighX = W / 2;
+var keys = {};
+var spawnTimer = 1.0;
+var shakeT = 0, flashT = 0, bannerT = 0, bannerTxt = '';
+var difficulty = 'medium';
+var LS_BEST = 'santasGiftDrop.best', LS_DIFF = 'santasGiftDrop.difficulty';
+try {
+  best = parseInt(localStorage.getItem(LS_BEST) || '0', 10) || 0;
+  var d0 = localStorage.getItem(LS_DIFF); if (d0) difficulty = d0;
+} catch (e) {}
+
+var SLEIGH_Y = 548;          /* catch line (sleigh bed height) */
+var CATCH_HALF = 62;         /* sleigh catch half-width */
+var DIFF = {
+  easy:   { fall: 115, perLevel: 9,  spawn: 1.15, coal: 0.08, desc: 'Easy: gentle snow, rare coal' },
+  medium: { fall: 155, perLevel: 12, spawn: 0.95, coal: 0.15, desc: 'Medium: steady snow, some coal' },
+  hard:   { fall: 205, perLevel: 16, spawn: 0.78, coal: 0.25, desc: 'Hard: blizzard falls, lots of coal' }
+};
+var DIFF_LABEL = { easy: 'Easy', medium: 'Medium', hard: 'Hard' };
+function params(){
+  var d = DIFF[difficulty] || DIFF.medium;
+  return {
+    fall: d.fall + (level - 1) * d.perLevel,
+    spawn: d.spawn,
+    coal: d.coal
+  };
+}
+
+/* ---- helpers ---- */
+function $(id){ return document.getElementById(id); }
+function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
+function rnd(a, b){ return a + Math.random() * (b - a); }
+function pick(arr){ return arr[Math.floor(Math.random() * arr.length)]; }
+
+/* ---- audio (gated by holoSettings) ---- */
+var AC = null;
+function ac(){
+  if (!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  return AC;
+}
+function beep(f, dur, type, g, slide){
+  try {
+    if (!window.holoSettings || !window.holoSettings.sound) return;
+    var c = ac(); if (!c) return;
+    var o = c.createOscillator(), gn = c.createGain();
+    o.type = type || 'sine'; o.frequency.value = f;
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, slide), c.currentTime + dur);
+    gn.gain.value = g || 0.1;
+    gn.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+    o.connect(gn); gn.connect(c.destination);
+    o.start(); o.stop(c.currentTime + dur);
+  } catch (e) {}
+}
+function sfx(name){
+  if (name === 'catch'){ beep(880, 0.1, 'sine', 0.11); setTimeout(function(){ beep(1318, 0.16, 'sine', 0.1); }, 90); }
+  else if (name === 'stocking'){ [1046, 1318, 1568].forEach(function(f, i){ setTimeout(function(){ beep(f, 0.12, 'triangle', 0.1); }, i * 80); }); }
+  else if (name === 'cookie'){ beep(523, 0.14, 'sine', 0.11); setTimeout(function(){ beep(784, 0.2, 'sine', 0.11); }, 120); }
+  else if (name === 'coal'){ beep(140, 0.3, 'sawtooth', 0.13, 55); }
+  else if (name === 'drop'){ beep(330, 0.25, 'triangle', 0.1, 165); }
+  else if (name === 'level'){ [523, 659, 784, 1046].forEach(function(f, i){ setTimeout(function(){ beep(f, 0.14, 'sine', 0.11); }, i * 100); }); }
+  else if (name === 'over'){ [392, 330, 262, 196].forEach(function(f, i){ setTimeout(function(){ beep(f, 0.24, 'triangle', 0.1); }, i * 170); }); }
+  else if (name === 'click'){ beep(660, 0.07, 'sine', 0.08); }
+}
+function buzz(ms){ try { if (window.holoBuzz) window.holoBuzz(ms); } catch (e) {} }
+
+/* ---- overlays ---- */
+var overlays = ['ovMenu', 'ovRules', 'ovPause', 'ovEnd'];
+function show(id){
+  overlays.forEach(function(o){ $(o).classList.toggle('hidden', o !== id); });
+}
+function showNone(){ overlays.forEach(function(o){ $(o).classList.add('hidden'); }); }
+function showMenu(){
+  state = 'menu';
+  $('menuBest').textContent = best;
+  $('menuPracticeNote').textContent = practiceMode ? 'Practice — scores don\u2019t count' : '';
+  show('ovMenu');
+  updateHUD();
+}
+
+/* ---- HUD ---- */
+var HEART_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14 C2 10 1 6 3 3.5 C4.5 1.8 7 2.2 8 4 C9 2.2 11.5 1.8 13 3.5 C15 6 14 10 8 14 Z" fill="FILL"/></svg>';
+function updateHUD(){
+  $('hudScore').textContent = score;
+  $('hudBest').textContent = best;
+  $('hudLevel').textContent = level;
+  var h = '';
+  for (var i = 0; i < 3; i++){
+    h += HEART_SVG.replace('FILL', i < lives ? '#ff5b5b' : '#3a3450');
+  }
+  $('hudLives').innerHTML = h;
+}
+
+/* ---- game flow ---- */
+function startGame(practice){
+  practiceMode = !!practice;
+  score = 0; level = 1; lives = 3;
+  presents = 0; stockings = 0; cookies = 0; coalHits = 0; dropped = 0;
+  items = []; floats = [];
+  spawnTimer = 0.9; shakeT = 0; flashT = 0; bannerT = 0;
+  sleighX = W / 2;
+  state = 'playing';
+  showNone();
+  updateHUD();
+}
+function pauseGame(){
+  if (state !== 'playing') return;
+  state = 'paused';
+  show('ovPause');
+}
+function resumeGame(){
+  if (state !== 'paused') return;
+  state = 'playing';
+  showNone();
+}
+function loseLife(reason, x, y){
+  if (practiceMode){
+    floats.push({ x: x, y: y, txt: reason + ' — practice, no life lost', color: '#cfc4ff', t: 1.6 });
+    return;
+  }
+  lives--;
+  shakeT = 0.35; flashT = 0.3;
+  sfx(reason.indexOf('Coal') === 0 ? 'coal' : 'drop');
+  buzz(80);
+  floats.push({ x: x, y: y, txt: reason + '  -1 life', color: '#ff5b5b', t: 1.6 });
+  updateHUD();
+  if (lives <= 0) gameOver();
+}
+function gameOver(){
+  state = 'over';
+  sfx('over');
+  var isBest = false;
+  if (!practiceMode && score > best){
+    best = score; isBest = true;
+    try { localStorage.setItem(LS_BEST, String(best)); } catch (e) {}
+  }
+  $('endTitle').textContent = 'GAME OVER';
+  $('endLine').textContent = practiceMode
+    ? 'Practice run over — the reindeer are already asking for a rematch.'
+    : (score >= 200 ? 'The sleigh is full and the North Pole is proud of you!'
+      : 'The sleigh is empty and the reindeer are laughing at you.');
+  $('endScore').textContent = score;
+  $('endBest').textContent = best;
+  $('endNewBest').classList.toggle('hidden', !isBest);
+  $('endStats').textContent = 'Level ' + level + '  ·  ' + presents + ' presents  ·  ' + stockings + ' stockings  ·  ' + cookies + ' cookies & milk';
+  $('endPracticeNote').textContent = practiceMode ? 'Practice round — nothing was saved.' : '';
+  $('copyMsg').textContent = '';
+  show('ovEnd');
+  updateHUD();
+}
+
+/* ---- falling items ---- */
+var PRESENT_COLORS = ['#e63946', '#2fbf71', '#3a86ff', '#ffd93b', '#ff3ec8'];
+function rollType(){
+  var p = params();
+  var r = Math.random();
+  if (r < p.coal) return 'coal';
+  if (r < p.coal + 0.10) return 'stocking';
+  if (r < p.coal + 0.13) return 'cookie';
+  return 'present';
+}
+function spawnItem(type, x, y){
+  type = type || rollType();
+  items.push({
+    type: type,
+    x: (x !== undefined ? x : rnd(24, W - 24)),
+    y: (y !== undefined ? y : -30),
+    vy: params().fall * rnd(0.9, 1.1),
+    phase: rnd(0, Math.PI * 2),
+    rot: rnd(-0.25, 0.25),
+    color: pick(PRESENT_COLORS)
+  });
+}
+function catchItem(it, idx){
+  items.splice(idx, 1);
+  if (it.type === 'present'){
+    score += 10; presents++;
+    floats.push({ x: it.x, y: SLEIGH_Y - 40, txt: '+10', color: '#7dff9e', t: 1.1 });
+    sfx('catch');
+    if (presents % 10 === 0){
+      level++;
+      score += 25;
+      bannerTxt = 'LEVEL ' + level + '!  +25';
+      bannerT = 1.6;
+      sfx('level');
+    }
+  } else if (it.type === 'stocking'){
+    score += 25; stockings++;
+    floats.push({ x: it.x, y: SLEIGH_Y - 40, txt: 'Stocking! +25', color: '#ffd93b', t: 1.3 });
+    sfx('stocking'); buzz(30);
+  } else if (it.type === 'cookie'){
+    cookies++;
+    if (lives < 3){
+      lives++;
+      floats.push({ x: it.x, y: SLEIGH_Y - 40, txt: 'Cookies & milk! +1 life', color: '#7dd8ff', t: 1.5 });
+    } else {
+      score += 25;
+      floats.push({ x: it.x, y: SLEIGH_Y - 40, txt: 'Cookies & milk! +25', color: '#7dd8ff', t: 1.5 });
+    }
+    sfx('cookie'); buzz(30);
+  } else if (it.type === 'coal'){
+    coalHits++;
+    loseLife('Coal! Off the naughty list!', it.x, SLEIGH_Y - 40);
+  }
+  updateHUD();
+}
+function missItem(it, idx){
+  items.splice(idx, 1);
+  if (it.type === 'present'){
+    dropped++;
+    loseLife('Dropped a present!', it.x, H - 60);
+  }
+  /* missed coal / stockings / cookies just melt into the snow — no penalty */
+}
+
+/* ---- update ---- */
+var lastT = 0;
+function update(dt){
+  if (state !== 'playing') return;
+  /* keyboard steering */
+  var kSpeed = 430 * dt;
+  if (keys['ArrowLeft']) sleighX -= kSpeed;
+  if (keys['ArrowRight']) sleighX += kSpeed;
+  sleighX = clamp(sleighX, 70, W - 70);
+  /* spawning */
+  spawnTimer -= dt;
+  if (spawnTimer <= 0){
+    spawnTimer = params().spawn * rnd(0.85, 1.15);
+    spawnItem();
+  }
+  /* items fall (+ gentle sway) */
+  for (var i = items.length - 1; i >= 0; i--){
+    var it = items[i];
+    it.y += it.vy * dt;
+    it.x += Math.sin(it.y / 60 + it.phase) * 14 * dt;
+    if (it.y >= SLEIGH_Y - 6 && it.y <= SLEIGH_Y + 34 && Math.abs(it.x - sleighX) <= CATCH_HALF){
+      catchItem(it, i);
+      continue;
+    }
+    if (it.y > H + 24) missItem(it, i);
+  }
+  /* background snow */
+  for (var f = 0; f < flakes.length; f++){
+    flakes[f].y += flakes[f].vy * dt;
+    flakes[f].x += Math.sin(flakes[f].y / 50 + flakes[f].ph) * 10 * dt;
+    if (flakes[f].y > H + 6){ flakes[f].y = -6; flakes[f].x = rnd(0, W); }
+  }
+  /* floats */
+  for (var q = floats.length - 1; q >= 0; q--){
+    floats[q].y -= 26 * dt; floats[q].t -= dt;
+    if (floats[q].t <= 0) floats.splice(q, 1);
+  }
+  if (shakeT > 0) shakeT -= dt;
+  if (flashT > 0) flashT -= dt;
+  if (bannerT > 0) bannerT -= dt;
+}
+
+/* ---- drawing ---- */
+function initFlakes(){
+  flakes = [];
+  for (var i = 0; i < 42; i++){
+    flakes.push({ x: rnd(0, W), y: rnd(0, H), r: rnd(1.5, 3.5), vy: rnd(18, 42), ph: rnd(0, Math.PI * 2) });
+  }
+}
+initFlakes();
+
+function drawPresent(x, y, rot, color){
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(rot);
+  ctx.fillStyle = color;
+  ctx.fillRect(-15, -13, 30, 26);
+  ctx.fillStyle = 'rgba(255,255,255,.25)';
+  ctx.fillRect(-15, -13, 30, 5);
+  ctx.fillStyle = '#fff8e0';
+  ctx.fillRect(-3, -13, 6, 26);
+  ctx.fillRect(-15, -2, 30, 5);
+  /* bow */
+  ctx.fillStyle = '#fff8e0';
+  ctx.beginPath();
+  ctx.moveTo(0, -13); ctx.lineTo(-9, -21); ctx.lineTo(-3, -21); ctx.lineTo(0, -15);
+  ctx.lineTo(3, -21); ctx.lineTo(9, -21); ctx.lineTo(0, -13);
+  ctx.fill();
+  ctx.restore();
+}
+function drawCoal(x, y, rot){
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(rot);
+  ctx.fillStyle = '#17131f';
+  ctx.beginPath();
+  ctx.arc(-6, 2, 9, 0, Math.PI * 2);
+  ctx.arc(5, 4, 10, 0, Math.PI * 2);
+  ctx.arc(0, -6, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#3d3648';
+  ctx.beginPath(); ctx.arc(-3, -5, 3, 0, Math.PI * 2); ctx.arc(7, 1, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawStocking(x, y, rot){
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(rot);
+  /* loop */
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.arc(0, -20, 5, Math.PI, 0); ctx.stroke();
+  /* sock body */
+  ctx.fillStyle = '#e63946';
+  ctx.beginPath();
+  ctx.moveTo(-9, -16); ctx.lineTo(9, -16); ctx.lineTo(9, 6);
+  ctx.quadraticCurveTo(9, 14, 2, 14);
+  ctx.lineTo(-4, 14); ctx.quadraticCurveTo(-12, 14, -12, 6);
+  ctx.lineTo(-12, 2); ctx.quadraticCurveTo(-12, -8, -9, -16);
+  ctx.fill();
+  /* cuff + heel/toe */
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(-11, -18, 22, 7);
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(-6, 10, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillRect(-11, 8, 6, 6);
+  ctx.restore();
+}
+function drawCookie(x, y, rot){
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(rot);
+  /* milk glass */
+  ctx.fillStyle = '#e8f4ff';
+  ctx.fillRect(8, -14, 12, 20);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(10, -12, 8, 14);
+  ctx.strokeStyle = '#ff5b5b'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(14, -14); ctx.lineTo(17, -22); ctx.stroke();
+  /* plate */
+  ctx.fillStyle = '#f4f1ff';
+  ctx.beginPath(); ctx.ellipse(-4, 8, 16, 5, 0, 0, Math.PI * 2); ctx.fill();
+  /* cookies */
+  ctx.fillStyle = '#a8763e';
+  ctx.beginPath(); ctx.arc(-10, 4, 7, 0, Math.PI * 2); ctx.arc(3, 3, 7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#4a2c14';
+  ctx.beginPath(); ctx.arc(-12, 2, 1.4, 0, Math.PI * 2); ctx.arc(-8, 6, 1.4, 0, Math.PI * 2);
+  ctx.arc(1, 1, 1.4, 0, Math.PI * 2); ctx.arc(5, 5, 1.4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawItem(it){
+  if (it.type === 'present') drawPresent(it.x, it.y, it.rot, it.color);
+  else if (it.type === 'coal') drawCoal(it.x, it.y, it.rot);
+  else if (it.type === 'stocking') drawStocking(it.x, it.y, it.rot);
+  else drawCookie(it.x, it.y, it.rot);
+}
+function drawReindeer(x, y, t){
+  var bob = Math.sin(t * 8) * 2;
+  ctx.save();
+  ctx.translate(x, y + bob);
+  /* legs */
+  ctx.strokeStyle = '#7a5228'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  var lp = Math.sin(t * 8) * 5;
+  ctx.beginPath(); ctx.moveTo(-12, 4); ctx.lineTo(-12 + lp, 16); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(10, 4); ctx.lineTo(10 - lp, 16); ctx.stroke();
+  /* body */
+  ctx.fillStyle = '#a8763e';
+  ctx.beginPath(); ctx.ellipse(0, 0, 20, 11, 0, 0, Math.PI * 2); ctx.fill();
+  /* neck + head */
+  ctx.fillStyle = '#a8763e';
+  ctx.beginPath(); ctx.ellipse(20, -8, 7, 10, -0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(27, -16, 7, 0, Math.PI * 2); ctx.fill();
+  /* snout + red nose */
+  ctx.fillStyle = '#8a5f30';
+  ctx.beginPath(); ctx.ellipse(33, -13, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ff2e2e';
+  ctx.beginPath(); ctx.arc(37, -14, 3.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(38, -15, 1, 0, Math.PI * 2); ctx.fill();
+  /* eye */
+  ctx.fillStyle = '#241200';
+  ctx.beginPath(); ctx.arc(28, -18, 1.6, 0, Math.PI * 2); ctx.fill();
+  /* antlers */
+  ctx.strokeStyle = '#6b4423'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(24, -22); ctx.lineTo(20, -32); ctx.lineTo(15, -30); ctx.moveTo(20, -32); ctx.lineTo(24, -34); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(29, -22); ctx.lineTo(29, -33); ctx.lineTo(34, -31); ctx.moveTo(29, -33); ctx.lineTo(27, -36); ctx.stroke();
+  /* tail */
+  ctx.fillStyle = '#e8dcc8';
+  ctx.beginPath(); ctx.arc(-20, -4, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawSleigh(t){
+  var x = sleighX, y = SLEIGH_Y;
+  var bob = Math.sin(t * 6) * 1.5;
+  /* reins to the reindeer */
+  ctx.strokeStyle = '#c9a35c'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x - 18, y - 34 + bob); ctx.quadraticCurveTo(x + 40, y - 52, x + 92, y - 34); ctx.stroke();
+  /* reindeer pulling ahead */
+  drawReindeer(x + 108, y - 18, t);
+  ctx.save();
+  ctx.translate(x, y + bob);
+  /* runners */
+  ctx.strokeStyle = '#ffd93b'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-58, 22); ctx.lineTo(52, 22); ctx.quadraticCurveTo(64, 22, 64, 10); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-46, 22); ctx.lineTo(-46, 8); ctx.moveTo(-14, 22); ctx.lineTo(-14, 8); ctx.moveTo(18, 22); ctx.lineTo(18, 8); ctx.moveTo(46, 22); ctx.lineTo(46, 8); ctx.stroke();
+  /* sleigh body */
+  ctx.fillStyle = '#c22f2f';
+  ctx.beginPath();
+  ctx.moveTo(-58, 6);
+  ctx.quadraticCurveTo(-62, -14, -44, -16);
+  ctx.lineTo(40, -16);
+  ctx.quadraticCurveTo(58, -16, 56, 2);
+  ctx.quadraticCurveTo(54, 8, 44, 8);
+  ctx.lineTo(-48, 8);
+  ctx.quadraticCurveTo(-58, 8, -58, 6);
+  ctx.fill();
+  ctx.fillStyle = '#ffd93b';
+  ctx.fillRect(-58, -2, 114, 3);
+  /* gift sack in the back of the sleigh */
+  ctx.fillStyle = '#7a3b12';
+  ctx.beginPath();
+  ctx.moveTo(-52, -16); ctx.quadraticCurveTo(-58, -34, -44, -36);
+  ctx.quadraticCurveTo(-32, -38, -34, -16);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#ffd93b'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-44, -36); ctx.lineTo(-40, -42); ctx.stroke();
+  /* Santa: seated, facing right */
+  /* torso */
+  ctx.fillStyle = '#c22f2f';
+  ctx.beginPath();
+  ctx.moveTo(-18, -14); ctx.lineTo(8, -14); ctx.lineTo(12, 8); ctx.lineTo(-20, 8);
+  ctx.closePath(); ctx.fill();
+  /* white trim + belt */
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(-20, 4, 32, 4);
+  ctx.fillStyle = '#241200';
+  ctx.fillRect(-18, -4, 28, 5);
+  ctx.fillStyle = '#ffd93b';
+  ctx.fillRect(-8, -4, 6, 5);
+  /* arm holding the reins */
+  ctx.strokeStyle = '#c22f2f'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(4, -8); ctx.lineTo(20, -22); ctx.stroke();
+  ctx.fillStyle = '#f2c79b';
+  ctx.beginPath(); ctx.arc(21, -23, 4, 0, Math.PI * 2); ctx.fill();
+  /* head */
+  ctx.fillStyle = '#f2c79b';
+  ctx.beginPath(); ctx.arc(-6, -26, 11, 0, Math.PI * 2); ctx.fill();
+  /* beard */
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(-16, -24); ctx.quadraticCurveTo(-14, -8, -6, -8);
+  ctx.quadraticCurveTo(2, -10, 3, -22); ctx.quadraticCurveTo(-4, -18, -16, -24);
+  ctx.fill();
+  /* nose + eye */
+  ctx.fillStyle = '#f2c79b';
+  ctx.beginPath(); ctx.arc(4, -26, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#241200';
+  ctx.beginPath(); ctx.arc(0, -30, 1.5, 0, Math.PI * 2); ctx.fill();
+  /* hat */
+  ctx.fillStyle = '#c22f2f';
+  ctx.beginPath();
+  ctx.moveTo(-16, -30); ctx.quadraticCurveTo(-8, -44, 6, -36);
+  ctx.lineTo(10, -30); ctx.lineTo(-16, -30);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(-17, -32, 28, 5);
+  ctx.beginPath(); ctx.arc(8, -37, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function drawRooftops(){
+  /* snowy rooftops + chimneys along the bottom, behind the sleigh */
+  var houses = [
+    { x: -10, w: 120, h: 46, lit: true },
+    { x: 96, w: 140, h: 62, lit: false },
+    { x: 222, w: 110, h: 40, lit: true },
+    { x: 320, w: 150, h: 58, lit: true },
+    { x: 452, w: 60, h: 44, lit: false }
+  ];
+  for (var i = 0; i < houses.length; i++){
+    var hs = houses[i];
+    var top = H - hs.h;
+    ctx.fillStyle = '#1c1440';
+    ctx.fillRect(hs.x, top, hs.w, hs.h);
+    /* roof triangle with snow */
+    ctx.fillStyle = '#241d4d';
+    ctx.beginPath();
+    ctx.moveTo(hs.x - 6, top); ctx.lineTo(hs.x + hs.w / 2, top - 22); ctx.lineTo(hs.x + hs.w + 6, top);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#eef4ff';
+    ctx.beginPath();
+    ctx.moveTo(hs.x - 6, top); ctx.lineTo(hs.x + hs.w / 2, top - 22); ctx.lineTo(hs.x + hs.w + 6, top);
+    ctx.lineTo(hs.x + hs.w, top - 2); ctx.lineTo(hs.x + hs.w / 2, top - 16); ctx.lineTo(hs.x, top - 2);
+    ctx.closePath(); ctx.fill();
+    /* chimney */
+    ctx.fillStyle = '#1c1440';
+    ctx.fillRect(hs.x + hs.w - 30, top - 34, 14, 22);
+    ctx.fillStyle = '#eef4ff';
+    ctx.fillRect(hs.x + hs.w - 32, top - 36, 18, 5);
+    /* lit window */
+    if (hs.lit){
+      ctx.fillStyle = '#ffd93b';
+      ctx.fillRect(hs.x + 14, top + 14, 14, 16);
+      ctx.fillRect(hs.x + hs.w - 30, top + 14, 14, 16);
+    }
+  }
+  /* snow ground */
+  ctx.fillStyle = '#eef4ff';
+  ctx.beginPath();
+  ctx.moveTo(0, H - 12);
+  ctx.quadraticCurveTo(120, H - 22, 240, H - 12);
+  ctx.quadraticCurveTo(360, H - 4, 480, H - 14);
+  ctx.lineTo(480, H); ctx.lineTo(0, H);
+  ctx.closePath(); ctx.fill();
+}
+function drawScene(t){
+  if (!ctx) return; /* headless env without a 2d context: logic still runs */
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  if (shakeT > 0){
+    ctx.translate(rnd(-4, 4) * shakeT * 3, rnd(-4, 4) * shakeT * 3);
+  }
+  /* night sky */
+  var sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#0d1038'); sky.addColorStop(0.55, '#1d1445'); sky.addColorStop(1, '#0a0620');
+  ctx.fillStyle = sky; ctx.fillRect(-8, -8, W + 16, H + 16);
+  /* stars */
+  ctx.fillStyle = 'rgba(255,255,255,.8)';
+  for (var s = 0; s < 30; s++){
+    var sx = (s * 173) % W, sy = (s * 97) % 90;
+    ctx.fillRect(sx, sy, 2, 2);
+  }
+  /* moon */
+  ctx.fillStyle = '#ffe9a3';
+  ctx.beginPath(); ctx.arc(418, 40, 22, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e8cf8a';
+  ctx.beginPath(); ctx.arc(411, 35, 5, 0, Math.PI * 2); ctx.arc(425, 47, 3.5, 0, Math.PI * 2); ctx.fill();
+  /* falling snow */
+  ctx.fillStyle = 'rgba(255,255,255,.85)';
+  for (var f = 0; f < flakes.length; f++){
+    ctx.beginPath(); ctx.arc(flakes[f].x, flakes[f].y, flakes[f].r, 0, Math.PI * 2); ctx.fill();
+  }
+  /* rooftops + ground */
+  drawRooftops();
+  /* falling gifts */
+  for (var i = 0; i < items.length; i++) drawItem(items[i]);
+  /* Santa's sleigh */
+  if (state !== 'menu' || true) drawSleigh(t);
+  /* float texts */
+  ctx.textAlign = 'center';
+  for (var q = 0; q < floats.length; q++){
+    ctx.globalAlpha = clamp(floats[q].t, 0, 1);
+    ctx.font = '800 15px system-ui, sans-serif';
+    ctx.fillStyle = floats[q].color;
+    ctx.fillText(floats[q].txt, floats[q].x, floats[q].y);
+  }
+  ctx.globalAlpha = 1;
+  /* level banner */
+  if (bannerT > 0){
+    ctx.globalAlpha = clamp(bannerT, 0, 1);
+    ctx.font = '900 26px system-ui, sans-serif';
+    ctx.fillStyle = '#ffd93b';
+    ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 5;
+    ctx.strokeText(bannerTxt, W / 2, 300);
+    ctx.fillText(bannerTxt, W / 2, 300);
+    ctx.globalAlpha = 1;
+  }
+  /* practice tag on canvas */
+  if (practiceMode && state === 'playing'){
+    ctx.font = '700 13px system-ui, sans-serif';
+    ctx.fillStyle = '#ffe9a3';
+    ctx.textAlign = 'left';
+    ctx.fillText('Practice — scores don\'t count', 10, 22);
+  }
+  ctx.restore();
+  /* red flash on life lost */
+  if (flashT > 0){
+    ctx.fillStyle = 'rgba(255,40,40,' + (flashT * 0.9) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+function loop(ts){
+  var t = ts / 1000;
+  var dt = lastT ? Math.min(0.05, (ts - lastT) / 1000) : 0.016;
+  lastT = ts;
+  update(dt);
+  drawScene(t);
+  requestAnimationFrame(loop);
+}
+
+/* ---- fit to size, no scroll ---- */
+function fit(){
+  var st = $('stage');
+  var r = st.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  var s = Math.min(r.width / W, r.height / H);
+  cv.style.width = Math.floor(W * s) + 'px';
+  cv.style.height = Math.floor(H * s) + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', function(){ setTimeout(fit, 100); });
+
+/* ---- input ---- */
+function toGame(e){
+  var r = cv.getBoundingClientRect();
+  var x = (e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0));
+  return { x: (x - r.left) / r.width * W };
+}
+function steer(e){
+  if (state !== 'playing') return;
+  sleighX = clamp(toGame(e).x, 70, W - 70);
+}
+cv.addEventListener('pointerdown', function(e){
+  if (state !== 'playing') return;
+  e.preventDefault();
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  steer(e);
+});
+cv.addEventListener('pointermove', function(e){ steer(e); });
+cv.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+window.addEventListener('keydown', function(e){
+  if (e.key.indexOf('Arrow') === 0){ keys[e.key] = true; if (state === 'playing') e.preventDefault(); }
+  else if (e.key === 'p' || e.key === 'P'){ if (state === 'playing') pauseGame(); else if (state === 'paused') resumeGame(); }
+  else if (e.key === 'Enter'){
+    if (state === 'menu') startGame(false);
+    else if (state === 'over') startGame(practiceMode);
+  }
+});
+window.addEventListener('keyup', function(e){
+  if (e.key.indexOf('Arrow') === 0) keys[e.key] = false;
+});
+
+/* ---- invite friend ---- */
+function copyInvite(){
+  var url = 'https://beta.holosarcade.ca/santas-gift-drop/';
+  var msg = $('copyMsg');
+  function done(ok){
+    msg.textContent = ok ? 'Link copied! Send it to a friend.' : 'Copy didn\u2019t work — the link is ' + url;
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){ done(true); }, function(){ fallbackCopy(url, done); });
+  } else {
+    fallbackCopy(url, done);
+  }
+  setTimeout(function(){ if (msg) msg.textContent = ''; }, 4000);
+}
+function fallbackCopy(url, done){
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = url;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    document.body.removeChild(ta);
+    done(!!ok);
+  } catch (e) { done(false); }
+}
+
+/* ---- buttons ---- */
+$('btnPlay').addEventListener('click', function(){ sfx('click'); startGame(false); });
+$('btnPractice').addEventListener('click', function(){ sfx('click'); startGame(true); });
+$('btnRules').addEventListener('click', function(){ show('ovRules'); });
+$('btnRulesClose').addEventListener('click', function(){ show('ovMenu'); });
+$('btnPause').addEventListener('click', function(){ if (state === 'playing') pauseGame(); else if (state === 'paused') resumeGame(); });
+$('btnResume').addEventListener('click', resumeGame);
+$('btnRestart').addEventListener('click', function(){ startGame(practiceMode); });
+$('btnExitPause').addEventListener('click', function(){ showMenu(); });
+$('btnAgain').addEventListener('click', function(){ startGame(practiceMode); });
+$('btnStartOver').addEventListener('click', function(){ showMenu(); });
+$('btnInvite').addEventListener('click', copyInvite);
+$('btnExit').addEventListener('click', function(){ window.location.href = 'https://beta.holosarcade.ca/games-hub/'; });
+
+/* ---- difficulty picker ---- */
+function syncDiffUI(){
+  var btns = document.querySelectorAll('#diffRow .diffbtn');
+  for (var i = 0; i < btns.length; i++){
+    btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-diff') === difficulty ? 'true' : 'false');
+  }
+  $('menuDiffLine').textContent = (DIFF[difficulty] || DIFF.medium).desc;
+}
+document.querySelectorAll('#diffRow .diffbtn').forEach(function(b){
+  b.addEventListener('click', function(){
+    difficulty = b.getAttribute('data-diff');
+    try { localStorage.setItem(LS_DIFF, difficulty); } catch (e) {}
+    sfx('click');
+    syncDiffUI();
+  });
+});
+syncDiffUI();
+
+/* ---- test hooks (for jsdom verification) ---- */
+window.__sgd = {
+  get state(){ return state; },
+  get score(){ return score; },
+  get best(){ return best; },
+  get lives(){ return lives; },
+  get level(){ return level; },
+  get presents(){ return presents; },
+  get stockings(){ return stockings; },
+  get cookies(){ return cookies; },
+  get items(){ return items; },
+  get practice(){ return practiceMode; },
+  get difficulty(){ return difficulty; },
+  get sleighX(){ return sleighX; },
+  start: startGame,
+  pause: pauseGame,
+  resume: resumeGame,
+  menu: showMenu,
+  spawn: spawnItem,
+  setSleigh: function(x){ sleighX = clamp(x, 70, W - 70); },
+  setLives: function(n){ lives = n; updateHUD(); },
+  setSpawnTimer: function(t){ spawnTimer = t; },
+  step: function(dt){ update(dt); drawScene(1.5); },
+  params: params,
+  fit: fit,
+  canvas: cv
+};
+
+/* ---- init ---- */
+if (window.__holoPractice){
+  /* hub opened in practice — the guard auto-clicks #btnPractice once loaded */
+}
+showMenu();
+updateHUD();
+fit();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
