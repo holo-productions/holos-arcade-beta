@@ -2973,6 +2973,29 @@ setTimeout(function(){
 .migrate-card .login-field input:focus{outline:none;border-color:var(--cyan);box-shadow:0 0 0 3px rgba(56,225,255,.32),inset 0 3px 0 rgba(0,0,0,.5)}
 .migrate-card .login-btn{width:100%}
 @media (max-width:560px){.migrate-card{padding:16px 14px}}
+/* CODENAME-PROMPT-2026-11-25: sign-in Code Name prompt for accounts
+   created before Code Names were required (Kevin, TheKkrazy21, any
+   legacy account). The input copies the register form's "pick a Code
+   Name" field — same .login-field look (label + dark input), free-text
+   typing, never a pick-list or dropdown. Blocks hub entry until a name
+   is saved; sign-out is the escape hatch. No Owner Dash / Vault mention. */
+#codeNameOverlay{position:fixed;inset:0;z-index:310;display:none;align-items:center;justify-content:center;background:rgba(5,2,20,.92);padding:16px}
+#codeNameOverlay.open{display:flex}
+.code-name-card{width:100%;max-width:560px;max-height:calc(100dvh - 32px);overflow-y:auto;background:#0d0826;border:2px solid #3b2a7a;border-radius:16px;padding:22px 20px;box-shadow:0 18px 60px rgba(0,0,0,.6)}
+.code-name-card h2{font-family:"Press Start 2P",monospace;font-size:15px;line-height:1.5;color:#ffe93d;margin:0 0 10px;text-shadow:2px 2px 0 #7a2b8f}
+.code-name-card p{color:#cfc8f5;font-size:14px;line-height:1.5;margin:0 0 12px}
+/* Same field as the register form: .login-field label (pixel, cyan) +
+   dark input with the violet border — one shared look for "pick a Code Name". */
+.code-name-card .login-field{margin:0 0 6px}
+.code-name-card .login-field label{display:block;font-family:"Press Start 2P",monospace;font-size:10px;letter-spacing:.06em;color:#7fe7ff;text-shadow:1px 1px 0 #123;margin-bottom:6px}
+.code-name-card .login-field input{width:100%;background:#0a0620;border:2px solid #3b2a7a;border-radius:10px;color:#fff;font-size:16px;padding:11px 12px;box-sizing:border-box}
+.code-name-card .login-field input:focus{outline:none;border-color:#ff2d95;box-shadow:0 0 0 3px rgba(255,45,149,.25)}
+.code-name-card .login-field.field-invalid input,.code-name-card .login-field input.field-invalid{border-color:#ff2d95;box-shadow:0 0 0 3px rgba(255,45,149,.35)}
+.code-name-card .field-msg{color:#ff8ac2;font-size:13px;min-height:18px;margin:2px 0 10px}
+.code-name-card .cn-err{color:#ff8ac2;font-size:13px;min-height:18px;margin:0 0 10px}
+.code-name-card .cn-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:4px}
+.code-name-card .cn-actions .btn{flex:1 1 auto}
+@media (max-width:560px){.code-name-card{padding:16px 14px}.code-name-card h2{font-size:13px}}
 </style>
 <div id="loginView" hidden role="dialog" aria-modal="true" aria-labelledby="loginTitle">
   <div class="gate-page">
@@ -3074,6 +3097,29 @@ setTimeout(function(){
       <button class="btn btn-dark login-btn" id="migrateTakenSave" type="button">Save my Code Name</button>
     </div>
     <p style="text-align:center;margin:10px 0 0"><button type="button" class="login-linkbtn" id="migrateBackBtn">Back to sign in</button> <button type="button" class="login-linkbtn" id="migrateLaterBtn" hidden>Later</button></p>
+  </div>
+</div>
+
+<!-- CODENAME-PROMPT-2026-11-25: sign-in prompt for accounts with no
+     Code Name (legacy accounts). Same "pick a Code Name" field as the
+     register form — free-text typing, no pick-list. Blocks hub entry
+     until a name is saved; Sign out is the escape hatch. -->
+<div id="codeNameOverlay" role="dialog" aria-modal="true" aria-labelledby="cnTitle" hidden>
+  <div class="code-name-card">
+    <h2 id="cnTitle">Pick your Code Name</h2>
+    <p id="cnIntro">Welcome in, agent! Every agent needs a Code Name so your friends can find you. Pick one — it's the name everyone in the Arcade will see.</p>
+    <p id="cnTakenNote" hidden>That name's taken, try another one. Your account is already created — only the Code Name needs changing.</p>
+    <div class="login-field" id="cnField">
+      <label for="cnName">Code Name</label>
+      <input id="cnName" name="username" type="text" autocomplete="username" placeholder="e.g. Sam" />
+      <div class="field-msg" id="cnFieldMsg" aria-live="polite"></div>
+    </div>
+    <div class="cn-err" id="cnErr" role="alert" aria-live="polite"></div>
+    <div class="cn-actions">
+      <button type="button" class="btn" id="cnSaveBtn">Save my Code Name</button>
+      <button type="button" class="login-linkbtn" id="cnLaterBtn" hidden>I'll pick one later</button>
+      <button type="button" class="login-linkbtn" id="cnSignOutBtn">Sign out</button>
+    </div>
   </div>
 </div>
 
@@ -15560,6 +15606,11 @@ function signInAccount(email, password, termsAccepted, rememberMe){
         var displayName = String(res.username || (local && local.acct && local.acct.name) || '').trim();
         /* GREETING-TESTER-2026-11-23: an empty username shows "Tester", never the email prefix. (A stored "test" name still comes from the account record itself — that record is fixed in Firebase Console, not here.) Local account name is preferred first, above. */
         if(!displayName) displayName = 'Tester';
+        /* CODENAME-PROMPT-2026-11-25: cloudName is the username the
+           server record actually holds — null means the record
+           couldn't be read (fail open: no prompt), '' means the
+           account has no Code Name yet. */
+        var cloudName = (typeof res.username === 'string') ? res.username : null;
         /* REVERIFY GATE (2026-11-22): Firebase Auth emailVerified
            is the source of truth. When the beta layer's lookup
            says the email is NOT verified, or the account carries
@@ -15575,6 +15626,18 @@ function signInAccount(email, password, termsAccepted, rememberMe){
             return { ok:false, verifyGate:true, needsReverify:!!res.needsReverify, email:email, rec:rec, rememberMe:!!rememberMe, error:'Verify your email to get back in, agent.' };
           }
           try { if(res.emailVerified === true) setLocalNeedsReverify(email, false); } catch(e){}
+          /* CODENAME-PROMPT-2026-11-25: a signed-in account with no
+             Code Name on the server record (or a name taken in the
+             cloud index) stops here — the prompt collects the name
+             before finishSignIn lets them in. */
+          if(typeof window.holoNeedsCodeName === 'function'){
+            return window.holoNeedsCodeName(rec, cloudName).then(function(n){
+              if(n && n.need){
+                return { ok:false, needUsername:true, taken:!!n.taken, email:email, rec:rec, rememberMe:!!rememberMe };
+              }
+              return finishSignIn(rec, rememberMe);
+            }).catch(function(){ return finishSignIn(rec, rememberMe); });
+          }
           return finishSignIn(rec, rememberMe);
         });
       }
@@ -15658,7 +15721,14 @@ function createAccount(name, email, password, confirmPassword, inviteCode, terms
      NEVER stored in plain text — see hashPassword() / interim
      local hashing note in the ACCOUNTS header above. */
   name = String(name || '').trim();
+  /* CODENAME-REQUIRED-2026-11-25: registration needs a Code Name —
+     rejected here, before any Firebase account is created. Same check
+     the hub uses elsewhere (window.holoValidateCodeName: required +
+     rude-word filter); the forms also validate inline, and the cloud
+     uniqueness check runs after sign-up (see below). */
+  var vNm = (typeof window.holoValidateCodeName === 'function') ? window.holoValidateCodeName(name) : null;
   if(!name) return Promise.resolve({ ok:false, error:'Pop your username in first, agent.' });
+  if(vNm && !vNm.ok) return Promise.resolve({ ok:false, error:vNm.error || 'That Code Name doesn\'t work — try another one.' });
   email = String(email || '').trim();
   if(!validAccountEmail(email)) return Promise.resolve({ ok:false, error:'Pop a valid email in, agent. Your verification link goes there.' });
   if(!termsAccepted) return Promise.resolve({ ok:false, error:'Please tick the box to agree to the Terms & Policies first.' });
@@ -15681,8 +15751,30 @@ function createAccount(name, email, password, confirmPassword, inviteCode, terms
   if(typeof window.betaSignUpAsync === 'function'){
     return window.betaSignUpAsync(email, password, name, inviteCodeNorm, dob).then(function(res){
       if(!res || !res.ok) return { ok:false, deviceLimit:!!(res && res.deviceLimit), error:(res && res.error) || 'Could not finish registration, agent. Check your internet and try again in a minute.' };
-      return cacheLocalAccount(name, email, password, res.uid, null, inviteCodeNorm, res.role || '', dob).then(function(rec){
-        rememberLastEmail(rec.email); return { ok:true, account:{ name:rec.name, code:rec.code, email:rec.email, emailVerified:false } };
+      /* CODENAME-REQUIRED-2026-11-25: the name is checked against the
+         cloud /usernames index right after sign-up (pre-auth the client
+         cannot read the index — the live rules deny it — so this is the
+         earliest the check can run, same as the migration flow). A name
+         taken by an account on another device can't be claimed here —
+         the account is created, but the Code Name isn't; the caller
+         shows the taken step so the tester picks another name (or the
+         sign-in prompt catches it at next sign-in). */
+      return window.betaCheckUsername(name).then(function(chk){
+        if(chk && chk.status === 'taken'){
+          return cacheLocalAccount(name, email, password, res.uid, null, inviteCodeNorm, res.role || '', dob).then(function(rec){
+            rememberLastEmail(rec.email);
+            return { ok:false, taken:true, uid:res.uid, email:email, username:name, account:{ name:rec.name, code:rec.code, email:rec.email, emailVerified:false } };
+          });
+        }
+        return cacheLocalAccount(name, email, password, res.uid, null, inviteCodeNorm, res.role || '', dob).then(function(rec){
+          rememberLastEmail(rec.email); return { ok:true, account:{ name:rec.name, code:rec.code, email:rec.email, emailVerified:false } };
+        });
+      }).catch(function(){
+        /* Index unreadable — fail open: the account exists and the
+           sign-in prompt re-checks the name on next sign-in. */
+        return cacheLocalAccount(name, email, password, res.uid, null, inviteCodeNorm, res.role || '', dob).then(function(rec){
+          rememberLastEmail(rec.email); return { ok:true, account:{ name:rec.name, code:rec.code, email:rec.email, emailVerified:false } };
+        });
       });
     }).catch(function(){ return { ok:false, error:'Could not reach the sign in service, agent. Check your internet and try again in a minute.' }; });
   }
@@ -16211,6 +16303,11 @@ function renderTesterAuth(){
     if(!terms){ markFieldInvalid(termsEl, '⚠️ Tick this box first, agent!'); fail('Please tick the box to agree to the Terms and Policies first.'); return; }
     signInAccount(signInEmail, secret, terms, remember).then(function(res){
       if(res.ok){ succeed(); return; }
+      /* CODENAME-PROMPT-2026-11-25: signed in, but the account has
+         no Code Name yet (or its name is taken in the cloud index).
+         Collect it before entering the hub — finishSignIn runs
+         only after a name is saved. */
+      if(res.needUsername){ if(err) err.hidden = true; if(typeof window.holoShowCodeNamePrompt === 'function'){ window.holoShowCodeNamePrompt({ mode:'sign-in', taken:!!res.taken, email:res.email, uid:(res.rec && res.rec.uid) || '', rec:res.rec, rememberMe:res.rememberMe, onSaved:function(){ finishSignIn(res.rec, res.rememberMe); succeed(); }, onSignOut:function(){ try { if(typeof signOutTester === 'function') signOutTester(); } catch(e){} } }); } else { finishSignIn(res.rec, res.rememberMe); succeed(); } return; }
       if(res.verifyGate){ if(err) err.hidden = true; showVerifyGate(res); return; }
       if(res.migrate){ if(err) err.hidden = true; if(typeof window.holoShowMigrate === 'function') window.holoShowMigrate(res); else fail('Your account is local to this device — register to keep your progress everywhere.'); return; }
       fail(res.error);
@@ -16247,9 +16344,24 @@ function renderTesterAuth(){
         try { if(pend && pend.email) setLocalNeedsReverify(pend.email, false); } catch(e){}
         hideVerifyGate(false);
         if(pend && pend.rec){
-          finishSignIn(pend.rec, pend.rememberMe);
-          celebrateConfetti(160);
-          showBadgeToast('🎉 You\'re in! Welcome to the secret tester club 🤫');
+          /* CODENAME-PROMPT-2026-11-25: the verify gate sits before
+             hub entry, so a name-less account is caught here too —
+             re-check the server record fresh before finishing
+             sign-in (fail open: any check failure signs in as before). */
+          var vgFinish = function(){
+            finishSignIn(pend.rec, pend.rememberMe);
+            celebrateConfetti(160);
+            showBadgeToast('🎉 You\'re in! Welcome to the secret tester club 🤫');
+          };
+          if(typeof window.holoNeedsCodeName === 'function'){
+            window.holoNeedsCodeName(pend.rec).then(function(n){
+              if(n && n.need){
+                if(typeof window.holoShowCodeNamePrompt === 'function'){
+                  window.holoShowCodeNamePrompt({ mode:'sign-in', taken:!!n.taken, email:pend.email, uid:pend.rec.uid || '', rec:pend.rec, rememberMe:pend.rememberMe, onSaved:function(){ vgFinish(); }, onSignOut:function(){ try { if(typeof signOutTester === 'function') signOutTester(); } catch(e){} } });
+                } else { vgFinish(); }
+              } else { vgFinish(); }
+            }).catch(function(){ vgFinish(); });
+          } else { vgFinish(); }
         }
         return;
       }
@@ -16762,7 +16874,7 @@ function renderTesterAuth(){
     createPane.id = 'createPane';
     createPane.innerHTML =
       '<form id="createForm" method="post" action="#" novalidate>' +
-      '<div class="login-field"><label for="createName">Code Name</label><input id="createName" name="username" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
+      '<div class="login-field"><label for="createName">Code Name</label><input id="createName" name="username" type="text" autocomplete="username" placeholder="e.g. Sam" required aria-required="true" /></div>' +
       '<div class="login-field"><label for="createEmail">Your email</label><input id="createEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
       '<div class="login-field"><label for="createDob">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDob') : '<input id="createDob" name="bday" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p><p><button type="button" class="tier3-link" id="createDobSkip" hidden>Continue without it for now — 18+ games stay hidden until you add your birthday</button></p></div>' +
       '<div class="login-field"><label for="createPw">Choose a password</label><input id="createPw" name="password" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
@@ -16877,7 +16989,13 @@ function renderTesterAuth(){
       var pw2El = document.getElementById('createPw2');
       var invEl = document.getElementById('createInvite');
       var trmEl = (document.getElementById('createTerms') || document.getElementById('createTermsOwner'));
-      if(!String(nm || '').trim()){ markFieldInvalid(nameEl, '⚠️ This field needs filling in, agent!'); fail('Pop your username in first, agent.'); if(nameEl) nameEl.focus(); return; }
+      /* CODENAME-REQUIRED-2026-11-25: same check as the hub's
+         window.holoValidateCodeName — required + rude-word filter —
+         before any Firebase account is created. */
+      nm = String(nm || '').trim();
+      var vNm = (typeof window.holoValidateCodeName === 'function') ? window.holoValidateCodeName(nm) : null;
+      if(!nm){ markFieldInvalid(nameEl, '⚠️ This field needs filling in, agent!'); fail('Pop your username in first, agent.'); if(nameEl) nameEl.focus(); return; }
+      if(vNm && !vNm.ok){ markFieldInvalid(nameEl, vNm.error || '⚠️ That Code Name doesn\'t work — try another one.'); fail(vNm.error || 'That Code Name doesn\'t work — try another one.'); if(nameEl) nameEl.focus(); return; }
       if(!validAccountEmail(em)){ markFieldInvalid(emailEl2, String(em || '').trim() ? '⚠️ That email looks off, agent.' : '⚠️ This field needs filling in, agent!'); fail('Pop a valid email in, agent. Your verification link goes there.'); if(emailEl2) emailEl2.focus(); return; }
       var dobEl = document.getElementById('createDob');
       var dobErr = (window.holoAge18 && window.holoAge18.validateDob) ? window.holoAge18.validateDob(dob) : null;
@@ -16887,6 +17005,21 @@ function renderTesterAuth(){
       if(!String(inv || '').trim()){ markFieldInvalid(invEl, '⚠️ This field needs filling in, agent!'); fail('Your invite code is required, agent. It comes with your invite link. No code? Ask Holo for one.'); if(invEl) invEl.focus(); return; }
       if(!trm){ markFieldInvalid(trmEl, '⚠️ Tick this box first, agent!'); fail('Please tick the box to agree to the Terms & Policies first.'); return; }
       createAccount(nm, em, pw, pw2, inv, trm, false, dob, cForm.dataset.dobSkip === '1').then(function(res){
+        if(res.taken){
+          /* CODENAME-REQUIRED-2026-11-25: the name is taken by an
+             account on another device — the account itself is
+             created, only the Code Name needs changing. Pick another
+             here (same look as the register form's Code Name field),
+             or carry on and pick one at sign-in (the sign-in prompt
+             catches a taken name too). */
+          if(err) err.hidden = true;
+          clearAllFieldMarks(cForm);
+          cForm.reset();
+          if(typeof window.holoShowCodeNamePrompt === 'function'){
+            window.holoShowCodeNamePrompt({ mode:'register-taken', email:res.email, uid:res.uid, oldName:res.username, rec:{ uid:res.uid, email:res.email, password:pw, name:res.username, code:(res.account && res.account.code) || '', inviteCode:inv }, onSaved:function(newName){ showRegisterSuccess(newName, res.email); }, onLater:function(){ showRegisterSuccess(res.username, res.email); } });
+          } else { showRegisterSuccess(nm, em); }
+          return;
+        }
         if(res.ok){
           if(err) err.hidden = true;
           clearAllFieldMarks(cForm);
@@ -16958,7 +17091,7 @@ function renderTesterAuth(){
     createPane.hidden = true;
     createPane.innerHTML =
       '<form id="createFormOwner" method="post" action="#" novalidate>' +
-      '<div class="login-field"><label for="createNameOwner">Code Name</label><input id="createNameOwner" name="username" type="text" autocomplete="username" placeholder="e.g. Sam" /></div>' +
+      '<div class="login-field"><label for="createNameOwner">Code Name</label><input id="createNameOwner" name="username" type="text" autocomplete="username" placeholder="e.g. Sam" required aria-required="true" /></div>' +
       '<div class="login-field"><label for="createEmailOwner">Your email</label><input id="createEmailOwner" name="email" type="email" autocomplete="email" placeholder="you@example.com" /><p class="login-helper">We send a verification link to this email. Tap it to verify your account.</p></div>' +
       '<div class="login-field"><label for="createDobOwner">Date of birth</label>' + (window.holoDobFieldHTML ? window.holoDobFieldHTML('createDobOwner') : '<input id="createDobOwner" name="bday" type="date" autocomplete="bday" />') + '<p class="login-helper">Type it as DD/MM/YYYY, or pick the year, month and day from the dropdowns below. We use this to hide 18+ party games until your 18th birthday. We never show it to anyone else.</p><p><button type="button" class="tier3-link" id="createDobSkipOwner" hidden>Continue without it for now — 18+ games stay hidden until you add your birthday</button></p></div>' +
       '<div class="login-field"><label for="createPwOwner">Choose a password</label><input id="createPwOwner" name="password" type="password" autocomplete="new-password" placeholder="At least 6 characters" /></div>' +
@@ -17450,7 +17583,13 @@ function renderTesterAuth(){
       var pw2El = document.getElementById('createPw2Owner');
       var invEl = document.getElementById('createInviteOwner');
       var trmEl = document.getElementById('createTermsOwner');
-      if(!String(nm || '').trim()){ markFieldInvalid(nameEl, '⚠️ This field needs filling in, agent!'); fail('Pop your username in first, agent.'); if(nameEl) nameEl.focus(); return; }
+      /* CODENAME-REQUIRED-2026-11-25: same check as the hub's
+         window.holoValidateCodeName — required + rude-word filter —
+         before any Firebase account is created. */
+      nm = String(nm || '').trim();
+      var vNm = (typeof window.holoValidateCodeName === 'function') ? window.holoValidateCodeName(nm) : null;
+      if(!nm){ markFieldInvalid(nameEl, '⚠️ This field needs filling in, agent!'); fail('Pop your username in first, agent.'); if(nameEl) nameEl.focus(); return; }
+      if(vNm && !vNm.ok){ markFieldInvalid(nameEl, vNm.error || '⚠️ That Code Name doesn\'t work — try another one.'); fail(vNm.error || 'That Code Name doesn\'t work — try another one.'); if(nameEl) nameEl.focus(); return; }
       if(!validAccountEmail(em)){ markFieldInvalid(emailEl2, String(em || '').trim() ? '⚠️ That email looks off, agent.' : '⚠️ This field needs filling in, agent!'); fail('Pop a valid email in, agent. Your verification link goes there.'); if(emailEl2) emailEl2.focus(); return; }
       var dobEl = document.getElementById('createDobOwner');
       var dobErr = (window.holoAge18 && window.holoAge18.validateDob) ? window.holoAge18.validateDob(dob) : null;
@@ -17460,6 +17599,21 @@ function renderTesterAuth(){
       if(!String(inv || '').trim()){ markFieldInvalid(invEl, '⚠️ This field needs filling in, agent!'); fail('Your invite code is required, agent. It comes with your invite link. No code? Ask Holo for one.'); if(invEl) invEl.focus(); return; }
       if(!trm){ markFieldInvalid(trmEl, '⚠️ Tick this box first, agent!'); fail('Please tick the box to agree to the Terms & Policies first.'); return; }
       createAccount(nm, em, pw, pw2, inv, trm, false, dob, cForm.dataset.dobSkip === '1').then(function(res){
+        if(res.taken){
+          /* CODENAME-REQUIRED-2026-11-25: the name is taken by an
+             account on another device — the account itself is
+             created, only the Code Name needs changing. Pick another
+             here (same look as the register form's Code Name field),
+             or carry on and pick one at sign-in (the sign-in prompt
+             catches a taken name too). */
+          if(err) err.hidden = true;
+          clearAllFieldMarks(cForm);
+          cForm.reset();
+          if(typeof window.holoShowCodeNamePrompt === 'function'){
+            window.holoShowCodeNamePrompt({ mode:'register-taken', email:res.email, uid:res.uid, oldName:res.username, rec:{ uid:res.uid, email:res.email, password:pw, name:res.username, code:(res.account && res.account.code) || '', inviteCode:inv }, onSaved:function(newName){ showRegisterSuccess(newName, res.email); }, onLater:function(){ showRegisterSuccess(res.username, res.email); } });
+          } else { showRegisterSuccess(nm, em); }
+          return;
+        }
         if(res.ok){
           if(err) err.hidden = true;
           clearAllFieldMarks(cForm);
@@ -21486,8 +21640,11 @@ function renderTesterAuth(){
       if(!rec2) return false;
       return patchUser(rec2, { username:clean }).then(function(ok){
         if(!ok) return false;
-        writeUsernameIndex(rec2, clean);
-        return true;
+        /* CODENAME-PROMPT-2026-11-25: the index write is awaited now —
+           the old fire-and-forget meant "true" while the name never
+           landed in /usernames (a taken name fails the PUT silently).
+           True now means all three places landed, as documented. */
+        return writeUsernameIndex(rec2, clean).then(function(idxOk){ return !!idxOk; });
       });
     }).catch(function(){ return false; });
   };
@@ -21682,10 +21839,14 @@ function renderTesterAuth(){
      change availability check. */
   function usernameKey(name){ return encodeURIComponent(String(name || '').trim().toLowerCase()); }
   function writeUsernameIndex(rec, username){
+    /* CODENAME-PROMPT-2026-11-25: returns a promise of true/false —
+       callers (betaSetUsername) now know whether the index write
+       actually landed. A taken name fails the PUT under the RTDB
+       rules, so false here is how a silent duplicate is caught. */
     try {
-      if(!rec || !rec.idToken || !rec.uid || !username || typeof fetch !== 'function') return;
-      fetch(FB_RTDB + '/usernames/' + usernameKey(username) + '.json?auth=' + encodeURIComponent(rec.idToken), { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(rec.uid) }).catch(function(){});
-    } catch(e){}
+      if(!rec || !rec.idToken || !rec.uid || !username || typeof fetch !== 'function') return Promise.resolve(false);
+      return fetch(FB_RTDB + '/usernames/' + usernameKey(username) + '.json?auth=' + encodeURIComponent(rec.idToken), { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(rec.uid) }).then(function(r){ return !!r.ok; }).catch(function(){ return false; });
+    } catch(e){ return Promise.resolve(false); }
   }
   window.betaCheckUsername = function(name){
     var rec = loadAuth();
@@ -21697,6 +21858,48 @@ function renderTesterAuth(){
         return { status:'taken' };
       }); })
       .catch(function(){ return { status:'blocked' }; });
+  };
+  /* CODENAME-PROMPT-2026-11-25: fresh read of the server username
+     for one account. Returns the username string, '' when the record
+     exists but holds no username, or null when the record cannot be
+     read at all (no credential, wrong uid, network failure) — callers
+     fail open on null. `rec` may be a full auth rec (idToken + uid)
+     or just { uid }; the stored credential is used otherwise, and a
+     uid mismatch against it fails open too. */
+  window.betaGetUsername = function(rec){
+    var auth = null;
+    try {
+      if(rec && rec.idToken && rec.uid) auth = rec;
+      else auth = loadAuth();
+    } catch(e){ auth = null; }
+    if(!auth || !auth.uid || !auth.idToken || typeof fetch !== 'function') return Promise.resolve(null);
+    if(rec && rec.uid && String(rec.uid) !== String(auth.uid)) return Promise.resolve(null);
+    return fetchUser(auth).then(function(u){
+      if(!u || typeof u !== 'object') return null;
+      return (u.username) ? String(u.username).trim() : '';
+    }).catch(function(){ return null; });
+  };
+  /* CODENAME-PROMPT-2026-11-25: does this account still need a Code
+     Name? { need:true } when the record has no username, or when its
+     username is taken in the cloud index by another account (the
+     register-taken "later" case — the name sits on the record but was
+     never claimed). { need:false } otherwise, and on any unreadable
+     record (fail open: sign-in must never break on this check).
+     `knownUsername` skips the fresh fetch when the caller already
+     holds the record's username (sign-in path). */
+  window.holoNeedsCodeName = function(rec, knownUsername){
+    var nameP = (typeof knownUsername === 'string')
+      ? Promise.resolve(knownUsername)
+      : window.betaGetUsername(rec);
+    return nameP.then(function(un){
+      if(un === null || un === undefined) return { need:false, taken:false };
+      if(un === '') return { need:true, taken:false };
+      if(typeof window.betaCheckUsername !== 'function') return { need:false, taken:false };
+      return window.betaCheckUsername(un).then(function(chk){
+        if(chk && chk.status === 'taken') return { need:true, taken:true };
+        return { need:false, taken:false };
+      }).catch(function(){ return { need:false, taken:false }; });
+    }).catch(function(){ return { need:false, taken:false }; });
   };
   /* UPDATE-EMAIL-2026-11-22: reauth with current password, then
      Firebase update email, send verification to the new address,
@@ -21765,7 +21968,7 @@ function renderTesterAuth(){
               return { ok:false, code:'DEVICE_LIMIT', deviceLimit:true, error:'This account is already signed in on 5 devices. Contact Holo if you need another one.' };
             }
             return lookupAccount(rec.idToken).then(function(verified){
-              return { ok:true, uid:rec.uid, email:email, username:(u && u.username) ? String(u.username) : '', inviteCode:notedCode, role:userRole, emailVerified:verified, needsReverify:needsReverify };
+              return { ok:true, uid:rec.uid, email:email, username:(u && typeof u === 'object') ? ((u.username) ? String(u.username).trim() : '') : null, /* CODENAME-PROMPT-2026-11-25: null = record unreadable (fail open, no prompt), '' = account has no Code Name yet (prompt at sign-in) */ inviteCode:notedCode, role:userRole, emailVerified:verified, needsReverify:needsReverify };
             });
           });
         });
@@ -30099,6 +30302,7 @@ footer .egg-row .egg{width:32px;height:32px}
     try { ov.scrollTop = 0; } catch(e){}
   }
   window.holoShowMigrate = showOverlay;
+  window.holoMigrateProgress = migrateProgress; /* CODENAME-PROMPT-2026-11-25: the Code Name prompt re-keys the on-device account too, and progress records follow the code the same way. */
   function hideOverlay(){ var ov = $('migrateOverlay'); if(ov) ov.hidden = true; }
   function fail(msg){ var err = $('migrateError'); if(err){ err.textContent = msg; err.hidden = false; } }
   function finishToVerifyGate(){
@@ -30255,8 +30459,260 @@ footer .egg-row .egg{width:32px;height:32px}
     if(bt) window.holoOnAuthForMigrate(bt);
   } catch(e){}
 })();
+
 </script>
 
+<script>
+/* CODENAME-PROMPT-2026-11-25: sign-in Code Name prompt.
+   Holo 2026-11-25 17:07 + 17:10: accounts created before Code Names
+   were required (Kevin, TheKkrazy21, any legacy account) get a popup
+   on next sign-in with a TEXT BOX right on the popup — the tester
+   TYPES their Code Name there (keyboard input, never a pick-list or
+   dropdown). The input copies the register form's "pick a Code Name"
+   field — same .login-field look (label + dark input), same
+   validation (window.holoValidateCodeName) + taken-name check as
+   registration. The popup blocks hub entry until a name is saved,
+   but never traps the tester: a failed save shows the error + retry,
+   a taken name shows the taken message, Sign out is the escape
+   hatch. No mention of the Owner Dash or the Vault anywhere here.
+   Also runs once on load for a remembered session (a tester who
+   never signs out again still gets the prompt on next visit). */
+(function(){
+  "use strict";
+  var ov = document.getElementById('codeNameOverlay');
+  var input = document.getElementById('cnName');
+  var field = document.getElementById('cnField');
+  var fieldMsg = document.getElementById('cnFieldMsg');
+  var errEl = document.getElementById('cnErr');
+  var saveBtn = document.getElementById('cnSaveBtn');
+  var laterBtn = document.getElementById('cnLaterBtn');
+  var signOutBtn = document.getElementById('cnSignOutBtn');
+  var takenNote = document.getElementById('cnTakenNote');
+  var intro = document.getElementById('cnIntro');
+  if(!ov || !input || !saveBtn) return;
+  var state = null;
+  var busy = false;
+  var bootChecked = false;
+  function markInvalid(msg){
+    try { if(typeof window.holoMarkFieldInvalid === 'function'){ window.holoMarkFieldInvalid(input, msg); return; } } catch(e){}
+    try { if(field) field.classList.add('field-invalid'); } catch(e){}
+    var m = field ? field.querySelector('.field-msg') : null;
+    if(m) m.textContent = msg || '';
+  }
+  function clearMark(){
+    try { if(field) field.classList.remove('field-invalid'); } catch(e){}
+    var m = field ? field.querySelector('.field-msg') : null;
+    if(m) m.textContent = '';
+  }
+  function showErr(msg){ if(errEl) errEl.textContent = msg || ''; }
+  function lockScroll(on){
+    try {
+      if(on){ document.body.style.overflow = 'hidden'; }
+      else if(typeof getTester === 'function' && getTester()){ document.body.style.overflow = ''; }
+    } catch(e){}
+  }
+  function hide(){
+    ov.classList.remove('open');
+    ov.hidden = true;
+    lockScroll(false);
+    state = null;
+  }
+  function show(opts){
+    opts = opts || {};
+    state = {
+      mode: opts.mode || 'sign-in',
+      taken: !!opts.taken,
+      email: opts.email || '',
+      uid: opts.uid || (opts.rec && opts.rec.uid) || '',
+      rec: opts.rec || null,
+      rememberMe: !!opts.rememberMe,
+      onSaved: (typeof opts.onSaved === 'function') ? opts.onSaved : null,
+      onLater: (typeof opts.onLater === 'function') ? opts.onLater : null,
+      onSignOut: (typeof opts.onSignOut === 'function') ? opts.onSignOut : null
+    };
+    busy = false;
+    if(saveBtn) saveBtn.disabled = false;
+    input.value = '';
+    clearMark();
+    showErr('');
+    var isTakenStep = (state.mode === 'register-taken') || state.taken;
+    if(takenNote) takenNote.hidden = !isTakenStep;
+    if(intro) intro.textContent = (state.mode === 'register-taken')
+      ? 'Your account is created — welcome in! One last thing: pick your Code Name so your friends can find you.'
+      : 'Welcome in, agent! Every agent needs a Code Name so your friends can find you. Pick one — it\'s the name everyone in the Arcade will see.';
+    if(laterBtn) laterBtn.hidden = (state.mode !== 'register-taken');
+    ov.hidden = false;
+    ov.classList.add('open');
+    lockScroll(true);
+    setTimeout(function(){ try { input.focus({ preventScroll:true }); } catch(e){ try { input.focus(); } catch(e2){} } }, 60);
+  }
+  function validate(name){
+    name = String(name || '').trim();
+    if(!name) return { ok:false, error:'Pop your username in first, agent.' };
+    if(typeof window.holoValidateCodeName === 'function'){
+      var v = window.holoValidateCodeName(name);
+      if(v && !v.ok) return v;
+    }
+    return { ok:true, value:name };
+  }
+  /* Re-key the on-device account under the new name WITHOUT touching
+     the stored password hash (cacheLocalAccount would re-hash the
+     password argument — the boot path has no plaintext password).
+     Progress records follow the code via holoMigrateProgress when
+     available, same as the migration flow. */
+  function rekeyLocal(name, email, uid){
+    try {
+      if(typeof getAccounts !== 'function' || typeof saveAccounts !== 'function') return null;
+      var all = getAccounts();
+      var newKey = String(name || '').trim().toLowerCase();
+      var em = String(email || '').trim().toLowerCase();
+      var oldKey = null, old = null;
+      for(var k in all){
+        var a = all[k] || {};
+        if((em && String(a.email || '').trim().toLowerCase() === em) || (uid && String(a.uid || '') === uid)){ oldKey = k; old = a; break; }
+      }
+      if(!old) return null;
+      var rec = {};
+      for(var f in old) rec[f] = old[f];
+      rec.name = name;
+      rec.code = 'ACCT-' + newKey;
+      if(uid) rec.uid = uid;
+      if(oldKey !== newKey) delete all[oldKey];
+      all[newKey] = rec;
+      saveAccounts(all);
+      try { if(typeof window.holoMigrateProgress === 'function' && old.code && old.code !== rec.code) window.holoMigrateProgress(old.code, rec.code); } catch(e){}
+      return rec;
+    } catch(e){ return null; }
+  }
+  function refreshSession(name){
+    try {
+      if(typeof getTester !== 'function' || typeof saveTesterSession !== 'function') return;
+      var t = getTester();
+      if(!t) return;
+      var remembered = false;
+      try { remembered = !!JSON.parse(localStorage.getItem('holos-arcade-tester-login') || 'null'); } catch(e){}
+      t.name = name;
+      t.code = 'ACCT-' + String(name).trim().toLowerCase();
+      saveTesterSession(t, remembered);
+    } catch(e){}
+  }
+  function finishWithName(name){
+    var rec = state && state.rec;
+    rekeyLocal(name, state ? state.email : '', state ? state.uid : '');
+    refreshSession(name);
+    /* The caller may finish sign-in from this same rec object —
+       make sure it carries the new name + code, not the 'Tester'
+       placeholder it was cached under before the prompt. */
+    if(rec){ try { rec.name = name; rec.code = 'ACCT-' + String(name).trim().toLowerCase(); } catch(e){} }
+    if(state && state.onSaved){ var cb = state.onSaved; hide(); cb(name); return; }
+    hide();
+  }
+  function save(){
+    if(busy || !state) return;
+    var name = String(input.value || '').trim();
+    var v = validate(name);
+    if(!v.ok){ markInvalid(v.error); showErr(''); try { input.focus(); } catch(e){} return; }
+    name = v.value;
+    clearMark();
+    showErr('');
+    busy = true;
+    if(saveBtn) saveBtn.disabled = true;
+    var doSave = function(){
+      if(typeof window.betaSetUsername !== 'function'){ busy = false; if(saveBtn) saveBtn.disabled = false; showErr('Couldn\'t save that right now — check your connection and try again.'); return; }
+      window.betaSetUsername(name).then(function(ok){
+        busy = false;
+        if(saveBtn) saveBtn.disabled = false;
+        if(ok){ finishWithName(name); return; }
+        /* betaSetUsername false = the name didn't land (taken or a
+           write failed). Re-check the index to tell the two apart. */
+        if(typeof window.betaCheckUsername === 'function'){
+          window.betaCheckUsername(name).then(function(chk){
+            if(chk && chk.status === 'taken'){
+              if(takenNote) takenNote.hidden = false;
+              markInvalid('That name\'s taken, try another one.');
+              showErr('');
+            } else {
+              showErr('Couldn\'t save that right now — check your connection and try again.');
+            }
+          }).catch(function(){ showErr('Couldn\'t save that right now — check your connection and try again.'); });
+        } else {
+          showErr('Couldn\'t save that right now — check your connection and try again.');
+        }
+      }).catch(function(){
+        busy = false;
+        if(saveBtn) saveBtn.disabled = false;
+        showErr('Couldn\'t save that right now — check your connection and try again.');
+      });
+    };
+    /* Uniqueness pre-check against the cloud /usernames index — the
+       same check registration runs — so a taken name is caught here
+       instead of failing silently on save. */
+    if(typeof window.betaCheckUsername === 'function'){
+      window.betaCheckUsername(name).then(function(chk){
+        if(chk && chk.status === 'taken'){
+          busy = false;
+          if(saveBtn) saveBtn.disabled = false;
+          if(takenNote) takenNote.hidden = false;
+          markInvalid('That name\'s taken, try another one.');
+          showErr('');
+          try { input.focus(); } catch(e){}
+          return;
+        }
+        doSave();
+      }).catch(function(){ doSave(); });
+    } else {
+      doSave();
+    }
+  }
+  saveBtn.addEventListener('click', save);
+  input.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); save(); }
+  });
+  input.addEventListener('input', function(){ clearMark(); showErr(''); });
+  if(laterBtn) laterBtn.addEventListener('click', function(){
+    if(!state) return;
+    var cb = state.onLater;
+    hide();
+    if(cb) cb();
+  });
+  if(signOutBtn) signOutBtn.addEventListener('click', function(){
+    if(!state) return;
+    var cb = state.onSignOut;
+    hide();
+    if(cb){ cb(); return; }
+    try { if(typeof signOutTester === 'function') signOutTester(); } catch(e){}
+  });
+  window.holoShowCodeNamePrompt = show;
+  window.holoCodeNamePrompt = { show:show, hide:hide };
+  /* Boot check for a remembered session: a tester who never signs
+     out again still gets the prompt on their next visit. Runs once,
+     after the page settles; never fires while another overlay (the
+     migration prompt, the verify gate) is up, and fails open on
+     any unreadable record. */
+  function bootCheck(){
+    if(bootChecked) return;
+    bootChecked = true;
+    try {
+      if(typeof getTester !== 'function') return;
+      var t = getTester();
+      if(!t || !t.uid) return;
+      if(!ov.hidden) return;
+      var mig = document.getElementById('migrateOverlay');
+      if(mig && !mig.hidden) return;
+      var vg = document.getElementById('verifyGate');
+      if(vg && !vg.hidden) return;
+      if(typeof window.holoNeedsCodeName !== 'function') return;
+      window.holoNeedsCodeName(t).then(function(n){
+        if(n && n.need){
+          show({ mode:'sign-in', taken:!!n.taken, email:t.email || '', uid:t.uid, rec:t, rememberMe:true });
+        }
+      }).catch(function(){});
+    } catch(e){}
+  }
+  if(document.readyState === 'complete'){ setTimeout(bootCheck, 900); }
+  else { window.addEventListener('load', function(){ setTimeout(bootCheck, 900); }); }
+})();
+</script>
 
 <script>
 /* WEREWOLF-MENU-STYLE-2026-11-24: PRESS START starts a hunt at the active
