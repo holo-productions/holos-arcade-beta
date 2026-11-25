@@ -2433,7 +2433,7 @@ body.in-game .nav-line-btns #signOutBtn,body.in-game .nav-line-btns #settingsGea
 .w-chip.sel{border-color:var(--gold);box-shadow:0 0 0 2px rgba(255,176,32,.55),0 0 12px rgba(255,176,32,.4)}
 .w-chip.info{border-style:dotted;border-color:rgba(205,188,245,.5);cursor:default;color:#d9cdf7}
 .w-chip.pop{animation:wchippop .5s ease}
-@keyframes wchippop{0%{transform:scale(.4);opacity:0}55%{transform:scale(1.18)}100%{transform:scale(1);opacity:1}}
+@keyframes wchippop{0%{transform:scale(.4) rotate(-6deg);opacity:0}55%{transform:scale(1.18) rotate(3deg)}75%{transform:scale(1) rotate(-2deg)}100%{transform:scale(1) rotate(0);opacity:1}}
 .w-drag-ghost{position:fixed;z-index:300;pointer-events:none;opacity:.92;transform:translate(-50%,-130%) scale(1.06);box-shadow:0 10px 24px rgba(0,0,0,.55)}
 .w-suspects{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:0 0 14px}
 @media (max-width:480px){.w-suspects{grid-template-columns:repeat(2,1fr)}}
@@ -2459,6 +2459,27 @@ body.in-game .nav-line-btns #signOutBtn,body.in-game .nav-line-btns #settingsGea
 .w-speech-x{position:absolute;top:6px;right:6px;width:28px;height:28px;border-radius:50%;border:0;background:#efe9ff;color:#5b2ee5;font-weight:800;cursor:pointer;font-size:14px;line-height:1}
 .w-ask-hint{font-size:12.5px;color:#cdbcf5;margin:0 0 10px}
 @media (prefers-reduced-motion:reduce){.w-cell .w-token,.w-chip.pop{animation:none}.w-meter i{transition:none}}
+/* WEREWOLF-CUTE-2026-11-24 (Holo 2026-11-24: "Yes, build it"): cute + friendly look — softer colours, wolf hop, clue wiggle (see wchippop), moon smile + float, win happy dance, Art Collection album. Gameplay, rules, difficulties, modes, scoring and the walkthrough are untouched. */
+#wMoonSvg{display:inline-block;animation:wMoonFloat 5s ease-in-out infinite}
+@keyframes wMoonFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+.w-cell .w-paw.fresh{animation:wPawHop .55s ease}
+@keyframes wPawHop{0%{transform:translateY(-7px) scale(.6);opacity:0}55%{transform:translateY(2px) scale(1.12)}100%{transform:translateY(0) scale(1);opacity:1}}
+.w-win-dance{display:flex;justify-content:center;margin:2px 0 6px}
+.w-win-dance svg{width:96px;height:96px;animation:wHappyDance 1s ease-in-out infinite}
+@keyframes wHappyDance{0%,100%{transform:translateY(0) rotate(-4deg)}50%{transform:translateY(-10px) rotate(4deg)}}
+.w-suspect{background:linear-gradient(180deg,#3b2a6e,#2a1a52);border-color:rgba(255,158,203,.55);border-radius:18px}
+.w-map-wrap{background:linear-gradient(180deg,#171040 0%,#241a52 55%,#2e2060 100%)}
+.w-clue-tray{background:rgba(255,158,203,.08);border-color:rgba(255,158,203,.45)}
+.w-art-album{border:2px solid rgba(139,92,255,.5);border-radius:18px;padding:12px;margin:0 0 14px;background:linear-gradient(180deg,#241a4d,#170d38)}
+.w-art-album h3{margin:0 0 4px;font-family:'Bricolage Grotesque',sans-serif}
+.w-art-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:10px}
+.w-art-card{background:#fdf6ff;border-radius:14px;padding:8px;text-align:center;color:#241a3d}
+.w-art-card img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:10px;display:block}
+.w-art-card.locked{background:#cfc8ee}
+.w-art-card.locked img{filter:brightness(0)}
+.w-art-name{font-weight:800;font-size:13.5px;margin-top:6px;line-height:1.2}
+.w-art-hint{font-size:11.5px;color:#6b5b95;margin-top:2px;line-height:1.3}
+@media (prefers-reduced-motion:reduce){#wMoonSvg,.w-cell .w-paw.fresh,.w-win-dance svg{animation:none}}
 /* ================= SETTINGS-BTN-CONSISTENCY-2026-11-23 =================
    Holo 2026-11-23 18:04-18:05 CST: "Parent pin button make pretty" +
    "The buttons aren't consistent on this page." — one button system
@@ -6009,6 +6030,11 @@ setTimeout(function(){
         <p class="g-note" id="wStyleDesc" style="margin:10px 0 0"></p>
       </div>
       <p class="badges-line" id="badges-werewolf" style="margin:0 0 14px"></p>
+      <div class="w-art-album" id="wArtAlbum" aria-label="Art collection">
+        <h3>🎨 Art Collection</h3>
+        <p class="g-note" id="wArtAlbumNote" style="margin:0">Win a real hunt to unlock a new art card — practice hunts unlock nothing.</p>
+        <div class="w-art-grid" id="wArtGrid"></div>
+      </div>
       <div class="w-clue" id="wStory" hidden style="margin:0 0 14px"></div>
       <div class="g-hud">
         <span>🌅 <b id="wDawn">12 turns to dawn</b></span>
@@ -9644,44 +9670,60 @@ var LOCATIONS = [
   function wMoonSVG(phaseIdx, full){
     var k = phaseIdx / 4; /* 0 new .. 1 full */
     var shadowCx = 27 - (k * 48 - 24);
+    /* WEREWOLF-CUTE-2026-11-24: the moon smiles as it waxes — the smile widens and deepens with k (tiny at new moon, big and happy at full). Drawn after the shadow so it always shows. */
+    var smileW = (4 + k * 6).toFixed(1), smileD = (34 + (1.5 + k * 3.5) * 2).toFixed(1);
     return '<svg class="w-moon-svg' + (full ? ' full' : '') + '" viewBox="0 0 54 54" aria-hidden="true">' +
       '<defs><clipPath id="wMoonClip"><circle cx="27" cy="27" r="23"/></clipPath></defs>' +
       '<circle cx="27" cy="27" r="23" fill="#ffe9a8"/>' +
       '<g clip-path="url(#wMoonClip)"><circle cx="20" cy="20" r="4" fill="#f2d27c"/><circle cx="34" cy="32" r="3" fill="#f2d27c"/><circle cx="30" cy="16" r="2.2" fill="#f2d27c"/>' +
       '<circle cx="' + shadowCx.toFixed(1) + '" cy="27" r="23" fill="#140b33"/></g>' +
+      '<circle cx="20" cy="24" r="1.7" fill="#7a5c14"/><circle cx="34" cy="24" r="1.7" fill="#7a5c14"/>' +
+      '<path d="M' + (27 - smileW) + ' 34 Q27 ' + smileD + ' ' + (27 + smileW) + ' 34" stroke="#7a5c14" stroke-width="1.8" fill="none" stroke-linecap="round"/>' +
       '<circle cx="27" cy="27" r="23" fill="none" stroke="#8b5cff" stroke-width="1.6"/></svg>';
   }
+  function wWolfSVG(){
+    /* WEREWOLF-CUTE-2026-11-24: the friendly pup — chubby, big eyes, floppy ears. Dances on the win panel (see .w-win-dance). */
+    return '<svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 62 Q12 44 32 44 Q52 44 54 62 Z" fill="#6b5b95" stroke="#0a0620" stroke-width="1.4"/><ellipse cx="15" cy="28" rx="5" ry="11" fill="#8a7ba8" stroke="#0a0620" stroke-width="1.3" transform="rotate(14 15 28)"/><ellipse cx="49" cy="28" rx="5" ry="11" fill="#8a7ba8" stroke="#0a0620" stroke-width="1.3" transform="rotate(-14 49 28)"/><circle cx="32" cy="29" r="16" fill="#b9b3c9" stroke="#0a0620" stroke-width="1.4"/><circle cx="25.5" cy="28" r="4.6" fill="#fff"/><circle cx="38.5" cy="28" r="4.6" fill="#fff"/><circle cx="26" cy="28.5" r="2.3" fill="#241a3d"/><circle cx="39" cy="28.5" r="2.3" fill="#241a3d"/><circle cx="26.8" cy="27.3" r=".9" fill="#fff"/><circle cx="39.8" cy="27.3" r=".9" fill="#fff"/><ellipse cx="32" cy="35" rx="2.6" ry="1.9" fill="#e87a90"/><path d="M26 39 Q32 44 38 39" stroke="#241a3d" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="20" cy="34" r="2.6" fill="#ffb3c2" opacity=".65"/><circle cx="44" cy="34" r="2.6" fill="#ffb3c2" opacity=".65"/></svg>';
+  }
   function wPortraitSVG(su){
-    var hair = su.hairHex, skin = su.skin, coat = su.coatHex;
+    /* WEREWOLF-CUTE-2026-11-24: villagers are cute animals now — same names, jobs, traits and hair/coat colours (clue text + pinning still use su.hair / su.coat), only the portrait changed. Big eyes, floppy ears, soft colours. */
+    var fur = su.hairHex, coat = su.coatHex, animal = su.animal || 'bear';
     var s = '<svg class="w-portrait" viewBox="0 0 64 64" aria-hidden="true">';
     s += '<path d="M10 62 Q12 44 32 44 Q52 44 54 62 Z" fill="' + coat + '" stroke="#0a0620" stroke-width="1.4"/>';
-    s += '<circle cx="32" cy="28" r="15" fill="' + skin + '" stroke="#0a0620" stroke-width="1.4"/>';
-    if(su.hairStyle === 'bun') s += '<path d="M17 28 Q16 12 32 12 Q48 12 47 28 Q44 18 32 18 Q20 18 17 28Z" fill="' + hair + '"/><circle cx="32" cy="10" r="5" fill="' + hair + '"/>';
-    else if(su.hairStyle === 'long') s += '<path d="M15 44 Q13 12 32 11 Q51 12 49 44 L43 44 Q45 20 32 19 Q19 20 21 44Z" fill="' + hair + '"/>';
-    else if(su.hairStyle === 'bald') s += '<path d="M19 24 Q32 12 45 24 Q40 16 32 16 Q24 16 19 24Z" fill="' + hair + '" opacity=".55"/>';
-    else s += '<path d="M17 27 Q17 12 32 12 Q47 12 47 27 Q42 17 32 17 Q22 17 17 27Z" fill="' + hair + '"/>';
-    if(su.beard) s += '<path d="M21 34 Q22 46 32 47 Q42 46 43 34 Q38 40 32 40 Q26 40 21 34Z" fill="' + hair + '"/>';
-    s += '<circle cx="26.5" cy="28" r="1.8" fill="#241a3d"/><circle cx="37.5" cy="28" r="1.8" fill="#241a3d"/>';
-    s += '<path d="M27 36 Q32 39 37 36" stroke="#241a3d" stroke-width="1.6" fill="none" stroke-linecap="round"/>';
-    if(su.acc === 'hat') s += '<path d="M14 18 H50" stroke="#0a0620" stroke-width="3" stroke-linecap="round"/><path d="M22 18 Q24 6 32 6 Q40 6 42 18Z" fill="#3a2a12" stroke="#0a0620" stroke-width="1.2"/>';
-    if(su.acc === 'glasses') s += '<circle cx="26.5" cy="28" r="5" fill="none" stroke="#38e1ff" stroke-width="1.6"/><circle cx="37.5" cy="28" r="5" fill="none" stroke="#38e1ff" stroke-width="1.6"/><path d="M31.5 28 H32.5" stroke="#38e1ff" stroke-width="1.6"/>';
-    if(su.acc === 'scarf') s += '<path d="M22 43 Q32 48 42 43 L42 49 Q32 54 22 49Z" fill="#ff3ec8" stroke="#0a0620" stroke-width="1.2"/>';
-    if(su.acc === 'veil') s += '<path d="M15 16 Q32 6 49 16 L47 40 Q32 34 17 40Z" fill="#ffe9a8" opacity=".45" stroke="#ffb020" stroke-width="1.2"/>';
+    if(animal === 'cat') s += '<path d="M17 22 L14 6 L27 13 Z" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/><path d="M47 22 L50 6 L37 13 Z" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/>';
+    else if(animal === 'rabbit') s += '<ellipse cx="22" cy="8" rx="4.5" ry="11" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/><ellipse cx="42" cy="8" rx="4.5" ry="11" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/>';
+    else if(animal === 'fox') s += '<path d="M16 24 L13 4 L29 14 Z" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/><path d="M48 24 L51 4 L35 14 Z" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/>';
+    else if(animal === 'mouse') s += '<circle cx="17" cy="16" r="7.5" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/><circle cx="47" cy="16" r="7.5" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/>';
+    else if(animal === 'owl') s += '<path d="M18 20 L14 6 L26 13 Z" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/><path d="M46 20 L50 6 L38 13 Z" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/>';
+    else if(animal === 'bee') s += '<path d="M26 16 Q22 6 18 5" stroke="#0a0620" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="17" cy="5" r="2.4" fill="#ffb020" stroke="#0a0620" stroke-width="1"/><path d="M38 16 Q42 6 46 5" stroke="#0a0620" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="47" cy="5" r="2.4" fill="#ffb020" stroke="#0a0620" stroke-width="1"/>';
+    else if(animal === 'dog') s += '<ellipse cx="15" cy="28" rx="5" ry="11" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3" transform="rotate(14 15 28)"/><ellipse cx="49" cy="28" rx="5" ry="11" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3" transform="rotate(-14 49 28)"/>';
+    else if(animal === 'otter') s += '<circle cx="19" cy="15" r="5" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/><circle cx="45" cy="15" r="5" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/>';
+    else if(animal === 'raccoon') s += '<circle cx="19" cy="15" r="5.5" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/><circle cx="45" cy="15" r="5.5" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/>';
+    else s += '<circle cx="18" cy="15" r="6" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/><circle cx="46" cy="15" r="6" fill="' + fur + '" stroke="#0a0620" stroke-width="1.3"/>';
+    s += '<circle cx="32" cy="29" r="16" fill="' + fur + '" stroke="#0a0620" stroke-width="1.4"/>';
+    if(animal === 'raccoon') s += '<path d="M17 27 Q32 22 47 27 Q47 33 32 33 Q17 33 17 27Z" fill="#3a3345" opacity=".85"/>';
+    if(animal === 'fox') s += '<path d="M18 40 Q32 34 46 40 Q44 50 32 50 Q20 50 18 40Z" fill="#fff3e0" opacity=".9"/>';
+    s += '<circle cx="25.5" cy="28" r="4.6" fill="#fff"/><circle cx="38.5" cy="28" r="4.6" fill="#fff"/>';
+    s += '<circle cx="26" cy="28.5" r="2.3" fill="#241a3d"/><circle cx="39" cy="28.5" r="2.3" fill="#241a3d"/>';
+    s += '<circle cx="26.8" cy="27.3" r=".9" fill="#fff"/><circle cx="39.8" cy="27.3" r=".9" fill="#fff"/>';
+    s += '<ellipse cx="32" cy="35" rx="2.6" ry="1.9" fill="#e87a90"/>';
+    s += '<path d="M27 39 Q32 43 37 39" stroke="#241a3d" stroke-width="1.6" fill="none" stroke-linecap="round"/>';
+    s += '<circle cx="20" cy="34" r="2.6" fill="#ffb3c2" opacity=".65"/><circle cx="44" cy="34" r="2.6" fill="#ffb3c2" opacity=".65"/>';
     return s + '</svg>';
   }
 
   /* --- Suspects: one of them is the werewolf --- */
   var SUSPECT_POOL = [
-    { name: "Bram", job: "the Blacksmith", trait: "Arms like tree trunks. Smells of coal smoke.", hair: "black", hairHex: "#1c1c22", coat: "brown", coatHex: "#6b4423", skin: "#e8b48c", hairStyle: "short", beard: true, acc: "" },
-    { name: "Widow Marta", job: "the Innkeeper", trait: "Keeps the Old Inn. Knows everyone's business.", hair: "grey", hairHex: "#b9b9c4", coat: "purple", coatHex: "#5b2ee5", skin: "#f2c9a4", hairStyle: "bun", beard: false, acc: "scarf" },
-    { name: "Finn", job: "the Shepherd", trait: "Out with the flock at all hours.", hair: "red", hairHex: "#c2511f", coat: "green", coatHex: "#2e7d46", skin: "#f6d3ae", hairStyle: "short", beard: false, acc: "" },
-    { name: "Old Tomas", job: "the Miller", trait: "Deaf as a post. Works the mill at night.", hair: "white", hairHex: "#eef0f4", coat: "grey", coatHex: "#6e7382", skin: "#e0aa80", hairStyle: "bald", beard: true, acc: "glasses" },
-    { name: "Sister Agnes", job: "of the Chapel", trait: "Rings the chapel bell at dawn and dusk.", hair: "brown", hairHex: "#5a3a1e", coat: "black", coatHex: "#23202e", skin: "#f2c9a4", hairStyle: "long", beard: false, acc: "" },
-    { name: "Pip", job: "the Baker's Boy", trait: "Up before dawn for the ovens.", hair: "blond", hairHex: "#e8c85a", coat: "cream", coatHex: "#e8dcc0", skin: "#f6d3ae", hairStyle: "short", beard: false, acc: "hat" },
-    { name: "Greta", job: "the Herbalist", trait: "Gathers herbs by moonlight.", hair: "auburn", hairHex: "#8a3b12", coat: "teal", coatHex: "#147d7d", skin: "#e8b48c", hairStyle: "long", beard: false, acc: "scarf" },
-    { name: "Colm", job: "the Ferryman", trait: "Rows the river crossing after dark.", hair: "dark brown", hairHex: "#3a2415", coat: "navy", coatHex: "#24406e", skin: "#d99e6f", hairStyle: "short", beard: true, acc: "hat" },
-    { name: "Bess", job: "the Beekeeper", trait: "Never seen without her veil and gloves.", hair: "honey", hairHex: "#d99a2b", coat: "yellow", coatHex: "#e0b62e", skin: "#f2c9a4", hairStyle: "bun", beard: false, acc: "veil" },
-    { name: "Rufus", job: "the Woodcutter", trait: "Lives alone at the forest edge.", hair: "chestnut", hairHex: "#7a3b1c", coat: "russet", coatHex: "#9c4a1e", skin: "#e0aa80", hairStyle: "short", beard: true, acc: "" }
+    { name: "Bram", animal: "bear", job: "the Blacksmith", trait: "Arms like tree trunks. Smells of coal smoke.", hair: "black", hairHex: "#1c1c22", coat: "brown", coatHex: "#6b4423", skin: "#e8b48c", hairStyle: "short", beard: true, acc: "" },
+    { name: "Widow Marta", animal: "cat", job: "the Innkeeper", trait: "Keeps the Old Inn. Knows everyone's business.", hair: "grey", hairHex: "#b9b9c4", coat: "purple", coatHex: "#5b2ee5", skin: "#f2c9a4", hairStyle: "bun", beard: false, acc: "scarf" },
+    { name: "Finn", animal: "dog", job: "the Shepherd", trait: "Out with the flock at all hours.", hair: "red", hairHex: "#c2511f", coat: "green", coatHex: "#2e7d46", skin: "#f6d3ae", hairStyle: "short", beard: false, acc: "" },
+    { name: "Old Tomas", animal: "owl", job: "the Miller", trait: "Deaf as a post. Works the mill at night.", hair: "white", hairHex: "#eef0f4", coat: "grey", coatHex: "#6e7382", skin: "#e0aa80", hairStyle: "bald", beard: true, acc: "glasses" },
+    { name: "Sister Agnes", animal: "rabbit", job: "of the Chapel", trait: "Rings the chapel bell at dawn and dusk.", hair: "brown", hairHex: "#5a3a1e", coat: "black", coatHex: "#23202e", skin: "#f2c9a4", hairStyle: "long", beard: false, acc: "" },
+    { name: "Pip", animal: "mouse", job: "the Baker's Boy", trait: "Up before dawn for the ovens.", hair: "blond", hairHex: "#e8c85a", coat: "cream", coatHex: "#e8dcc0", skin: "#f6d3ae", hairStyle: "short", beard: false, acc: "hat" },
+    { name: "Greta", animal: "fox", job: "the Herbalist", trait: "Gathers herbs by moonlight.", hair: "auburn", hairHex: "#8a3b12", coat: "teal", coatHex: "#147d7d", skin: "#e8b48c", hairStyle: "long", beard: false, acc: "scarf" },
+    { name: "Colm", animal: "otter", job: "the Ferryman", trait: "Rows the river crossing after dark.", hair: "dark brown", hairHex: "#3a2415", coat: "navy", coatHex: "#24406e", skin: "#d99e6f", hairStyle: "short", beard: true, acc: "hat" },
+    { name: "Bess", animal: "bee", job: "the Beekeeper", trait: "Never seen without her veil and gloves.", hair: "honey", hairHex: "#d99a2b", coat: "yellow", coatHex: "#e0b62e", skin: "#f2c9a4", hairStyle: "bun", beard: false, acc: "veil" },
+    { name: "Rufus", animal: "raccoon", job: "the Woodcutter", trait: "Lives alone at the forest edge.", hair: "chestnut", hairHex: "#7a3b1c", coat: "russet", coatHex: "#9c4a1e", skin: "#e0aa80", hairStyle: "short", beard: true, acc: "" }
   ];
   var W_ASK_TRUE = [
     "I was at {home} all night. Ask anyone — my lamp burned till late.",
@@ -10136,7 +10178,7 @@ var LOCATIONS = [
       if(W.traps[i]) marks += '🪤';
       if(W.snacks[i]) marks += '🍖';
       var homeSu = wSuspectAtHome(i);
-      var paw = (c.investigated && c.track) ? '<span class="w-paw">' + wPawSVG() + c.track.arrow + '</span>' : '';
+      var paw = (c.investigated && c.track) ? '<span class="w-paw' + (i === W.lastHopCell ? ' fresh' : '') + '">' + wPawSVG() + c.track.arrow + '</span>' : '';
       var token = (i === W.hunter) ? wTokenSVG() : '';
       var dot = homeSu ? '<span class="w-home-dot" style="background:' + homeSu.coatHex + '" title="' + homeSu.name + ' lives here"></span>' : '';
       b.innerHTML = wSceneSVG(c.icon) + '<span class="w-loc-name">' + c.name + '</span>' + dot + paw + token + (marks ? '<span class="marks">' + marks + '</span>' : '');
@@ -10219,6 +10261,7 @@ var LOCATIONS = [
     from.track = { turn: W.turn, dir: pick.dir.name, arrow: pick.dir.arrow };
     W.prevWolf = W.wolf;
     W.wolf = pick.i;
+    W.lastHopCell = W.prevWolf; /* WEREWOLF-CUTE-2026-11-24: the fresh track hops in (see wRefresh .w-paw.fresh) */
     if(W.traps[W.wolf]){
       delete W.traps[W.wolf];
       wEndGame(true, 'trap');
@@ -10399,6 +10442,33 @@ var LOCATIONS = [
     announceLive(text);
     wAfterAction(false);
   }
+  /* WEREWOLF-CUTE-2026-11-24: Art Collection — one card unlocks per real-hunt win, in order. Practice hunts unlock NOTHING (standing rule: practice earns nothing). Locked cards show as silhouettes (the real image with brightness(0)). Adding a card later is one line in this list + one image file — no new code per card. Images live in games-hub/werewolf-art/. */
+  var WEREWOLF_ART = [
+    { id:'pup', name:'Pup Portrait', file:'werewolf-art/wolf-pup.jpg', hint:'Win a hunt' },
+    { id:'teen', name:'Teen Wolf', file:'werewolf-art/wolf-teen.jpg', hint:'Win 2 hunts' },
+    { id:'alpha', name:'Alpha Wolf', file:'werewolf-art/wolf-alpha.jpg', hint:'Win 3 hunts' },
+    { id:'village', name:'Village at Dusk', file:'werewolf-art/village-dusk.jpg', hint:'Win 4 hunts' },
+    { id:'moon', name:'Full Moon', file:'werewolf-art/full-moon.jpg', hint:'Win 5 hunts' },
+    { id:'snack', name:'Snack Time', file:'werewolf-art/snack-time.jpg', hint:'Win 6 hunts' }
+  ];
+  function wArtUnlocked(){ return store.get('werewolfArt', []); }
+  function wUnlockArt(){
+    var unlocked = wArtUnlocked();
+    for(var i = 0; i < WEREWOLF_ART.length; i++){
+      if(unlocked.indexOf(WEREWOLF_ART[i].id) === -1){ unlocked.push(WEREWOLF_ART[i].id); store.set('werewolfArt', unlocked); return WEREWOLF_ART[i]; }
+    }
+    return null;
+  }
+  function wRenderArtAlbum(){
+    var grid = $('wArtGrid'); if(!grid) return;
+    var unlocked = wArtUnlocked();
+    grid.innerHTML = WEREWOLF_ART.map(function(a){
+      var has = unlocked.indexOf(a.id) !== -1;
+      return '<div class="w-art-card' + (has ? '' : ' locked') + '"><img src="' + a.file + '" alt="' + (has ? a.name : 'Locked art card') + '" loading="lazy"><div class="w-art-name">' + (has ? a.name : '???') + '</div><div class="w-art-hint">' + (has ? 'Unlocked \uD83C\uDFA8' : a.hint) + '</div></div>';
+    }).join('');
+    var note = $('wArtAlbumNote');
+    if(note) note.textContent = unlocked.length >= WEREWOLF_ART.length ? 'Collection complete — all 6 art cards unlocked! \uD83C\uDFA8' : 'Win a real hunt to unlock a new art card — ' + unlocked.length + ' of 6 unlocked. Practice hunts unlock nothing.';
+  }
   function wEndGame(won, how){
     if(W.over) return;
     W.over = true;
@@ -10406,15 +10476,15 @@ var LOCATIONS = [
     var ws = wWolfSuspect();
     var title, sub;
     if(won && how === 'accuse'){
-      title = 'Accused — and right! ⚖️';
-      sub = 'You point at ' + ws.name + ' ' + ws.job + ' and lay the evidence out, piece by piece. The colour drains from their face… and then the change takes them, right there in front of the whole village. Silver net, quick hands, case closed. Hollowbrook can sleep again.';
+      title = 'New friend found! 🐾';
+      sub = 'You point at ' + ws.name + ' ' + ws.job + ' and lay the evidence out, piece by piece. The colour drains from their face… and then — instead of a monster — out pops a big friendly pup with floppy ears, tail wagging, delighted to be found. It was never a scary werewolf, just a lonely pup who wanted a pack. Hollowbrook has a new friend tonight, and so do you.';
     } else if(won && how === 'trap'){
       wSnap();
-      title = 'Caught in the trap! 🪤';
-      sub = 'A scream splits the night at ' + W.cells[W.wolf].name + ' — steel jaws, a staked chain, and a very surprised werewolf. By lantern-light the village sees who it really is: ' + ws.name + ' ' + ws.job + '. Hollowbrook can sleep again.';
+      title = 'Caught — and befriended! 🪤';
+      sub = 'A happy yelp splits the night at ' + W.cells[W.wolf].name + ' — the trap springs, and out bounces a chubby pup with big eyes, tail wagging, delighted to be found. By lantern-light the village sees who it really is: ' + ws.name + ' ' + ws.job + '. Hollowbrook has a new friend tonight, and so does your pack.';
     } else if(won && how === 'net'){
-      title = 'Netted! 🥅';
-      sub = 'The silver net drops true at ' + W.cells[W.wolf].name + '. It thrashes, it howls, it shrinks — and by the time the village arrives with lanterns, there\'s only ' + ws.name + ' ' + ws.job + ', tangled in silver and very embarrassed. Hollowbrook can sleep again.';
+      title = 'Netted a new friend! 🥅';
+      sub = 'The silver net drops true at ' + W.cells[W.wolf].name + '. It wriggles, it giggles, it shrinks — and by the time the village arrives with lanterns, there\'s only ' + ws.name + ' ' + ws.job + ', tangled in silver and wagging happily. A new friend joins your pack.';
     } else if(how === 'dawn'){
       title = 'Dawn breaks 🌅';
       sub = 'Pink light spills over ' + W.cells[W.wolf].name + ', where the trail ends. The werewolf was ' + ws.name + ' ' + ws.job + ' all along — someone ordinary now, until next month\'s moon.';
@@ -10435,6 +10505,9 @@ var LOCATIONS = [
     var score = won ? 500 + (scoreMax - turnsUsed + 1) * 40 + trapsLeft * 60 + W.nets * 80 + W.snackInv * 30 + W.health * 100 + fits * 40
                     : W.cluesFound * 25 + (turnsUsed - 1) * 10;
     store.del('werewolfSave');
+    /* WEREWOLF-CUTE-2026-11-24: a real-hunt win befriends the pup — confetti + happy dance (in the end panel below) + one art card unlocked. Practice wins unlock nothing. */
+    var artUnlock = null;
+    if(won && !W.practice){ artUnlock = wUnlockArt(); try{ celebrateConfetti(120); }catch(err){} }
     var bestKey = W.diffKey + '_' + W.style;
     var wasBest = false;
     if(!W.practice){
@@ -10447,7 +10520,9 @@ var LOCATIONS = [
     }
     var end = $('wEnd');
     end.hidden = false;
-    end.innerHTML = '<div class="g-result"><h3>' + title + '</h3><p class="g-note">' + sub + '</p>' +
+    var artLine = '';
+    if(won && !W.practice){ artLine = artUnlock ? '<p class="g-note">🎨 New art unlocked: <strong>' + artUnlock.name + '</strong> — see it in your Art Collection in the game menu.</p>' : '<p class="g-note">🎨 Your Art Collection is complete — every card unlocked!</p>'; }
+    end.innerHTML = '<div class="g-result">' + (won ? '<div class="w-win-dance">' + wWolfSVG() + '</div>' : '') + '<h3>' + title + '</h3><p class="g-note">' + sub + '</p>' + artLine +
       '<p class="big">Score ' + score + ' · ' + turnsUsed + ' turns · ' + W.cluesFound + ' clues found' + (W.practice ? ' · 🎓 Practice — score not saved' : wasBest ? ' · 🏆 New best!' : ' · Best: ' + fmtNum(bestGet('werewolf')[bestKey] || 0)) + '</p>' +
       '<div class="g-row" style="justify-content:center"><button class="g-btn primary" type="button" id="wAgain">Hunt again</button>' +
       '<button class="g-btn" type="button" id="wShare">📤 Share my score</button>' +
@@ -10480,6 +10555,7 @@ var LOCATIONS = [
       end.querySelector('.g-result').appendChild(note);
     }
     renderBadges('werewolf');
+    wRenderArtAlbum();
     $('wChange').addEventListener('click', function(){ $('pane-werewolf').scrollIntoView({ behavior: 'smooth' }); player.scrollTop = 0; });
     wLog(won ? 'good' : 'bad', '<strong>' + title + '</strong> ' + sub);
     announceLive(title + ' ' + sub);
@@ -10654,8 +10730,16 @@ var LOCATIONS = [
     moonIdx: wMoonPhaseIdx,
     moonFull: wMoonFull,
     refresh: wRefresh,
-    renderChips: wRenderChips
+    renderChips: wRenderChips,
+    artUnlocked: wArtUnlocked,
+    unlockArt: wUnlockArt,
+    renderAlbum: wRenderArtAlbum,
+    wolfSVG: wWolfSVG,
+    portraitSVG: wPortraitSVG,
+    moonSVG: wMoonSVG,
+    endGame: wEndGame
   };
+  wRenderArtAlbum(); /* WEREWOLF-CUTE-2026-11-24: the album shows on the menu from first open */
 
   /* ================================================================
      MAD COW. Canvas herding game.
