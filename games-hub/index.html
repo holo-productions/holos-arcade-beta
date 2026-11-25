@@ -1501,6 +1501,10 @@ body.preview-as-tester #pointsWallet{display:none!important}
 .friend-result .friend-main b{font-size:15.5px}
 .friend-result .btn{margin-left:auto;flex:0 0 auto}
 .friend-result .already{margin-left:auto;flex:0 0 auto;font-size:13px;font-weight:800;color:var(--good);white-space:nowrap}
+/* FRIEND-SUGGEST-HOLO-2026-11-24: the Holo suggestion row in the friends search dropdown — same .friend-result look, with a small tag line and a dismiss ×. */
+.holo-suggest .holo-suggest-tag{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.holo-suggest-dismiss{flex:0 0 auto;width:28px;height:28px;border-radius:50%;border:1.5px solid var(--line);background:var(--card);color:var(--muted);font-size:13px;cursor:pointer;display:grid;place-items:center;padding:0}
+.holo-suggest-dismiss:hover{border-color:var(--bad);color:var(--bad)}
 .friend-no-match{font-size:14px;font-weight:700;color:var(--muted);background:var(--bg2);border:1.5px dashed var(--line);border-radius:14px;padding:12px 14px;margin:0}
 .friend-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:14px}
 .friend-grid:empty{display:none}
@@ -23541,6 +23545,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   function refresh(){
     var uid = myUid();
     if(!uid){ incoming = {}; cloudFriends = {}; renderAll(); return Promise.resolve(false); }
+    loadHoloSuggestFlag(); /* FRIEND-SUGGEST-HOLO-2026-11-24: cache the account-level dismissal flag. */
     return api('GET', '/friendRequests/' + encodeURIComponent(uid)).then(function(reqs){
       incoming = (reqs && typeof reqs === 'object') ? reqs : {};
       /* BLOCK-REPORT-2026-11-24: a request from a blocked tester is
@@ -23655,6 +23660,57 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       if(head) head.hidden = !keys.length;
     }
   }
+  /* FRIEND-SUGGEST-HOLO-2026-11-24 (Holo 2026-11-24: "show a drop down suggestion with my agent account if were not already friends… Allow them to x it and not show it again"): when a tester focuses the empty friends search bar, suggest HoloElizabeth (the owner, OWNER_UIDS[0]) so they can add her in one tap. Never for Holo herself, never once friends, never once a request is pending either way, never after dismissal. Dismissal persists BOTH ways: an account-level flag at /users/<uid>/dismissedHoloSuggest (writable by the owner under the live DM rules — /users/$uid .write is self-only) AND an on-device localStorage flag, so the × hides it instantly and on every device. Tapping Add sends a friend request through the existing sendRequest flow (same as the Owner Dash Add friend button). Typing takes over: renderCloudResults replaces the results box, so the suggestion only ever shows on focus while the box is empty. */
+  var HOLO_UID = (typeof OWNER_UIDS !== 'undefined' && OWNER_UIDS[0]) || 'wQEvX4fiG6QSDMWaxx20JaQwRPP2';
+  var HOLO_NAME = 'HoloElizabeth';
+  var HOLO_SUGGEST_LOCAL_KEY = 'holos-arcade-holo-suggest-dismissed';
+  var holoSuggestDismissed = null; /* null = account flag not read yet */
+  function holoSuggestDismissedLocal(){ try { return localStorage.getItem(HOLO_SUGGEST_LOCAL_KEY) === '1'; } catch(e){ return false; } }
+  function loadHoloSuggestFlag(){
+    var uid = myUid(); if(!uid) return Promise.resolve(false);
+    if(holoSuggestDismissed !== null) return Promise.resolve(holoSuggestDismissed);
+    return api('GET', '/users/' + encodeURIComponent(uid) + '/dismissedHoloSuggest').then(function(v){ holoSuggestDismissed = (v === true); return holoSuggestDismissed; }).catch(function(){ return false; });
+  }
+  function dismissHoloSuggest(){
+    var uid = myUid();
+    holoSuggestDismissed = true;
+    try { localStorage.setItem(HOLO_SUGGEST_LOCAL_KEY, '1'); } catch(e){}
+    if(uid) api('PUT', '/users/' + encodeURIComponent(uid) + '/dismissedHoloSuggest', true).catch(function(){});
+    var row = document.getElementById('holoSuggestRow'); if(row) row.remove();
+  }
+  function showHoloSuggestRow(){
+    var box = document.getElementById('cloudFriendResults'); if(!box) return;
+    if(document.getElementById('holoSuggestRow')) return;
+    box.innerHTML = '<div class="friend-result holo-suggest" id="holoSuggestRow">' +
+      '<span class="friend-avatar" aria-hidden="true">🦆</span>' +
+      '<div class="friend-main"><b>' + esc(HOLO_NAME) + '</b><span class="holo-suggest-tag">Your Arcade host — tap to add her</span></div>' +
+      '<button type="button" class="btn btn-dark" data-holo-suggest-add>📨 Add Holo</button>' +
+      '<button type="button" class="holo-suggest-dismiss" data-holo-suggest-dismiss aria-label="Dismiss — don\'t show again" title="Don\'t show again">✕</button></div>';
+    var addBtn = box.querySelector('[data-holo-suggest-add]');
+    if(addBtn) addBtn.addEventListener('click', function(){
+      sendRequest(HOLO_UID, HOLO_NAME).then(function(ok){
+        var row = document.getElementById('holoSuggestRow'); if(!row) return;
+        if(ok){ row.innerHTML = '<span class="friend-avatar" aria-hidden="true">🦆</span><div class="friend-main"><b>' + esc(HOLO_NAME) + '</b></div><span class="freq-pending">Request sent ✓</span>'; }
+      });
+    });
+    var xBtn = box.querySelector('[data-holo-suggest-dismiss]');
+    if(xBtn) xBtn.addEventListener('click', function(ev){ ev.stopPropagation(); dismissHoloSuggest(); });
+  }
+  function maybeShowHoloSuggest(){
+    var uid = myUid(); if(!uid || uid === HOLO_UID) return;
+    if(holoSuggestDismissedLocal()) return;
+    if(cloudFriends[HOLO_UID] || outgoing[HOLO_UID] || incoming[HOLO_UID]) return;
+    var inp = document.getElementById('friendInput'); if(!inp || inp.value.trim()) return;
+    var box = document.getElementById('cloudFriendResults'); if(!box) return;
+    if(document.getElementById('holoSuggestRow')) return;
+    if(holoSuggestDismissed === true) return;
+    if(holoSuggestDismissed === null){
+      /* Account flag not read yet — read it first, then show only if still allowed. */
+      loadHoloSuggestFlag().then(function(d){ if(!d) showHoloSuggestRow(); });
+      return;
+    }
+    showHoloSuggestRow();
+  }
   function renderCloudResults(query){
     var box = document.getElementById('cloudFriendResults'); if(!box) return;
     var q = String(query || '').trim();
@@ -23712,6 +23768,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       inp2.__freqWired = true;
       var t = null;
       inp2.addEventListener('input', function(){ clearTimeout(t); t = setTimeout(function(){ renderCloudResults(inp2.value); }, 450); });
+      /* FRIEND-SUGGEST-HOLO-2026-11-24: focusing the empty search bar shows the Holo suggestion; typing replaces it via renderCloudResults. */
+      inp2.addEventListener('focus', function(){ maybeShowHoloSuggest(); });
     }
   }
   buildUI();
