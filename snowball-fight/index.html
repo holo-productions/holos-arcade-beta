@@ -1,0 +1,922 @@
+<!doctype html>
+<!-- SNOWBALL-FIGHT-2026-11-25 -->
+<!-- December drop — hidden from the count until the hub agent cards it. -->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Snowball Fight — Holo's Arcade</title>
+<!-- GATE-GUARD-2026-11-24 -->
+<script src="../shared/gate-guard.js"></script>
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --navy:#0a0620; --panel:#1a1033; --yellow:#ffd93b; --violet:#7c3aed;
+    --pink:#ff3ec8; --ink:#fff; --muted:#b9aee6; --teal:#2dd4bf; --green:#37d67a;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #2a1b5e, var(--navy) 62%);
+    color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    height:100dvh; overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  .wrap{ width:100%; max-width:560px; margin:0 auto; height:100dvh; display:flex; flex-direction:column; padding:10px 12px 12px; }
+  header{ text-align:center; }
+  .title{ font-family:"Press Start 2P",system-ui,sans-serif; font-size:clamp(16px,5.2vw,24px); line-height:1.35; color:var(--yellow); text-shadow:0 2px 0 #7a4d00, 0 0 18px rgba(255,217,59,.45); }
+  .sub{ font-size:13px; color:var(--muted); margin-top:6px; }
+  .hud{ display:flex; gap:8px; align-items:stretch; margin:10px 0; }
+  .stat{ flex:1; background:rgba(255,255,255,.08); border:2px solid var(--violet); border-radius:10px; padding:4px 6px; text-align:center; min-width:0; }
+  .stat .lbl{ display:block; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
+  .stat .val{ display:block; font-size:18px; font-weight:800; line-height:1.2; }
+  .stat.hot{ border-color:var(--yellow); box-shadow:0 0 12px rgba(255,217,59,.4); }
+  .stat.hot .val{ color:var(--yellow); }
+  .iconbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:10px; padding:6px 12px; font-size:15px; font-weight:800; cursor:pointer; }
+  .iconbtn:hover{ border-color:var(--pink); }
+  .stage{ flex:1; min-height:0; position:relative; border-radius:16px; overflow:hidden; box-shadow:0 8px 30px rgba(0,0,0,.5); background:linear-gradient(#141038 0%, #1d1445 45%, #2b1a4d 78%, #3d2a63 100%); }
+  .yard{ position:absolute; inset:0; width:100%; height:100%; }
+  .sleigh{ position:absolute; top:6%; left:0; width:110px; z-index:1; pointer-events:none; animation:sleighfly 22s linear infinite; }
+  @keyframes sleighfly{ 0%{ transform:translateX(-140px); } 100%{ transform:translateX(620px); } }
+  .flake{ position:absolute; top:-12px; border-radius:50%; background:#fff; opacity:.9; pointer-events:none; animation:fall linear infinite; }
+  @keyframes fall{ to{ transform:translateY(110vh); } }
+  #targetLayer{ position:absolute; inset:0; z-index:2; touch-action:manipulation; }
+  .target{ position:absolute; transform:translate(-50%,-50%); background:none; border:none; padding:0; cursor:pointer; width:clamp(52px,15vw,76px); height:clamp(52px,15vw,76px); animation:pop .18s ease-out; -webkit-tap-highlight-color:transparent; }
+  .target svg{ width:100%; height:100%; display:block; filter:drop-shadow(0 3px 4px rgba(0,0,0,.45)); }
+  .target.hit{ animation:splat .18s ease-out forwards; pointer-events:none; }
+  @keyframes pop{ 0%{ transform:translate(-50%,-50%) scale(0); } 70%{ transform:translate(-50%,-50%) scale(1.15); } 100%{ transform:translate(-50%,-50%) scale(1); } }
+  @keyframes splat{ to{ transform:translate(-50%,-50%) scale(1.6); opacity:0; } }
+  .target.bob svg{ animation:bob .5s ease-in-out infinite alternate; }
+  @keyframes bob{ from{ transform:translateY(-3px) rotate(-3deg); } to{ transform:translateY(3px) rotate(3deg); } }
+  .floattxt{ position:absolute; transform:translate(-50%,-50%); font-weight:900; font-size:20px; color:var(--yellow); text-shadow:0 2px 0 rgba(0,0,0,.6); pointer-events:none; z-index:4; animation:rise .9s ease-out forwards; white-space:nowrap; }
+  .floattxt.miss{ color:#cfc4ff; font-size:15px; }
+  .floattxt.dbl{ color:#7dff9e; font-size:24px; }
+  @keyframes rise{ 0%{ opacity:1; margin-top:0; } 100%{ opacity:0; margin-top:-46px; } }
+  .comboBanner{ position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:5; background:rgba(10,6,32,.92); color:var(--yellow); border:2px solid var(--yellow); border-radius:999px; padding:6px 14px; font-weight:800; font-size:14px; white-space:nowrap; box-shadow:0 0 16px rgba(255,217,59,.5); pointer-events:none; }
+  .overlay{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; background:rgba(10,6,32,.88); border-radius:16px; padding:18px; text-align:center; z-index:6; overflow-y:auto; }
+  .hidden{ display:none !important; }
+  .overlay h2{ margin:0; color:var(--yellow); font-size:24px; font-family:"Press Start 2P",system-ui,sans-serif; font-size:clamp(15px,4.4vw,20px); line-height:1.5; }
+  .overlay p{ margin:0; font-size:15px; line-height:1.5; max-width:400px; color:#e9e4ff; }
+  .big{ font-size:34px; font-weight:900; color:var(--yellow); }
+  .card{ background:var(--panel); border:2px solid var(--violet); border-radius:14px; padding:14px 16px; max-width:420px; width:100%; text-align:left; }
+  .card ul{ margin:0; padding-left:20px; font-size:14px; line-height:1.6; color:#e9e4ff; }
+  .card li{ margin-bottom:6px; }
+  .card table{ width:100%; border-collapse:collapse; font-size:14px; color:#e9e4ff; }
+  .card td{ padding:3px 4px; }
+  .card td:last-child{ text-align:right; font-weight:800; color:var(--yellow); }
+  .btn{ background:linear-gradient(#ffe45e,#ffc93b); color:#241200; font-weight:800; border:none; border-radius:999px; padding:13px 30px; font-size:18px; box-shadow:0 0 18px rgba(255,217,59,.55), 0 4px 0 #b98a00; cursor:pointer; min-width:200px; }
+  .btn:active{ transform:translateY(2px); box-shadow:0 0 18px rgba(255,217,59,.55), 0 2px 0 #b98a00; }
+  .btn2{ background:linear-gradient(135deg,var(--violet),var(--pink)); color:#fff; border:none; border-radius:999px; padding:11px 24px; font-size:16px; font-weight:700; box-shadow:0 4px 0 rgba(0,0,0,.35); cursor:pointer; min-width:200px; }
+  .btn2:active{ transform:translateY(2px); }
+  .btn3{ background:none; border:none; color:#cfc4ff; text-decoration:underline; cursor:pointer; font-size:15px; padding:6px 10px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .diffbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:999px; padding:7px 14px; font-weight:700; cursor:pointer; }
+  .diffbtn[aria-pressed="true"]{ background:var(--yellow); color:#241200; border-color:var(--yellow); }
+  .hint{ text-align:center; color:var(--muted); font-size:12px; padding-top:8px; }
+  .bestline{ font-size:14px; color:var(--muted); }
+  .bestline b{ color:var(--yellow); }
+  .newbest{ color:#7dff9e; font-weight:800; }
+  .pracbadge{ display:inline-block; background:#0a0620; color:#ffe9a3; border:2px solid var(--pink); border-radius:999px; padding:3px 12px; font-size:12px; font-weight:700; }
+  .quip{ font-style:italic; color:#ffe9a3 !important; }
+  .toast{ position:absolute; bottom:14px; left:50%; transform:translateX(-50%); z-index:7; background:var(--yellow); color:#241200; font-weight:800; border-radius:999px; padding:8px 18px; font-size:15px; box-shadow:0 4px 16px rgba(0,0,0,.5); pointer-events:none; }
+  @media (max-width:360px){ .btn,.btn2{ min-width:170px; } }
+  @media (prefers-reduced-motion: reduce){ .flake,.sleigh{ animation:none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title">SNOWBALL FIGHT</div>
+    <div class="sub">Christmas chaos in the North Pole yard — Santa's sleigh is overhead, the elves are on break, and somebody left the snowballs out.</div>
+  </header>
+  <div class="hud">
+    <div class="stat"><span class="lbl">Score</span><span class="val" id="hudScore">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="hudBest">0</span></div>
+    <div class="stat"><span class="lbl">Time</span><span class="val" id="hudTime">1:00</span></div>
+    <div class="stat" id="comboStat"><span class="lbl">Combo</span><span class="val" id="hudCombo">—</span></div>
+    <button id="btnPause" class="iconbtn" aria-label="Pause game">II</button>
+    <button id="btnEndPractice" class="iconbtn hidden" aria-label="End practice">End</button>
+  </div>
+  <div class="stage" id="stage">
+    <!-- Snowy North Pole yard: night sky, moon, pine trees, fence, snow drifts. All inline SVG, no emoji. -->
+    <svg class="yard" viewBox="0 0 560 640" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#141038"/><stop offset=".45" stop-color="#1d1445"/>
+          <stop offset=".78" stop-color="#2b1a4d"/><stop offset="1" stop-color="#3d2a63"/>
+        </linearGradient>
+      </defs>
+      <rect width="560" height="640" fill="url(#sky)"/>
+      <g fill="#fff" opacity=".8">
+        <circle cx="40" cy="40" r="2"/><circle cx="120" cy="90" r="1.6"/><circle cx="200" cy="30" r="2"/>
+        <circle cx="300" cy="70" r="1.6"/><circle cx="380" cy="26" r="2"/><circle cx="470" cy="80" r="1.6"/>
+        <circle cx="520" cy="40" r="2"/><circle cx="90" cy="140" r="1.4"/><circle cx="250" cy="120" r="1.4"/>
+        <circle cx="430" cy="140" r="1.4"/><circle cx="160" cy="170" r="1.2"/><circle cx="340" cy="170" r="1.2"/>
+      </g>
+      <circle cx="478" cy="52" r="24" fill="#ffe9a3"/>
+      <circle cx="470" cy="46" r="5" fill="#e8cf8a"/><circle cx="486" cy="60" r="4" fill="#e8cf8a"/>
+      <!-- pine trees -->
+      <g>
+        <g transform="translate(18,330)">
+          <rect x="-5" y="150" width="10" height="26" fill="#5a3d1e"/>
+          <path d="M0 0 L34 74 L-34 74 Z" fill="#1d5c33"/><path d="M0 34 L44 108 L-44 108 Z" fill="#22703d"/>
+          <path d="M0 72 L52 150 L-52 150 Z" fill="#1d5c33"/>
+          <path d="M0 0 L34 74 L-34 74 Z" fill="#fff" opacity=".55" transform="translate(0,10) scale(.55)"/>
+        </g>
+        <g transform="translate(542,350) scale(.9)">
+          <rect x="-5" y="150" width="10" height="26" fill="#5a3d1e"/>
+          <path d="M0 0 L34 74 L-34 74 Z" fill="#1d5c33"/><path d="M0 34 L44 108 L-44 108 Z" fill="#22703d"/>
+          <path d="M0 72 L52 150 L-52 150 Z" fill="#1d5c33"/>
+        </g>
+        <g transform="translate(66,420) scale(.62)">
+          <rect x="-5" y="150" width="10" height="26" fill="#5a3d1e"/>
+          <path d="M0 0 L34 74 L-34 74 Z" fill="#22703d"/><path d="M0 34 L44 108 L-44 108 Z" fill="#1d5c33"/>
+          <path d="M0 72 L52 150 L-52 150 Z" fill="#22703d"/>
+        </g>
+        <g transform="translate(496,430) scale(.62)">
+          <rect x="-5" y="150" width="10" height="26" fill="#5a3d1e"/>
+          <path d="M0 0 L34 74 L-34 74 Z" fill="#22703d"/><path d="M0 34 L44 108 L-44 108 Z" fill="#1d5c33"/>
+          <path d="M0 72 L52 150 L-52 150 Z" fill="#22703d"/>
+        </g>
+      </g>
+      <!-- wooden fence -->
+      <g fill="#6b4a2f" stroke="#4a3018" stroke-width="1">
+        <rect x="0" y="470" width="560" height="10" rx="3"/><rect x="0" y="496" width="560" height="10" rx="3"/>
+        <rect x="30" y="452" width="14" height="70" rx="3"/><rect x="130" y="452" width="14" height="70" rx="3"/>
+        <rect x="230" y="452" width="14" height="70" rx="3"/><rect x="330" y="452" width="14" height="70" rx="3"/>
+        <rect x="430" y="452" width="14" height="70" rx="3"/><rect x="520" y="452" width="14" height="70" rx="3"/>
+      </g>
+      <rect x="0" y="470" width="560" height="10" fill="#fff" opacity=".8"/>
+      <rect x="0" y="496" width="560" height="10" fill="#fff" opacity=".8"/>
+      <!-- snow drifts -->
+      <path d="M0 560 Q140 528 280 556 T560 552 V640 H0 Z" fill="#eef4ff"/>
+      <path d="M0 596 Q180 572 360 594 T560 590 V640 H0 Z" fill="#ffffff"/>
+      <!-- Santa's workshop window glow, far left -->
+      <g transform="translate(210,486)">
+        <rect x="0" y="0" width="60" height="46" rx="4" fill="#3a2140"/>
+        <rect x="8" y="8" width="18" height="16" fill="#ffd93b"/><rect x="34" y="8" width="18" height="16" fill="#ffd93b"/>
+        <path d="M-6 0 L30 -16 L66 0 Z" fill="#2c1830"/>
+      </g>
+    </svg>
+    <!-- Santa's sleigh with reindeer, drifting across the sky -->
+    <div class="sleigh" aria-hidden="true">
+      <svg viewBox="0 0 110 40" width="110" height="40">
+        <g fill="#241200">
+          <circle cx="14" cy="18" r="5"/><circle cx="26" cy="22" r="7"/>
+          <path d="M10 14 L6 6 M14 13 L14 5" stroke="#241200" stroke-width="2"/>
+          <circle cx="12" cy="17" r="1" fill="#ff3ec8"/>
+          <path d="M30 20 L44 24 L30 28 Z"/>
+          <path d="M60 8 L66 2 L68 8 M64 8 L70 4" stroke="#241200" stroke-width="2"/>
+          <circle cx="58" cy="14" r="5"/><circle cx="70" cy="18" r="7"/>
+          <path d="M74 16 L88 20 L74 24 Z"/>
+        </g>
+        <g>
+          <path d="M84 22 Q100 22 102 14 L106 14 Q104 26 88 28 Z" fill="#c22f2f"/>
+          <circle cx="96" cy="12" r="4" fill="#f2c79b"/>
+          <path d="M92 8 L100 4 L102 10 Z" fill="#c22f2f"/>
+        </g>
+      </svg>
+    </div>
+    <div id="snowLayer" aria-hidden="true"></div>
+    <div id="targetLayer" role="application" aria-label="Snowball fight yard — tap the targets"></div>
+    <div class="comboBanner hidden" id="comboBanner" role="status"></div>
+
+    <div class="overlay" id="ovMenu">
+      <h2>SNOWBALL FIGHT</h2>
+      <p>It's Christmas Eve at the North Pole. The elves are on break, the snowman doesn't mind getting pelted (he's used to it), and Santa's sleigh just flew over. Sixty seconds, one snowball at a time — how many Christmas targets can you hit?</p>
+      <p class="bestline">Best score: <b id="menuBest">0</b> &nbsp;·&nbsp; Difficulty: <b id="menuDiff">Medium</b></p>
+      <div class="row" id="diffRow" role="group" aria-label="Difficulty">
+        <button class="diffbtn" data-diff="easy" aria-pressed="false">Easy</button>
+        <button class="diffbtn" data-diff="medium" aria-pressed="true">Medium</button>
+        <button class="diffbtn" data-diff="hard" aria-pressed="false">Hard</button>
+      </div>
+      <button class="btn" id="btnPlay">Play</button>
+      <button class="btn2" id="btnPractice">Practice</button>
+      <button class="btn2" id="btnRules">How to Play</button>
+    </div>
+
+    <div class="overlay hidden" id="ovRules">
+      <h2>HOW TO PLAY</h2>
+      <div class="card">
+        <ul>
+          <li><b>Tap a target</b> to pelt it with a snowball. Targets pop up around the yard for a short while, then duck back down.</li>
+          <li>You have <b>60 seconds</b>. Most points wins.</li>
+          <li><b>Stars and elves are fast and rare</b> — elves are on break, so they don't hang around. The star fell off the tree and is in a hurry to get back.</li>
+          <li><b>Combos:</b> hit 3 in a row without a miss and your <b>next hit is worth DOUBLE</b>. Every 3rd hit in a row arms another double.</li>
+          <li><b>Clicking empty snow is a miss</b> — it breaks your combo streak. A target ducking away on its own does not.</li>
+          <li>The snowman doesn't mind, he's used to it. The stockings are full of stuffers. The gifts are… well, gifts.</li>
+          <li><b>Practice mode:</b> untimed, no score, no best saved — just cookies-and-milk calm.</li>
+        </ul>
+        <table aria-label="Scoring">
+          <tr><td>Snowman</td><td>+10</td></tr>
+          <tr><td>Gift box</td><td>+15</td></tr>
+          <tr><td>Stocking</td><td>+20</td></tr>
+          <tr><td>Star</td><td>+25</td></tr>
+          <tr><td>Elf</td><td>+30</td></tr>
+        </table>
+      </div>
+      <button class="btn" id="btnRulesClose">Got it</button>
+    </div>
+
+    <div class="overlay hidden" id="ovPause">
+      <h2>PAUSED</h2>
+      <p>The snow is holding. Santa's reindeer are waiting.</p>
+      <button class="btn" id="btnResume">Resume</button>
+      <button class="btn2" id="btnRestart">Restart</button>
+      <button class="btn3" id="btnQuitToMenu">Main menu</button>
+    </div>
+
+    <div class="overlay hidden" id="ovEnd">
+      <h2 id="endTitle">TIME'S UP!</h2>
+      <p id="endLine">The sleigh bells are ringing — round over.</p>
+      <div class="big" id="endScore">0</div>
+      <p class="bestline">Best: <b id="endBest">0</b> <span class="newbest hidden" id="endNewBest">New best!</span></p>
+      <p class="bestline" id="endStats"></p>
+      <p class="quip" id="endQuip"></p>
+      <p id="endPracticeNote" class="hidden"><span class="pracbadge">Practice — scores don't count</span></p>
+      <button class="btn" id="btnReplay">Replay</button>
+      <button class="btn2" id="btnStartOver">Start over</button>
+      <button class="btn2" id="btnInvite">Invite friend</button>
+      <button class="btn2" id="btnExit">Exit</button>
+    </div>
+    <div class="toast hidden" id="toast" role="status">Link copied!</div>
+  </div>
+  <div class="hint">Tap a target to throw a snowball. Empty snow = a miss, and it breaks your combo.</div>
+</div>
+<script>
+(function(){
+'use strict';
+/* SNOWBALL-FIGHT-2026-11-25: Snowball Fight — Christmas pop-up targets.
+   60-second rounds, combos double the next hit, Practice never saves. */
+var $ = function(id){ return document.getElementById(id); };
+function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
+function rnd(a, b){ return a + Math.random() * (b - a); }
+
+/* ---- state ---- */
+var state = 'menu'; /* menu | playing | paused | over */
+var practiceMode = false;
+var score = 0, best = 0, hits = 0, misses = 0, streak = 0, bestStreak = 0;
+var doubleNext = false;
+var timeLeft = 60, gameNow = 0, spawnTimer = 0;
+var difficulty = 'medium';
+var targets = {}; /* id -> {el, type, expires} */
+var targetSeq = 0;
+var loopId = null;
+var LS_BEST = 'snowballFight.best', LS_DIFF = 'snowballFight.difficulty';
+try {
+  best = parseInt(localStorage.getItem(LS_BEST) || '0', 10) || 0;
+  var d0 = localStorage.getItem(LS_DIFF); if (d0) difficulty = d0;
+} catch (e) {}
+
+var ROUND = 60;
+var DIFF = {
+  /* spawn: ms between spawns · window: ms a target stays up · max: targets at once · mix: weighted target shares */
+  easy:   { spawn: 1100, window: 1600, max: 3, mix: { snowman: 55, stocking: 20, gift: 12, star: 8, elf: 5 } },
+  medium: { spawn: 800,  window: 1200, max: 4, mix: { snowman: 45, stocking: 22, gift: 15, star: 10, elf: 8 } },
+  hard:   { spawn: 550,  window: 850,  max: 5, mix: { snowman: 35, stocking: 20, gift: 15, star: 16, elf: 14 } }
+};
+var POINTS = { snowman: 10, gift: 15, stocking: 20, star: 25, elf: 30 };
+var QUIPS = [
+  'The snowman doesn\u2019t mind, he\u2019s used to it.',
+  'The elves are on break — you just interrupted it.',
+  'Santa saw that. He\u2019s writing it down. (Nice list, probably.)',
+  'Somewhere, a stocking just lost a stuffer.',
+  'The reindeer are impressed. They don\u2019t impress easily.',
+  'Cookies and milk for the winner. The milk is non-negotiable.',
+  'That star fell off the tree and you sent it further. Bold.',
+  'The North Pole has filed a formal snowball complaint.'
+];
+var HIT_QUIPS = {
+  elf: 'Elf on break — busted!',
+  star: 'Star down! The tree will notice.',
+  snowman: 'He doesn\u2019t mind, he\u2019s used to it.',
+  gift: 'That gift was for someone!',
+  stocking: 'A stuffer just flew out!'
+};
+
+/* ---- target art: inline SVG, no emoji ---- */
+var ART = {
+  snowman: '<svg viewBox="0 0 64 64" aria-hidden="true">'
+    + '<line x1="14" y1="38" x2="4" y2="30" stroke="#6b4a2f" stroke-width="3" stroke-linecap="round"/>'
+    + '<line x1="50" y1="38" x2="60" y2="30" stroke="#6b4a2f" stroke-width="3" stroke-linecap="round"/>'
+    + '<circle cx="32" cy="48" r="14" fill="#fff"/><circle cx="32" cy="30" r="10" fill="#fff"/><circle cx="32" cy="15" r="8" fill="#fff"/>'
+    + '<rect x="24" y="6" width="16" height="9" fill="#241200"/><rect x="20" y="14" width="24" height="3" fill="#241200"/>'
+    + '<circle cx="29" cy="14" r="1.4" fill="#241200"/><circle cx="35" cy="14" r="1.4" fill="#241200"/>'
+    + '<path d="M33 16 L46 19 L33 22 Z" fill="#ff7b1c"/>'
+    + '<circle cx="32" cy="28" r="1.6" fill="#241200"/><circle cx="32" cy="34" r="1.6" fill="#241200"/><circle cx="32" cy="46" r="1.6" fill="#241200"/>'
+    + '<rect x="23" y="22" width="18" height="5" rx="2" fill="#c22f2f"/><rect x="36" y="26" width="5" height="10" rx="2" fill="#c22f2f"/>'
+    + '</svg>',
+  elf: '<svg viewBox="0 0 64 64" aria-hidden="true">'
+    + '<path d="M32 2 L44 22 L20 22 Z" fill="#1d7a3a"/><circle cx="32" cy="3" r="3.4" fill="#ffd93b"/>'
+    + '<path d="M20 22 Q32 14 44 22 L44 26 L20 26 Z" fill="#c22f2f"/>'
+    + '<path d="M14 28 L22 26 L22 36 L14 38 Z" fill="#f2c79b"/><path d="M50 28 L42 26 L42 36 L50 38 Z" fill="#f2c79b"/>'
+    + '<circle cx="32" cy="32" r="12" fill="#f2c79b"/>'
+    + '<circle cx="27" cy="31" r="1.6" fill="#241200"/><circle cx="37" cy="31" r="1.6" fill="#241200"/>'
+    + '<circle cx="32" cy="36" r="2.4" fill="#ff8fb0"/>'
+    + '<path d="M26 41 Q32 45 38 41" stroke="#241200" stroke-width="2" fill="none" stroke-linecap="round"/>'
+    + '<path d="M18 50 L32 42 L46 50 L46 60 L18 60 Z" fill="#1d7a3a"/>'
+    + '<circle cx="32" cy="52" r="3" fill="#ffd93b"/>'
+    + '</svg>',
+  stocking: '<svg viewBox="0 0 64 64" aria-hidden="true">'
+    + '<path d="M22 12 L40 12 L40 30 L50 44 Q54 52 46 56 L30 60 Q20 62 18 52 L18 12 Z" fill="#c22f2f"/>'
+    + '<rect x="18" y="6" width="26" height="10" rx="3" fill="#fff"/>'
+    + '<path d="M18 30 L40 30 L40 38 L18 38 Z" fill="#fff" opacity=".85"/>'
+    + '<path d="M44 44 Q52 50 46 56 L38 58 L40 48 Z" fill="#8ecbff"/>'
+    + '<path d="M26 6 L30 0" stroke="#fff" stroke-width="3" stroke-linecap="round"/>'
+    + '<path d="M30 2 L34 8" stroke="#c22f2f" stroke-width="3" stroke-linecap="round"/>'
+    + '<circle cx="46" cy="14" r="2.4" fill="#37d67a"/><circle cx="52" cy="20" r="2" fill="#ffd93b"/>'
+    + '</svg>',
+  star: '<svg viewBox="0 0 64 64" aria-hidden="true">'
+    + '<path d="M32 4 L39 24 L60 24 L43 37 L49 58 L32 45 L15 58 L21 37 L4 24 L25 24 Z" fill="#ffd93b" stroke="#e8a100" stroke-width="2" stroke-linejoin="round"/>'
+    + '<circle cx="27" cy="30" r="2" fill="#241200"/><circle cx="37" cy="30" r="2" fill="#241200"/>'
+    + '<path d="M27 36 Q32 40 37 36" stroke="#241200" stroke-width="2" fill="none" stroke-linecap="round"/>'
+    + '<circle cx="12" cy="12" r="1.8" fill="#fff"/><circle cx="52" cy="10" r="1.8" fill="#fff"/><circle cx="56" cy="34" r="1.5" fill="#fff"/>'
+    + '</svg>',
+  gift: '<svg viewBox="0 0 64 64" aria-hidden="true">'
+    + '<rect x="10" y="26" width="44" height="30" rx="3" fill="#7c3aed"/>'
+    + '<rect x="8" y="18" width="48" height="10" rx="3" fill="#9a5cff"/>'
+    + '<rect x="28" y="18" width="8" height="38" fill="#ffd93b"/>'
+    + '<path d="M32 18 Q22 6 14 12 Q12 20 32 18 Z" fill="#ffd93b"/>'
+    + '<path d="M32 18 Q42 6 50 12 Q52 20 32 18 Z" fill="#ffd93b"/>'
+    + '<circle cx="32" cy="18" r="3" fill="#ff3ec8"/>'
+    + '<circle cx="18" cy="40" r="1.6" fill="#fff"/><circle cx="46" cy="48" r="1.6" fill="#fff"/><circle cx="20" cy="50" r="1.6" fill="#fff"/>'
+    + '</svg>'
+};
+
+/* ---- audio (gated by holoSettings) ---- */
+var AC = null;
+function ac(){
+  if (!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  return AC;
+}
+function beep(f, dur, type, g, slide){
+  try {
+    if (!window.holoSettings || !window.holoSettings.sound) return;
+    var c = ac(); if (!c) return;
+    var o = c.createOscillator(), gn = c.createGain();
+    o.type = type || 'sine'; o.frequency.value = f;
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, slide), c.currentTime + dur);
+    gn.gain.value = g || 0.1;
+    gn.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+    o.connect(gn); gn.connect(c.destination);
+    o.start(); o.stop(c.currentTime + dur);
+  } catch (e) {}
+}
+function sfx(name){
+  if (name === 'thwip'){ beep(900, 0.09, 'triangle', 0.07, 300); }
+  else if (name === 'pop'){ beep(520, 0.16, 'triangle', 0.1, 170); }
+  else if (name === 'jingle'){ [880, 1108, 1318, 1760].forEach(function(f, i){ setTimeout(function(){ beep(f, 0.16, 'sine', 0.1); }, i * 90); }); }
+  else if (name === 'whistle'){ beep(1200, 0.35, 'sine', 0.09, 500); setTimeout(function(){ beep(1200, 0.3, 'sine', 0.09, 600); }, 380); }
+  else if (name === 'click'){ beep(660, 0.06, 'sine', 0.06); }
+}
+function buzz(ms){ try { if (window.holoBuzz) window.holoBuzz(ms); } catch (e) {} }
+
+/* ---- overlays ---- */
+var overlays = ['ovMenu', 'ovRules', 'ovPause', 'ovEnd'];
+function show(id){ overlays.forEach(function(o){ $(o).classList.toggle('hidden', o !== id); }); }
+function showNone(){ overlays.forEach(function(o){ $(o).classList.add('hidden'); }); }
+function showMenu(){
+  state = 'menu';
+  $('menuBest').textContent = best;
+  $('menuDiff').textContent = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+  $('btnEndPractice').classList.add('hidden');
+  show('ovMenu');
+  updateHUD();
+}
+
+/* ---- HUD ---- */
+function fmtTime(s){
+  s = Math.max(0, Math.ceil(s));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+function updateHUD(){
+  $('hudScore').textContent = score;
+  $('hudBest').textContent = best;
+  $('hudTime').textContent = practiceMode ? '\u221E' : fmtTime(timeLeft);
+  $('hudCombo').textContent = streak > 0 ? 'x' + streak : '—';
+  var cs = $('comboStat');
+  cs.classList.toggle('hot', streak >= 3);
+  var banner = $('comboBanner');
+  if (doubleNext && state === 'playing'){
+    banner.textContent = 'COMBO x' + streak + ' — next hit worth DOUBLE!';
+    banner.classList.remove('hidden');
+  } else {
+    banner.classList.add('hidden');
+  }
+}
+
+/* ---- snowfall (CSS flakes) ---- */
+function buildSnow(){
+  var layer = $('snowLayer');
+  if (!layer || layer.childNodes.length) return;
+  for (var i = 0; i < 26; i++){
+    var f = document.createElement('div');
+    f.className = 'flake';
+    var size = rnd(3, 7);
+    f.style.width = size + 'px'; f.style.height = size + 'px';
+    f.style.left = rnd(0, 100) + '%';
+    f.style.animationDuration = rnd(6, 14) + 's';
+    f.style.animationDelay = (-rnd(0, 14)) + 's';
+    f.style.opacity = rnd(0.4, 0.95);
+    layer.appendChild(f);
+  }
+}
+
+/* ---- targets ---- */
+function pickType(){
+  var mix = DIFF[difficulty].mix, total = 0, k;
+  for (k in mix) total += mix[k];
+  var roll = Math.random() * total;
+  for (k in mix){ roll -= mix[k]; if (roll <= 0) return k; }
+  return 'snowman';
+}
+function clearTargets(){
+  var layer = $('targetLayer');
+  layer.innerHTML = '';
+  targets = {};
+}
+function spawnTarget(forceType){
+  var d = DIFF[difficulty];
+  var count = 0; for (var k in targets) count++;
+  if (count >= d.max) return null;
+  var type = forceType || pickType();
+  var id = 't' + (++targetSeq);
+  var btn = document.createElement('button');
+  btn.className = 'target' + ((type === 'star' || type === 'elf') ? ' bob' : '');
+  btn.id = id;
+  btn.setAttribute('data-type', type);
+  btn.setAttribute('aria-label', type + ' target, worth ' + POINTS[type] + ' points');
+  btn.innerHTML = ART[type];
+  /* keep the whole target inside the yard, away from the combo banner */
+  btn.style.left = rnd(12, 88) + '%';
+  btn.style.top = rnd(16, 88) + '%';
+  $('targetLayer').appendChild(btn);
+  targets[id] = { el: btn, type: type, expires: gameNow + d.window / 1000 };
+  return id;
+}
+function floatText(xPct, yPct, txt, cls){
+  var layer = $('targetLayer');
+  var el = document.createElement('div');
+  el.className = 'floattxt' + (cls ? ' ' + cls : '');
+  el.textContent = txt;
+  el.style.left = xPct; el.style.top = yPct;
+  layer.appendChild(el);
+  setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 950);
+}
+function removeTarget(id){
+  var t = targets[id];
+  if (!t) return;
+  if (t.el.parentNode) t.el.parentNode.removeChild(t.el);
+  delete targets[id];
+}
+function hitTarget(id){
+  var t = targets[id];
+  if (!t || state !== 'playing') return;
+  var base = POINTS[t.type];
+  var pts = base, doubled = false;
+  if (doubleNext){ pts = base * 2; doubled = true; doubleNext = false; }
+  score += pts; hits++;
+  streak++;
+  if (streak > bestStreak) bestStreak = streak;
+  var xPct = t.el.style.left, yPct = t.el.style.top;
+  t.el.classList.add('hit');
+  setTimeout(function(){ removeTarget(id); }, 160);
+  delete targets[id];
+  floatText(xPct, yPct, '+' + pts + (doubled ? ' DOUBLE!' : ''), doubled ? 'dbl' : '');
+  if (Math.random() < 0.3) floatText(xPct, clamp(parseFloat(yPct) + 10, 10, 92) + '%', HIT_QUIPS[t.type], 'miss');
+  if (!doubled && streak % 3 === 0){
+    doubleNext = true;
+    sfx('jingle'); buzz(40);
+  } else {
+    sfx('pop'); buzz(15);
+  }
+  updateHUD();
+}
+function missAt(xPct, yPct){
+  if (state !== 'playing') return;
+  streak = 0; doubleNext = false; misses++;
+  floatText(xPct, yPct, 'MISS', 'miss');
+  updateHUD();
+}
+
+/* ---- game flow ---- */
+function startLoop(){
+  stopLoop();
+  loopId = setInterval(function(){ tick(0.1); }, 100);
+}
+function stopLoop(){ if (loopId){ clearInterval(loopId); loopId = null; } }
+function tick(dt){
+  if (state !== 'playing') return;
+  gameNow += dt;
+  if (!practiceMode){
+    timeLeft -= dt;
+    if (timeLeft <= 0){ timeLeft = 0; updateHUD(); endRound(false); return; }
+  }
+  var d = DIFF[difficulty];
+  spawnTimer -= dt * 1000;
+  if (spawnTimer <= 0){
+    spawnTimer = d.spawn * rnd(0.85, 1.15);
+    spawnTarget();
+  }
+  /* expire targets that ducked away on their own — no combo penalty */
+  for (var id in targets){
+    if (targets[id].expires <= gameNow) removeTarget(id);
+  }
+  updateHUD();
+}
+function startGame(practice){
+  practiceMode = !!practice;
+  score = 0; hits = 0; misses = 0; streak = 0; bestStreak = 0; doubleNext = false;
+  timeLeft = ROUND; gameNow = 0; spawnTimer = 400;
+  clearTargets();
+  state = 'playing';
+  $('btnEndPractice').classList.toggle('hidden', !practiceMode);
+  showNone();
+  updateHUD();
+  startLoop();
+}
+function pauseGame(){
+  if (state !== 'playing') return;
+  state = 'paused';
+  stopLoop();
+  show('ovPause');
+}
+function resumeGame(){
+  if (state !== 'paused') return;
+  state = 'playing';
+  showNone();
+  startLoop();
+}
+function endRound(practiceEnd){
+  stopLoop();
+  clearTargets();
+  state = 'over';
+  sfx('whistle');
+  var isBest = false;
+  if (!practiceMode && score > best){
+    best = score; isBest = true;
+    try { localStorage.setItem(LS_BEST, String(best)); } catch (e) {}
+  }
+  $('endTitle').textContent = practiceMode ? 'PRACTICE DONE' : 'TIME\u2019S UP!';
+  $('endLine').textContent = practiceMode
+    ? 'Nice warm-up. The real round is waiting — and the elves are still on break.'
+    : 'The sleigh bells are ringing — round over.';
+  $('endScore').textContent = score;
+  $('endBest').textContent = best;
+  $('endNewBest').classList.toggle('hidden', !isBest);
+  $('endStats').textContent = hits + ' hits  ·  ' + misses + ' misses  ·  best combo x' + bestStreak + '  ·  ' + difficulty;
+  $('endQuip').textContent = QUIPS[Math.floor(Math.random() * QUIPS.length)];
+  $('endPracticeNote').classList.toggle('hidden', !practiceMode);
+  $('btnEndPractice').classList.add('hidden');
+  show('ovEnd');
+  updateHUD();
+}
+
+/* ---- input ---- */
+$('targetLayer').addEventListener('click', function(e){
+  if (state !== 'playing') return;
+  sfx('thwip');
+  var tgt = e.target && e.target.closest ? e.target.closest('.target') : null;
+  if (tgt && targets[tgt.id]){ hitTarget(tgt.id); return; }
+  /* miss: click position as % of the layer */
+  var r = e.currentTarget.getBoundingClientRect();
+  var x = r.width ? ((e.clientX - r.left) / r.width * 100) : 50;
+  var y = r.height ? ((e.clientY - r.top) / r.height * 100) : 50;
+  missAt(clamp(x, 4, 96) + '%', clamp(y, 8, 94) + '%');
+});
+window.addEventListener('keydown', function(e){
+  if (e.key === 'Enter'){
+    if (state === 'menu') startGame(false);
+    else if (state === 'over') startGame(practiceMode);
+  } else if (e.key === 'p' || e.key === 'P'){
+    if (state === 'playing') pauseGame();
+    else if (state === 'paused') resumeGame();
+  }
+});
+
+/* ---- buttons ---- */
+$('btnPlay').addEventListener('click', function(){ sfx('click'); startGame(false); });
+$('btnPractice').addEventListener('click', function(){ sfx('click'); startGame(true); });
+$('btnRules').addEventListener('click', function(){ show('ovRules'); });
+$('btnRulesClose').addEventListener('click', function(){ show('ovMenu'); });
+$('btnPause').addEventListener('click', function(){ if (state === 'playing') pauseGame(); else if (state === 'paused') resumeGame(); });
+$('btnResume').addEventListener('click', resumeGame);
+$('btnRestart').addEventListener('click', function(){ startGame(practiceMode); });
+$('btnQuitToMenu').addEventListener('click', function(){ stopLoop(); clearTargets(); showMenu(); });
+$('btnEndPractice').addEventListener('click', function(){ if (state === 'playing') endRound(true); });
+$('btnReplay').addEventListener('click', function(){ startGame(practiceMode); });
+$('btnStartOver').addEventListener('click', function(){ showMenu(); });
+$('btnExit').addEventListener('click', function(){ window.location.href = 'https://beta.holosarcade.ca/games-hub/'; });
+$('btnInvite').addEventListener('click', function(){
+  var url = 'https://beta.holosarcade.ca/snowball-fight/';
+  var done = function(){
+    var toast = $('toast');
+    toast.classList.remove('hidden');
+    setTimeout(function(){ toast.classList.add('hidden'); }, 1800);
+  };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(done, function(){ fallbackCopy(url); done(); });
+      return;
+    }
+  } catch (e) {}
+  fallbackCopy(url); done();
+});
+function fallbackCopy(text){
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  } catch (e) {}
+}
+
+/* ---- difficulty picker ---- */
+function syncDiffUI(){
+  var btns = document.querySelectorAll('#diffRow .diffbtn');
+  for (var i = 0; i < btns.length; i++){
+    btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-diff') === difficulty ? 'true' : 'false');
+  }
+  $('menuDiff').textContent = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+}
+document.querySelectorAll('#diffRow .diffbtn').forEach(function(b){
+  b.addEventListener('click', function(){
+    difficulty = b.getAttribute('data-diff');
+    try { localStorage.setItem(LS_DIFF, difficulty); } catch (e) {}
+    syncDiffUI();
+  });
+});
+syncDiffUI();
+
+/* ---- test hooks (for jsdom verification) ---- */
+window.__sb = {
+  get state(){ return state; },
+  get score(){ return score; },
+  get best(){ return best; },
+  get streak(){ return streak; },
+  get bestStreak(){ return bestStreak; },
+  get doubleNext(){ return doubleNext; },
+  get hits(){ return hits; },
+  get misses(){ return misses; },
+  get timeLeft(){ return timeLeft; },
+  get difficulty(){ return difficulty; },
+  get practice(){ return practiceMode; },
+  get targetCount(){ var n = 0; for (var k in targets) n++; return n; },
+  get targetTypes(){ var o = []; for (var k in targets) o.push(targets[k].type); return o; },
+  start: startGame,
+  tick: tick,
+  halt: stopLoop,
+  setDifficulty: function(d){ difficulty = d; syncDiffUI(); },
+  setTimeLeft: function(s){ timeLeft = s; },
+  spawn: function(type){ return spawnTarget(type); },
+  hitFirst: function(type){
+    for (var id in targets){ if (!type || targets[id].type === type){ hitTarget(id); return id; } }
+    return null;
+  },
+  clickEmpty: function(){ missAt('50%', '50%'); },
+  endNow: function(){ endRound(false); },
+  params: function(){ return DIFF[difficulty]; }
+};
+
+/* ---- init ---- */
+if (window.__holoPractice){
+  /* hub opened in practice — the guard auto-clicks #btnPractice once loaded */
+}
+buildSnow();
+showMenu();
+updateHUD();
+})();
+</script>
+</body>
+</html>
