@@ -1,0 +1,656 @@
+<!-- CHRISTMAS-TRIVIA-2026-11-25 -->
+<!-- December drop — hidden from the count until the hub agent cards it. Trivia-category candidate for later (Holo decides the fold-in after launch). -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Christmas Trivia — Holo's Arcade</title>
+<!-- GATE-GUARD-2026-11-24 -->
+<script src="../shared/gate-guard.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches. (Copied from the live Firefighter pattern.) */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try { document.querySelectorAll('audio,video').forEach(function (el) {
+      var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+      el.muted = isMusic ? !settings.music : !settings.sound;
+    }); } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try { var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply(); } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try { if (e && e.data && e.data.type === 'holo-settings') {
+        if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+        if (e.data.music !== undefined) settings.music = !!e.data.music;
+        if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+        apply(); } } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support. Practice NEVER saves. (Copied from the live Firefighter pattern.) */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try { var v = new URLSearchParams(window.location.search).get('practice'); practice = (v === '1' || v === 'true'); } catch (e) {}
+  window.__holoPractice = practice;
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem, origRemove = proto.removeItem, origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) { if (window.__holoPractice && !allow(k)) return; return origSet.call(this, k, val); };
+        proto.removeItem = function (k) { if (window.__holoPractice && !allow(k)) return; return origRemove.call(this, k); };
+        proto.clear = function () { if (window.__holoPractice) return; return origClear.call(this); };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {}
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge'; b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() { try { var b = document.getElementById('holoPracticeBadge'); if (b && b.parentNode) b.parentNode.removeChild(b); } catch (e) {} }
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null; try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true; return;
+    }
+  }
+  function scheduleNative() { tryNative(); setTimeout(tryNative, 350); setTimeout(tryNative, 1200); }
+  function activate() { window.__holoPractice = true; practice = true; showBadge(); scheduleNative(); try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {} }
+  function deactivate() { window.__holoPractice = false; practice = false; hideBadge(); }
+  window.addEventListener('message', function (e) {
+    try { if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate(); } catch (err) {}
+  });
+  if (practice) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    else { showBadge(); scheduleNative(); }
+  }
+})();
+</script>
+<style>
+  :root{ --navy:#0a0620; --panel:#1a1033; --yellow:#ffd93b; --violet:#7c3aed; --pink:#ff3ec8; --ink:#fff; --muted:#b9aee6; --teal:#2dd4bf; --green:#7dff9e; --red:#ff6b6b; }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{ background:radial-gradient(1200px 800px at 50% -10%, #2a1b5e, var(--navy) 62%); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; height:100dvh; overflow:hidden; user-select:none; -webkit-user-select:none; }
+  .wrap{ width:100%; max-width:560px; margin:0 auto; height:100dvh; display:flex; flex-direction:column; padding:8px 12px 10px; }
+  header{ text-align:center; flex:0 0 auto; }
+  .title{ font-family:"Press Start 2P",monospace; font-size:20px; color:var(--yellow); text-shadow:0 2px 0 #7a4d00, 0 0 18px rgba(255,217,59,.45); line-height:1.5; }
+  .sub{ font-size:13px; color:var(--muted); margin-top:4px; }
+  .scene{ display:flex; justify-content:center; gap:6px; margin-top:6px; }
+  .scene svg{ width:52px; height:44px; }
+  .hud{ display:flex; gap:8px; align-items:stretch; margin:8px 0; flex:0 0 auto; }
+  .stat{ flex:1; background:rgba(255,255,255,.08); border:2px solid var(--violet); border-radius:10px; padding:4px 6px; text-align:center; min-width:0; }
+  .stat .lbl{ display:block; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
+  .stat .val{ display:block; font-size:16px; font-weight:800; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .iconbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:10px; padding:6px 12px; font-size:15px; font-weight:800; cursor:pointer; }
+  .iconbtn:hover{ border-color:var(--pink); }
+  .stage{ flex:1; min-height:0; position:relative; display:flex; align-items:center; justify-content:center; }
+  .overlay{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:10px; background:rgba(10,6,32,.92); border-radius:16px; padding:14px 12px; text-align:center; z-index:5; overflow-y:auto; }
+  .hidden{ display:none !important; }
+  .overlay h2{ margin:0; color:var(--yellow); font-family:"Press Start 2P",monospace; font-size:16px; line-height:1.6; }
+  .overlay p{ margin:0; font-size:14px; line-height:1.5; max-width:460px; color:#e9e4ff; }
+  .big{ font-size:32px; font-weight:900; color:var(--yellow); }
+  .card{ background:var(--panel); border:2px solid var(--violet); border-radius:14px; padding:12px 14px; max-width:480px; width:100%; text-align:left; }
+  .card ul{ margin:0; padding-left:20px; font-size:14px; line-height:1.55; color:#e9e4ff; }
+  .card li{ margin-bottom:5px; }
+  .btn{ background:linear-gradient(#ffe45e,#ffc93b); color:#241200; font-weight:800; border:none; border-radius:999px; padding:12px 28px; font-size:17px; box-shadow:0 0 18px rgba(255,217,59,.55), 0 4px 0 #b98a00; cursor:pointer; min-width:200px; }
+  .btn:active{ transform:translateY(2px); box-shadow:0 0 18px rgba(255,217,59,.55), 0 2px 0 #b98a00; }
+  .btn:disabled{ opacity:.45; cursor:default; }
+  .btn2{ background:linear-gradient(135deg,var(--violet),var(--pink)); color:#fff; border:none; border-radius:999px; padding:10px 22px; font-size:15px; font-weight:700; box-shadow:0 4px 0 rgba(0,0,0,.35); cursor:pointer; min-width:180px; }
+  .btn2:active{ transform:translateY(2px); }
+  .btn3{ background:none; border:none; color:#cfc4ff; text-decoration:underline; cursor:pointer; font-size:15px; padding:6px 10px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .hint{ text-align:center; color:var(--muted); font-size:12px; padding-top:6px; flex:0 0 auto; }
+  .bestline{ font-size:14px; color:var(--muted); }
+  .bestline b{ color:var(--yellow); }
+  .newbest{ color:var(--green); font-weight:800; }
+  .pracbadge{ display:inline-block; background:#0a0620; color:#ffe9a3; border:2px solid var(--pink); border-radius:999px; padding:3px 12px; font-size:12px; font-weight:700; }
+  .cat{ width:100%; max-width:480px; background:var(--panel); border:2px solid var(--violet); border-radius:14px; padding:10px 12px; text-align:left; cursor:pointer; color:#fff; font-family:inherit; display:flex; gap:10px; align-items:center; }
+  .cat:hover{ border-color:var(--pink); }
+  .cat[aria-pressed="true"]{ border-color:var(--yellow); box-shadow:0 0 14px rgba(255,217,59,.35); }
+  .cat svg{ width:38px; height:38px; flex:0 0 auto; }
+  .cat .cname{ font-size:16px; font-weight:800; color:var(--yellow); }
+  .cat .cdesc{ font-size:12px; color:#e9e4ff; margin-top:2px; line-height:1.4; }
+  .cat .cbest{ font-size:12px; color:var(--muted); margin-left:auto; white-space:nowrap; }
+  .cat .cbest b{ color:var(--green); }
+  .seg{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .segbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:999px; padding:8px 16px; font-weight:700; cursor:pointer; font-size:14px; }
+  .segbtn[aria-pressed="true"]{ background:var(--yellow); color:#241200; border-color:var(--yellow); }
+  .segbtn small{ display:block; font-size:11px; font-weight:600; }
+  .qcard{ width:100%; max-width:520px; background:var(--panel); border:2px solid var(--violet); border-radius:14px; padding:12px 14px; text-align:left; }
+  .qpart{ font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--teal); font-weight:800; margin-bottom:5px; }
+  .qtext{ font-size:16px; font-weight:700; line-height:1.4; margin-bottom:10px; }
+  .opt{ display:block; width:100%; text-align:left; background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:12px; padding:10px 12px; font-size:14px; line-height:1.35; margin-bottom:7px; cursor:pointer; font-family:inherit; }
+  .opt:hover:not(:disabled){ border-color:var(--pink); }
+  .opt:disabled{ cursor:default; opacity:.85; }
+  .opt.correct{ background:#123b22; border-color:var(--green); }
+  .opt.wrong{ background:#3b1220; border-color:var(--red); }
+  .opt.dimmed{ opacity:.4; }
+  .opt .key{ display:inline-block; width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,.15); text-align:center; line-height:22px; font-weight:800; font-size:13px; margin-right:8px; }
+  .why{ font-size:13px; line-height:1.5; color:#d9f7e3; background:rgba(125,255,158,.08); border:1px solid rgba(125,255,158,.35); border-radius:10px; padding:9px 11px; margin-top:4px; }
+  .why.bad{ color:#ffe1e1; background:rgba(255,107,107,.08); border-color:rgba(255,107,107,.35); }
+  .timerbar{ width:100%; max-width:520px; height:10px; background:rgba(255,255,255,.12); border-radius:999px; overflow:hidden; }
+  .timerfill{ height:100%; background:linear-gradient(90deg,var(--teal),var(--green)); }
+  .timerfill.low{ background:linear-gradient(90deg,#ff9f1c,var(--red)); }
+  .qactions{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .smallbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:999px; padding:7px 14px; font-weight:700; cursor:pointer; font-size:13px; }
+  .smallbtn:disabled{ opacity:.4; cursor:default; }
+  /* SOURCE-BUTTON pattern (adapted from CAEC): clapperboard Source button + retro TV panel. */
+  .srcbtn{ position:relative; overflow:hidden; display:flex; flex-direction:column; align-items:center; gap:0; background:#14101f; border:2px solid var(--yellow); color:#fff; border-radius:12px; padding:0 0 7px; cursor:pointer; font-family:inherit; width:100%; max-width:280px; margin:8px auto 0; box-shadow:0 0 14px rgba(255,217,59,.25); }
+  .srcbtn:hover{ border-color:var(--pink); }
+  .srcstrip{ display:block; width:100%; height:14px; background:repeating-linear-gradient(-45deg,#fff 0 12px,#14101f 12px 24px); border-bottom:2px solid var(--yellow); }
+  .srctext{ font-size:16px; font-weight:900; letter-spacing:2px; color:var(--yellow); margin-top:5px; }
+  .srcsub{ font-size:12px; color:var(--muted); font-weight:600; }
+  .srcov{ position:absolute; inset:0; z-index:20; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; background:rgba(5,2,18,.9); border-radius:16px; padding:12px; }
+  .tvframe{ position:relative; width:100%; max-width:520px; background:#26262e; border:2px solid #4a4a58; border-radius:16px; padding:10px 10px 6px; box-shadow:0 10px 30px rgba(0,0,0,.6); animation:tvOn .45s ease-out; }
+  @keyframes tvOn{ 0%{ transform:scaleY(.02) scaleX(.55); opacity:0; } 55%{ transform:scaleY(1.03) scaleX(1); opacity:1; } 100%{ transform:scale(1); } }
+  .tvx{ position:absolute; top:-12px; right:-8px; z-index:3; width:30px; height:30px; border-radius:50%; background:var(--yellow); color:#241200; border:2px solid #241200; font-size:18px; font-weight:900; line-height:1; cursor:pointer; }
+  .tvscreen{ position:relative; background:#070818; border-radius:10px; padding:12px; overflow:hidden; }
+  .tvscreen::after{ content:''; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(0deg,rgba(255,255,255,.03) 0 1px,transparent 1px 3px); border-radius:10px; }
+  .srcclap{ font-size:12px; letter-spacing:3px; font-weight:900; color:var(--yellow); text-align:center; margin-bottom:8px; }
+  .dlg{ position:relative; background:#0b0e2a; border:3px solid #fff; box-shadow:0 0 0 3px #0b0e2a, 0 0 0 5px var(--yellow); border-radius:6px; padding:12px 12px 16px; text-align:left; cursor:pointer; }
+  .srcq{ font-family:ui-monospace,'Courier New',monospace; font-size:13px; line-height:1.6; color:#f2efff; min-height:40px; overflow-wrap:anywhere; }
+  .srcmore{ position:absolute; right:10px; bottom:2px; color:var(--yellow); font-size:14px; animation:blink 1s steps(2) infinite; }
+  @keyframes blink{ 50%{ opacity:0; } }
+  .srclook{ font-family:ui-monospace,'Courier New',monospace; font-size:12px; color:var(--yellow); text-align:left; margin-top:10px; line-height:1.5; overflow-wrap:anywhere; }
+  .srcmeta{ font-size:12px; color:var(--muted); text-align:left; margin-top:6px; line-height:1.5; overflow-wrap:anywhere; }
+  .srcmeta a{ color:#8fd3ff; }
+  .srcembed{ width:100%; height:170px; border:2px solid #555; border-radius:8px; background:#fff; margin-top:10px; }
+  .tvbezel{ display:flex; align-items:center; justify-content:space-between; padding:5px 8px 2px; }
+  .tvled{ width:8px; height:8px; border-radius:50%; background:#ff3b30; box-shadow:0 0 6px #ff3b30; }
+  .tvspeaker{ width:34px; height:6px; background-image:radial-gradient(circle,#555 2px,transparent 2.5px); background-size:9px 6px; background-repeat:repeat-x; }
+  .copied{ color:var(--green); font-weight:800; font-size:14px; }
+  @media (max-width:360px){ .title{ font-size:16px; } .btn,.btn2{ min-width:160px; } .scene svg{ width:42px; height:36px; } }
+</style>
+</head>
+<body>
+<!-- CHRISTMAS-TRIVIA-2026-11-25: Christmas Trivia — 4 categories x 5 questions, Easy/Medium/Hard by timer + points. -->
+<div class="wrap">
+  <header>
+    <div class="title">Christmas Trivia</div>
+    <div class="sub">Santa, songs, supper and the whole wide world.</div>
+    <div class="scene" aria-hidden="true">
+      <svg viewBox="0 0 60 50"><path d="M30 4 L50 34 L42 34 L54 48 L6 48 L18 34 L10 34 Z" fill="#2e9e4f"/><rect x="26" y="46" width="8" height="4" fill="#7a4d00"/><circle cx="30" cy="4" r="3" fill="#ffd93b"/><circle cx="22" cy="26" r="2.5" fill="#ff3ec8"/><circle cx="38" cy="20" r="2.5" fill="#ffd93b"/><circle cx="30" cy="34" r="2.5" fill="#7dd8ff"/></svg>
+      <svg viewBox="0 0 60 50"><circle cx="30" cy="16" r="11" fill="#f2c79b"/><path d="M19 14 Q30 -2 41 14 L38 16 Q30 6 22 16 Z" fill="#c22f2f"/><circle cx="30" cy="2" r="4" fill="#fff"/><path d="M16 26 Q30 20 44 26 L46 48 L14 48 Z" fill="#c22f2f"/><circle cx="30" cy="34" r="3" fill="#fff"/><circle cx="30" cy="42" r="3" fill="#fff"/></svg>
+      <svg viewBox="0 0 60 50"><ellipse cx="30" cy="38" rx="22" ry="7" fill="#7a4d00"/><path d="M12 36 Q30 22 48 36" stroke="#7a4d00" stroke-width="3" fill="none"/><circle cx="14" cy="30" r="3" fill="#ffd93b"/><circle cx="46" cy="30" r="3" fill="#ffd93b"/><path d="M20 28 L24 18 L28 28 Z" fill="#a8763e"/><circle cx="24" cy="16" r="3" fill="#a8763e"/></svg>
+      <svg viewBox="0 0 60 50"><rect x="14" y="18" width="32" height="26" rx="4" fill="#c22f2f"/><rect x="27" y="18" width="6" height="26" fill="#ffd93b"/><rect x="14" y="28" width="32" height="6" fill="#ffd93b"/><path d="M24 18 Q30 8 36 18 Q30 14 24 18" fill="#ffd93b"/></svg>
+    </div>
+  </header>
+  <div class="hud">
+    <div class="stat"><span class="lbl">Category</span><span class="val" id="hudCat">—</span></div>
+    <div class="stat"><span class="lbl">Question</span><span class="val" id="hudQ">—</span></div>
+    <div class="stat"><span class="lbl">Score</span><span class="val" id="hudScore">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="hudBest">0</span></div>
+  </div>
+  <div class="stage" id="stage">
+
+    <div class="overlay" id="ovMenu">
+      <h2>Christmas Trivia</h2>
+      <p>Pick a category, pick a difficulty, then answer 5 questions. Every question has a Source button — check the real source, retro TV style.</p>
+      <div id="catList" style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:8px;"></div>
+      <div class="seg" id="diffRow" role="group" aria-label="Difficulty">
+        <button class="segbtn" data-diff="easy" aria-pressed="true">Easy<small>No timer · 100 pts</small></button>
+        <button class="segbtn" data-diff="medium" aria-pressed="false">Medium<small>30 sec each · 150 pts</small></button>
+        <button class="segbtn" data-diff="hard" aria-pressed="false">Hard<small>15 sec each · 200 pts</small></button>
+      </div>
+      <button class="btn" id="btnPlay">Play</button>
+      <button class="btn2" id="btnPractice">Practice</button>
+      <div class="row">
+        <button class="btn2" id="btnRules">How to Play</button>
+      </div>
+      <p class="bestline" id="menuBestLine"></p>
+    </div>
+
+    <div class="overlay hidden" id="ovStart">
+      <h2 id="startTitle">Ready?</h2>
+      <div class="card"><ul id="startList"></ul></div>
+      <button class="btn" id="btnBegin">Start questions</button>
+      <button class="btn3" id="btnStartBack">Back to menu</button>
+    </div>
+
+    <div class="overlay hidden" id="ovRules">
+      <h2>How to Play</h2>
+      <div class="card"><ul>
+        <li>Pick one of 4 categories, then a difficulty: <b>Easy</b> has no timer (100 pts per right answer), <b>Medium</b> gives 30 seconds per question (150 pts), <b>Hard</b> gives 15 seconds per question (200 pts).</li>
+        <li>Answer 5 questions. Tap an answer — right is green, wrong is red, and the right one lights up too.</li>
+        <li><b>Hint</b> (one per question, no score penalty): removes two wrong answers.</li>
+        <li><b>Source</b> on every question opens the real source on a retro TV — exact quote, source name and link. The timer pauses while you check.</li>
+        <li><b>Practice mode:</b> no score, no best saved — just learning the ropes.</li>
+        <li>Your best score per category + difficulty is saved on this device.</li>
+      </ul></div>
+      <button class="btn" id="btnRulesClose">Got it</button>
+    </div>
+
+    <div class="overlay hidden" id="ovQuiz">
+      <div class="timerbar" id="timerWrap"><div class="timerfill" id="timerFill" style="width:100%"></div></div>
+      <div class="qcard" id="qCard"></div>
+      <div id="qWhy" class="qcard hidden" style="margin-top:8px;"></div>
+      <div class="qactions">
+        <button class="smallbtn" id="btnHint">Hint (1 per question)</button>
+        <button class="smallbtn" id="btnSourceQ">Source</button>
+      </div>
+      <button class="btn hidden" id="btnNextQ" style="margin-top:6px;">Next question</button>
+    </div>
+
+    <div class="overlay hidden" id="ovEnd">
+      <h2 id="endTitle">Results</h2>
+      <div class="big" id="endScore">0</div>
+      <p class="bestline" id="endDetail"></p>
+      <p class="bestline">Best: <b id="endBest">—</b> <span class="newbest hidden" id="endNewBest">New best!</span></p>
+      <p id="endLine" style="max-width:440px;"></p>
+      <button class="btn" id="btnReplay">Replay</button>
+      <button class="btn2" id="btnStartOver">Start over</button>
+      <button class="btn2" id="btnInvite">Invite friend</button>
+      <button class="btn2" id="btnExit">Exit</button>
+      <p class="copied hidden" id="copiedMsg">Link copied!</p>
+    </div>
+
+    <div class="srcov hidden" id="ovSource" role="dialog" aria-label="Source check">
+      <div class="tvframe" id="tvFrame">
+        <button class="tvx" id="btnSourceClose" aria-label="Close source panel">×</button>
+        <div class="tvscreen">
+          <div class="srcclap">— SOURCE CHECK —</div>
+          <div class="dlg" id="srcDlg">
+            <div class="srcq" id="srcQuote"></div>
+            <div class="srcmore hidden" id="srcMore">▼</div>
+          </div>
+          <div class="srclook" id="srcLook"></div>
+          <div class="srcmeta" id="srcMeta"></div>
+          <iframe class="srcembed hidden" id="srcFrame" title="Source page"></iframe>
+          <button class="btn hidden" id="btnSrcOpen" style="margin-top:10px;">Open the source in a new tab</button>
+        </div>
+        <div class="tvbezel"><span class="tvled"></span><span class="tvspeaker"></span></div>
+      </div>
+      <button class="btn2" id="btnSourceGotIt">Got it</button>
+    </div>
+  </div>
+  <div class="hint">One Hint per question · Source on every question · Practice never saves.</div>
+</div>
+<script>
+(function(){
+'use strict';
+/* CHRISTMAS-TRIVIA-2026-11-25: 20 questions, 5 per category. Every fact
+   verified against its recorded source on 2026-11-25; quotes below are
+   1–2 sentence EXACT quotes from those sources. Difficulty changes the
+   timer and the points (Easy: no timer/100, Medium: 30s/150, Hard: 15s/200);
+   the question set is the same 5 per category at every difficulty. */
+var CATS = [
+  { id:'santa', name:'Santa & the North Pole', desc:'The man in red, his reindeer and his workshop.', icon:'<svg viewBox="0 0 60 50"><circle cx="30" cy="16" r="11" fill="#f2c79b"/><path d="M19 14 Q30 -2 41 14 L38 16 Q30 6 22 16 Z" fill="#c22f2f"/><circle cx="30" cy="2" r="4" fill="#fff"/><path d="M16 26 Q30 20 44 26 L46 48 L14 48 Z" fill="#c22f2f"/></svg>' },
+  { id:'movies', name:'Christmas movies & songs', desc:'Films, carols and the biggest-selling single ever.', icon:'<svg viewBox="0 0 60 50"><rect x="8" y="10" width="44" height="32" rx="4" fill="#1a1033" stroke="#ffd93b" stroke-width="2"/><path d="M22 16 L22 34 L38 25 Z" fill="#ff3ec8"/><circle cx="30" cy="46" r="2" fill="#ffd93b"/></svg>' },
+  { id:'food', name:'Food & traditions', desc:'Trees, crackers, calendars and gingerbread houses.', icon:'<svg viewBox="0 0 60 50"><path d="M30 4 L50 34 L42 34 L54 48 L6 48 L18 34 L10 34 Z" fill="#2e9e4f"/><rect x="26" y="46" width="8" height="4" fill="#7a4d00"/><circle cx="30" cy="4" r="3" fill="#ffd93b"/></svg>' },
+  { id:'world', name:'Around the world', desc:'How Christmas looks from Japan to Iceland to Australia.', icon:'<svg viewBox="0 0 60 50"><circle cx="30" cy="25" r="20" fill="#2dd4bf"/><path d="M10 25 Q30 10 50 25 Q30 40 10 25" fill="#0a0620"/><path d="M14 22 L20 14 L26 22 L32 12 L38 22 L44 16" stroke="#fff" stroke-width="2" fill="none"/></svg>' }
+];
+var Q = {
+santa: [
+ { q:'Santa Claus is based on a real person. Which bishop was he?', opts:['St. Patrick','St. Nicholas of Myra','St. Francis','St. Valentine'], a:1, s:{ n:'Wikipedia — Saint Nicholas', u:'https://en.wikipedia.org/wiki/Saint_Nicholas', q:'Saint Nicholas of Myra (traditionally 15 March 270 – 6 December 343), also known as Nicholas of Bari, was an early Christian bishop of Greek descent from the maritime city of Patara in Anatolia (in modern-day Antalya Province, Turkey).', f:'Look for: Saint Nicholas of Myra — bishop, 270–343.' } },
+ { q:'In the song “Rudolph the Red-Nosed Reindeer”, which reindeer is named first?', opts:['Dancer','Dasher','Prancer','Vixen'], a:1, s:{ n:'Wikipedia — Rudolph the Red-Nosed Reindeer (song)', u:'https://en.wikipedia.org/wiki/Rudolph_the_Red-Nosed_Reindeer_(song)', q:'“You know Dasher and Dancer and Prancer and Vixen, Comet and Cupid and Donner and Blitzen! But do you recall the most famous reindeer of all?”', f:'Look for: the song’s intro — the eight reindeer, Dasher first.' } },
+ { q:'When was “A Visit from St. Nicholas” (“’Twas the Night Before Christmas”) first published?', opts:['1803','1823','1843','1863'], a:1, s:{ n:'Wikipedia — A Visit from St. Nicholas', u:'https://en.wikipedia.org/wiki/A_Visit_from_St._Nicholas', q:'“A Visit from St. Nicholas” (often called “The Night Before Christmas” and “’Twas the Night Before Christmas”, from its first line) is a poem, first published anonymously under the title “Account of a Visit from St. Nicholas”, in 1823.', f:'Look for: first published — 1823, Troy Sentinel.' } },
+ { q:'In what year did NORAD start tracking Santa Claus?', opts:['1945','1955','1965','1975'], a:1, s:{ n:'Smithsonian Magazine — How NORAD Got Into Tracking Santa', u:'https://www.smithsonianmag.com/smart-news/how-the-north-american-aerospace-defense-command-got-into-the-business-of-tracking-santa-180948196/?no-ist', q:'In 1955, Sears inadvertently kicked off what has become a yearly holiday tradition.', f:'Look for: it all began in 1955 with Sears and a wrong number.' } },
+ { q:'In what year did Haddon Sundblom’s Santa debut in Coca-Cola ads?', opts:['1911','1921','1931','1941'], a:2, s:{ n:'The Coca-Cola Company — Haddon Sundblom and the Coca-Cola Santas', u:'https://www.coca-colacompany.com/about-us/history/haddon-sundblom-and-the-coca-cola-santas', q:'Sundblom’s Santa debuted in 1931 in Coke ads in The Saturday Evening Post and appeared regularly in that magazine, as well as in Ladies Home Journal, National Geographic, The New Yorker and others.', f:'Look for: Sundblom’s Santa debuted in 1931.' } }
+],
+movies: [
+ { q:'Which song is the world’s best-selling single, with over 50 million copies sold?', opts:['“All I Want for Christmas Is You”','“Jingle Bells”','“White Christmas”','“Last Christmas”'], a:2, s:{ n:'Wikipedia — White Christmas (song)', u:'https://en.wikipedia.org/wiki/White_Christmas_(song)', q:'Crosby’s version is the world’s best-selling single (in terms of sales of physical media), with estimated sales in excess of 50 million physical copies worldwide.', f:'Look for: world’s best-selling single — over 50 million copies.' } },
+ { q:'In “Home Alone” (1990), where was Kevin’s family going for Christmas when they left him behind?', opts:['London','New York','Paris','Florida'], a:2, s:{ n:'Wikipedia — Home Alone', u:'https://en.wikipedia.org/wiki/Home%20Alone', q:'The film stars Macaulay Culkin as Kevin McCallister, an eight-year-old boy who defends his Chicago home from a home invasion by a pair of robbers after his family accidentally leaves him behind on their Christmas vacation to Paris.', f:'Look for: left behind on their Christmas vacation to Paris.' } },
+ { q:'In the film “Elf” (2003), Buddy is a human raised by whom?', opts:['Santa’s elves','The reindeer','Mrs. Claus','The toy soldiers'], a:0, s:{ n:'Wikipedia — Elf (film)', u:'https://en.wikipedia.org/wiki/Elf_(film)', q:'It stars Will Ferrell as Buddy the Elf, a human raised by Santa’s elves, who learns about his origins and heads to New York City to meet his biological father who doesn’t know of his existence.', f:'Look for: Buddy — a human raised by Santa’s elves.' } },
+ { q:'In what year did Mariah Carey release “All I Want for Christmas Is You”?', opts:['1984','1994','2004','2014'], a:1, s:{ n:'Wikipedia — All I Want for Christmas Is You', u:'https://en.wikipedia.org/wiki/All_I_Want_For_Christmas_Is_You', q:'“All I Want for Christmas Is You” is a song by American singer-songwriter Mariah Carey from her fourth studio album and first holiday album, Merry Christmas (1994).', f:'Look for: from Merry Christmas (1994) — lead single, October 1994.' } },
+ { q:'“Jingle Bells” was first published in 1857 under what original title?', opts:['“The One Horse Open Sleigh”','“Sleigh Ride”','“Winter Wonderland”','“Let It Snow”'], a:0, s:{ n:'Songwriters Hall of Fame — J. S. Pierpont', u:'https://www.songhall.org/profiles/j-s-pierpont', q:'The sheet music, first published in 1857 by Oliver Ditson with its original title “The One Horse Open Sleigh,” was reissued two years later with only one title change chosen by the public: “Jingle Bells.”', f:'Look for: first published in 1857 — original title “The One Horse Open Sleigh.”' } }
+],
+food: [
+ { q:'Who brought a real Christmas tree into Windsor Castle, helping make the tree popular in Britain?', opts:['Queen Charlotte','Prince Albert','King George III','Charles Dickens'], a:1, s:{ n:'Pointe-à-Callière Museum — Holiday Stories', u:'https://pacmusee.qc.ca/en/stories-of-montreal/article/holiday-stories/', q:'In 1841, Prince Albert convinced his wife, Queen Victoria, to bring a real tree into Windsor Castle and to decorate it with fruit, nuts, and sweets.', f:'Look for: 1841 — Prince Albert and Queen Victoria, Windsor Castle.' } },
+ { q:'Who is traditionally credited with inventing the Christmas cracker in 1847?', opts:['Tom Smith','John Cadbury','Charles Dickens','William Fortnum'], a:0, s:{ n:'V&A Museum — The Christmas cracker', u:'https://www.vam.ac.uk/articles/the-christmas-cracker', q:'Tom Smith, an enterprising baker in London’s East End, invented the Christmas cracker over 150 years ago.', f:'Look for: Tom Smith invented the Christmas cracker; patented in 1847.' } },
+ { q:'Who is credited with creating the first printed Advent calendar, in 1908?', opts:['Gerhard Lang','Hans Christian Andersen','Martin Luther','Richard Sellmer'], a:0, s:{ n:'AdventCalendars.org — History of the Advent Calendar', u:'https://adventcalendars.org/2024/09/20/a-brief-history-of-the-advent-calendar/', q:'Fast forward to 1908, and we meet Gerhard Lang, a German printer from Munich who is often credited with creating the first printed Advent calendar.', f:'Look for: 1908 — Gerhard Lang, first printed Advent calendar.' } },
+ { q:'In “The Twelve Days of Christmas”, what gift arrives on the first day?', opts:['Two turtle doves','Five gold rings','A partridge in a pear tree','Three French hens'], a:2, s:{ n:'Wikipedia — The Twelve Days of Christmas (song)', u:'https://en.wikipedia.org/wiki/The_Twelve_Days_of_Christmas_%28song%29', q:'On the first day of Christmas my true love sent to me A partridge in a pear tree.', f:'Look for: first day — a partridge in a pear tree.' } },
+ { q:'In which country did the tradition of making decorated gingerbread houses start, in the early 1800s?', opts:['France','England','Germany','Sweden'], a:2, s:{ n:'Wikipedia — Gingerbread house', u:'https://en.wikipedia.org/wiki/Gingerbread_house', q:'The tradition of making decorated gingerbread houses started in Germany in the early 1800s.', f:'Look for: gingerbread houses started in Germany in the early 1800s.' } }
+],
+world: [
+ { q:'In Japan, what is the popular Christmas Day meal, thanks to a 1974 campaign?', opts:['Sushi','KFC fried chicken','Ramen','Tempura'], a:1, s:{ n:'Smithsonian Magazine — Why Japan Is Obsessed With KFC on Christmas', u:'https://www.smithsonianmag.com/arts-culture/why-japan-is-obsessed-with-kentucky-fried-chicken-on-christmas-1-161666960/', q:'Thanks to the successful “Kurisumasu ni wa kentakkii!” (Kentucky for Christmas!) marketing campaign in 1974, Japan can’t get enough KFC on Christmas Day.', f:'Look for: the 1974 “Kentucky for Christmas!” campaign.' } },
+ { q:'How many Yule Lads visit children in Iceland at Christmas?', opts:['7','9','11','13'], a:3, s:{ n:'Wikipedia — Yule lads', u:'https://en.wikipedia.org/wiki/Yule_lads', q:'The Yule Lads are the sons of Grýla and Leppalúði. They are a group of 13 mischievous pranksters who steal from or harass the population; they all have descriptive names that convey their favorite way of harassing.', f:'Look for: a group of 13 mischievous pranksters.' } },
+ { q:'What season is Christmas in Australia?', opts:['Winter','Spring','Summer','Autumn'], a:2, s:{ n:'KidsGen — Christmas in Australia', u:'https://www.kidsgen.com/events/christmas/christmas-around-the-world/australia.htm', q:'December is the start of summer, and for many workers Christmas marks the beginning of the annual holiday, so the season has a relaxed, outdoor feel.', f:'Look for: December is the start of summer in Australia.' } },
+ { q:'The poinsettia, the Christmas flower, is native to which country?', opts:['Mexico','Spain','Italy','Brazil'], a:0, s:{ n:'The Old Farmer’s Almanac — The Legend of the Poinsettia', u:'https://www.almanac.com/poinsettia-christmas-story', q:'In their native region of southern Mexico, poinsettias flower during the winter season.', f:'Look for: native region of southern Mexico.' } },
+ { q:'Saint Lucy’s Day, when girls in Sweden wear a crown of candles, is on which date?', opts:['December 6','December 13','December 21','December 24'], a:1, s:{ n:'Wikipedia — Saint Lucy’s Day', u:'https://en.wikipedia.org/wiki/Saint_Lucy%27s_Day', q:'Saint Lucy’s Day, also called the Feast of Saint Lucy, is a Christian feast day observed on 13 December.', f:'Look for: observed on 13 December — crown of candles.' } }
+]
+};
+var DIFF = { easy:{ pts:100, secs:0, label:'Easy' }, medium:{ pts:150, secs:30, label:'Medium' }, hard:{ pts:200, secs:15, label:'Hard' } };
+var GAME_URL = 'https://beta.holosarcade.ca/christmas-trivia/';
+var HUB_URL = 'https://beta.holosarcade.ca/games-hub/';
+
+/* ---- state ---- */
+var state = 'menu';
+var catId = 'santa', diff = 'easy', practiceMode = false;
+var qs = [], qi = 0, score = 0, correct = 0, hintUsed = false, answered = false;
+var timerId = null, timeLeft = 0, timerPaused = false;
+function $(id){ return document.getElementById(id); }
+function cat(){ for (var i = 0; i < CATS.length; i++) if (CATS[i].id === catId) return CATS[i]; return CATS[0]; }
+function bestKey(){ return 'christmasTrivia.best.' + catId + '.' + diff; }
+function getBest(){ try { return parseInt(localStorage.getItem(bestKey()) || '0', 10) || 0; } catch (e) { return 0; } }
+function saveBest(v){ if (practiceMode || window.__holoPractice) return; try { localStorage.setItem(bestKey(), String(v)); } catch (e) {} }
+
+/* ---- audio (gated by holoSettings) ---- */
+var AC = null;
+function ac(){ if (!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } return AC; }
+function beep(f, dur, type, g, slide){
+  try {
+    if (!window.holoSettings || !window.holoSettings.sound) return;
+    var c = ac(); if (!c) return;
+    var o = c.createOscillator(), gn = c.createGain();
+    o.type = type || 'sine'; o.frequency.value = f;
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, slide), c.currentTime + dur);
+    gn.gain.value = g || 0.1; gn.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+    o.connect(gn); gn.connect(c.destination); o.start(); o.stop(c.currentTime + dur);
+  } catch (e) {}
+}
+function sfx(name){
+  if (name === 'correct'){ [523, 659, 784].forEach(function(f, i){ setTimeout(function(){ beep(f, 0.16, 'sine', 0.11); }, i * 100); }); }
+  else if (name === 'wrong'){ beep(220, 0.35, 'sawtooth', 0.09, 110); }
+  else if (name === 'hint'){ beep(880, 0.12, 'sine', 0.09); setTimeout(function(){ beep(1174, 0.16, 'sine', 0.09); }, 110); }
+  else if (name === 'jingle'){ [523, 659, 784, 1046].forEach(function(f, i){ setTimeout(function(){ beep(f, 0.14, 'triangle', 0.1); }, i * 110); }); }
+  else if (name === 'end'){ [523, 659, 784, 1046, 1318].forEach(function(f, i){ setTimeout(function(){ beep(f, 0.2, 'sine', 0.1); }, i * 130); }); }
+}
+function buzz(ms){ try { if (window.holoBuzz) window.holoBuzz(ms); } catch (e) {} }
+
+/* ---- overlays ---- */
+var overlays = ['ovMenu', 'ovStart', 'ovRules', 'ovQuiz', 'ovEnd'];
+function show(id){ overlays.forEach(function(o){ $(o).classList.toggle('hidden', o !== id); }); }
+function showMenu(){
+  state = 'menu'; stopTimer();
+  $('hudCat').textContent = '—'; $('hudQ').textContent = '—'; $('hudScore').textContent = '0'; $('hudBest').textContent = getBest();
+  var lines = [];
+  CATS.forEach(function(c){ var b = 0; try { b = parseInt(localStorage.getItem('christmasTrivia.best.' + c.id + '.' + diff) || '0', 10) || 0; } catch (e) {} lines.push(c.name.split(' ')[0] + ' ' + b); });
+  $('menuBestLine').innerHTML = 'Best in ' + DIFF[diff].label + ': ' + lines.map(function(l){ return '<b>' + l + '</b>'; }).join(' · ');
+  show('ovMenu');
+}
+function buildCats(){
+  var list = $('catList'); list.innerHTML = '';
+  CATS.forEach(function(c){
+    var b = document.createElement('button');
+    b.className = 'cat'; b.setAttribute('aria-pressed', c.id === catId ? 'true' : 'false');
+    var best = 0; try { best = parseInt(localStorage.getItem('christmasTrivia.best.' + c.id + '.' + diff) || '0', 10) || 0; } catch (e) {}
+    b.innerHTML = c.icon + '<span><span class="cname">' + c.name + '</span><span class="cdesc" style="display:block;">' + c.desc + '</span></span><span class="cbest">Best <b>' + best + '</b></span>';
+    b.addEventListener('click', function(){ catId = c.id; sfx('jingle'); buildCats(); $('hudCat').textContent = c.name; });
+    list.appendChild(b);
+  });
+}
+function showStart(){
+  state = 'start';
+  $('startTitle').textContent = cat().name + ' — ' + DIFF[diff].label + (practiceMode ? ' · Practice' : '');
+  $('startList').innerHTML =
+    '<li><b>5 questions</b> from ' + cat().name + '.</li>' +
+    '<li>' + (DIFF[diff].secs ? '<b>' + DIFF[diff].secs + ' seconds</b> per question — answer before the bar runs out.' : '<b>No timer</b> — take your time.') + ' Each right answer is worth <b>' + DIFF[diff].pts + ' points</b>.</li>' +
+    '<li><b>Hint</b> (one per question, no penalty) removes two wrong answers.</li>' +
+    '<li><b>Source</b> on every question shows the real source. The timer pauses while you check.</li>' +
+    (practiceMode ? '<li><b>Practice</b> — no score, nothing saved.</li>' : '<li>Your best score for this category + difficulty is saved on this device.</li>');
+  show('ovStart');
+}
+function startRound(){
+  qs = Q[catId].slice(); qi = 0; score = 0; correct = 0;
+  state = 'quiz'; show('ovQuiz');
+  $('hudCat').textContent = cat().name; $('hudBest').textContent = getBest();
+  renderQ();
+}
+function renderQ(){
+  var q = qs[qi];
+  answered = false; hintUsed = false;
+  $('btnHint').disabled = false; $('btnNextQ').classList.add('hidden'); $('qWhy').classList.add('hidden');
+  $('hudQ').textContent = (qi + 1) + ' / ' + qs.length;
+  $('hudScore').textContent = score;
+  var keys = ['A', 'B', 'C', 'D'];
+  var html = '<div class="qpart">' + cat().name + ' · Question ' + (qi + 1) + ' of ' + qs.length + '</div>' +
+    '<div class="qtext">' + q.q + '</div>';
+  q.opts.forEach(function(o, i){
+    html += '<button class="opt" data-i="' + i + '"><span class="key">' + keys[i] + '</span>' + o + '</button>';
+  });
+  $('qCard').innerHTML = html;
+  var btns = $('qCard').querySelectorAll('.opt');
+  for (var i = 0; i < btns.length; i++) btns[i].addEventListener('click', function(){ answer(parseInt(this.getAttribute('data-i'), 10)); });
+  startTimer();
+}
+function startTimer(){
+  stopTimer();
+  var secs = DIFF[diff].secs;
+  $('timerWrap').style.visibility = secs ? 'visible' : 'hidden';
+  if (!secs){ $('timerFill').style.width = '100%'; return; }
+  timeLeft = secs; timerPaused = false;
+  $('timerFill').style.width = '100%'; $('timerFill').classList.remove('low');
+  timerId = setInterval(function(){
+    if (timerPaused || answered) return;
+    timeLeft -= 0.25;
+    var pct = Math.max(0, timeLeft / secs * 100);
+    $('timerFill').style.width = pct + '%';
+    if (pct < 30) $('timerFill').classList.add('low');
+    if (timeLeft <= 0){ stopTimer(); answer(-1); }
+  }, 250);
+}
+function stopTimer(){ if (timerId){ clearInterval(timerId); timerId = null; } }
+function answer(i){
+  if (answered) return;
+  answered = true; stopTimer();
+  var q = qs[qi];
+  var btns = $('qCard').querySelectorAll('.opt');
+  for (var j = 0; j < btns.length; j++){
+    btns[j].disabled = true;
+    if (j === q.a) btns[j].classList.add('correct');
+    else if (j === i) btns[j].classList.add('wrong');
+  }
+  var why = $('qWhy');
+  if (i === q.a){
+    score += DIFF[diff].pts; correct++;
+    sfx('correct'); buzz(30);
+    why.innerHTML = '<b>Right!</b> +' + DIFF[diff].pts + ' points. The answer is <b>' + q.opts[q.a] + '</b>. Tap Source to see where it comes from.';
+    why.className = 'qcard why';
+  } else {
+    sfx('wrong'); buzz(60);
+    var msg = i === -1 ? 'Time ran out!' : 'Not quite.';
+    why.innerHTML = '<b>' + msg + '</b> The answer is <b>' + q.opts[q.a] + '</b>. Tap Source to see where it comes from.';
+    why.className = 'qcard why bad';
+  }
+  why.classList.remove('hidden');
+  $('hudScore').textContent = score;
+  $('btnNextQ').textContent = (qi + 1 < qs.length) ? 'Next question' : 'See results';
+  $('btnNextQ').classList.remove('hidden');
+}
+function nextQ(){
+  if (qi + 1 < qs.length){ qi++; renderQ(); }
+  else endRound();
+}
+function endRound(){
+  state = 'over'; stopTimer();
+  var best = getBest(), isBest = false;
+  if (!practiceMode && score > best){ saveBest(score); best = score; isBest = true; }
+  sfx('end');
+  $('endTitle').textContent = correct === qs.length ? 'Perfect round!' : (correct >= 3 ? 'Nice work!' : 'Good try!');
+  $('endScore').textContent = practiceMode ? correct + ' / ' + qs.length + ' right' : score + ' pts';
+  $('endDetail').textContent = cat().name + ' · ' + DIFF[diff].label + ' · ' + correct + ' of ' + qs.length + ' right' + (practiceMode ? ' · Practice — nothing saved' : '');
+  $('endBest').textContent = practiceMode ? '— (practice)' : best;
+  $('endNewBest').classList.toggle('hidden', !isBest);
+  $('endLine').textContent = correct === qs.length ? 'A perfect Christmas round — Santa would be proud.' : (correct >= 3 ? 'Mostly right — a quick replay could make it perfect.' : 'The North Pole is tricky. Replay and try another category.');
+  $('copiedMsg').classList.add('hidden');
+  $('hudScore').textContent = score;
+  show('ovEnd');
+}
+
+/* ---- hint ---- */
+$('btnHint').addEventListener('click', function(){
+  if (answered || hintUsed) return;
+  hintUsed = true; this.disabled = true;
+  sfx('hint');
+  var q = qs[qi], wrong = [];
+  for (var i = 0; i < 4; i++) if (i !== q.a) wrong.push(i);
+  wrong.sort(function(){ return Math.random() - 0.5; });
+  var remove = wrong.slice(0, 2);
+  var btns = $('qCard').querySelectorAll('.opt');
+  remove.forEach(function(i){ btns[i].classList.add('dimmed'); btns[i].disabled = true; });
+});
+
+/* ---- source panel (CAEC pattern) ---- */
+var srcTimer = null, srcLoaded = false;
+function openSource(){
+  var q = qs[qi]; if (!q) return;
+  timerPaused = true;
+  var full = '', done = false;
+  $('srcQuote').textContent = '';
+  $('srcMore').classList.add('hidden');
+  $('srcLook').textContent = 'Look for: ' + q.s.f;
+  $('srcMeta').innerHTML = 'Source: <a href="' + q.s.u + '" target="_blank" rel="noopener">' + q.s.n + '</a><br>' + q.s.u;
+  var frame = $('srcFrame'), openBtn = $('btnSrcOpen');
+  frame.classList.add('hidden'); openBtn.classList.add('hidden'); srcLoaded = false;
+  openBtn.onclick = function(){ try { window.open(q.s.u, '_blank'); } catch (e) {} };
+  frame.onload = function(){ srcLoaded = true; frame.classList.remove('hidden'); };
+  frame.onerror = function(){ openBtn.classList.remove('hidden'); };
+  try { frame.src = q.s.u; } catch (e) {}
+  if (srcTimer) clearTimeout(srcTimer);
+  srcTimer = setTimeout(function(){ if (!srcLoaded){ frame.classList.add('hidden'); openBtn.classList.remove('hidden'); } }, 4000);
+  $('ovSource').classList.remove('hidden');
+  /* typewriter reveal of the exact quote */
+  var txt = '\u201C' + q.s.q + '\u201D';
+  var idx = 0;
+  (function type(){
+    if ($('ovSource').classList.contains('hidden')) return;
+    idx += 3;
+    $('srcQuote').textContent = txt.slice(0, idx);
+    if (idx < txt.length) setTimeout(type, 18);
+    else $('srcMore').classList.remove('hidden');
+  })();
+}
+function closeSource(){
+  $('ovSource').classList.add('hidden');
+  if (srcTimer) clearTimeout(srcTimer);
+  timerPaused = false;
+  try { $('srcFrame').src = 'about:blank'; } catch (e) {}
+}
+$('btnSourceQ').addEventListener('click', openSource);
+$('btnSourceClose').addEventListener('click', closeSource);
+$('btnSourceGotIt').addEventListener('click', closeSource);
+$('srcDlg').addEventListener('click', function(){ $('srcQuote').textContent = '\u201C' + qs[qi].s.q + '\u201D'; $('srcMore').classList.remove('hidden'); });
+
+/* ---- buttons ---- */
+$('btnPlay').addEventListener('click', function(){ practiceMode = false; showStart(); });
+$('btnPractice').addEventListener('click', function(){ practiceMode = true; showStart(); });
+$('btnRules').addEventListener('click', function(){ show('ovRules'); });
+$('btnRulesClose').addEventListener('click', function(){ showMenu(); });
+$('btnBegin').addEventListener('click', startRound);
+$('btnStartBack').addEventListener('click', showMenu);
+$('btnNextQ').addEventListener('click', nextQ);
+$('btnReplay').addEventListener('click', function(){ startRound(); }); /* Replay: same category + difficulty, fresh round */
+$('btnStartOver').addEventListener('click', function(){ showMenu(); }); /* Start over: back to the title menu */
+$('btnInvite').addEventListener('click', function(){ /* Invite friend: copy the game URL, show "Link copied!" briefly */
+  function done(){
+    var m = $('copiedMsg'); m.classList.remove('hidden');
+    setTimeout(function(){ m.classList.add('hidden'); }, 2500);
+  }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(GAME_URL).then(done, function(){ fallbackCopy(); }); }
+    else fallbackCopy();
+  } catch (e) { fallbackCopy(); }
+  function fallbackCopy(){
+    try {
+      var ta = document.createElement('textarea'); ta.value = GAME_URL; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+    } catch (e2) {}
+    done();
+  }
+});
+$('btnExit').addEventListener('click', function(){ /* Exit: back to the Arcade hub */
+  try { window.location.href = HUB_URL; } catch (e) {}
+  window.__exitTarget = HUB_URL;
+});
+document.querySelectorAll('#diffRow .segbtn').forEach(function(b){
+  b.addEventListener('click', function(){
+    diff = b.getAttribute('data-diff');
+    document.querySelectorAll('#diffRow .segbtn').forEach(function(x){ x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+    buildCats(); showMenu();
+  });
+});
+
+/* ---- test hooks ---- */
+window.__ct = {
+  get state(){ return state; },
+  get score(){ return score; },
+  get correct(){ return correct; },
+  get qi(){ return qi; },
+  get cat(){ return catId; },
+  get diff(){ return diff; },
+  get practice(){ return practiceMode; },
+  get questions(){ return qs; },
+  get categories(){ return CATS; },
+  get bank(){ return Q; },
+  answer: answer, next: nextQ, openSource: openSource, closeSource: closeSource,
+  setCat: function(id){ catId = id; buildCats(); },
+  setDiff: function(d){ diff = d; },
+  startPractice: function(){ practiceMode = true; showStart(); },
+  gameUrl: GAME_URL, hubUrl: HUB_URL
+};
+
+/* ---- init ---- */
+buildCats();
+showMenu();
+})();
+</script>
+</body>
+</html>
