@@ -26966,7 +26966,11 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 
 
 <!-- END-BAR-2026-11-22 (Holo 23:03): after a game finishes, show
-     Replay / Game Menu / Close in the hub game view. Detection:
+     the locked end set (Replay / Start over / Invite friend / Exit,
+     no X Close) in the hub game view. SWEEP-FIX4-2026-11-25 (Holo
+     00:32): replaced the old Replay / Game Menu / Close set, and
+     #endBar stays hidden for werewolf + monster-match, whose native
+     end screens are already compliant. Detection:
      hub-native end panels (tEnd/wEnd/djEnd/mcOver), postMessage
      {type:'holo-game-finished'} from standalone games, and a
      same-origin iframe poll for visible game-over markers.
@@ -26985,8 +26989,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   bar.id = 'endBar'; bar.hidden = true; bar.setAttribute('role','group'); bar.setAttribute('aria-label','Game finished — what next?');
   bar.innerHTML = '<span class="endbar-title">Game over — what next?</span>' +
     '<button type="button" class="g-btn primary" id="endReplay">▶ Replay</button>' +
-    '<button type="button" class="g-btn" id="endMenu">🎮 Game Menu</button>' +
-    '<button type="button" class="g-btn" id="endClose">✕ Close</button>';
+    '<button type="button" class="g-btn" id="endStartOver">Start over</button>' +
+    '<button type="button" class="g-btn" id="endInvite">Invite friend</button>' +
+    '<button type="button" class="g-btn" id="endExit">Exit</button>';
   var banner = document.getElementById('practiceBanner');
   if(banner && banner.parentNode) banner.parentNode.insertBefore(bar, banner.nextSibling); else player.appendChild(bar);
   var lastSlug = null;
@@ -26999,7 +27004,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     return lastSlug;
   }
   function isPractice(){ var b = document.getElementById('practiceBanner'); return !!(b && !b.hidden); }
-  function show(){ if(player.hidden) return; var first = bar.hidden; bar.hidden = false; if(first){ try { if(window.holoBadges) window.holoBadges.recordFinish(slug()); } catch(e){} } try { if(window.holoComp) window.holoComp.onGameFinished(slug()); } catch(e){} }
+  /* SWEEP-FIX4-2026-11-25: Werewolf + Monster Match already show their own compliant end screen (locked set, no X) — #endBar must not stack over it. */
+  var COMPLIANT_NATIVE = { 'werewolf':1, 'monster-match':1 };
+  function show(){ if(player.hidden) return; if(COMPLIANT_NATIVE[slug()]) return; var first = bar.hidden; bar.hidden = false; if(first){ try { if(window.holoBadges) window.holoBadges.recordFinish(slug()); } catch(e){} } try { if(window.holoComp) window.holoComp.onGameFinished(slug()); } catch(e){} }
   function hide(){ bar.hidden = true; }
   window.holoGameFinished = show;
   /* Native end panels */
@@ -27053,12 +27060,26 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     window.__holoDirectStart = true;
     if(b) b.click();
   });
-  document.getElementById('endMenu').addEventListener('click', function(){
+  document.getElementById('endStartOver').addEventListener('click', function(){
     var s = slug(); hide();
     if(window.holoClosePlayer) window.holoClosePlayer();
     if(s && window.holoOpenGameMenu) setTimeout(function(){ window.holoOpenGameMenu(s); }, 30);
   });
-  document.getElementById('endClose').addEventListener('click', function(){
+  document.getElementById('endInvite').addEventListener('click', function(){
+    var s = slug();
+    var title = ''; try { var pt = document.getElementById('playerTitle'); if(pt) title = (pt.textContent || '').trim(); } catch(e){}
+    var base = ''; try { base = location.origin + location.pathname; } catch(e){}
+    var text = 'Play ' + (title || 'a game') + ' with me in Holo\'s Arcade: ' + base + (s ? '#game/' + s : '');
+    function done(){ try { if(typeof showBadgeToast === 'function') showBadgeToast('Invite copied — send it to a friend to play together.'); } catch(e){} }
+    function fallback(){
+      var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); try { ta.select(); document.execCommand('copy'); } catch(e){}
+      document.body.removeChild(ta); done();
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done, fallback); }
+    else fallback();
+  });
+  document.getElementById('endExit').addEventListener('click', function(){
     hide();
     if(window.holoClosePlayer) window.holoClosePlayer();
   });
