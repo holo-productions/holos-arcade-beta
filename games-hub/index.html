@@ -578,6 +578,28 @@ html.bigtext main,html.bigtext .topbar,html.bigtext footer{zoom:1.25}
 .login-card h2{font-family:"Bricolage Grotesque",sans-serif;font-size:clamp(30px,6vw,38px);line-height:1;letter-spacing:-.02em;margin:16px 0 8px}
 .login-note{display:inline-block;background:var(--puzzle-bg);color:var(--ink);font-weight:800;font-size:13.5px;padding:7px 12px;border-radius:999px;margin:0 0 10px}
 .login-field{margin:0 0 14px}
+/* CODENAME-HIGHSCORE-2026-11-25: arcade high-score entry for the Code
+   Name pick at registration. Pixel font, letter tiles + blinking
+   cursor, on-screen letter board. Dark by default (theme vars). */
+.hs-name-panel{margin:2px 0 4px;border:2px solid var(--gold);border-radius:14px;background:var(--bg2);padding:12px 12px 10px;box-shadow:0 0 18px rgba(255,176,32,.25)}
+.hs-name-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:var(--pixel);font-size:10px;line-height:1.7;color:var(--gold);text-shadow:2px 2px 0 rgba(139,92,255,.45);margin:0 0 4px}
+.hs-name-rank{font-family:var(--pixel);font-size:8px;color:#140b33;background:var(--gold);border-radius:6px;padding:4px 6px;text-shadow:none;white-space:nowrap}
+.hs-name-sub{margin:0 0 10px;font-size:13px;color:var(--muted)}
+.hs-name-tiles{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:52px;padding:8px;border-radius:10px;border:1.5px dashed var(--violet);background:#0a0620;cursor:text}
+.hs-name-panel.hs-focused .hs-name-tiles{outline:3px solid var(--gold);outline-offset:1px;border-color:var(--gold)}
+.hs-tile{display:inline-grid;place-items:center;min-width:36px;height:44px;padding:0 6px;border-radius:8px;border:2px solid var(--gold);background:#140b33;color:#fff;font-family:var(--pixel);font-size:16px;text-transform:uppercase;box-shadow:0 3px 0 rgba(0,0,0,.45)}
+.hs-cursor{display:inline-grid;place-items:center;width:22px;height:44px;color:var(--gold);font-family:var(--pixel);font-size:16px;animation:hsBlink 1s steps(2,start) infinite}
+@keyframes hsBlink{50%{opacity:0}}
+@media (prefers-reduced-motion: reduce){.hs-cursor{animation:none}}
+body.reduced-motion .hs-cursor{animation:none}
+.hs-name-board{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 0}
+.hs-key{flex:0 0 auto;min-width:40px;min-height:44px;padding:8px 10px;border-radius:10px;border:2px solid var(--violet);background:#140b33;color:#f4f1ff;font-family:var(--pixel);font-size:12px;cursor:pointer}
+.hs-key:hover{border-color:var(--pink);color:#fff}
+.hs-key:active{transform:translateY(2px)}
+.hs-key-del{border-color:var(--pink);color:#fff;min-width:64px}
+.hs-name-hint{margin:8px 0 0;font-size:12.5px;color:var(--muted)}
+.hs-name-input{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:0!important;opacity:0!important;pointer-events:none!important;border:0!important;min-height:0!important}
+
 .login-field label{display:block;font-weight:800;font-size:14px;margin:0 0 6px}
 .login-field input{width:100%;padding:13px 16px;border-radius:14px;border:1.5px solid var(--line);background:var(--bg2);color:var(--ink);font-size:16px;min-height:50px;font-family:inherit}
 .dob-wrap{display:flex;gap:8px;align-items:stretch}
@@ -28798,6 +28820,117 @@ footer .egg-row .egg{width:32px;height:32px}
   window.__wFlow={showMenu:showMenu,hideFlow:hideFlow,goStep:goStep,refreshContinue:refreshContinue,openWalk:openWalk,closeWalk:closeWalk,startHunt:startHunt,steps:STEPS.length,hunter:hunter,selDiff:selDiff,selStyle:selStyle,inviteText:inviteText};
 })();
 
+</script>
+<!-- CODENAME-HIGHSCORE-2026-11-25 -->
+<script>
+/* CODENAME-HIGHSCORE-2026-11-25: Code Name pick at registration works
+   like entering a high score — letter tiles + blinking cursor + an
+   on-screen letter board. The real input stays the source of truth
+   (submit + createAccount read its .value); this only changes entry.
+   Progressive enhancement: if anything here fails, the plain input
+   is untouched. */
+(function(){
+  "use strict";
+  var LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".split("");
+  function $(id){ return document.getElementById(id); }
+  function enhance(input){
+    if(!input || input.__hsDone) return;
+    var field = input.closest ? input.closest(".login-field") : input.parentNode;
+    if(!field) return;
+    input.__hsDone = true;
+    input.classList.add("hs-name-input");
+    input.setAttribute("aria-label", "Code Name");
+    var panel = document.createElement("div");
+    panel.className = "hs-name-panel";
+    var head = document.createElement("div");
+    head.className = "hs-name-head";
+    var ht = document.createElement("span");
+    ht.textContent = "ENTER YOUR CODE NAME";
+    var rank = document.createElement("span");
+    rank.className = "hs-name-rank";
+    rank.textContent = "NEW PLAYER";
+    head.appendChild(ht); head.appendChild(rank);
+    var sub = document.createElement("p");
+    sub.className = "hs-name-sub";
+    sub.textContent = "Pick your arcade name — this is the name other players see, never your email.";
+    var tiles = document.createElement("div");
+    tiles.className = "hs-name-tiles";
+    tiles.setAttribute("role", "button");
+    tiles.tabIndex = 0;
+    tiles.setAttribute("aria-label", "Code Name entry — tap to type");
+    var board = document.createElement("div");
+    board.className = "hs-name-board";
+    var hint = document.createElement("p");
+    hint.className = "hs-name-hint";
+    hint.textContent = "Tap letters to build your name, or tap your name and type on your keyboard.";
+    panel.appendChild(head); panel.appendChild(sub); panel.appendChild(tiles);
+    panel.appendChild(board); panel.appendChild(hint);
+    field.insertBefore(panel, input);
+    function render(){
+      var v = String(input.value || "");
+      tiles.innerHTML = "";
+      for(var i = 0; i < v.length; i++){
+        var t = document.createElement("span");
+        t.className = "hs-tile";
+        t.textContent = v[i];
+        tiles.appendChild(t);
+      }
+      var c = document.createElement("span");
+      c.className = "hs-cursor";
+      c.setAttribute("aria-hidden", "true");
+      c.textContent = "_";
+      tiles.appendChild(c);
+    }
+    function setVal(v){
+      input.value = v;
+      try { input.dispatchEvent(new Event("input", { bubbles: true })); } catch(e){}
+      render();
+    }
+    LETTERS.forEach(function(ch){
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "hs-key";
+      b.textContent = ch;
+      b.setAttribute("aria-label", "Letter " + ch);
+      b.addEventListener("click", function(){ setVal(String(input.value || "") + ch); });
+      board.appendChild(b);
+    });
+    var del = document.createElement("button");
+    del.type = "button";
+    del.className = "hs-key hs-key-del";
+    del.textContent = "DEL";
+    del.setAttribute("aria-label", "Delete last letter");
+    del.addEventListener("click", function(){ setVal(String(input.value || "").slice(0, -1)); });
+    board.appendChild(del);
+    tiles.addEventListener("click", function(){ try { input.focus(); } catch(e){} });
+    tiles.addEventListener("keydown", function(ev){
+      if(ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); try { input.focus(); } catch(e){} }
+    });
+    input.addEventListener("input", render);
+    input.addEventListener("focus", function(){ panel.classList.add("hs-focused"); });
+    input.addEventListener("blur", function(){ panel.classList.remove("hs-focused"); });
+    var form = input.form || (field.closest ? field.closest("form") : null);
+    if(form) form.addEventListener("reset", function(){ setTimeout(render, 0); });
+    render();
+  }
+  function scan(){
+    var done = false;
+    ["createName", "createNameOwner"].forEach(function(id){
+      var el = $(id);
+      if(el){ enhance(el); done = true; }
+    });
+    return done;
+  }
+  if(scan()) return;
+  var mo = null;
+  try {
+    mo = new MutationObserver(function(){
+      if(scan() && mo) mo.disconnect();
+    });
+    mo.observe(document.body || document.documentElement, { childList: true, subtree: true });
+    setTimeout(function(){ if(scan() && mo) mo.disconnect(); }, 5000);
+  } catch(e){ scan(); }
+})();
 </script>
 </body>
 </html>
