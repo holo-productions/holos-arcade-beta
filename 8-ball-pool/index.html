@@ -984,11 +984,13 @@ if (window.HoloGamepad) HoloGamepad.bind({ keys: { action: 'Space', down: 'Arrow
    Challenge from inside this game, or join via a private room link
    (?room=<CODE> or a 'holo-room-join' postMessage — see
    poolJoinRoom; the hub writes /challengeRooms/<CODE>).
-   RULES GATE: the live /turnMatches rules only allow
-   game==='tic-tac-toe' — Holo must publish
-   firebase-rules-turnmatches-pool-update-2026-11-24.md before any
-   friend match can be created live. Until then every cloud call
-   fails soft with a plain message, and solo play is unaffected.
+   RULES GATE (2026-11-24 20:15): the pool rules ARE published
+   (firebase-rules-turnmatches-pool-update-2026-11-24.md) — friend
+   matches create live. Rooms: the hub creates /challengeRooms/<CODE>
+   first and the match right after (the host cannot write matchId
+   into the room under the live rules — only the guest can — so the
+   room node carries no matchId until the guest's first entry adopts
+   the hub's match; see pfAdoptRoomMatch).
    Code names only in every match UI. Beta friends only. */
 (function(){
 'use strict';
@@ -1341,6 +1343,9 @@ function pfPollTick(){
 }
 
 /* ---------- room join (?room=<CODE> / postMessage) ---------- */
+/* POOL-ROOM-2026-11-24 (CHALLENGE-ROOM): room entry gates live here.
+   The hub creates the room; the guest enters via ?room=<CODE> or the
+   hub's 'holo-room-join' postMessage. */
 function pfJoinRoom(code){
   code=String(code||'').trim().toUpperCase();
   if(!code) return Promise.resolve(false);
@@ -1355,29 +1360,130 @@ function pfJoinRoom(code){
     var isHost=room.hostUid===me;
     var isGuest=room.guestUid===me||!room.guestUid;
     if(!isHost&&!isGuest){ setStatus('⚠️ That room is already full.'); return false; }
-    if(!room.guestUid&&!isHost){
-      return pfMyName().then(function(myN){
-        return pfApi('PATCH','/'+ROOM_NODE+'/'+encodeURIComponent(code),{guestUid:me,guestName:myN}).then(function(){
-          room.guestUid=me; room.guestName=myN;
-          return pfEnterRoom(room);
-        });
+    /* POOL-LINK-SELFDESTRUCT-2026-11-24: the link does NOT die on
+       join — it dies AFTER the game (see pfEnterMatch). An UNJOINED
+       room older than 24h is expired; a room whose match is declined
+       or ended is used up (gated in pfEnterMatch). */
+    if(!room.matchId && room.createdAt && (Date.now()-room.createdAt)>86400000){
+      setStatus('⚠️ This invite has expired — ask the host to send a fresh one.');
+      return false;
+    }
+    if(room.pendingFriend && !isHost){
+      /* CHALLENGE-ROOM-2026-11-24: game + friend request together —
+         the invite stays PENDING until the friend request is accepted.
+         The pool refuses entry until the two are friends. */
+      return pfApi('GET','/friends/'+encodeURIComponent(me)).then(function(fr){
+        if(!fr||!fr[room.hostUid]){
+          setStatus('⚠️ Accept the friend request first — this game opens once you’re friends.');
+          return false;
+        }
+        return pfClaimAndEnter(room, me, isHost, isGuest);
       });
     }
-    return pfEnterRoom(room);
+    return pfClaimAndEnter(room, me, isHost, isGuest);
   });
+}
+function pfClaimAndEnter(room, me, isHost, isGuest){
+  if(!room.guestUid&&!isHost){
+    return pfMyName().then(function(myN){
+      return pfApi('PATCH','/'+ROOM_NODE+'/'+encodeURIComponent(pfRoomCode),{guestUid:me,guestName:myN}).then(function(){
+        room.guestUid=me; room.guestName=myN;
+        return pfEnterRoom(room);
+      });
+    });
+  }
+  return pfEnterRoom(room);
+}
+function pfAdoptRoomMatch(code){
+  /* CHALLENGE-ROOM-2026-11-24: the hub creates the room first and the
+     match right after (the host cannot write matchId into the room
+     under the live rules — only the guest can — so the room node
+     carries no matchId). Adopt the match the hub already made via my
+     own match index instead of making a second one. */
+  var me=pfUid(); if(!me) return Promise.resolve(null);
+  return pfApi('GET','/users/'+encodeURIComponent(me)+'/turnMatches').then(function(idx){
+    if(!idx||typeof idx!=='object') return null;
+    var mids=Object.keys(idx);
+    var chain=Promise.resolve(null);
+    mids.forEach(function(mid){
+      chain=chain.then(function(found){
+        if(found) return found;
+        return pfApi('GET','/turnMatches/'+encodeURIComponent(mid)).then(function(m){
+          if(m&&m.roomCode===code) return mid;
+          return null;
+        });
+      });
+    });
+    return chain;
+  });
+}
+function pfEnterMatch(mid, m, room){
+  var me=pfUid();
+  /* POOL-LINK-SELFDESTRUCT-2026-11-24: the link dies AFTER the game.
+     Declined → "This invite was cancelled"; won/draw/left → "This
+     invite is used up"; playing + not a player → "This game already
+     started". Reload-safe mid-match: a player re-enters freely. */
+  if(m.status==='declined'){
+    setStatus('⚠️ This invite was cancelled — ask the host to send a fresh one.');
+    return false;
+  }
+  if(m.status==='won'||m.status==='draw'||m.status==='left'){
+    setStatus('⚠️ This invite is used up — the game is over. Start a fresh challenge from the Arcade to play again.');
+    return false;
+  }
+  if(m.status==='playing' && m.aUid!==me && m.bUid!==me){
+    setStatus('⚠️ This game already started — only the two players can open it.');
+    return false;
+  }
+  if(m.status==='waiting' && m.aUid!==me && m.bUid!==me){
+    setStatus('⚠️ That room is already full.');
+    return false;
+  }
+  pfMatchList[mid]=m;
+  pfMid=mid; pfMatch=m; pfSeenMoves=m.moves||0; pfSeenUpdated=m.updatedAt||0;
+  try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
+  /* Join notice: the host gets ONE Inbox notice the first time the
+     guest enters the room (once per device per match). */
+  if(m.bUid===me && room && room.hostUid && (m.status==='waiting'||m.status==='playing')){
+    try{
+      var flag='pool8_joined_'+mid;
+      if(!localStorage.getItem(flag)){
+        localStorage.setItem(flag,'1');
+        pfMyName().then(function(myN){
+          pfNotice(room.hostUid,{type:'turn',title:'Your pool game started!',body:myN+' joined your pool game.',link:'game:8-ball-pool?room='+String(pfRoomCode||''),fromName:myN,fromUid:me});
+        });
+      }
+    }catch(e){}
+  }
+  setMode('friend',true); pfApplyMatch(m); pfStartPoll();
+  return true;
 }
 function pfEnterRoom(room){
   var me=pfUid();
   if(room.matchId){
     return pfApi('GET','/turnMatches/'+encodeURIComponent(room.matchId)).then(function(m){
       if(!m||typeof m!=='object'){ setStatus('⚠️ That room’s match couldn’t be found — ask the host to share a fresh link.'); return false; }
-      pfMatchList[room.matchId]=m;
-      pfMid=room.matchId; pfMatch=m; pfSeenMoves=m.moves||0; pfSeenUpdated=m.updatedAt||0;
-      try{localStorage.setItem(LS_MATCH,room.matchId);}catch(e){}
-      setMode('friend',true); pfApplyMatch(m); pfStartPoll();
-      return true;
+      return pfEnterMatch(room.matchId, m, room);
     });
   }
+  /* No matchId on the room yet — adopt the hub's match first; only
+     if none exists does the first arrival create one (host breaks). */
+  return pfAdoptRoomMatch(pfRoomCode).then(function(mid){
+    if(mid){
+      return pfApi('GET','/turnMatches/'+encodeURIComponent(mid)).then(function(m){
+        if(!m||typeof m!=='object'){ return pfCreateRoomMatch(room); }
+        /* Write matchId back into the room (guest-only write — allowed
+           by the live rules; a host-side denial is harmless, the
+           match still opens). */
+        pfApi('PATCH','/'+ROOM_NODE+'/'+encodeURIComponent(pfRoomCode),{matchId:mid,status:'ready'});
+        return pfEnterMatch(mid, m, room);
+      });
+    }
+    return pfCreateRoomMatch(room);
+  });
+}
+function pfCreateRoomMatch(room){
+  var me=pfUid();
   /* No match yet — the first arrival creates it (host breaks). */
   var hostUid=room.hostUid, guestUid=room.guestUid||me;
   var oppUid=(me===hostUid)?guestUid:hostUid;
