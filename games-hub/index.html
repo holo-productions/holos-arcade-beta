@@ -11437,7 +11437,7 @@ var LOCATIONS = [
   var mcStage = $('mcStage');
   var S = null, mcBest = 0, mcRaf = null, mcLastTs = 0, mcRunning = false;
   var mcKeys = {}, mcPointer = { active: false, x: 0, y: 0 };
-  var mcReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var mcReduced = (typeof window.matchMedia === 'function') && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var mcBannerTimer = null;
   /* MADCOW-DIFF-FIX-2026-11-24: retuned levels — Gentle 0.75x/4 hearts/+0.45 aim, Classic unchanged, Stampede 1.55x/2 hearts/-0.35 aim; per-level warning floors. */
   var MC_DIFFS = {
@@ -14470,7 +14470,7 @@ window.holoDaily = (function(){
       try { ctx.referrer = holoScrubUrl(document.referrer || ''); } catch(e){ ctx.referrer = ''; }
       ctx.host = (typeof location !== 'undefined' && location.hostname) || '';
       var standalone = false;
-      try { standalone = !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone); } catch(e){}
+      try { standalone = !!(((typeof window.matchMedia === 'function') && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone); } catch(e){}
       ctx.appMode = standalone ? 'app' : 'browser';
       var w = (typeof window !== 'undefined' && window.innerWidth) || 0, h = (typeof window !== 'undefined' && window.innerHeight) || 0;
       var sw = (typeof window !== 'undefined' && window.screen && window.screen.width) || 0, sh = (typeof window !== 'undefined' && window.screen && window.screen.height) || 0;
@@ -15853,7 +15853,7 @@ function clearDraft(game){ var all = loadDrafts(); if(all[game]){ delete all[gam
    ============================================================ */
 function celebrateConfetti(count){
   try {
-    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if((typeof window.matchMedia === 'function') && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     var canvas = document.getElementById('confettiCanvas');
     if(!canvas){ canvas = document.createElement('canvas'); canvas.id = 'confettiCanvas'; document.body.appendChild(canvas); }
     var ctx = canvas.getContext('2d'); if(!ctx) return;
@@ -20119,7 +20119,7 @@ function renderTesterAuth(){
     var anim = nextEggAnim();
     b.setAttribute('data-anim', anim);
     var reduced = false;
-    try { reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch(e){}
+    try { reduced = !!((typeof window.matchMedia === 'function') && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch(e){}
     b.classList.remove('dancing','anim-bounce','anim-spin','anim-wave','anim-squeak');
     try { void b.offsetWidth; } catch(e){}
     if(!reduced && anim !== 'sparkle') b.classList.add('anim-' + anim);
@@ -20869,7 +20869,7 @@ function renderTesterAuth(){
       target:function(){ try { var b = tourFindBriefing(); if(b){ var it = document.querySelector('.inbox-item[data-id="' + b.id + '"]'); if(it && isShown(it)) return it; } } catch(e){} return firstShown(['#inboxList .inbox-item', '#inboxList', '#inbox']); } }
   ];
   function reducedMotion(){
-    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    return !!((typeof window.matchMedia === 'function') && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   }
   function scrollPanelTo(panel, el){
     try {
@@ -21635,8 +21635,16 @@ function renderTesterAuth(){
     var clean = String(username).trim();
     if(!clean) return Promise.resolve(false);
     return postJSON('https://identitytoolkit.googleapis.com/v1/accounts:update?key=' + FB_API_KEY, { idToken:rec.idToken, displayName:clean, returnSecureToken:true }).then(function(u){
-      if(!(u.ok && u.json && u.json.idToken)) return false;
-      var rec2 = saveAuth(u.json, rec.email);
+      if(!(u.ok && u.json)) return false;
+      /* CODENAME-PROMPT-2026-11-25: a displayName-only update returns
+         NO fresh idToken (verified live 2026-11-25: Firebase only
+         re-issues tokens on credential changes) — the 200 + the
+         displayName in the body IS the success signal. Requiring
+         u.json.idToken made this always return false, so the name
+         never landed (the migration taken-step hit the same wall).
+         Keep the existing rec — its token is still valid — and
+         refresh the stored auth only when a fresh token IS returned. */
+      var rec2 = (u.json && u.json.idToken) ? saveAuth(u.json, rec.email) : rec;
       if(!rec2) return false;
       return patchUser(rec2, { username:clean }).then(function(ok){
         if(!ok) return false;
@@ -29742,11 +29750,15 @@ body.in-game .rff-frame{height:calc(100dvh - 150px)}
   }, true);
   window.addEventListener('popstate', function(){ if(open){ pushed = false; closePanel(true); } });
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && open) closePanel(false); });
+  /* MATCHMEDIA-GUARD-2026-11-25: matchMedia may not exist (jsdom
+     probes) — treat as no-match and skip the listener, never throw. */
   try {
-    var mq = window.matchMedia('(max-width: 1023px)');
-    var onMq = function(){ if(!mq.matches && open) closePanel(false); };
-    if(mq.addEventListener) mq.addEventListener('change', onMq);
-    else if(mq.addListener) mq.addListener(onMq);
+    var mq = (typeof window.matchMedia === 'function') ? window.matchMedia('(max-width: 1023px)') : null;
+    if(mq){
+      var onMq = function(){ if(!mq.matches && open) closePanel(false); };
+      if(mq.addEventListener) mq.addEventListener('change', onMq);
+      else if(mq.addListener) mq.addListener(onMq);
+    }
   } catch(e){}
 })();
 </script>
@@ -31463,8 +31475,14 @@ body[data-view="account"] .wt-stage{display:none!important;}
    are left alone. ============ */
 (function(){
 'use strict';
-var MQ_DESK=window.matchMedia('(min-width:1024px)');
-var MQ_RAIL=window.matchMedia('(min-width:1280px)');
+/* MATCHMEDIA-GUARD-2026-11-25: matchMedia may not exist (jsdom
+   probes) — this unguarded call threw "window.matchMedia is not a
+   function" and killed the whole walk-through script. Fall back to a
+   stub that reports no-match with no-op listeners, so every MQ_* use
+   (.matches, 'change' via on()) keeps working and never crashes. */
+function holoMatchMedia(q){ try { if(typeof window.matchMedia === 'function') return window.matchMedia(q); } catch(e){} return { matches:false, media:q, addEventListener:function(){}, removeEventListener:function(){}, addListener:function(){}, removeListener:function(){} }; }
+var MQ_DESK=holoMatchMedia('(min-width:1024px)');
+var MQ_RAIL=holoMatchMedia('(min-width:1280px)');
 function $(s,r){return (r||document).querySelector(s);}
 function $$(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
 function el(t,c){var n=document.createElement(t);if(c)n.className=c;return n;}
