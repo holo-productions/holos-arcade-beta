@@ -23601,6 +23601,15 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   }
   /* INBOX-EMAIL-2026-11-23: sender / preview / short time for email rows */
   function senderOf(n){
+    /* FRIENDS-NAME-REFRESH-2026-11-25: a notice's stored fromName (or the
+       name baked into its body) is from send time and goes stale when a
+       friend changes Code Name. When the notice carries the sender's UID,
+       prefer their current Code Name from the cloud friends list (kept
+       fresh by the name sync). The body text itself stays as-sent — it is
+       the historical message, only the sender header re-resolves. */
+    if(n.fromUid){
+      try { var cf = (window.holoFriends && window.holoFriends.cloudFriends) ? window.holoFriends.cloudFriends() : {}; var f = cf && cf[String(n.fromUid)]; if(f && f.name) return String(f.name); } catch(e){}
+    }
     if(n.fromName) return String(n.fromName);
     var b = String(n.body || '');
     var m = b.match(/^(\S+) wants to be your friend/); if(m) return m[1];
@@ -24413,7 +24422,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           return api('DELETE', '/friendRequests/' + encodeURIComponent(uid) + '/' + encodeURIComponent(fromUid)).then(function(){
             delete incoming[fromUid];
             if(window.holoInbox && window.holoInbox.sendNotice){
-              try { window.holoInbox.sendNotice(fromUid, { type:'friend-accepted', title:'Quest accepted!', body:name + ' accepted your quest \u2014 you\u2019re friends now!', link:'friends' }); } catch(e){}
+              try { window.holoInbox.sendNotice(fromUid, { type:'friend-accepted', title:'Quest accepted!', body:name + ' accepted your quest \u2014 you\u2019re friends now!', link:'friends', fromUid:uid }) /* FRIENDS-NAME-REFRESH-2026-11-25: carry the sender UID so the Inbox can re-resolve the sender's current Code Name later. */; } catch(e){}
             }
             /* CHALLENGE-ROOM-2026-11-24: game + friend request together —
                the request carried a game invite, so accepting the friend
@@ -24478,6 +24487,52 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       });
     });
   }
+
+  var friendNameSyncDone = false; /* FRIENDS-NAME-REFRESH-2026-11-25: the name sync runs once per session. */
+  function syncFriendNames(){
+    /* FRIENDS-NAME-REFRESH-2026-11-25 (Holo 2026-11-25 09:21): a friend's
+       Code Name can change (honeybear -> MamaBear), but the name stored
+       in /friends/<myUid>/<friendUid> at accept time never did — so the
+       Friends list showed the old name. Two mechanisms, both fail-closed:
+       (1) PUSH — my client writes MY current Code Name into each friend's
+       list at my own slot (/friends/<friendUid>/<myUid>). The live rules
+       allow this (auth.uid === $friendUid), and it only runs for UIDs in
+       MY list, so an unfriended tester is never re-added (removal deletes
+       both sides). A rename lands in friends' lists on the renamer's next
+       sign-in. (2) PULL — attempt a live read of each friend's
+       /users/<uid>/username and use it when it succeeds. Under the live
+       DM rules /users reads are SELF-ONLY, so this read is denied today
+       and the stored name stands — the attempt is kept so it starts
+       working the moment a rules publish opens a public-name read, with
+       no code change. A fresh name from the pull is written back into my
+       own /friends copy, so it survives offline. */
+    var uid = myUid(); if(!uid) return Promise.resolve(false);
+    var friendUids = Object.keys(cloudFriends || {});
+    if(!friendUids.length) return Promise.resolve(false); /* nothing to sync yet — retry on the next refresh */
+    if(friendNameSyncDone) return Promise.resolve(false);
+    friendNameSyncDone = true;
+    return myName().then(function(name){
+      var now = Date.now();
+      var jobs = [];
+      if(name && name !== 'A tester'){
+        /* (1) PUSH my current name into each friend's list. */
+        friendUids.forEach(function(fuid){
+          jobs.push(api('PUT', '/friends/' + encodeURIComponent(fuid) + '/' + encodeURIComponent(uid), { name:name, ts:now }).catch(function(){ return null; }));
+        });
+      }
+      /* (2) PULL each friend's current name; denied under live rules. */
+      friendUids.forEach(function(fuid){
+        jobs.push(api('GET', '/users/' + encodeURIComponent(fuid)).then(function(u){
+          var fresh = (u && (u.username || u.name)) ? String(u.username || u.name) : '';
+          if(!fresh || !cloudFriends[fuid]) return null;
+          if(cloudFriends[fuid].name === fresh) return null;
+          cloudFriends[fuid].name = fresh;
+          return api('PUT', '/friends/' + encodeURIComponent(uid) + '/' + encodeURIComponent(fuid), { name:fresh, ts:now }).catch(function(){ return null; });
+        }).catch(function(){ return null; }));
+      });
+      return Promise.all(jobs).then(function(){ try { renderAll(); } catch(e){} return true; });
+    }).catch(function(){ return false; });
+  }
   function refresh(){
     var uid = myUid();
     if(!uid){ incoming = {}; cloudFriends = {}; renderAll(); return Promise.resolve(false); }
@@ -24524,7 +24579,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       }
       renderAll();
       return true;
-    });
+    }).then(function(ok){ try { syncFriendNames(); } catch(e){} return ok; });
   }
   function requestCard(fromUid, r){
     return '<div class="freq-card"><span class="friend-avatar" aria-hidden="true">' + CLOUD_DUCK + '</span>' +
@@ -24715,7 +24770,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   try { new MutationObserver(function(){ var v = document.body.getAttribute('data-view'); if(v === 'friends' || v === 'inbox'){ buildUI(); refresh(); } }).observe(document.body, { attributes:true, attributeFilter:['data-view'] }); } catch(e){}
   setInterval(function(){ if(myUid()) refresh(); }, 60000);
   setTimeout(function(){ buildUI(); refresh(); }, 2500);
-  window.holoFriends = { refresh:refresh, sendRequest:sendRequest, acceptRequest:acceptRequest, declineRequest:declineRequest, cancelRequest:cancelRequest, removeCloudFriend:removeCloudFriend, searchCloud:searchCloud, incoming:function(){ return incoming; }, cloudFriends:function(){ return cloudFriends; }, outgoing:function(){ return outgoing; } };
+  window.holoFriends = { refresh:refresh, syncFriendNames:syncFriendNames, sendRequest:sendRequest, acceptRequest:acceptRequest, declineRequest:declineRequest, cancelRequest:cancelRequest, removeCloudFriend:removeCloudFriend, searchCloud:searchCloud, incoming:function(){ return incoming; }, cloudFriends:function(){ return cloudFriends; }, outgoing:function(){ return outgoing; } };
 })();
 </script>
 <!-- FRIEND-DMS-2026-11-24 (Holo 12:15): friend-only DMs.
@@ -24911,6 +24966,16 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     return 'Tester';
   }
 
+
+  function dmDisplayName(t){
+    /* FRIENDS-NAME-REFRESH-2026-11-25: a thread's stored withName is from
+       thread creation and goes stale when a friend changes Code Name.
+       Prefer the friend's current Code Name from the cloud friends list
+       (kept fresh by the name sync); fall back to the stored name when
+       the friend is gone from the list or it hasn't loaded yet. */
+    try { var cf = (window.holoFriends && window.holoFriends.cloudFriends) ? window.holoFriends.cloudFriends() : {}; var f = t && cf[t.withUid]; if(f && f.name) return String(f.name); } catch(e){}
+    return (t && t.withName) || 'Tester';
+  }
   var threads = {};   /* tid -> {withUid, withName, lastMessageAt, lastPreview, unread} */
   var archived = {};  /* INBOX-DM-FIX-2026-11-24: tid -> true; own /users/$uid/dmArchived — archived chats hide from the list and live in the Archive section. Own-only writes, so no rules change needed. */
   var muted = {};     /* tid -> true */
@@ -25324,11 +25389,12 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     rows.innerHTML = keys.map(function(tid){
       var t = threads[tid] || {};
       var unread = (!muted[tid] && (t.unread || 0) > 0);
-      var initial = String(t.withName || 'T').replace(/[^A-Za-z0-9]/g, '').charAt(0).toUpperCase() || 'T';
+      var dn = dmDisplayName(t); /* FRIENDS-NAME-REFRESH-2026-11-25: current Code Name first, stored withName as fallback. */
+      var initial = String(dn || 'T').replace(/[^A-Za-z0-9]/g, '').charAt(0).toUpperCase() || 'T';
       return '<div class="dm-row' + (unread ? ' unread' : '') + '">' +
-        '<button type="button" class="dm-row-open" data-dm-open="' + esc(t.withUid) + '" data-dm-name="' + esc(t.withName || 'Tester') + '">' +
+        '<button type="button" class="dm-row-open" data-dm-open="' + esc(t.withUid) + '" data-dm-name="' + esc(dn) + '">' +
         '<span class="inbox-ava" aria-hidden="true">' + esc(initial) + '</span>' +
-        '<span class="dm-main"><span class="dm-name">' + esc(t.withName || 'Tester') + '</span>' +
+        '<span class="dm-main"><span class="dm-name">' + esc(dn) + '</span>' +
         '<span class="dm-prev">' + esc(previewOf({ kind: (t.lastKind || 'text'), text: t.lastPreview, sticker: t.lastSticker })) + '</span></span>' +
         '<span class="dm-time">' + esc(whenShort(t.lastMessageAt)) + '</span>' +
         (unread ? '<span class="dm-count">' + esc(String(t.unread > 9 ? '9+' : t.unread)) + '</span>' : '') +
@@ -25410,7 +25476,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var parts = pairParts(uid, withUid);
     openA = parts[0]; openB = parts[1];
     openTid = pairKey(uid, withUid);
-    openWith = withUid; openName = withName || friendName(withUid);
+    openWith = withUid; openName = dmDisplayName({ withUid:withUid, withName:withName }); /* FRIENDS-NAME-REFRESH-2026-11-25: current Code Name first. */
     var sec = document.getElementById('inbox');
     var th = document.getElementById('dmThread');
     var rd = document.getElementById('inboxRead');
