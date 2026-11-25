@@ -404,22 +404,37 @@ paintChrome();
 var cv=$("cv"),ctx=cv.getContext("2d"),R=16,COLS=11,ROWS=13;
 var BC=["#e4572e","#2563eb","#1d7a3a","#e19a12","#7c5cbf"];
 var board=[],shot=null,angle=-Math.PI/2,shots=0,over=false,nextCol="";
+/* BUBBLE-POP-FIX-2026-11-24 (sound): the game had no audio code at
+   all — nothing ever played. WebAudio effects below, created lazily
+   on the first sound (inside a user gesture). new AudioContext() is
+   wrapped by the HOLO-SOUND gate, so the hub Sound switch mutes
+   these via the master gain; the holoSettings check is belt-and-braces. */
+var __bpbAC=null;
+function __bpbACtx(){try{if(!__bpbAC)__bpbAC=new (window.AudioContext||window.webkitAudioContext)();if(__bpbAC.state==="suspended")__bpbAC.resume();return __bpbAC}catch(e){return null}}
+function __bpbTone(f0,f1,dur,type,vol,when){var c=__bpbACtx();if(!c)return;try{var t=c.currentTime+(when||0);var o=c.createOscillator(),g=c.createGain();o.type=type||"sine";o.frequency.setValueAtTime(f0,t);if(f1&&f1!==f0)o.frequency.exponentialRampToValueAtTime(Math.max(1,f1),t+dur);g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol||0.2,t+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);o.connect(g);g.connect(c.destination);o.start(t);o.stop(t+dur+0.05)}catch(e){}}
+function sfx(name,n){try{if(window.holoSettings&&window.holoSettings.sound===false)return;if(name==="shoot")__bpbTone(520,240,0.12,"sine",0.15);else if(name==="pop"){var m=Math.min(n||1,6);for(var i=0;i<m;i++)__bpbTone(660+i*90,990+i*90,0.09,"triangle",0.18,i*0.05)}else if(name==="drop")__bpbTone(880,1320,0.15,"sine",0.15);else if(name==="win"){var f=[523,659,784,1047];for(var j=0;j<f.length;j++)__bpbTone(f[j],f[j],0.18,"triangle",0.2,j*0.12)}else if(name==="lose")__bpbTone(330,110,0.5,"sawtooth",0.15)}catch(e){}}
 function bx(c,r){return R+c*R*2+(r%2?R:0)} function by(r){return R+r*R*1.75}
 function newGame(){board=[];var rows=difficulty==="easy"?4:(difficulty==="hard"?7:5);var nc=difficulty==="easy"?3:(difficulty==="hard"?5:4);
  for(var r=0;r<ROWS;r++){var row=[];for(var c=0;c<COLS;c++)row.push(r<rows?BC[Math.floor(Math.random()*nc)]:null);board.push(row)}
  shot=null;shots=0;over=false;nextCol=BC[Math.floor(Math.random()*nc)];setScore(0);draw();say("Aim with mouse or finger, tap to shoot!")}
 function neigh(c,r){var o=r%2?[[1,0],[-1,0],[0,-1],[1,-1],[0,1],[1,1]]:[[1,0],[-1,0],[-1,-1],[0,-1],[-1,1],[0,1]];var res=[];o.forEach(function(d){var cc=c+d[0],rr=r+d[1];if(rr>=0&&rr<ROWS&&cc>=0&&cc<COLS)res.push([cc,rr])});return res}
 function cluster(c,r){var col=board[r][c],seen={},stack=[[c,r]],out=[];while(stack.length){var p=stack.pop(),k=p[0]+","+p[1];if(seen[k])continue;seen[k]=1;if(board[p[1]][p[0]]!==col)continue;out.push(p);neigh(p[0],p[1]).forEach(function(q){stack.push(q)})}return out}
-function dropFloating(){var keep={},stack=[];for(var c=0;c<COLS;c++)if(board[0][c])stack.push([c,0]);
+/* BUBBLE-POP-FIX-2026-11-24: dropFloating used to seed its flood-fill
+   only from row 0 — but the ceiling drop inserts an all-empty row 0,
+   so the next pop deleted EVERY bubble as "floating" and the win
+   check fired with most of the board left. Seed from the topmost
+   OCCUPIED row instead: bubbles anchored to the ceiling stay. */
+function dropFloating(){var keep={},stack=[];var top=-1;for(var r=0;r<ROWS;r++){var any=false;for(var c=0;c<COLS;c++)if(board[r][c]){any=true;break}if(any){top=r;break}}
+ if(top>=0)for(var c=0;c<COLS;c++)if(board[top][c])stack.push([c,top]);
  while(stack.length){var p=stack.pop(),k=p[0]+","+p[1];if(keep[k]||!board[p[1]][p[0]])continue;keep[k]=1;neigh(p[0],p[1]).forEach(function(q){stack.push(q)})}
  var n=0;for(var r=0;r<ROWS;r++)for(var c2=0;c2<COLS;c2++)if(board[r][c2]&&!keep[c2+","+r]){board[r][c2]=null;n++}return n}
 function land(x,y){var best=null,bd=1e9;for(var r=0;r<ROWS;r++)for(var c=0;c<COLS;c++){if(board[r][c])continue;var d=(bx(c,r)-x)*(bx(c,r)-x)+(by(r)-y)*(by(r)-y);if(d<bd){bd=d;best=[c,r]}}
  if(!best)return;board[best[1]][best[0]]=shot.col;var cl=cluster(best[0],best[1]);
- if(cl.length>=3){cl.forEach(function(p){board[p[1]][p[0]]=null});var fl=dropFloating();addScore(cl.length*10+fl*15);say("Pop! +"+(cl.length*10+fl*15))}
+ if(cl.length>=3){cl.forEach(function(p){board[p[1]][p[0]]=null});var fl=dropFloating();addScore(cl.length*10+fl*15);say("Pop! +"+(cl.length*10+fl*15));sfx("pop",cl.length);if(fl>0)sfx("drop")}
  shot=null;shots++;
  var every=difficulty==="hard"?3:5;if(shots%every===0){board.pop();board.unshift(new Array(COLS).fill(null));}
- if(board.every(function(row){return row.every(function(v){return !v})})) {over=true;addScore(200);setLevel(curLevel+1);say("Board cleared! +200. Tap New game for the next bay.")}
- else if(board[ROWS-1].some(function(v){return v})){over=true;say("The bubbles reached the bay floor. Final score: "+curScore)}
+ if(board.every(function(row){return row.every(function(v){return !v})})) {over=true;addScore(200);setLevel(curLevel+1);say("Board cleared! +200. Tap New game for the next bay.");sfx("win")}
+ else if(board[ROWS-1].some(function(v){return v})){over=true;say("The bubbles reached the bay floor. Final score: "+curScore);sfx("lose")}
  draw()}
 function step(){if(!shot)return;shot.x+=shot.vx;shot.y+=shot.vy;if(shot.x<R||shot.x>cv.width-R)shot.vx*=-1;
  var hit=shot.y<=R;for(var r=0;r<ROWS&&!hit;r++)for(var c=0;c<COLS;c++)if(board[r][c]){var dx=bx(c,r)-shot.x,dy=by(r)-shot.y;if(dx*dx+dy*dy<(R*1.8)*(R*1.8))hit=true}
@@ -432,7 +447,7 @@ function draw(){ctx.fillStyle="#0b2a3a";ctx.fillRect(0,0,cv.width,cv.height);
  if(shot){ctx.fillStyle=shot.col;ctx.beginPath();ctx.arc(shot.x,shot.y,R-1,0,7);ctx.fill()}}
 function aim(e){var r=cv.getBoundingClientRect();var x=(e.clientX-r.left)/r.width*cv.width,y=(e.clientY-r.top)/r.height*cv.height;angle=Math.atan2(y-(cv.height-24),x-cv.width/2);if(angle>-0.15)angle=-0.15;if(angle<-Math.PI+0.15)angle=-Math.PI+0.15;draw()}
 cv.addEventListener("mousemove",aim);
-cv.addEventListener("click",function(e){aim(e);if(over||shot)return;shot={x:cv.width/2,y:cv.height-24,vx:Math.cos(angle)*7,vy:Math.sin(angle)*7,col:nextCol};var nc=difficulty==="easy"?3:(difficulty==="hard"?5:4);nextCol=BC[Math.floor(Math.random()*nc)];requestAnimationFrame(step)});
+cv.addEventListener("click",function(e){aim(e);if(over||shot)return;shot={x:cv.width/2,y:cv.height-24,vx:Math.cos(angle)*7,vy:Math.sin(angle)*7,col:nextCol};sfx("shoot");var nc=difficulty==="easy"?3:(difficulty==="hard"?5:4);nextCol=BC[Math.floor(Math.random()*nc)];requestAnimationFrame(step)});
 $("btnNew").addEventListener("click",newGame);
 window.onDiff=function(){newGame()};
 newGame();
