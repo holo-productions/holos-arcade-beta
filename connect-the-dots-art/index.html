@@ -255,6 +255,7 @@
   svg#board{width:100%;aspect-ratio:4/3;background:#fff;border-radius:12px;border:3px solid var(--purple);touch-action:manipulation;display:block}
   .view{display:none}.view.on{display:block}
   .note{color:var(--muted);font-size:.85rem}
+  [data-diff] small{display:block;font-size:.72rem;font-weight:400;opacity:.85;line-height:1.3}
   .status{font-size:1.05rem;font-weight:700}
   textarea{width:100%;min-height:70px;border-radius:10px;border:1px solid var(--border);background:var(--navy2);color:var(--text);padding:10px;font:inherit}
   select{font:inherit;background:var(--navy2);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:9px;min-height:44px}
@@ -316,9 +317,9 @@ a{color:var(--ha-cyan)}
 <main>
   <div class="panel">
     <div class="row"><label>Difficulty</label>
-      <button data-diff="easy">Easy</button><button data-diff="normal">Normal</button><button data-diff="hard">Hard</button>
+      <button data-diff="easy">Easy<small>12 dots &middot; hints</small></button><button data-diff="normal">Normal<small>20 dots &middot; no glow</small></button><button data-diff="hard">Hard<small>30 dots &middot; no numbers, no hints</small></button>
     </div>
-    <p class="note">Easy: next dot glows. Normal: no glow. Hard: no glow, and finished pictures are counted.</p>
+    <p class="note">Easy: 12 dots, next dot glows. Normal: 20 dots, no glow. Hard: 30 dots, no glow, no numbers, no hints.</p>
     <div class="row"><label>Mode</label>
       <button data-mode="create">Play</button><button data-mode="practice">Practice</button>
     </div>
@@ -357,6 +358,7 @@ a{color:var(--ha-cyan)}
   <div class="view" id="viewRules"><div class="panel">
     <h2 style="margin-top:0">Rules</h2>
     <p>Connect the dots in number order to reveal the picture. There is no losing and no timer.</p>
+    <p>Easy pictures have 12 dots, Normal 20, Hard 30 &mdash; and on Hard the dots have no numbers and there are no hints, so follow the outline.</p>
     <p>Difficulty, mode and finished-picture counts save only in this browser on this device. Nothing is uploaded.</p>
     <p>Practice mode always shows hints and never counts finished pictures.</p>
     <p>Be kind in feedback: no personal information needed.</p>
@@ -385,6 +387,21 @@ var PICS={
  dog:{name:"Dog",pts:[[300,200],[270,130],[330,120],[370,170],[450,160],[520,120],[555,190],[545,270],[500,340],[430,375],[350,370],[300,310],[285,250]]},
  house:{name:"House",pts:[[250,320],[400,180],[550,320],[520,320],[520,470],[440,470],[440,380],[360,380],[360,470],[280,470],[280,320]]},
  rocket:{name:"Rocket",pts:[[400,90],[460,190],[475,330],[540,430],[460,420],[455,480],[345,480],[340,420],[260,430],[325,330],[340,190]]}};
+/* DIFFICULTY-SCALE-2026-11-24: dot counts are wired to difficulty (audit: Normal and Hard were identical).
+   Easy 12 dots + hints, Normal 20 dots, Hard 30 dots with no dot numbers and no hints.
+   Pictures keep their fixed outlines; extra dots are resampled evenly along the outline. */
+var DIFFS={easy:{dots:12,numbers:true},normal:{dots:20,numbers:true},hard:{dots:30,numbers:false}};
+function diffCfg(){return DIFFS[state.diff]||DIFFS.easy;}
+function numbersOn(){return state.mode==="practice"||diffCfg().numbers;}
+function resample(pts,n){var edges=[],total=0,i;for(i=0;i<pts.length;i++){var a=pts[i],b=pts[(i+1)%pts.length];var len=Math.hypot(b[0]-a[0],b[1]-a[1]);edges.push(len);total+=len;}
+  var step=total/n,out=[],e=0,pos=0;
+  for(var k=0;k<n;k++){var target=k*step;
+    while(e<pts.length-1&&pos+edges[e]<target){pos+=edges[e];e++;}
+    var a2=pts[e],b2=pts[(e+1)%pts.length];var f=edges[e]===0?0:(target-pos)/edges[e];
+    out.push([a2[0]+(b2[0]-a2[0])*f,a2[1]+(b2[1]-a2[1])*f]);}
+  return out;}
+var ptsCache={};
+function picPts(){var key=state.pic+"|"+state.diff;if(!ptsCache[key])ptsCache[key]=resample(PICS[state.pic].pts,diffCfg().dots);return ptsCache[key];}
 var state={diff:localStorage.getItem(SLUG+":difficulty")||"easy",mode:localStorage.getItem(SLUG+":mode")||"create",colour:"#ff5da2",rating:0,pic:null,next:0,done:false};
 var board=document.getElementById("board"),statusEl=document.getElementById("status");
 var NS="http://www.w3.org/2000/svg";
@@ -410,10 +427,12 @@ function startPic(key){state.pic=key;state.next=0;state.done=false;document.getE
 document.querySelectorAll("[data-pic]").forEach(function(b){b.onclick=function(){var k=b.getAttribute("data-pic");
   if(k==="random"){var keys=Object.keys(PICS);k=keys[Math.floor(Math.random()*keys.length)];}startPic(k);};});
 document.getElementById("btnRestart").onclick=function(){if(state.pic)startPic(state.pic);};
-document.getElementById("btnHint").onclick=function(){if(!state.pic||state.done)return;flashNext();
+document.getElementById("btnHint").onclick=function(){if(!state.pic||state.done)return;
+  if(state.diff==="hard"&&state.mode!=="practice"){statusEl.textContent="No hints on Hard \u2014 follow the outline from the last pink line.";return;}
+  flashNext();
   statusEl.textContent="Hint: dot "+(state.next+1)+" is glowing.";};
 function flashNext(){var dots=board.querySelectorAll(".dot");dots.forEach(function(d,i){d.setAttribute("fill",i===state.next?"#22d3ee":"#8b5cf6");});}
-function drawBoard(){board.innerHTML="";if(!state.pic)return;var pts=PICS[state.pic].pts;
+function drawBoard(){board.innerHTML="";if(!state.pic)return;var pts=picPts();
   var poly=el("polygon",{points:pts.map(function(p){return p.join(",");}).join(" "),fill:state.done&&state.filled?state.colour:"none",stroke:"#6d28d9","stroke-width":4,"stroke-linejoin":"round",id:"picShape"});
   if(!state.done)poly.setAttribute("stroke","none");board.appendChild(poly);
   for(var i=0;i<state.next&&i<pts.length-1;i++){board.appendChild(el("line",{x1:pts[i][0],y1:pts[i][1],x2:pts[i+1][0],y2:pts[i+1][1],stroke:"#ff5da2","stroke-width":5,"stroke-linecap":"round"}));}
@@ -422,15 +441,15 @@ function drawBoard(){board.innerHTML="";if(!state.pic)return;var pts=PICS[state.
     var c=el("circle",{cx:p[0],cy:p[1],r:17,class:"dot",fill:(hintsOn()&&i===state.next&&!state.done)?"#22d3ee":(i<state.next?"#34d399":"#8b5cf6"),stroke:"#fff","stroke-width":3,style:"cursor:pointer"});
     var t=el("text",{x:p[0],y:p[1]+6,"text-anchor":"middle","font-size":17,"font-weight":"bold",fill:"#fff",style:"pointer-events:none"});t.textContent=i+1;
     (function(idx,circle){circle.addEventListener("click",function(){tapDot(idx,circle);});})(i,c);
-    g.appendChild(c);g.appendChild(t);board.appendChild(g);});}
+    g.appendChild(c);if(numbersOn())g.appendChild(t);board.appendChild(g);});}
 function tapDot(i,circle){if(state.done)return;
-  if(i===state.next){state.next++;var pts=PICS[state.pic].pts;
+  if(i===state.next){state.next++;var pts=picPts();
     if(state.next>=pts.length){state.done=true;state.filled=false;drawBoard();
       document.getElementById("colourRow").style.display="flex";
       statusEl.textContent="You did it — it's a "+PICS[state.pic].name+"! Pick a colour to fill it in.";
       if(state.mode!=="practice"){var n=(+localStorage.getItem(SLUG+":finished")||0)+1;localStorage.setItem(SLUG+":finished",n);scoreLine();}}
-    else{drawBoard();statusEl.textContent="Nice! Now dot "+(state.next+1)+" of "+pts.length+".";}}
-  else{circle.setAttribute("fill","#f87171");setTimeout(drawBoard,350);statusEl.textContent="Not that one — look for dot "+(state.next+1)+".";}}
+    else{drawBoard();statusEl.textContent=numbersOn()?("Nice! Now dot "+(state.next+1)+" of "+pts.length+"."):"Nice! Keep going \u2014 find the next dot along the outline.";}}
+  else{circle.setAttribute("fill","#f87171");setTimeout(drawBoard,350);statusEl.textContent=numbersOn()?("Not that one \u2014 look for dot "+(state.next+1)+"."):"Not that one \u2014 follow the outline from the last dot.";}}
 document.getElementById("btnFill").onclick=function(){if(!state.done)return;state.filled=true;drawBoard();
   statusEl.textContent="Coloured in! Pick another picture whenever you're ready.";};
 var starsEl=document.getElementById("stars");
