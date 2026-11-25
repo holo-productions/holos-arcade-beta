@@ -3058,24 +3058,25 @@ setTimeout(function(){
   </section>
 
   <!-- ================= FRIENDS (beta testers) ================= -->
+  <!-- FRIENDS-MERGE-2026-11-25: local + cloud lists merged into one empty-state/count (union); cloud avatars are the #eggDuck SVG; all wording says Code Name. -->
   <section class="hub-panel" id="friends" aria-label="Your friends — Glitch Lab testers">
     <span class="kicker personal">Your Arcade</span>
     <h2>Friends</h2>
-    <p style="margin:0;color:var(--muted);max-width:640px">Add friends by username.</p>
+    <p style="margin:0;color:var(--muted);max-width:640px">Add friends by Code Name.</p>
     <div class="friend-code-box">
-      <div><span class="fc-label">Your username — this is how friends find you</span><span class="fc-code" id="myUsername">Sign in to see your username</span></div>
-      <button class="btn btn-dark fc-copy" id="copyUsernameBtn" type="button">📋 Copy my username</button>
+      <div><span class="fc-label">Your Code Name — this is how friends find you</span><span class="fc-code" id="myUsername">Sign in to see your Code Name</span></div>
+      <button class="btn btn-dark fc-copy" id="copyUsernameBtn" type="button">Copy my Code Name</button>
     </div>
     <p class="g-note" style="margin:0">Tell your friends your Code Name, then search for theirs below and tap Send request.</p>
     <form class="friend-add" id="friendAddForm">
-      <input id="friendInput" type="text" autocomplete="off" placeholder="Type their full username — e.g. Sam" aria-label="Search by username" />
+      <input id="friendInput" type="text" autocomplete="off" placeholder="Type their full Code Name — e.g. Sam" aria-label="Search by Code Name" />
       <button class="btn btn-dark" type="submit">🔍 Search</button>
     </form>
     <div class="friend-results" id="friendResults" aria-live="polite"></div>
     <p class="friend-msg" id="friendMsg" role="status"></p>
     <!-- CHALLENGE-ROOM-2026-11-24: Rooms live here on the Friends page — next-move tiles + the room list. Filled by the Rooms module (window.holoRooms); empty until it renders. -->
     <div id="roomsSection" aria-label="Game rooms"></div>
-    <p id="friendEmpty" style="margin:14px 0 0;font-weight:700">No friends yet — search for a tester by username above and they’ll show up here.</p>
+    <p id="friendEmpty" style="margin:14px 0 0;font-weight:700">No friends yet — search for a tester by Code Name above and they’ll show up here.</p>
     <div class="friend-grid" id="friendGrid"></div>
     <p style="margin:16px 0 0;color:var(--muted);font-size:13.5px">Friend requests work across devices — accept in your Inbox or right here.</p>
   </section>
@@ -19653,7 +19654,7 @@ function renderTesterAuth(){
     if(!n){ box.innerHTML = ''; return; }
     var results = searchAccounts(query);
     if(!results.length){
-      box.innerHTML = '<p class="friend-no-match">No tester with that exact username on this device yet — check the spelling, agent. In the Glitch Lab, friends need an account on this same browser.</p>';
+      box.innerHTML = '<p class="friend-no-match">No tester with that Code Name on this device yet — check the spelling, agent. In the Glitch Lab, friends need an account on this same browser.</p>';
       return;
     }
     var friends = friendsLoad();
@@ -19678,16 +19679,28 @@ function renderTesterAuth(){
     renderFriends();
     try { if(typeof showBadgeToast === 'function') showBadgeToast('Removed ' + (entry ? entry.name : code) + ' from your Friends'); } catch(e){}
   }
+  /* FRIENDS-MERGE-2026-11-25: one friends list — the empty state and
+     the nav count use the UNION of the local list (friendsLoad) and the
+     cloud list (window.holoFriends.cloudFriends()). Previously the
+     empty line only counted the local list, so it showed above a real
+     cloud friend (MamaBear). The cloud module's renderAll() calls this
+     same helper whenever the cloud list changes. */
+  window.holoFriendEmptySync = function(){
+    var localN = 0; try { localN = Object.keys(friendsLoad() || {}).length; } catch(e){}
+    var cloudN = 0; try { if(window.holoFriends && typeof window.holoFriends.cloudFriends === 'function') cloudN = Object.keys(window.holoFriends.cloudFriends() || {}).length; } catch(e){}
+    var total = localN + cloudN;
+    var count = document.getElementById('friendNavCount');
+    if(count){ count.textContent = total ? String(total) : ''; count.hidden = !total; }
+    var empty = document.getElementById('friendEmpty');
+    if(empty) empty.hidden = total > 0;
+  };
   function renderFriends(){
     var t = me();
     var codeEl = document.getElementById('myUsername');
-    if(codeEl) codeEl.textContent = t ? plainUsername(t) : 'Sign in to see your username';
+    if(codeEl) codeEl.textContent = t ? plainUsername(t) : 'Sign in to see your Code Name';
     var friends = friendsLoad();
     var codes = Object.keys(friends);
-    var count = document.getElementById('friendNavCount');
-    if(count){ count.textContent = codes.length ? String(codes.length) : ''; count.hidden = !codes.length; }
-    var empty = document.getElementById('friendEmpty');
-    if(empty) empty.hidden = codes.length > 0;
+    window.holoFriendEmptySync();
     var grid = document.getElementById('friendGrid');
     if(grid){
       grid.innerHTML = codes.map(function(code){
@@ -19716,7 +19729,7 @@ function renderTesterAuth(){
     var t = me();
     if(!t){ setMsg('Sign in first — your username appears once you’re in.', false); return; }
     var uname = plainUsername(t);
-    function done(){ try { if(typeof showBadgeToast === 'function') showBadgeToast('📋 Username copied: ' + uname); } catch(e){} }
+    function done(){ try { if(typeof showBadgeToast === 'function') showBadgeToast('Code Name copied: ' + uname); } catch(e){} }
     if(navigator.clipboard && navigator.clipboard.writeText){
       navigator.clipboard.writeText(uname).then(done).catch(function(){ fallback(); });
     } else fallback();
@@ -24027,10 +24040,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     }).catch(function(){ return null; });
   }
   function esc(s){ var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+  function usernameKey(name){ return encodeURIComponent(String(name || '').trim().toLowerCase()); }  var CLOUD_DUCK = '<svg aria-hidden="true"><use href="#eggDuck" preserveAspectRatio="xMidYMid slice"></use></svg>'; /* FRIENDS-MERGE-2026-11-25: cloud friend avatars use the #eggDuck yellow pixel-duck SVG (same as local cards) — the duck emoji in a gold circle read as a wrong orange circle on phones. */
   function when(ts){
     try { var d = new Date(ts); if(isNaN(d)) return ''; return d.toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ' ' + d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }); } catch(e){ return ''; }
   }
-  function usernameKey(name){ return encodeURIComponent(String(name || '').trim().toLowerCase()); }
   function myUid(){ var a = loadAuth(); return a ? a.uid : null; }
   var myNameCache = null;
   function myName(){
@@ -24274,7 +24287,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     });
   }
   function requestCard(fromUid, r){
-    return '<div class="freq-card"><span class="friend-avatar" aria-hidden="true">🦆</span>' +
+    return '<div class="freq-card"><span class="friend-avatar" aria-hidden="true">' + CLOUD_DUCK + '</span>' +
       '<div class="friend-main"><b>' + esc(r.fromName || 'A tester') + '</b><span class="freq-when">wants to be your friend · ' + esc(when(r.ts)) + '</span></div>' +
       '<div class="freq-actions"><button type="button" class="btn btn-dark" data-freq-accept="' + esc(fromUid) + '">✅ Accept</button>' +
       '<button type="button" class="btn btn-light" data-freq-decline="' + esc(fromUid) + '">Decline</button></div></div>';
@@ -24309,7 +24322,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       if(outKeys.length){
         html += '<h3 style="margin-top:14px">Requests sent</h3>' + outKeys.map(function(u){
           var o = outgoing[u] || {};
-          return '<div class="freq-card"><span class="friend-avatar" aria-hidden="true">🦆</span>' +
+          return '<div class="freq-card"><span class="friend-avatar" aria-hidden="true">' + CLOUD_DUCK + '</span>' +
             '<div class="friend-main"><b>' + esc(o.name || 'Tester') + '</b><span class="freq-when">request sent · ' + esc(when(o.ts)) + '</span></div>' +
             '<div class="freq-actions"><span class="freq-pending">Waiting…</span><button type="button" class="btn btn-light" data-freq-cancel="' + esc(u) + '">Cancel</button></div></div>';
         }).join('');
@@ -24331,7 +24344,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       grid.innerHTML = keys.map(function(u){
         var f = cloudFriends[u] || {};
         /* FRIEND-ROW-2026-11-24: no duplicated status line inside the card (the "☁️ Friends across devices" heading sits above the list); Holo's layout pick — top row: avatar + name (left), Play + Message (right, injected into .friend-top-actions by the turn/DM modules); bottom row: Unfriend + Block + Report at half the Play/Message size. Remove flow unchanged (removeCloudFriend deletes both sides, no confirm — there never was one). */
-        return '<div class="friend-card"><div class="friend-top"><span class="friend-avatar" aria-hidden="true">🦆</span>' +
+        return '<div class="friend-card"><div class="friend-top"><span class="friend-avatar" aria-hidden="true">' + CLOUD_DUCK + '</span>' +
           '<div class="friend-main"><b>' + esc(f.name || 'Tester') + '</b></div>' +
           '<div class="friend-top-actions"></div></div>' +
           '<div class="friend-bottom-actions"><button type="button" class="friend-remove" data-freq-remove="' + esc(u) + '" aria-label="Unfriend ' + esc(f.name || 'friend') + '" title="Unfriend">Unfriend</button>' +
@@ -24342,6 +24355,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       var head = document.getElementById('cloudFriendHead');
       if(head) head.hidden = !keys.length;
     }
+    /* FRIENDS-MERGE-2026-11-25: the cloud list changed — re-sync the
+       shared empty state / nav count (union of local + cloud). */
+    try { if(typeof window.holoFriendEmptySync === 'function') window.holoFriendEmptySync(); } catch(e){}
   }
   /* FRIEND-SUGGEST-HOLO-2026-11-24 (Holo 2026-11-24: "show a drop down suggestion with my agent account if were not already friends… Allow them to x it and not show it again"): when a tester focuses the empty friends search bar, suggest HoloElizabeth (the owner, OWNER_UIDS[0]) so they can add her in one tap. Never for Holo herself, never once friends, never once a request is pending either way, never after dismissal. Dismissal persists BOTH ways: an account-level flag at /users/<uid>/dismissedHoloSuggest (writable by the owner under the live DM rules — /users/$uid .write is self-only) AND an on-device localStorage flag, so the × hides it instantly and on every device. Tapping Add sends a friend request through the existing sendRequest flow (same as the Owner Dash Add friend button). Typing takes over: renderCloudResults replaces the results box, so the suggestion only ever shows on focus while the box is empty. */
   var HOLO_UID = (typeof OWNER_UIDS !== 'undefined' && OWNER_UIDS[0]) || 'wQEvX4fiG6QSDMWaxx20JaQwRPP2';
@@ -24365,7 +24381,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var box = document.getElementById('cloudFriendResults'); if(!box) return;
     if(document.getElementById('holoSuggestRow')) return;
     box.innerHTML = '<div class="friend-result holo-suggest" id="holoSuggestRow">' +
-      '<span class="friend-avatar" aria-hidden="true">🦆</span>' +
+      '<span class="friend-avatar" aria-hidden="true">' + CLOUD_DUCK + '</span>' +
       '<div class="friend-main"><b>' + esc(HOLO_NAME) + '</b><span class="holo-suggest-tag">Your Arcade host — tap to add her</span></div>' +
       '<button type="button" class="btn btn-dark" data-holo-suggest-add>📨 Add Holo</button>' +
       '<button type="button" class="holo-suggest-dismiss" data-holo-suggest-dismiss aria-label="Dismiss — don\'t show again" title="Don\'t show again">✕</button></div>';
@@ -24373,7 +24389,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(addBtn) addBtn.addEventListener('click', function(){
       sendRequest(HOLO_UID, HOLO_NAME).then(function(ok){
         var row = document.getElementById('holoSuggestRow'); if(!row) return;
-        if(ok){ row.innerHTML = '<span class="friend-avatar" aria-hidden="true">🦆</span><div class="friend-main"><b>' + esc(HOLO_NAME) + '</b></div><span class="freq-pending">Request sent ✓</span>'; }
+        if(ok){ row.innerHTML = '<span class="friend-avatar" aria-hidden="true">' + CLOUD_DUCK + '</span><div class="friend-main"><b>' + esc(HOLO_NAME) + '</b></div><span class="freq-pending">Request sent ✓</span>'; }
       });
     });
     var xBtn = box.querySelector('[data-holo-suggest-dismiss]');
@@ -24408,7 +24424,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         else if(incoming[f.uid]) action = '<button type="button" class="btn btn-dark" data-freq-accept="' + esc(f.uid) + '">✅ Accept theirs</button>';
         else if(f.accepts === false) action = '<span class="freq-pending">Not accepting requests</span>';
         else action = '<button type="button" class="btn btn-dark" data-freq-send="' + esc(f.uid) + '" data-freq-name="' + esc(f.name) + '">📨 Send request</button>';
-        return '<div class="friend-result"><span class="friend-avatar" aria-hidden="true">🦆</span>' +
+        return '<div class="friend-result"><span class="friend-avatar" aria-hidden="true">' + CLOUD_DUCK + '</span>' +
           '<div class="friend-main"><b>' + esc(f.name) + '</b></div>' + action + '</div>';
       }).join('');
       wireCards(box);
