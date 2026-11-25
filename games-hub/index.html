@@ -30861,8 +30861,10 @@ body.wt-on #loginView.wt-gate-steps .login-card .gate-form-title{margin:0 0 6px;
    commit 6ee1d0a6. The single-window shell (100dvh flex column)
    must not constrain main, so on the main view the shell
    becomes a plain scrolling block (the library view joined it in
-   LIBRARY-REVERT-2026-11-25 below). Every other view keeps the
-   shell and its walk stage. No stage ever shows on main. */
+   LIBRARY-REVERT-2026-11-25 below, and Categories / Inbox / Trophy
+   Case in CAT-INBOX-ACCT-REVERT-2026-11-25). The remaining views
+   (friends, daily, favourites, settings, about) keep the shell and
+   their walk stage. No stage ever shows on main. */
 body[data-view="main"].wt-shell{display:block;height:auto;min-height:100dvh;}
 body[data-view="main"].wt-shell>header.topbar{flex:none;}
 body[data-view="main"].wt-shell main.wrap{display:block;flex:none;min-height:0;}
@@ -30885,6 +30887,32 @@ body[data-view="library"].wt-shell>header.topbar{flex:none;}
 body[data-view="library"].wt-shell main.wrap{display:block;flex:none;min-height:0;}
 body[data-view="library"].wt-shell>footer{flex:none;}
 body[data-view="library"] .wt-stage{display:none!important;}
+
+/* ============ CAT-INBOX-ACCT-REVERT-2026-11-25 (Holo 2026-11-25 16:15) ============
+   Same call as main (15:45) and library (16:10): Categories, Inbox
+   and the Trophy Case (account) go back to their pre-walk-through
+   layouts — normal scrolling pages, no walk-through steps. The three
+   stages are not built (see the script below); the single-window
+   shell (100dvh flex column) must not constrain these views either,
+   so on each of them the shell becomes a plain scrolling block,
+   exactly as on main and library. Friends, daily, favourites,
+   settings and about keep the shell + walk stage. No stage ever
+   shows on categories, inbox or account. */
+body[data-view="categories"].wt-shell{display:block;height:auto;min-height:100dvh;}
+body[data-view="categories"].wt-shell>header.topbar{flex:none;}
+body[data-view="categories"].wt-shell main.wrap{display:block;flex:none;min-height:0;}
+body[data-view="categories"].wt-shell>footer{flex:none;}
+body[data-view="categories"] .wt-stage{display:none!important;}
+body[data-view="inbox"].wt-shell{display:block;height:auto;min-height:100dvh;}
+body[data-view="inbox"].wt-shell>header.topbar{flex:none;}
+body[data-view="inbox"].wt-shell main.wrap{display:block;flex:none;min-height:0;}
+body[data-view="inbox"].wt-shell>footer{flex:none;}
+body[data-view="inbox"] .wt-stage{display:none!important;}
+body[data-view="account"].wt-shell{display:block;height:auto;min-height:100dvh;}
+body[data-view="account"].wt-shell>header.topbar{flex:none;}
+body[data-view="account"].wt-shell main.wrap{display:block;flex:none;min-height:0;}
+body[data-view="account"].wt-shell>footer{flex:none;}
+body[data-view="account"] .wt-stage{display:none!important;}
 </style>
 
 <script>
@@ -31146,7 +31174,8 @@ function tilePager(tiles){
    built: the hero, banners, featured game and #recentShelf stay in
    their original places in main.wrap and the page scrolls like it did
    before commit 6ee1d0a6. Every other view keeps its walk stage
-   (the Library view was reverted the same way at 16:10 — see below).
+   (the Library view was reverted the same way at 16:10, and
+   Categories / Inbox / Trophy Case at 16:26 — see below).
    Two leftovers from the old main stage still need a home on main:
    (1) #recentShelf — the Library stage moves it into its Recently
    played step on visit; restoreMain() puts it back in flow whenever
@@ -31200,7 +31229,9 @@ function restoreMain(){
    borrowed the shelf is gone, and the shelf stays home on main via
    restoreMain(). The hub's own Library nav link still opens the
    whole library as one A-Z list; the Categories nav link still opens
-   it grouped by shelf. Every other view keeps its walk stage, and
+   it grouped by shelf. Categories, Inbox and Trophy Case were
+   reverted the same way at 16:26; the remaining views keep their
+   walk stage, and
    every post-6ee1d0a6 fix stays (Duck Pond player-body fix, neon
    B+E, INSERT COIN blink, categories shelf fix, tour fixes, DMs,
    turn-based, pop-ups, Code Names resolver, Message/Duel/Rooms).
@@ -31227,39 +31258,21 @@ function collect(){
 }
 
 /* ---------- CATEGORIES: the hub's own tile grid, paged on both widths ---------- */
-makeStage('categories',function(S){
-  var sec=$('#categories');
-  S.addStep('Categories',function(b){if(sec)b.appendChild(sec);});
-  function pageTiles(){
-    var grid=$('#catGrid');if(!grid)return;
-    S.__paging=true;
-    /* Unwrap any earlier paging, from any step. */
-    $$('.wt-catpage').forEach(function(p){while(p.firstChild)grid.appendChild(p.firstChild);if(p.parentNode)p.parentNode.removeChild(p);});
-    S.steps.slice(1).forEach(function(st){if(st.el.parentNode)st.el.parentNode.removeChild(st.el);});
-    S.steps=S.steps.slice(0,1);
-    var tiles=$$('.cat-tile',grid);
-    /* CATEGORIES-SHELF-FIX-2026-11-25: page on BOTH widths — 18 tiles
-       in one step never fit the window (desktop section 551px in a
-       465px step body, 12 of 18 visible; phone 10 tiles in one column
-       = 1335px in 457px, 2 of 10 visible). Two rows per page: 12 on
-       desktop (6 cols), 4 on phone (2 cols — the section heading
-       + intro take ~165px, so only 2 rows fit the ~457px body). */
-    var per=MQ_DESK.matches?12:4;
-    for(var i=0;i<tiles.length;i+=per){
-      var page=el('div','wt-catpage');page.style.display='grid';page.style.gap='12px';
-      tiles.slice(i,i+per).forEach(function(t){page.appendChild(t);});
-      if(i===0){grid.appendChild(page);}
-      else{(function(pg){S.addStep('More categories',function(b){b.appendChild(pg);});})(page);}
-    }
-    setTimeout(function(){S.__paging=false;},0);
-    showStep(S,0);
-  }
-  S.__pageTiles=pageTiles;
-  S.onShow=function(){pageTiles();};
-  new MutationObserver(function(){if(!S.__paging&&S.el.classList.contains('active'))pageTiles();}).observe($('#catGrid')||document.body,{childList:true});
-  on(MQ_DESK,'change',function(){if(S.el.classList.contains('active'))pageTiles();});
-});
-
+/* ---------- CATEGORIES: REVERTED to the pre-walk-through layout ----------
+   CAT-INBOX-ACCT-REVERT-2026-11-25 (Holo 2026-11-25 16:15): the
+   Categories view goes back to the layout from just before commit
+   6ee1d0a6 — the category tiles grid as it was, a normal scrolling
+   page, no walk-through steps/panes/dots/Back/Next. The categories
+   stage is NOT built: buildCategoryTiles() renders the tiles into
+   #catGrid (its own code, untouched) and they stay there — the stage
+   used to re-page them into .wt-catpage wrappers 12 (desktop) / 4
+   (phone) at a time, which is what left most tiles out of reach.
+   The push-2 CATEGORIES-SHELF-FIX (the #recentShelf bug — the shelf
+   rendering inside #categories and stealing 298px) is NOT touched by
+   this revert: the shelf stays stage-owned/hidden on every view
+   except main + library, and #categories shows category tiles only.
+   The .wt-catpage CSS below is dead now (no wrappers are ever made);
+   left in place like the other retired walk helpers. */
 /* ---------- DAILY: GOTD / Challenge / Dare, one tile per step ---------- */
 makeStage('daily',function(S){
   var tiles=$$('.cat-tile',$('#dailyTiles'));
@@ -31286,58 +31299,42 @@ makeStage('friends',function(S){
 });
 
 /* ---------- INBOX: list (paged) / reading ---------- */
-makeStage('inbox',function(S){
-  var sec=$('#inbox');
-  if(!sec){ /* hub builds #inbox lazily; retry on next activation */
-    setTimeout(function(){if(viewOf()==='inbox'){S.built=false;activate('inbox');}},400);return;
-  }
-  var list=$('#inboxList'),read=$('#inboxRead');
-  var s1=S.addStep('Messages',function(b){
-    if(sec){
-      var sc=el('div','wt-scroll');sc.appendChild(sec);b.appendChild(sc);
-    }
-  });
-  if(read)S.addStep('Reading',function(b){b.appendChild(read);});
-  var per=8,page=0;
-  function pageList(){
-    var rows=$$('#inboxList > *');if(!rows.length)return;
-    var pages=Math.max(1,Math.ceil(rows.length/per));
-    if(page>=pages)page=pages-1;
-    rows.forEach(function(r,i){r.style.display=(i>=page*per&&i<(page+1)*per)?'':'none';});
-    var info=S.__info;if(info)info.textContent=rows.length?('Page '+(page+1)+' of '+pages+' — '+rows.length+' messages'):'No messages yet.';
-  }
-  S.__pageList=pageList;
-  S.onShow=function(){
-    page=0;pageList();
-    var rd=$('#inboxRead');
-    if(rd&&!rd.hidden){showStep(S,1);}else{showStep(S,0);}
-  };
-  var bar=el('div','wt-pagerbar');
-  var prev=document.createElement('button');prev.type='button';prev.className='btn';prev.textContent='← Prev';
-  var info=el('div','wt-pageinfo');S.__info=info;
-  var next=document.createElement('button');next.type='button';next.className='btn btn-primary';next.textContent='Next →';
-  bar.appendChild(prev);bar.appendChild(info);bar.appendChild(next);
-  if(s1)s1.body.appendChild(bar);
-  on(prev,'click',function(){if(page>0){page--;pageList();}});
-  on(next,'click',function(){var rows=$$('#inboxList > *');if(page<Math.ceil(rows.length/per)-1){page++;pageList();}});
-  new MutationObserver(function(){
-    if(!S.el.classList.contains('active'))return;
-    var rd=$('#inboxRead');
-    if(rd&&!rd.hidden){showStep(S,1);}else{showStep(S,0);pageList();}
-  }).observe(sec,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden']});
-});
-
+/* ---------- INBOX: REVERTED to the pre-walk-through layout ----------
+   CAT-INBOX-ACCT-REVERT-2026-11-25 (Holo 2026-11-25 16:15): the Inbox
+   view goes back to the layout from just before commit 6ee1d0a6 — the
+   message list, DM threads and notifications as they were, a normal
+   scrolling page, no walk-through steps/panes/dots/Back/Next. The
+   inbox stage is NOT built: #inbox is built lazily by its own IIFE
+   (buildUI appends it to main.wrap with #inboxList, #inboxRead and
+   #dmThread inside), and it renders in place. The stage used to wrap
+   it in .wt-scroll, page the list 8 rows at a time (hiding the rest),
+   and split Messages / Reading into two steps — all gone. DM send /
+   receive, turn notices, pop-ups and the Message-button fix are hub
+   code and untouched; reading a message still unhides #inboxRead in
+   flow (closeMessage / Escape still close it). */
 /* ---------- ACCOUNT (profile): Profile / Stats & badges / Trophy Case ---------- */
-makeStage('account',function(S){
-  var panel=$('#yourArcadePanel');if(!panel)return;
-  var acct=$('#accountBox'),stats=$('#acctStatsPanel'),trophy=$('#reviewsView');
-  S.addStep('Profile',function(b){if(acct)b.appendChild(acct);});
-  S.addStep('Stats & badges',function(b){if(stats)b.appendChild(stats);});
-  S.addStep('Trophy Case',function(b){if(trophy)b.appendChild(trophy);});
-  S.onShow=function(){hideSrc(panel);};
-  S.onHide=function(){showSrc(panel);};
-});
-
+/* ---------- ACCOUNT (Trophy Case): REVERTED to the pre-walk-through layout ----------
+   CAT-INBOX-ACCT-REVERT-2026-11-25 (Holo 2026-11-25 16:15): the
+   account / Trophy Case view goes back to the layout from just before
+   commit 6ee1d0a6 — #yourArcadePanel (stats + account box) and the
+   full Trophy Case page (#reviewsView: badges, dares, stamps,
+   calendar, trophies, reports) stacked in flow on one scrolling
+   page, no walk-through steps/panes/dots/Back/Next. The account
+   stage is NOT built: it used to move #accountBox / #acctStatsPanel
+   / #reviewsView into Profile / Stats & badges / Trophy Case steps
+   and hide the panel while active. #accountBox is unhidden by the
+   hub's own account code on sign-in; openReviews() still switches
+   to the account view and scrolls the Trophy Case into view. (Note:
+   the 6-tile Trophy Case grid from the 12:28 redesign lives in the
+   games-hub SPACE file, not in this beta hub file — in this file the
+   Trophy Case has always been the full #reviewsView page, and that
+   is what is restored here.) The Profile Vault button is untouched —
+   it lives in the games-hub SPACE file (#profileView), not in this
+   beta hub file at all, so this revert cannot affect it (restored in
+   the space 14:16, owner-only, phone + desktop). The tour's step-9 prepare guards on
+   stages.account, so it degrades to a plain window scroll on this
+   scrolling page (see scrollToTarget's step-body branch, which only
+   fires inside a .wt-step-body). */
 /* ---------- SETTINGS: Display & sound / Friends & privacy / Your data ---------- */
 makeStage('settings',function(S){
   var panel=$('#settingsPanel');if(!panel)return;
