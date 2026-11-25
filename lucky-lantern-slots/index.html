@@ -255,6 +255,7 @@ header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:1
 .bar .lbl{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .pill{border:1.5px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:8px 14px;font-weight:800;font-size:13px}
 .pill[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.pill small{font-weight:600;opacity:.85}
 .pill.practice[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:#1a1405}
 .stats{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
 .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-weight:700;font-size:14px}
@@ -336,9 +337,9 @@ a{color:var(--ha-cyan)}
 </div>
 </header>
 <div class="bar" role="group" aria-label="Difficulty"><span class="lbl">Difficulty</span>
-<button class="pill" type="button" data-diff="easy" aria-pressed="false">Easy</button>
-<button class="pill" type="button" data-diff="normal" aria-pressed="true">Normal</button>
-<button class="pill" type="button" data-diff="hard" aria-pressed="false">Hard</button>
+<button class="pill" type="button" data-diff="easy" aria-pressed="false">Easy <small>luckier &middot; pairs pay 30</small></button>
+<button class="pill" type="button" data-diff="normal" aria-pressed="true">Normal <small>standard &middot; pairs pay 20</small></button>
+<button class="pill" type="button" data-diff="hard" aria-pressed="false">Hard <small>stingier &middot; pairs pay 10</small></button>
 <button class="pill practice" type="button" id="btnPractice" aria-pressed="false">Practice mode</button>
 </div>
 <div class="practice-banner" id="practiceBanner">Practice is on — scores in this round are never saved to your best.</div>
@@ -358,7 +359,7 @@ a{color:var(--ha-cyan)}
   <div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#fbbf24" stroke="#f59e0b" stroke-width="2" stroke-linejoin="round"><path d="M24 6l5.5 11.5L42 19l-9.5 8.5L35 40 24 33.5 13 40l2.5-12.5L6 19l12.5-1.5z"/></svg></div><b>Play-Money</b><p>Coins are just for fun — no real value and no cash-out.</p></div>
 </div>
 <p><strong>Play-money only: no prizes, no real money.</strong></p><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-close="howModal" type="button">Got it</button></div></div></div>
-<div class="modal-back" id="rulesModal"><div class="modal"><h2>Rules</h2><ul><li>Each spin costs 10 play-money coins.</li><li>3 of a kind pays out; pairs pay a little.</li><li>Coins are pretend — no real money, no prizes, no cash-out.</li><li>Run out? Tap Refill for 100 free pretend coins.</li><li>Practice mode never saves to your best.</li></ul><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-close="rulesModal" type="button">Close</button></div></div></div>
+<div class="modal-back" id="rulesModal"><div class="modal"><h2>Rules</h2><ul><li>Each spin costs 10 play-money coins.</li><li>3 of a kind pays out; pairs pay a little.</li><li>Easy reels are luckier and pairs pay 30; Normal is standard and pairs pay 20; Hard reels are stingier and pairs pay 10. Jackpot: 500 on Easy, 400 on Normal, 300 on Hard.</li><li>Coins are pretend — no real money, no prizes, no cash-out.</li><li>Run out? Tap Refill for 100 free pretend coins.</li><li>Practice mode never saves to your best.</li></ul><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-close="rulesModal" type="button">Close</button></div></div></div>
 <div class="modal-back" id="fbModal"><div class="modal"><h2>Tell us what you think!</h2>
 <p>Tap the stars, add a note if you like. Saved in this browser on this device only — nothing is sent anywhere.</p>
 <div class="stars" id="fbStars"><button type="button" data-star="1">★</button><button type="button" data-star="2">★</button><button type="button" data-star="3">★</button><button type="button" data-star="4">★</button><button type="button" data-star="5">★</button></div>
@@ -401,16 +402,30 @@ $("fbSave").addEventListener("click",function(){
 });
 paintChrome();
 
+/* DIFFICULTY-SCALE-2026-11-24: odds are wired to difficulty (audit: only the jackpot number changed).
+   Lantern reel weight scales the jackpot chance x1.5 on Easy / x0.7 on Hard vs Normal;
+   Easy also nudges no-match spins into pairs (+small wins), Hard breaks pairs sometimes (fewer small wins);
+   pair payout 30 / 20 / 10. Jackpot stays 500 / 400 / 300. */
+var ODDS={easy:{lanternW:1.173,pairPay:30,nudgePair:0.15,breakPair:0},normal:{lanternW:1,pairPay:20,nudgePair:0,breakPair:0},hard:{lanternW:0.872,pairPay:10,nudgePair:0,breakPair:0.25}};
 var SYM=["🏮","🍒","🍋","⭐","💎","🍀","🔔"];
+function pickSym(){var o=ODDS[difficulty];var r=Math.random()*(o.lanternW+6);return r<o.lanternW?SYM[0]:SYM[1+Math.floor(r-o.lanternW)];}
+function drawReels(){var r=[pickSym(),pickSym(),pickSym()];var o=ODDS[difficulty];
+ if(o.nudgePair&&r[0]!==r[1]&&r[1]!==r[2]&&r[0]!==r[2]&&Math.random()<o.nudgePair){r[2]=r[0];}
+ if(o.breakPair&&!(r[0]===r[1]&&r[1]===r[2])&&(r[0]===r[1]||r[1]===r[2]||r[0]===r[2])&&Math.random()<o.breakPair){
+  var pairSym=r[0]===r[1]?r[0]:r[2];var odd=r[0]===r[1]?r[2]:(r[1]===r[2]?r[0]:r[1]);
+  var others=SYM.filter(function(s){return s!==pairSym&&s!==odd;});
+  var alt=others[Math.floor(Math.random()*others.length)];
+  if(r[0]===pairSym)r[0]=alt;else r[1]=alt;}
+ return r;}
 var coins=lsGet("lucky-lantern-slots_coins",100); if(typeof coins!=="number"||coins<0) coins=100;
 var spinning=false;
 function paint(){$("coins").textContent=coins; lsSet("lucky-lantern-slots_coins",coins)}
 function payFor(a,b,c){var jackpot=difficulty==="easy"?500:(difficulty==="hard"?300:400);
  if(a===b&&b===c){if(a==="🏮")return jackpot; if(a==="💎")return 250; return 120}
- if(a===b||b===c||a===c)return 20; return 0}
+ if(a===b||b===c||a===c)return ODDS[difficulty].pairPay; return 0}
 $("btnSpin").addEventListener("click",function(){if(spinning)return;if(coins<10){say("Out of pretend coins — tap Refill!");return}
  coins-=10;paint();spinning=true;var n=0;
- var iv=setInterval(function(){var r=[SYM[Math.floor(Math.random()*SYM.length)],SYM[Math.floor(Math.random()*SYM.length)],SYM[Math.floor(Math.random()*SYM.length)]];$("reels").textContent=r.join("");
+ var iv=setInterval(function(){var r=drawReels();$("reels").textContent=r.join("");
   if(++n>12){clearInterval(iv);spinning=false;var p=payFor(r[0],r[1],r[2]);coins+=p;paint();addScore(p);
    $("pay").textContent=p>0?("You won "+p+" pretend coins! 🎉"):"No match — spin again!";say(p>0?"Winner! (pretend coins only)":"")}},70)});
 $("btnRefill").addEventListener("click",function(){coins+=100;paint();say("100 free pretend coins added.")});
