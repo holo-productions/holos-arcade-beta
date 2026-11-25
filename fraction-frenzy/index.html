@@ -1,0 +1,1696 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="data:," />
+    <title>Fraction Frenzy</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=IBM+Plex+Mono:wght@500;600;700&family=Press+Start+2P&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../shared/neon-arcade-theme.css" />
+    <style>
+      :root {
+        --bg: #eef1f4;
+        --bg-grid: rgba(23, 42, 66, 0.055);
+        --panel: #ffffff;
+        --panel-2: #f4f6f8;
+        --ink: #172a42;
+        --ink-soft: #4c5f76;
+        --line: #d3dbe3;
+        --accent: #e4572e;
+        --accent-ink: #ffffff;
+        --teal: #0e7c66;
+        --teal-soft: #dff2ec;
+        --gold: #c98a04;
+        --gold-soft: #fdf0d3;
+        --bad: #c22f2f;
+        --bad-soft: #fbe3e1;
+        --good: #177245;
+        --good-soft: #dcf2e4;
+        --shadow: 0 10px 30px rgba(23, 42, 66, 0.12);
+        --radius: 14px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0e1622;
+          --bg-grid: rgba(190, 214, 240, 0.05);
+          --panel: #16222f;
+          --panel-2: #1b2a3a;
+          --ink: #e8eef4;
+          --ink-soft: #9db0c3;
+          --line: #2c4055;
+          --accent: #f0643a;
+          --teal: #2cb894;
+          --teal-soft: #123a30;
+          --gold: #e8b23a;
+          --gold-soft: #3d3010;
+          --bad: #f0736a;
+          --bad-soft: #47201d;
+          --good: #4ecb8d;
+          --good-soft: #14382a;
+          --shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+        }
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; }
+      body {
+        font-family: "Archivo", system-ui, -apple-system, sans-serif;
+        background:
+          linear-gradient(var(--bg-grid) 1px, transparent 1px),
+          linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px),
+          var(--bg);
+        background-size: 28px 28px;
+        color: var(--ink);
+        min-height: 100vh; min-height: 100dvh;
+        -webkit-font-smoothing: antialiased;
+      }
+      button, [role="button"], select, summary, input:not([type="checkbox"], [type="radio"]) { min-height: 2.25rem; }
+      button { font-family: inherit; cursor: pointer; }
+      :focus-visible { outline: 3px solid var(--teal); outline-offset: 2px; border-radius: 6px; }
+
+      .wrap { max-width: 640px; margin: 0 auto; padding: 20px 16px 48px; }
+
+      /* ---------- Header ---------- */
+      header.top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+      .title-block h1 {
+        font-size: clamp(30px, 7vw, 42px); font-weight: 900; letter-spacing: -0.02em;
+        margin: 0; line-height: 1.02;
+      }
+      .title-block p { margin: 6px 0 0; color: var(--ink-soft); font-size: 15px; max-width: 34ch; }
+      .top-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+      .btn {
+        border: 2px solid var(--ink); background: var(--panel); color: var(--ink);
+        font-weight: 700; font-size: 14px; padding: 8px 14px; border-radius: 999px;
+        min-height: 40px; display: inline-flex; align-items: center; gap: 6px;
+        transition: transform 0.08s ease, background 0.15s ease;
+      }
+      .btn:hover { background: var(--panel-2); }
+      .btn:active { transform: translateY(1px); }
+      .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+      .btn.primary:hover { filter: brightness(1.07); background: var(--accent); }
+      .btn.teal { background: var(--teal); border-color: var(--teal); color: #fff; }
+      .btn.teal:hover { filter: brightness(1.08); background: var(--teal); }
+      .btn.big { font-size: 17px; padding: 12px 26px; min-height: 52px; width: 100%; justify-content: center; }
+      .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+      /* ---------- Bests strip ---------- */
+      .bests { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 18px 0 0; }
+      .best-card {
+        background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+        padding: 10px 12px; text-align: center;
+      }
+      .best-card .num { font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 22px; line-height: 1.1; }
+      .best-card .lbl { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin-top: 2px; }
+
+      /* ---------- Panels / screens ---------- */
+      .panel {
+        background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+        box-shadow: var(--shadow); padding: 20px; margin-top: 18px;
+      }
+      .screen[hidden] { display: none; }
+      .field-label { font-size: 12px; font-weight: 800; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-soft); margin: 18px 0 8px; }
+      .field-label:first-child { margin-top: 0; }
+      .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+      .chip {
+        border: 2px solid var(--line); background: var(--panel-2); color: var(--ink);
+        border-radius: 12px; padding: 9px 14px; font-weight: 700; font-size: 15px; min-height: 44px;
+        display: inline-flex; align-items: center; gap: 6px;
+      }
+      .chip[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--bg); }
+      .chip small { font-weight: 600; opacity: 0.75; font-size: 12px; }
+      .mode-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .mode-card.practice-card { grid-column: 1 / -1; }
+      @media (max-width: 460px) { .mode-cards { grid-template-columns: 1fr; } .mode-card.practice-card { grid-column: auto; } }
+      .practice-banner {
+        display: none; align-items: center; gap: 8px; justify-content: center;
+        background: var(--teal-soft); color: var(--teal); border: 1px solid var(--teal);
+        font-weight: 800; font-size: 13px; letter-spacing: 0.02em;
+        padding: 8px 12px; border-radius: 999px; margin-bottom: 12px; text-align: center;
+      }
+      .practice-banner.show { display: flex; }
+      .practice-banner span { color: var(--ink); font-weight: 600; }
+      .mode-card {
+        text-align: left; border: 2px solid var(--line); background: var(--panel-2); border-radius: var(--radius);
+        padding: 14px; min-height: 44px;
+      }
+      .mode-card[aria-pressed="true"] { border-color: var(--accent); background: var(--panel); box-shadow: inset 0 0 0 1px var(--accent); }
+      .mode-card .mc-name { font-weight: 800; font-size: 17px; display: block; }
+      .mode-card .mc-desc { color: var(--ink-soft); font-size: 13px; display: block; margin-top: 3px; line-height: 1.4; }
+      .mode-card .mc-best { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--gold); font-weight: 700; display: block; margin-top: 8px; }
+      .hint-line { margin-top: 16px; font-size: 13.5px; color: var(--ink-soft); background: var(--gold-soft); border-radius: 10px; padding: 10px 12px; }
+      .hint-line strong { color: var(--ink); }
+
+      /* ---------- Game screen ---------- */
+      .hud { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; }
+      .hud-stat { flex: 1 1 0; min-width: 84px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; text-align: center; }
+      .hud-stat .v { font-family: "IBM Plex Mono", monospace; font-weight: 700; font-size: 21px; line-height: 1.15; }
+      .hud-stat .k { font-size: 10.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+      .hud-stat.streak-hot .v { color: var(--accent); }
+      .timer-track { height: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; margin-top: 12px; }
+      .timer-fill { height: 100%; width: 100%; background: var(--teal); border-radius: 999px; transition: width 0.12s linear; }
+      .timer-fill.low { background: var(--bad); }
+      .q-progress { font-size: 13px; color: var(--ink-soft); font-weight: 700; margin-top: 12px; text-align: center; min-height: 18px; }
+      .hud-coin {
+        font-family: "Press Start 2P", "Courier New", monospace; font-size: 10px; line-height: 1.8;
+        color: #ffb020; text-align: center; letter-spacing: 1px; margin: 8px 0 0;
+        pointer-events: none; text-shadow: 0 0 12px rgba(255, 176, 32, 0.55);
+      }
+
+      .question-zone { text-align: center; padding: 18px 6px 6px; }
+      .q-prompt { font-size: clamp(19px, 5vw, 24px); font-weight: 800; line-height: 1.5; margin: 0; }
+      .q-visual { margin: 14px auto 0; display: flex; justify-content: center; }
+      .q-visual svg { max-width: 100%; height: auto; }
+      .feedback { min-height: 26px; text-align: center; font-weight: 800; font-size: 16px; margin-top: 12px; }
+      .feedback.good { color: var(--good); }
+      .feedback.bad { color: var(--bad); }
+      .explain { min-height: 22px; text-align: center; font-size: 14.5px; line-height: 1.5; color: var(--ink-soft); margin: 4px 0 0; }
+      .explain strong { color: var(--ink); }
+
+      /* Stacked fractions: numerator over denominator, vinculum between. */
+      .frac { display: inline-block; vertical-align: middle; text-align: center; line-height: 1.15; margin: 0 1px; }
+      .frac .fn { display: block; padding: 0 5px; }
+      .frac .fd { display: block; padding: 0 5px; border-top: 2px solid currentColor; }
+      .mixed { display: inline-flex; align-items: center; gap: 5px; }
+      .mixed .whole { font-weight: 700; }
+      .q-prompt .frac { font-size: 0.92em; }
+
+      .options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 460px; margin: 16px auto 0; }
+      @media (max-width: 420px) { .options { grid-template-columns: 1fr 1fr; gap: 8px; } }
+      .opt-btn {
+        font-family: "IBM Plex Mono", monospace; font-size: 22px; font-weight: 700;
+        background: var(--panel-2); border: 2px solid var(--line); border-radius: 14px;
+        min-height: 76px; color: var(--ink); padding: 10px 8px;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+      }
+      .opt-btn:hover { border-color: var(--ink); }
+      .opt-btn:active { transform: translateY(1px); }
+      .opt-btn .opt-key {
+        flex: none; font-family: "Archivo", sans-serif; font-size: 11px; font-weight: 800;
+        color: var(--ink-soft); border: 1px solid var(--line); border-radius: 6px;
+        width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center;
+      }
+      .opt-btn.opt-correct { border-color: var(--good); background: var(--good-soft); color: var(--good); }
+      .opt-btn.opt-wrong { border-color: var(--bad); background: var(--bad-soft); color: var(--bad); }
+      .opt-btn:disabled { cursor: default; opacity: 1; }
+      .game-actions { display: flex; gap: 8px; justify-content: center; margin-top: 16px; flex-wrap: wrap; }
+
+      /* ---------- Results ---------- */
+      .grade-badge {
+        width: 92px; height: 92px; border-radius: 50%; margin: 4px auto 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 46px; font-weight: 900; background: var(--gold-soft); color: var(--gold);
+        border: 3px solid var(--gold);
+      }
+      .results-title { text-align: center; font-size: 26px; font-weight: 900; margin: 0; }
+      .results-sub { text-align: center; color: var(--ink-soft); margin: 6px 0 0; font-size: 15px; }
+      .new-best {
+        display: none; margin: 14px auto 0; width: fit-content; background: var(--accent); color: #fff;
+        font-weight: 800; font-size: 14px; padding: 6px 14px; border-radius: 999px;
+      }
+      .new-best.show { display: block; }
+      .result-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 18px; }
+      .result-grid .best-card .num { font-size: 26px; }
+      .results-actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+      .results-actions .btn { flex: 1 1 140px; justify-content: center; min-height: 50px; }
+
+      /* ---------- Overlays ---------- */
+      .overlay {
+        position: fixed; inset: 0; background: rgba(10, 18, 28, 0.62);
+        display: none; align-items: flex-end; justify-content: center; z-index: 50; padding: 0;
+      }
+      .overlay.open { display: flex; }
+      .sheet {
+        background: var(--panel); color: var(--ink); width: 100%; max-width: 640px; max-height: 88vh;
+        overflow-y: auto; border-radius: 20px 20px 0 0; padding: 22px 20px 28px;
+      }
+      @media (min-width: 560px) {
+        .overlay { align-items: center; padding: 20px; }
+        .sheet { border-radius: 20px; }
+      }
+      .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+      .sheet-head h2 { margin: 0; font-size: 23px; font-weight: 900; }
+      .close-btn {
+        border: 2px solid var(--line); background: var(--panel-2); color: var(--ink);
+        width: 40px; height: 40px; border-radius: 50%; font-size: 18px; font-weight: 800; flex: none;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .sheet h3 { font-size: 16px; font-weight: 800; margin: 20px 0 6px; }
+      .sheet p, .sheet li { font-size: 15px; line-height: 1.55; color: var(--ink); }
+      .sheet ul, .sheet ol { padding-left: 20px; margin: 6px 0; }
+      .sheet li { margin: 4px 0; }
+      .sheet .muted { color: var(--ink-soft); }
+      table.rules-table { width: 100%; border-collapse: collapse; margin: 8px 0 4px; font-size: 14.5px; }
+      table.rules-table th, table.rules-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      table.rules-table th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); }
+      table.rules-table td.num, table.rules-table th.num { text-align: right; font-family: "IBM Plex Mono", monospace; }
+      .practice {
+        margin-top: 18px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px;
+      }
+      .practice .pq { font-size: 19px; font-weight: 800; text-align: center; }
+      .practice .pfb { text-align: center; font-weight: 800; min-height: 22px; margin-top: 8px; font-size: 14.5px; }
+      .sheet-actions { margin-top: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
+      .sheet-actions .btn { flex: 1 1 150px; justify-content: center; min-height: 48px; }
+
+      /* ---------- Feedback ---------- */
+      .star-row { display: flex; gap: 6px; margin-top: 4px; }
+      .star-btn {
+        width: 52px; height: 52px; border-radius: 12px; border: 2px solid var(--line);
+        background: var(--panel-2); color: var(--line); font-size: 28px; line-height: 1;
+        display: flex; align-items: center; justify-content: center; padding: 0;
+      }
+      .star-btn.on { color: var(--gold); border-color: var(--gold); background: var(--gold-soft); }
+      .star-btn:hover { border-color: var(--gold); }
+      .rating-word { font-weight: 800; font-size: 14.5px; margin-top: 8px; min-height: 20px; color: var(--ink-soft); }
+      .fb-textarea {
+        width: 100%; min-height: 110px; resize: vertical; font-family: inherit; font-size: 15px; line-height: 1.5;
+        border: 2px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); padding: 10px 12px;
+      }
+      .fb-textarea:focus { outline: 3px solid var(--teal); outline-offset: 1px; border-color: var(--teal); }
+      .fb-terms { font-size: 13px; color: var(--ink-soft); line-height: 1.5; margin: 12px 0 0; }
+      .fb-status { font-weight: 800; font-size: 14.5px; min-height: 21px; margin-top: 12px; }
+      .fb-status.good { color: var(--good); }
+      .fb-status.bad { color: var(--bad); }
+      .fb-saved-count { font-size: 13px; color: var(--ink-soft); margin-top: 6px; }
+
+      footer.note { text-align: center; color: var(--ink-soft); font-size: 13px; margin-top: 22px; line-height: 1.5; }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .question-zone.pop { animation: pop 0.18s ease; }
+        @keyframes pop { from { transform: scale(0.96); opacity: 0.4; } to { transform: scale(1); opacity: 1; } }
+      }
+    /* vtut visual steps */
+.vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
+@media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
+.vtut-card{position:relative;border-radius:14px;padding:12px 10px 10px;text-align:center;background:rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.12)}
+.vtut-num{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;background:#ff5fa2;color:#fff;font-size:12px;font-weight:800;line-height:20px}
+.vtut-pic{height:52px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.vtut-pic svg{width:44px;height:44px}
+.vtut-card b{display:block;font-size:.92rem;margin-bottom:2px}
+.vtut-card p{margin:0;font-size:.85rem;line-height:1.35;opacity:.92}
+@media (min-width:521px){.vtut-grid{grid-template-columns:1fr 1fr}}
+
+/* INSERT-COIN-2026-11-22 (Holo 23:13): old-school title-screen
+   blink line on game start/title areas. Same blink as the 404
+   page .coin. CSS + one tiny guarded script; no gameplay change. */
+@keyframes haCoinBlink{50%{opacity:.25}}
+.insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
+@media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+
+/* ===== FRACTION-FRENZY-THEME-2026-11-25 =====
+   Neon Arcade universal theme for Fraction Frenzy.
+   Theme colours live ONLY in this block; everything above
+   is the shared layout, everything below uses
+   var(--neon-*, #fallback) from shared/neon-arcade-theme.css.
+   Dark navy board, neon pink title, cyan shaded parts,
+   gold INSERT COIN. Press Start 2P for the title. */
+.panel.neon-board{
+  background:radial-gradient(120% 120% at 50% 0%, var(--neon-navy-2,#131a4a) 0%, var(--neon-navy-1,#080b26) 55%, var(--neon-navy-0,#05061a) 100%);
+  border:3px solid var(--neon-violet,#8f7bff);
+  color:var(--neon-ink,#f5efff);
+}
+.panel.neon-board .field-label{color:var(--neon-muted,#bda8e0)}
+.panel.neon-board .mode-card{background:rgba(19,26,74,.6);border-color:var(--neon-line-dim,rgba(140,160,255,.28));color:var(--neon-ink,#f5efff)}
+.panel.neon-board .mode-card .mc-desc{color:var(--neon-muted,#bda8e0)}
+.panel.neon-board .mode-card[aria-pressed="true"]{border-color:var(--neon-pink,#ff2d95);box-shadow:inset 0 0 0 1px var(--neon-pink,#ff2d95),0 0 16px rgba(255,45,149,.35)}
+.panel.neon-board .chip{background:rgba(19,26,74,.6);border-color:var(--neon-line-dim,rgba(140,160,255,.28));color:var(--neon-ink,#f5efff)}
+.panel.neon-board .chip[aria-pressed="true"]{background:var(--neon-pink,#ff2d95);border-color:var(--neon-pink,#ff2d95);color:#fff}
+.panel.neon-board .hint-line{background:rgba(255,233,61,.12);color:var(--neon-ink,#f5efff)}
+.panel.neon-board .hint-line strong{color:var(--neon-yellow,#ffe93d)}
+.panel.neon-board .hud-stat{background:rgba(19,26,74,.6);border-color:var(--neon-line-dim,rgba(140,160,255,.28));color:var(--neon-ink,#f5efff)}
+.panel.neon-board .hud-stat .k{color:var(--neon-muted,#bda8e0)}
+.panel.neon-board .hud-stat .v{color:var(--neon-cyan,#00e5ff)}
+.panel.neon-board .hud-stat.streak-hot .v{color:var(--neon-pink,#ff2d95)}
+.panel.neon-board .timer-track{background:rgba(19,26,74,.6);border-color:var(--neon-line-dim,rgba(140,160,255,.28))}
+.panel.neon-board .timer-fill{background:var(--neon-cyan,#00e5ff)}
+.panel.neon-board .timer-fill.low{background:var(--neon-pink,#ff2d95)}
+.panel.neon-board .q-progress{color:var(--neon-muted,#bda8e0)}
+.panel.neon-board .opt-btn{background:rgba(19,26,74,.6);border-color:var(--neon-line-dim,rgba(140,160,255,.28));color:var(--neon-ink,#f5efff)}
+.panel.neon-board .opt-btn:hover{border-color:var(--neon-cyan,#00e5ff)}
+.panel.neon-board .opt-btn .opt-key{color:var(--neon-muted,#bda8e0);border-color:var(--neon-line-dim,rgba(140,160,255,.28))}
+.panel.neon-board .opt-btn.opt-correct{border-color:var(--neon-cyan,#00e5ff);background:rgba(0,229,255,.18);color:#7df4ff}
+.panel.neon-board .opt-btn.opt-wrong{border-color:var(--neon-pink,#ff2d95);background:rgba(255,45,149,.18);color:#ff9ecf}
+.panel.neon-board .explain{color:var(--neon-muted,#bda8e0)}
+.panel.neon-board .explain strong{color:var(--neon-yellow,#ffe93d)}
+.panel.neon-board .feedback.good{color:var(--neon-cyan,#00e5ff)}
+.panel.neon-board .feedback.bad{color:var(--neon-pink,#ff2d95)}
+.panel.neon-board .best-card{background:rgba(19,26,74,.6);border-color:var(--neon-line-dim,rgba(140,160,255,.28));color:var(--neon-ink,#f5efff)}
+.panel.neon-board .best-card .lbl{color:var(--neon-muted,#bda8e0)}
+.panel.neon-board .best-card .num{color:var(--neon-yellow,#ffe93d)}
+.panel.neon-board .grade-badge{background:rgba(255,176,32,.14);color:var(--neon-gold,#ffb020);border-color:var(--neon-gold,#ffb020)}
+.panel.neon-board .results-sub{color:var(--neon-muted,#bda8e0)}
+.panel.neon-board .practice-banner{background:rgba(0,229,255,.12);color:var(--neon-cyan,#00e5ff);border-color:var(--neon-cyan,#00e5ff)}
+.panel.neon-board .practice-banner span{color:var(--neon-ink,#f5efff)}
+.panel.neon-board .btn{background:#140b33;color:var(--neon-pink,#ff2d95);border-color:var(--neon-pink,#ff2d95)}
+.panel.neon-board .btn.primary{background:var(--neon-pink,#ff2d95);border-color:var(--neon-pink,#ff2d95);color:#fff;box-shadow:0 0 16px rgba(255,45,149,.55)}
+.panel.neon-board .btn.teal{background:var(--neon-cyan,#00e5ff);border-color:var(--neon-cyan,#00e5ff);color:#05061a}
+.title-block h1{font-family:var(--neon-pixel,"Press Start 2P","Courier New",monospace);font-size:clamp(15px,4.5vw,24px);line-height:1.7;letter-spacing:0;background:linear-gradient(92deg,var(--neon-pink,#ff2d95) 0%,var(--neon-violet,#8f7bff) 52%,var(--neon-cyan,#00e5ff) 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(2px 2px 0 rgba(143,123,255,.45))}
+.hud-coin{color:var(--neon-gold,#ffb020)}
+.vtut-card{border:2px solid rgba(143,123,255,.55);background:linear-gradient(180deg,#1e1247,#140b33);color:#e9e4ff;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+.vtut-num{background:linear-gradient(92deg,#ff2d95,#8f7bff)}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="top">
+        <div class="title-block">
+          <h1>Fraction Frenzy</h1>
+          <p>Shaded bars, sliced pizzas, and fractions in lowest terms — how fast can you think in pieces?</p>
+        </div>
+        <div class="top-actions">
+          <button class="btn" id="btn-howto" type="button">How to play</button>
+          <button class="btn" id="btn-rules" type="button">Rules</button>
+          <button class="btn" id="btn-source" type="button">Source</button>
+          <button class="btn" id="btn-feedback" type="button">Feedback</button>
+        </div>
+      </header>
+
+      <div class="bests" aria-label="Your bests on this device">
+        <div class="best-card"><div class="num" id="best-sprint">0</div><div class="lbl">Best Sprint</div></div>
+        <div class="best-card"><div class="num" id="best-challenge">0</div><div class="lbl">Best Challenge</div></div>
+        <div class="best-card"><div class="num" id="best-streak">0</div><div class="lbl">Best Streak</div></div>
+      </div>
+
+      <!-- ============ SETUP ============ -->
+      <section class="panel neon-board screen" id="screen-setup" aria-label="Game setup">
+        <p class="field-label">Mode</p>
+        <div class="mode-cards" role="group" aria-label="Choose a mode">
+          <button class="mode-card" type="button" data-mode="sprint" aria-pressed="true">
+            <span class="mc-name">Sprint · 60 seconds</span>
+            <span class="mc-desc">As many fraction questions as you can before the clock runs out. Wrong answers cost 3 seconds.</span>
+            <span class="mc-best" data-mode-best="sprint"></span>
+          </button>
+          <button class="mode-card" type="button" data-mode="challenge" aria-pressed="false">
+            <span class="mc-name">Challenge · 20 questions</span>
+            <span class="mc-desc">A fixed set of 20. No clock pressure — your grade rides on accuracy and speed.</span>
+            <span class="mc-best" data-mode-best="challenge"></span>
+          </button>
+          <button class="mode-card practice-card" type="button" data-mode="practice" aria-pressed="false">
+            <span class="mc-name">Practice · No clock, no pressure</span>
+            <span class="mc-desc">Unlimited questions at your own pace. No timer, no time penalty, no score saved — just drill, see the right answer when you miss, and stop whenever you're ready.</span>
+            <span class="mc-best">Not scored · Bests aren't saved in Practice</span>
+          </button>
+        </div>
+
+        <p class="field-label">Difficulty</p>
+        <div class="chip-row" role="group" aria-label="Choose a difficulty" id="diff-row">
+          <button class="chip" type="button" data-diff="easy" aria-pressed="true">Easy <small>10 pts</small></button>
+          <button class="chip" type="button" data-diff="medium" aria-pressed="false">Medium <small>20 pts</small></button>
+          <button class="chip" type="button" data-diff="hard" aria-pressed="false">Hard <small>30 pts</small></button>
+        </div>
+
+        <div class="hint-line" id="first-hint" hidden>
+          <strong>New here?</strong> Tap <strong>How to play</strong> up top for a 30-second walkthrough with a practice question — or just hit Start and learn by doing.
+        </div>
+
+        <div style="margin-top:20px;">
+          <button class="btn primary big" id="btn-start" type="button">START</button>
+        </div>
+      </section>
+
+      <!-- ============ GAME ============ -->
+      <section class="panel neon-board screen" id="screen-game" hidden aria-label="Fraction game in progress">
+        <div class="practice-banner" id="practice-banner">Practice round <span>· No timer · No penalty · Take your time</span></div>
+        <div class="hud">
+          <div class="hud-stat"><div class="v" id="hud-score">0</div><div class="k">Score</div></div>
+          <div class="hud-stat" id="hud-streak-box"><div class="v" id="hud-streak">0</div><div class="k">Streak</div></div>
+          <div class="hud-stat"><div class="v" id="hud-right">0/0</div><div class="k">Correct</div></div>
+          <div class="hud-stat" id="hud-time-box"><div class="v" id="hud-time">60</div><div class="k" id="hud-time-label">Seconds</div></div>
+        </div>
+        <div class="timer-track" id="timer-track"><div class="timer-fill" id="timer-fill"></div></div>
+        <p class="q-progress" id="q-progress"></p>
+        <p class="hud-coin neon-blink" id="hud-coin" hidden>INSERT COIN</p>
+
+        <div class="question-zone" id="question-zone">
+          <p class="q-prompt" id="q-prompt" aria-live="polite"></p>
+          <div class="q-visual" id="q-visual"></div>
+          <div class="options" id="options" role="group" aria-label="Answer choices"></div>
+          <p class="feedback" id="feedback" aria-live="polite"></p>
+          <p class="explain" id="explain"></p>
+        </div>
+
+        <div class="game-actions">
+          <button class="btn" id="btn-quit" type="button">End game</button>
+        </div>
+      </section>
+
+      <!-- ============ RESULTS ============ -->
+      <section class="panel neon-board screen" id="screen-results" hidden aria-label="Results">
+        <div class="grade-badge" id="grade-badge">A</div>
+        <h2 class="results-title" id="results-title">Time's up!</h2>
+        <p class="results-sub" id="results-sub"></p>
+        <div class="new-best" id="new-best">New personal best!</div>
+        <div class="result-grid">
+          <div class="best-card"><div class="num" id="res-score">0</div><div class="lbl">Final score</div></div>
+          <div class="best-card"><div class="num" id="res-acc">0%</div><div class="lbl">Accuracy</div></div>
+          <div class="best-card"><div class="num" id="res-streak">0</div><div class="lbl">Best streak</div></div>
+          <div class="best-card"><div class="num" id="res-avg">—</div><div class="lbl">Avg seconds / answer</div></div>
+        </div>
+        <div class="results-actions">
+          <button class="btn primary" id="btn-again" type="button">INSERT COIN TO CONTINUE</button>
+          <button class="btn" id="btn-change" type="button">Change settings</button>
+        </div>
+      </section>
+
+      <footer class="note">
+        Single player, just you against the fractions. Bests are saved on this device only.<br />
+        Stuck on a rule mid-game? The <strong>Rules</strong> button up top has the full scoring table.
+      </footer>
+    </div>
+
+    <!-- ============ HOW TO PLAY ============ -->
+    <div class="overlay" id="overlay-howto" role="dialog" aria-modal="true" aria-labelledby="howto-title">
+      <div class="sheet">
+        <div class="sheet-head">
+          <h2 id="howto-title">How to play</h2>
+          <button class="close-btn" type="button" data-close aria-label="Close">✕</button>
+        </div>
+        <div class="vtut-grid">
+          <div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#00e5ff" stroke-width="3" stroke-linecap="round"><rect x="6" y="14" width="36" height="20" rx="3"/><path d="M18 14v20M30 14v20"/></svg></div><b>Read the picture</b><p>Count the shaded parts of the bar or pizza — that is your fraction.</p></div>
+          <div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#ff2d95" stroke-width="3" stroke-linecap="round"><path d="M10 24h28M24 8v32"/></svg></div><b>Tap an answer</b><p>Pick one of the four fractions, or press keys 1–4 on your keyboard.</p></div>
+          <div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#ffe93d" stroke="#eab308" stroke-width="2" stroke-linejoin="round"><path d="M27 4L10 28h11l-3 16 18-25H24z"/></svg></div><b>Streak bonus</b><p>Every 5 correct in a row earns a streak bonus worth half the question points.</p></div>
+          <div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#8f7bff" stroke-width="3" stroke-linecap="round"><path d="M24 40S7 29 7 17a9 9 0 0 1 17-4 9 9 0 0 1 17 4c0 12-17 23-17 23z"/></svg></div><b>Protect the streak</b><p>A wrong answer resets the streak — in Sprint it also knocks 3 seconds off.</p></div>
+          <div class="vtut-card"><span class="vtut-num">5</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#ffe93d" stroke-width="3" stroke-linecap="round"><path d="M14 8h20v10a10 10 0 0 1-20 0zM14 12H8a6 6 0 0 0 6 6M34 12h6a6 6 0 0 1-6 6M24 28v6M16 40h16M20 34h8v6h-8z"/></svg></div><b>Beat your best</b><p>Sprint and Challenge end with a grade and stats. Bests are saved on this device.</p></div>
+          <div class="vtut-card"><span class="vtut-num">6</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#00e5ff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="17"/><path d="M16 24l6 6 10-12"/></svg></div><b>Practice mode</b><p>No clock, no penalty, nothing saved — just for learning.</p></div>
+        </div>
+        <div class="practice">
+          <p style="margin:0 0 4px; font-weight:800; text-align:center;">Try one now</p>
+          <div class="pq" id="practice-q">What fraction is shaded?</div>
+          <div class="q-visual" id="practice-visual" style="margin:8px auto 0;"></div>
+          <div class="options" id="practice-options" style="margin-top:10px;"></div>
+          <p class="pfb" id="practice-fb"></p>
+        </div>
+
+        <div class="sheet-actions">
+          <button class="btn primary" type="button" data-close>Got it — let's play</button>
+          <button class="btn" type="button" id="howto-to-rules">Read the full rules</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ RULES ============ -->
+    <div class="overlay" id="overlay-rules" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+      <div class="sheet">
+        <div class="sheet-head">
+          <h2 id="rules-title">Rules</h2>
+          <button class="close-btn" type="button" data-close aria-label="Close">✕</button>
+        </div>
+
+        <h3>Objective</h3>
+        <p>Answer fraction questions — visual fractions, simplifying, equivalents, comparing, adding and subtracting, and (on Hard) mixed numbers and improper fractions. There are no opponents — you are playing against the clock, the question count, and your own saved bests.</p>
+
+        <h3>Modes &amp; win conditions</h3>
+        <ul>
+          <li><strong>Sprint (60 seconds):</strong> Answer as many questions as possible before time runs out. You "win" the round by beating your previous best Sprint score at that difficulty. The game ends the moment the timer hits zero.</li>
+          <li><strong>Challenge (20 questions):</strong> A fixed set of 20 questions with no countdown. Finish all 20 to complete the round; your grade is set by accuracy (below). You "win" by earning a higher grade or score than your saved best.</li>
+          <li><strong>Practice (unlimited):</strong> No timer, no time penalty, and no saved score. Answer as many or as few as you like, take as long as you need on each one, and tap <strong>End practice</strong> whenever you're done. Wrong answers show the correct answer and the explanation a little longer so you can learn from it. Practice doesn't change your bests or grades — it's just for warming up and drilling.</li>
+        </ul>
+
+        <h3>Scoring</h3>
+        <table class="rules-table">
+          <thead><tr><th>Difficulty</th><th class="num">Points per correct answer</th></tr></thead>
+          <tbody>
+            <tr><td>Easy — visual fractions, halves, quarters, thirds</td><td class="num">10</td></tr>
+            <tr><td>Medium — simplify, equivalents, compare, like denominators</td><td class="num">20</td></tr>
+            <tr><td>Hard — unlike denominators, mixed &amp; improper fractions</td><td class="num">30</td></tr>
+          </tbody>
+        </table>
+        <ul>
+          <li><strong>Streak bonus:</strong> every 5th correct answer in a row adds a bonus equal to half the question's points (rounded down). The streak counter turns pink while a streak of 5+ is live.</li>
+          <li><strong>Wrong answers score 0</strong> and reset the streak to zero. A wrong answer shows the correct answer and a one-line explanation.</li>
+          <li>There is no partial credit and no skipping — every question must be answered to move on.</li>
+          <li><strong>Practice is not scored:</strong> points show during the round so you can see how you're doing, but nothing is saved to your bests and no grade is given.</li>
+        </ul>
+
+        <h3>Difficulty bands</h3>
+        <table class="rules-table">
+          <thead><tr><th>Difficulty</th><th>What it covers</th></tr></thead>
+          <tbody>
+            <tr><td>Easy</td><td>Visual fractions, halves / quarters / thirds — below / early Grade 4.</td></tr>
+            <tr><td>Medium</td><td>The Saskatchewan Math Grades 4–6 core: simplify, equivalent fractions, compare, add / subtract with like denominators.</td></tr>
+            <tr><td>Hard</td><td>Above Grade 6: unlike denominators, mixed numbers, improper fractions.</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Special rules</h3>
+        <ul>
+          <li><strong>Sprint time penalty:</strong> a wrong answer in Sprint mode subtracts 3 seconds from the remaining time. Challenge mode has no time penalty.</li>
+          <li><strong>Lowest terms:</strong> on Hard visual questions, and on Medium / Hard adding and subtracting, answers are given in lowest terms. Watch out — the unreduced form often appears as a wrong option.</li>
+          <li><strong>Subtraction:</strong> the answer is never negative.</li>
+          <li><strong>Ending early:</strong> "End game" finishes the round immediately and shows results for the questions answered so far. A round with zero answered questions is not recorded.</li>
+        </ul>
+
+        <h3>Grades (Challenge mode)</h3>
+        <table class="rules-table">
+          <thead><tr><th>Grade</th><th class="num">Accuracy needed</th></tr></thead>
+          <tbody>
+            <tr><td>S</td><td class="num">100%</td></tr>
+            <tr><td>A</td><td class="num">90%+</td></tr>
+            <tr><td>B</td><td class="num">75%+</td></tr>
+            <tr><td>C</td><td class="num">60%+</td></tr>
+            <tr><td>D</td><td class="num">Below 60%</td></tr>
+          </tbody>
+        </table>
+        <p class="muted">In Sprint mode the same grades apply, based on your accuracy across every question you attempted.</p>
+
+        <h3>Saved bests</h3>
+        <p>Your best Sprint score, best Challenge score, and longest streak are stored in this browser on this device only. They are kept separately for each difficulty. Clearing your browser data resets them. Your difficulty choice is also remembered on this device.</p>
+
+        <div class="sheet-actions">
+          <button class="btn primary" type="button" data-close>Back to the game</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ SOURCE ============ -->
+    <div class="overlay" id="overlay-source" role="dialog" aria-modal="true" aria-labelledby="source-title">
+      <div class="sheet">
+        <div class="sheet-head">
+          <h2 id="source-title">Source</h2>
+          <button class="close-btn" type="button" data-close aria-label="Close">✕</button>
+        </div>
+        <h3>How answers are checked</h3>
+        <p>Every answer in this game is generated and checked by computation — greatest common divisor for simplifying, common denominators for adding and subtracting, cross-multiplication for comparing — not copied from a trivia source. Aligned to Saskatchewan Math, Grades 4–6 (fractions outcome).</p>
+        <h3>Difficulty bands</h3>
+        <ul>
+          <li><strong>Easy</strong> — visual fractions, halves / quarters / thirds — below / early Grade 4.</li>
+          <li><strong>Medium</strong> — the Saskatchewan Math Grades 4–6 core: simplify, equivalent fractions, compare, add / subtract with like denominators.</li>
+          <li><strong>Hard</strong> — above Grade 6: unlike denominators, mixed numbers, improper fractions.</li>
+        </ul>
+        <div class="sheet-actions">
+          <button class="btn primary" type="button" data-close>Back to the game</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ FEEDBACK ============ -->
+    <div class="overlay" id="overlay-feedback" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+      <div class="sheet">
+        <div class="sheet-head">
+          <h2 id="feedback-title">Feedback</h2>
+          <button class="close-btn" type="button" data-close aria-label="Close">✕</button>
+        </div>
+        <p style="margin:10px 0 0;">How's Fraction Frenzy treating you? Rate it and tell us what to fix or add.</p>
+
+        <p class="field-label" style="margin-top:18px;">Your rating</p>
+        <div class="star-row" role="group" aria-label="Rate this game from 1 to 5 stars" id="fb-stars">
+          <button class="star-btn" type="button" data-stars="1" aria-pressed="false" aria-label="1 star">★</button>
+          <button class="star-btn" type="button" data-stars="2" aria-pressed="false" aria-label="2 stars">★</button>
+          <button class="star-btn" type="button" data-stars="3" aria-pressed="false" aria-label="3 stars">★</button>
+          <button class="star-btn" type="button" data-stars="4" aria-pressed="false" aria-label="4 stars">★</button>
+          <button class="star-btn" type="button" data-stars="5" aria-pressed="false" aria-label="5 stars">★</button>
+        </div>
+        <p class="rating-word" id="fb-rating-word">Tap a star to rate</p>
+
+        <p class="field-label">What's this about? <span style="text-transform:none; letter-spacing:0; font-weight:600;">(optional)</span></p>
+        <div class="chip-row" role="group" aria-label="Feedback type" id="fb-tags">
+          <button class="chip" type="button" data-tag="bug" aria-pressed="false">Bug</button>
+          <button class="chip" type="button" data-tag="suggestion" aria-pressed="false">Suggestion</button>
+          <button class="chip" type="button" data-tag="other" aria-pressed="false">Other</button>
+        </div>
+
+        <p class="field-label">Your comment <span style="text-transform:none; letter-spacing:0; font-weight:600;">(optional)</span></p>
+        <textarea class="fb-textarea" id="fb-comment" maxlength="1000" placeholder="What did you like? What should change?"></textarea>
+
+        <p class="fb-terms">Feedback follows the same Terms &amp; Conditions as the games: no personal info needed, keep it clean (moderation rules apply), and feedback may be used to improve the games. Saved on this device only for now — it will sync once accounts arrive.</p>
+        <p class="fb-status" id="fb-status" aria-live="polite"></p>
+        <p class="fb-saved-count" id="fb-saved-count"></p>
+
+        <div class="sheet-actions">
+          <button class="btn primary" type="button" id="fb-send">Save feedback</button>
+          <button class="btn" type="button" data-close>Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+
+        /* ---------- Storage ---------- */
+        var LS_KEY = "fractionFrenzyBests.v1";
+        var DIFF_KEY = "fractionFrenzyDiff.v1";
+        function loadBests() {
+          try {
+            var raw = localStorage.getItem(LS_KEY);
+            if (raw) { var p = JSON.parse(raw); if (p && typeof p === "object") return p; }
+          } catch (e) {}
+          return {};
+        }
+        function saveBests() {
+          try { localStorage.setItem(LS_KEY, JSON.stringify(bests)); } catch (e) {}
+        }
+        var bests = loadBests(); // { "sprint:easy": 120, "challenge:hard": 300, "streak": 9, "played": true }
+
+        /* ---------- Settings state ---------- */
+        var settings = { mode: "sprint", diff: "easy" };
+        try {
+          var savedDiff = localStorage.getItem(DIFF_KEY);
+          if (savedDiff === "easy" || savedDiff === "medium" || savedDiff === "hard") settings.diff = savedDiff;
+        } catch (e) {}
+        var POINTS = { easy: 10, medium: 20, hard: 30 };
+        var SPRINT_SECONDS = 60, CHALLENGE_COUNT = 20;
+
+        /* ---------- DOM ---------- */
+        function $(id) { return document.getElementById(id); }
+        var screens = { setup: $("screen-setup"), game: $("screen-game"), results: $("screen-results") };
+        function show(name) {
+          Object.keys(screens).forEach(function (k) { screens[k].hidden = k !== name; });
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
+
+        /* ---------- Bests display ---------- */
+        function refreshBests() {
+          var bs = 0, bc = 0;
+          ["easy", "medium", "hard"].forEach(function (d) {
+            bs = Math.max(bs, bests["sprint:" + d] || 0);
+            bc = Math.max(bc, bests["challenge:" + d] || 0);
+          });
+          $("best-sprint").textContent = bs;
+          $("best-challenge").textContent = bc;
+          $("best-streak").textContent = bests.streak || 0;
+          document.querySelectorAll("[data-mode-best]").forEach(function (el) {
+            var m = el.getAttribute("data-mode-best");
+            var v = bests[m + ":" + settings.diff] || 0;
+            el.textContent = v ? ("Best on " + settings.diff + ": " + v) : ("No score yet on " + settings.diff);
+          });
+        }
+
+        /* ---------- Pure fraction math (exposed for testing) ---------- */
+        function gcd(a, b) {
+          a = Math.abs(a); b = Math.abs(b);
+          while (b) { var t = a % b; a = b; b = t; }
+          return a || 1;
+        }
+        function lcm(a, b) { return Math.abs(a * b) / gcd(a, b); }
+        function reduce(n, d) {
+          var g = gcd(n, d);
+          return { w: 0, n: n / g, d: d / g };
+        }
+        function fracKey(o) { return (o.w || 0) + "|" + o.n + "|" + o.d; }
+        function fracNum(o) { return (o.w || 0) * o.d + o.n; } // improper numerator over o.d
+        function fracVal(o) { return fracNum(o) / o.d; }
+        function compareFrac(a, b) {
+          var l = fracNum(a) * b.d - fracNum(b) * a.d;
+          return l < 0 ? -1 : (l > 0 ? 1 : 0);
+        }
+        function addFrac(a, b) { return reduce(fracNum(a) * b.d + fracNum(b) * a.d, a.d * b.d); }
+        function subFrac(a, b) { return reduce(fracNum(a) * b.d - fracNum(b) * a.d, a.d * b.d); }
+        function toMixed(n, d) {
+          var w = Math.floor(n / d), r = n % d;
+          return r === 0 ? { w: w, n: 0, d: 1 } : { w: w, n: r, d: d };
+        }
+        function toImproper(o) { return { w: 0, n: fracNum(o), d: o.d }; }
+        function fracText(o) {
+          if (o.w) return o.n ? (o.w + " " + o.n + "/" + o.d) : String(o.w);
+          return o.n + "/" + o.d;
+        }
+        function fracHtml(o) {
+          var f = '<span class="frac"><span class="fn">' + o.n + '</span><span class="fd">' + o.d + '</span></span>';
+          if (o.w) return '<span class="mixed"><span class="whole">' + o.w + '</span>' + f + '</span>';
+          return f;
+        }
+
+        /* ---------- Random helpers ---------- */
+        function rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+        function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+        function shuffle(arr) {
+          for (var i = arr.length - 1; i > 0; i--) {
+            var j = Math.floor(Math.random() * (i + 1));
+            var t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+          }
+          return arr;
+        }
+        function sampleDistinct(arr, n) {
+          var c = shuffle(arr.slice());
+          return c.slice(0, n);
+        }
+
+        /* Build a 4-option set: correct + 3 distractors.
+           pool: candidate option objects (may include same-value different-form
+           entries, e.g. the unreduced form — allowed where form is the point).
+           valueStrict: when true, distractors must differ in VALUE from correct
+           (visual, compare, equivalent) so the question has one right answer. */
+        function buildOptions(correct, pool, valueStrict) {
+          var opts = [correct];
+          var seen = {};
+          seen[fracKey(correct)] = true;
+          var shuffled = shuffle(pool.slice());
+          for (var i = 0; i < shuffled.length && opts.length < 4; i++) {
+            var o = shuffled[i];
+            if (seen[fracKey(o)]) continue;
+            if (valueStrict && compareFrac(o, correct) === 0) continue;
+            seen[fracKey(o)] = true;
+            opts.push(o);
+          }
+          // Fallback: nudge the numerator until we have 4 distinct options.
+          var guard = 0;
+          while (opts.length < 4 && guard < 200) {
+            guard++;
+            var cand = { w: 0, n: correct.n + guard, d: correct.d };
+            if (!seen[fracKey(cand)] && (!valueStrict || compareFrac(cand, correct) !== 0)) {
+              seen[fracKey(cand)] = true;
+              opts.push(cand);
+            }
+          }
+          shuffle(opts);
+          return { options: opts, correctIndex: opts.indexOf(correct) };
+        }
+        function optF(n, d) { return { w: 0, n: n, d: d }; }
+
+        /* ---------- Question generators ---------- */
+        function genVisual(diff) {
+          var den, k, kind = pick(["bar", "pizza"]);
+          if (diff === "easy") den = pick([2, 3, 4]);
+          else den = pick([5, 6, 8, 10, 12]);
+          k = rand(1, den - 1);
+          var correct = diff === "hard" ? reduce(k, den) : optF(k, den);
+          var pool = [
+            optF(k + 1, den), optF(Math.max(1, k - 1), den), optF(den - k, den),
+            optF(den, k), optF(k, den + 1), optF(k + 1, den + 1), optF(den - k + 1, den)
+          ];
+          var built = buildOptions(correct, pool, true);
+          var expl = k + " of " + den + " parts are shaded, so the fraction is " + fracText(optF(k, den)) +
+            (diff === "hard" && fracKey(correct) !== fracKey(optF(k, den))
+              ? " = " + fracText(correct) + " in lowest terms." : ".");
+          return {
+            type: "visual", promptHtml: "What fraction is shaded?",
+            promptText: "What fraction is shaded?",
+            visual: { kind: kind, n: den, k: k },
+            options: built.options, correctIndex: built.correctIndex, correct: correct,
+            explanation: expl
+          };
+        }
+
+        function genSimplify(diff) {
+          var maxDen, maxK;
+          if (diff === "easy") { maxDen = 12; maxK = 3; }
+          else if (diff === "medium") { maxDen = 24; maxK = 4; }
+          else { maxDen = 60; maxK = 12; }
+          var a, b, k, n, d;
+          do {
+            b = rand(2, 12);
+            a = rand(1, b - 1);
+            k = rand(2, maxK);
+            n = a * k; d = b * k;
+          } while (gcd(a, b) !== 1 || d > maxDen || (diff === "easy" && k > 3));
+          var correct = optF(a, b);
+          var pool = [
+            optF(n, d), // unreduced form — same value, wrong form (the classic trap)
+            optF(a + 1, b), optF(Math.max(1, a - 1), b), optF(a, b + 1),
+            optF(a, Math.max(2, b - 1)), optF(n + 1, d), optF(a + 1, b + 1)
+          ];
+          var built = buildOptions(correct, pool, false);
+          return {
+            type: "simplify",
+            promptHtml: "Write " + fracHtml(optF(n, d)) + " in lowest terms",
+            promptText: "Write " + n + "/" + d + " in lowest terms",
+            visual: null,
+            options: built.options, correctIndex: built.correctIndex, correct: correct,
+            explanation: "Divide the top and bottom by " + k + ": " + n + " ÷ " + k + " = " + a + " and " + d + " ÷ " + k + " = " + b + "."
+          };
+        }
+
+        function genEquivalent(diff) {
+          var a, b, k;
+          do { b = rand(2, 9); a = rand(1, b - 1); } while (gcd(a, b) !== 1);
+          k = diff === "easy" ? rand(2, 3) : rand(2, 5);
+          var correct = optF(a * k, b * k);
+          var pool = [
+            optF(a * k + 1, b * k), optF(Math.max(1, a * k - 1), b * k),
+            optF(a * k, b * k + 1), optF(a * k, Math.max(2, b * k - 1)),
+            optF(a * (k + 1), b * k), optF(a * k, b * (k + 1)), optF(b * k, a * k)
+          ];
+          var built = buildOptions(correct, pool, true);
+          return {
+            type: "equivalent",
+            promptHtml: "Which fraction equals " + fracHtml(optF(a, b)) + "?",
+            promptText: "Which fraction equals " + a + "/" + b + "?",
+            visual: null,
+            options: built.options, correctIndex: built.correctIndex, correct: correct,
+            explanation: "Multiply the top and bottom by " + k + ": " + a + " × " + k + " = " + (a * k) + " and " + b + " × " + k + " = " + (b * k) + "."
+          };
+        }
+
+        function genCompare(diff) {
+          var wantBig = Math.random() < 0.5;
+          var fracs = [], seenVal = {};
+          function valKey(o) { return fracNum(o) + "/" + o.d; }
+          function addUnique(o) {
+            if (fracs.length >= 4) return;
+            if (seenVal[valKey(o)]) return;
+            // also reject equal values via cross-multiplication
+            for (var i = 0; i < fracs.length; i++) if (compareFrac(fracs[i], o) === 0) return;
+            seenVal[valKey(o)] = true;
+            fracs.push(o);
+          }
+          if (diff === "easy") {
+            if (Math.random() < 0.5) {
+              var den = rand(5, 8);
+              sampleDistinct([1, 2, 3, 4, 5, 6, 7].filter(function (x) { return x < den; }), 4)
+                .forEach(function (n) { addUnique(optF(n, den)); });
+            } else {
+              var num = rand(1, 3);
+              sampleDistinct([2, 3, 4, 5, 6, 7, 8], 4)
+                .forEach(function (d) { addUnique(optF(num, d)); });
+            }
+          } else if (diff === "medium") {
+            var guard = 0;
+            while (fracs.length < 4 && guard < 300) {
+              guard++;
+              var d = rand(2, 12), n = rand(1, d - 1);
+              addUnique(optF(n, d));
+            }
+          } else {
+            var guard2 = 0, madeImproper = false;
+            while (fracs.length < 4 && guard2 < 300) {
+              guard2++;
+              var dd = rand(2, 20), nn;
+              if (!madeImproper && Math.random() < 0.3) {
+                nn = dd + rand(1, 4); madeImproper = true;
+              } else nn = rand(1, dd - 1);
+              addUnique(optF(nn, dd));
+            }
+          }
+          var correct = fracs[0];
+          fracs.forEach(function (o) {
+            if (wantBig ? compareFrac(o, correct) > 0 : compareFrac(o, correct) < 0) correct = o;
+          });
+          var decList = fracs.map(function (o) { return fracText(o) + " = " + fracVal(o).toFixed(2); }).join(", ");
+          var built = buildOptions(correct, fracs.filter(function (o) { return fracKey(o) !== fracKey(correct); }), true);
+          // buildOptions shuffles; ensure all four fractions are the options
+          built.options = shuffle(fracs.slice());
+          built.correctIndex = built.options.indexOf(correct);
+          return {
+            type: "compare",
+            promptHtml: wantBig ? "Which is biggest?" : "Which is smallest?",
+            promptText: wantBig ? "Which is biggest?" : "Which is smallest?",
+            visual: null,
+            options: built.options, correctIndex: built.correctIndex, correct: correct,
+            explanation: "As decimals: " + decList + " — so " + fracText(correct) + " is the " + (wantBig ? "biggest." : "smallest.")
+          };
+        }
+
+        function genAddLike(diff, op) {
+          op = op || pick(["+", "−"]);
+          var den = diff === "easy" ? rand(2, 6) : rand(3, 12);
+          var a, c, res;
+          if (op === "+") {
+            do { a = rand(1, den - 1); c = rand(1, den - 1); } while (a + c > den || a + c < 1);
+            res = a + c;
+          } else {
+            do { a = rand(2, den - 1); c = rand(1, a - 1); } while (a - c < 1);
+            res = a - c;
+          }
+          var correct = reduce(res, den);
+          var unreduced = optF(res, den);
+          var pool = [
+            unreduced,
+            optF(res + 1 <= den ? res + 1 : res - 1, den),
+            optF(Math.max(1, res - 1), den),
+            optF(res, den + den), // added the denominators by mistake
+            optF(a + c, den)
+          ];
+          var built = buildOptions(correct, pool, false);
+          var sym = op === "+" ? "+" : "−";
+          var verb = op === "+" ? "Add the tops, keep the bottom" : "Subtract the tops, keep the bottom";
+          return {
+            type: "addlike",
+            promptHtml: fracHtml(optF(a, den)) + " " + sym + " " + fracHtml(optF(c, den)) + " = ?",
+            promptText: a + "/" + den + " " + sym + " " + c + "/" + den + " = ?",
+            visual: null,
+            options: built.options, correctIndex: built.correctIndex, correct: correct,
+            explanation: verb + ": " + a + " " + sym + " " + c + " = " + res + ", over " + den +
+              (fracKey(correct) !== fracKey(unreduced) ? " = " + fracText(correct) + " in lowest terms." : ".")
+          };
+        }
+
+        var UNLIKE_PAIRS = [[2, 4], [3, 6], [4, 8], [5, 10], [2, 3], [3, 4], [2, 6], [4, 6], [3, 9], [2, 8], [3, 12], [4, 12], [6, 8], [6, 12]];
+        function genAddUnlike(diff, op) {
+          op = op || pick(["+", "−"]);
+          var pair = pick(UNLIKE_PAIRS), d1 = pair[0], d2 = pair[1];
+          var L = lcm(d1, d2), a, c, num;
+          if (op === "+") {
+            a = rand(1, d1 - 1); c = rand(1, d2 - 1);
+            num = a * (L / d1) + c * (L / d2);
+          } else {
+            do {
+              a = rand(1, d1 - 1); c = rand(1, d2 - 1);
+              num = a * (L / d1) - c * (L / d2);
+            } while (num <= 0);
+          }
+          var correct = reduce(num, L);
+          var pool = [
+            optF(num, L),
+            optF(num + 1, L),
+            optF(Math.max(1, num - 1), L),
+            optF(a + c, d1 + d2), // added the denominators by mistake
+            optF(a + c, L)
+          ];
+          var built = buildOptions(correct, pool, false);
+          var sym = op === "+" ? "+" : "−";
+          var a2 = a * (L / d1), c2 = c * (L / d2);
+          return {
+            type: "addunlike",
+            promptHtml: fracHtml(optF(a, d1)) + " " + sym + " " + fracHtml(optF(c, d2)) + " = ?",
+            promptText: a + "/" + d1 + " " + sym + " " + c + "/" + d2 + " = ?",
+            visual: null,
+            options: built.options, correctIndex: built.correctIndex, correct: correct,
+            explanation: "Common denominator " + L + ": " + fracText(optF(a, d1)) + " = " + fracText(optF(a2, L)) +
+              " and " + fracText(optF(c, d2)) + " = " + fracText(optF(c2, L)) + ", so " + a2 + " " + sym + " " + c2 + " = " + num +
+              " over " + L + (fracKey(correct) !== fracKey(optF(num, L)) ? " = " + fracText(correct) + " in lowest terms." : ".")
+          };
+        }
+
+        function genMixed() {
+          var dir = pick(["toMixed", "toImproper"]);
+          if (dir === "toMixed") {
+            var d = rand(2, 9), w = rand(1, 3), r;
+            do { r = rand(1, d - 1); } while (gcd(r, d) !== 1);
+            var n = w * d + r;
+            var correct = { w: w, n: r, d: d };
+            var pool = [
+              { w: 0, n: n, d: d }, // the improper form itself — right value, wrong form
+              { w: w + 1, n: r, d: d },
+              { w: Math.max(1, w - 1), n: r, d: d },
+              { w: w, n: d - r, d: d },
+              { w: w, n: Math.min(d - 1, r + 1), d: d }
+            ];
+            var built = buildOptions(correct, pool, false);
+            return {
+              type: "mixed",
+              promptHtml: "Write " + fracHtml(optF(n, d)) + " as a mixed number",
+              promptText: "Write " + n + "/" + d + " as a mixed number",
+              visual: null,
+              options: built.options, correctIndex: built.correctIndex, correct: correct,
+              explanation: d + " goes into " + n + " " + w + " time" + (w === 1 ? "" : "s") + " with " + r + " left over, so " + fracText(optF(n, d)) + " = " + fracText(correct) + "."
+            };
+          }
+          var dd = rand(2, 9), ww = rand(1, 3), nn;
+          do { nn = rand(1, dd - 1); } while (gcd(nn, dd) !== 1);
+          var correct2 = optF(ww * dd + nn, dd);
+          var pool2 = [
+            { w: ww, n: nn, d: dd }, // the mixed form itself — right value, wrong form
+            optF(ww * dd + nn + 1, dd),
+            optF(ww * dd + Math.max(1, nn - 1), dd),
+            optF((ww + 1) * dd + nn, dd),
+            optF(ww * dd, dd)
+          ];
+          var built2 = buildOptions(correct2, pool2, false);
+          return {
+            type: "mixed",
+            promptHtml: "Write " + fracHtml({ w: ww, n: nn, d: dd }) + " as an improper fraction",
+            promptText: "Write " + ww + " " + nn + "/" + dd + " as an improper fraction",
+            visual: null,
+            options: built2.options, correctIndex: built2.correctIndex, correct: correct2,
+            explanation: ww + " wholes are " + (ww * dd) + "/" + dd + ", plus " + fracText(optF(nn, dd)) + " = " + fracText(correct2) + "."
+          };
+        }
+
+        var TYPES_BY_DIFF = {
+          easy: ["visual", "simplify", "equivalent", "compare", "addlike"],
+          medium: ["visual", "simplify", "equivalent", "compare", "addlike"],
+          hard: ["visual", "simplify", "equivalent", "compare", "addlike", "addunlike", "mixed"]
+        };
+        function makeQuestion(diff, forcedType) {
+          diff = TYPES_BY_DIFF[diff] ? diff : "easy";
+          var type = forcedType || pick(TYPES_BY_DIFF[diff]);
+          switch (type) {
+            case "visual": return genVisual(diff);
+            case "simplify": return genSimplify(diff);
+            case "equivalent": return genEquivalent(diff);
+            case "compare": return genCompare(diff);
+            case "addlike": return genAddLike(diff);
+            case "addunlike": return genAddUnlike(diff);
+            case "mixed": return genMixed();
+            default: return genVisual(diff);
+          }
+        }
+
+        /* ---------- Visual SVG ---------- */
+        function visualSvg(v) {
+          if (!v) return "";
+          if (v.kind === "bar") {
+            var W = 280, H = 56, seg = W / v.n, parts = "";
+            for (var i = 0; i < v.n; i++) {
+              var fill = i < v.k ? "#00e5ff" : "#131a4a";
+              parts += '<rect x="' + (i * seg + 1) + '" y="4" width="' + (seg - 2) + '" height="48" rx="4" fill="' + fill + '" stroke="#8f7bff" stroke-width="2"/>';
+            }
+            return '<svg viewBox="0 0 280 56" width="280" height="56" role="img" aria-label="' + v.k + ' of ' + v.n + ' parts shaded">' + parts + "</svg>";
+          }
+          // pizza: circle divided into n sectors, k shaded
+          var cx = 80, cy = 80, r = 72, s = "";
+          for (var j = 0; j < v.n; j++) {
+            var a1 = (j / v.n) * Math.PI * 2 - Math.PI / 2;
+            var a2 = ((j + 1) / v.n) * Math.PI * 2 - Math.PI / 2;
+            var x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+            var x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+            var large = (a2 - a1) > Math.PI ? 1 : 0;
+            var fill2 = j < v.k ? "#ff2d95" : "#131a4a";
+            s += '<path d="M' + cx + " " + cy + " L" + x1.toFixed(1) + " " + y1.toFixed(1) +
+              " A" + r + " " + r + " 0 " + large + " 1 " + x2.toFixed(1) + " " + y2.toFixed(1) +
+              ' Z" fill="' + fill2 + '" stroke="#8f7bff" stroke-width="2"/>';
+          }
+          return '<svg viewBox="0 0 160 160" width="160" height="160" role="img" aria-label="' + v.k + ' of ' + v.n + ' slices shaded">' + s + "</svg>";
+        }
+
+        /* ---------- Game state ---------- */
+        var G = null;
+        var timerId = null;
+
+        function startGame() {
+          G = {
+            score: 0, streak: 0, bestStreak: 0, right: 0, answered: 0,
+            timeLeft: SPRINT_SECONDS, elapsed: 0, current: null,
+            startedAt: Date.now(), locked: false
+          };
+          show("game");
+          var isPractice = settings.mode === "practice";
+          $("practice-banner").classList.toggle("show", isPractice);
+          $("hud-time-label").textContent = settings.mode === "sprint" ? "Seconds" : (isPractice ? "No limit" : "Elapsed");
+          $("timer-track").style.display = settings.mode === "sprint" ? "block" : "none";
+          $("hud-coin").hidden = false;
+          $("btn-quit").textContent = isPractice ? "End practice" : "End game";
+          nextQuestion();
+          updateHud();
+          clearInterval(timerId);
+          timerId = setInterval(tick, 100);
+        }
+
+        function tick() {
+          if (!G) return;
+          if (settings.mode === "sprint") {
+            G.timeLeft -= 0.1;
+            if (G.timeLeft <= 0) { G.timeLeft = 0; updateHud(); endGame(false); return; }
+          } else {
+            G.elapsed = (Date.now() - G.startedAt) / 1000;
+          }
+          updateHud();
+        }
+
+        function updateHud() {
+          if (!G) return;
+          $("hud-score").textContent = G.score;
+          $("hud-streak").textContent = G.streak;
+          $("hud-streak-box").classList.toggle("streak-hot", G.streak >= 5);
+          $("hud-right").textContent = G.right + "/" + G.answered;
+          if (settings.mode === "sprint") {
+            $("hud-time").textContent = Math.ceil(G.timeLeft);
+            var pct = Math.max(0, (G.timeLeft / SPRINT_SECONDS) * 100);
+            var fill = $("timer-fill");
+            fill.style.width = pct + "%";
+            fill.classList.toggle("low", G.timeLeft <= 10);
+            $("q-progress").textContent = "Question " + (G.answered + 1) + " · Sprint";
+          } else if (settings.mode === "practice") {
+            $("hud-time").textContent = "∞";
+            $("q-progress").textContent = "Question " + (G.answered + 1) + " · Practice — go as long as you like, tap End practice when you're done";
+          } else {
+            $("hud-time").textContent = Math.floor(G.elapsed) + "s";
+            $("q-progress").textContent = "Question " + Math.min(G.answered + 1, CHALLENGE_COUNT) + " of " + CHALLENGE_COUNT + " · Challenge";
+          }
+        }
+
+        function renderQuestion() {
+          var q = G.current;
+          $("q-prompt").innerHTML = q.promptHtml;
+          $("q-visual").innerHTML = q.visual ? visualSvg(q.visual) : "";
+          var box = $("options");
+          box.innerHTML = "";
+          q.options.forEach(function (opt, i) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "opt-btn";
+            b.setAttribute("data-opt", String(i));
+            b.innerHTML = '<span class="opt-key">' + (i + 1) + "</span>" + fracHtml(opt);
+            b.addEventListener("click", function () { answer(i); });
+            box.appendChild(b);
+          });
+          setFeedback("", "");
+          $("explain").textContent = "";
+          var zone = $("question-zone");
+          zone.classList.remove("pop"); void zone.offsetWidth; zone.classList.add("pop");
+        }
+
+        function nextQuestion() {
+          G.current = makeQuestion(settings.diff);
+          G.locked = false;
+          renderQuestion();
+          updateHud();
+        }
+
+        function setFeedback(text, cls) {
+          var fb = $("feedback");
+          fb.textContent = text;
+          fb.className = "feedback" + (cls ? " " + cls : "");
+        }
+
+        function answer(idx) {
+          if (!G || G.locked) return;
+          G.locked = true;
+          G.answered++;
+          var q = G.current;
+          var isPractice = settings.mode === "practice";
+          var btns = $("options").querySelectorAll(".opt-btn");
+          btns.forEach(function (b) { b.disabled = true; });
+          if (btns[q.correctIndex]) btns[q.correctIndex].classList.add("opt-correct");
+          if (idx === q.correctIndex) {
+            G.right++;
+            G.streak++;
+            G.bestStreak = Math.max(G.bestStreak, G.streak);
+            var pts = POINTS[settings.diff];
+            var bonus = 0;
+            if (G.streak % 5 === 0) bonus = Math.floor(pts / 2);
+            G.score += pts + bonus;
+            if (isPractice) {
+              setFeedback("Correct! Nice work — keep going when you're ready.", "good");
+            } else {
+              setFeedback(bonus ? ("Correct! +" + pts + " and a +" + bonus + " streak bonus") : ("Correct! +" + pts), "good");
+            }
+            $("explain").innerHTML = "<strong>Why:</strong> " + q.explanation;
+            setTimeout(function () { advance(); }, isPractice ? 1200 : 500);
+          } else {
+            G.streak = 0;
+            if (btns[idx]) btns[idx].classList.add("opt-wrong");
+            var msg = "Not quite — the answer is " + fracText(q.correct);
+            if (settings.mode === "sprint") { G.timeLeft = Math.max(0, G.timeLeft - 3); msg += " (−3 sec)"; }
+            if (isPractice) { msg += " — take a sec to look it over, no rush."; }
+            setFeedback(msg, "bad");
+            $("explain").innerHTML = "<strong>Why:</strong> " + q.explanation;
+            setTimeout(function () { advance(); }, isPractice ? 2400 : 1400);
+          }
+          updateHud();
+        }
+
+        function advance() {
+          if (!G) return;
+          if (settings.mode === "challenge" && G.answered >= CHALLENGE_COUNT) { endGame(false); return; }
+          if (settings.mode === "sprint" && G.timeLeft <= 0) { endGame(false); return; }
+          nextQuestion();
+        }
+
+        function gradeFor(acc) {
+          if (acc >= 1) return "S";
+          if (acc >= 0.9) return "A";
+          if (acc >= 0.75) return "B";
+          if (acc >= 0.6) return "C";
+          return "D";
+        }
+
+        function endGame(quitEarly) {
+          clearInterval(timerId);
+          if (!G) return;
+          var g = G; G = null;
+          $("hud-coin").hidden = true;
+          if (g.answered === 0) { show("setup"); return; }
+
+          var acc = g.right / g.answered;
+          var wallSeconds = (Date.now() - g.startedAt) / 1000;
+          var avg = wallSeconds / g.answered;
+
+          var isPractice = settings.mode === "practice";
+          // Save bests — Practice rounds are never saved
+          var isBest = false;
+          if (!isPractice) {
+            var key = settings.mode + ":" + settings.diff;
+            isBest = g.score > (bests[key] || 0);
+            if (isBest) bests[key] = g.score;
+            if (g.bestStreak > (bests.streak || 0)) bests.streak = g.bestStreak;
+            bests.played = true;
+            saveBests();
+            refreshBests();
+            $("first-hint").hidden = true;
+          }
+
+          var grade = gradeFor(acc);
+          $("grade-badge").textContent = isPractice ? "✓" : grade;
+          if (isPractice) {
+            $("results-title").textContent = "Practice done — nice work!";
+            $("results-sub").textContent =
+              "On " + settings.diff + " · " + g.right + " of " + g.answered + " correct in Practice. No timer, no penalty — and this score wasn't saved, it was just for learning.";
+          } else {
+            $("results-title").textContent = quitEarly ? "Round ended" : (settings.mode === "sprint" ? "Time's up!" : "Challenge complete!");
+            $("results-sub").textContent =
+              "On " + settings.diff + " · " + g.right + " of " + g.answered + " correct" +
+              (settings.mode === "sprint" ? " in the 60-second Sprint." : " in the 20-question Challenge.");
+          }
+          $("new-best").classList.toggle("show", isBest);
+          $("btn-again").textContent = "INSERT COIN TO CONTINUE";
+          $("res-score").textContent = g.score;
+          $("res-acc").textContent = Math.round(acc * 100) + "%";
+          $("res-streak").textContent = g.bestStreak;
+          $("res-avg").textContent = avg.toFixed(1) + "s";
+          show("results");
+        }
+
+        /* ---------- Setup controls ---------- */
+        document.querySelectorAll("[data-mode]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            settings.mode = btn.getAttribute("data-mode");
+            document.querySelectorAll("[data-mode]").forEach(function (b) {
+              b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+            });
+            $("btn-start").textContent = settings.mode === "practice" ? "START PRACTICE" : "START";
+          });
+        });
+        function paintDiff() {
+          $("diff-row").querySelectorAll("[data-diff]").forEach(function (b) {
+            b.setAttribute("aria-pressed", b.getAttribute("data-diff") === settings.diff ? "true" : "false");
+          });
+        }
+        $("diff-row").addEventListener("click", function (e) {
+          var btn = e.target.closest("[data-diff]"); if (!btn) return;
+          settings.diff = btn.getAttribute("data-diff");
+          try { localStorage.setItem(DIFF_KEY, settings.diff); } catch (err) {}
+          paintDiff();
+          refreshBests();
+        });
+
+        if (!bests.played) { $("first-hint").hidden = false; }
+
+        /* ---------- Input handling ---------- */
+        document.addEventListener("keydown", function (e) {
+          if (screens.game.hidden) return;
+          if (document.querySelector(".overlay.open")) return;
+          if (e.metaKey || e.ctrlKey || e.altKey) return;
+          if (/^[1-4]$/.test(e.key)) { e.preventDefault(); answer(parseInt(e.key, 10) - 1); }
+        });
+
+        $("btn-start").addEventListener("click", startGame);
+        $("btn-again").addEventListener("click", startGame);
+        $("btn-change").addEventListener("click", function () { show("setup"); });
+        $("btn-quit").addEventListener("click", function () { endGame(true); });
+
+        /* ---------- Overlays ---------- */
+        var lastFocus = null;
+        function openOverlay(id) {
+          lastFocus = document.activeElement;
+          $(id).classList.add("open");
+          var closeBtn = $(id).querySelector("[data-close]");
+          if (closeBtn) closeBtn.focus();
+        }
+        function closeOverlay(el) {
+          el.classList.remove("open");
+          if (lastFocus && lastFocus.focus) lastFocus.focus();
+        }
+        document.querySelectorAll(".overlay").forEach(function (ov) {
+          ov.addEventListener("click", function (e) { if (e.target === ov) closeOverlay(ov); });
+          ov.querySelectorAll("[data-close]").forEach(function (b) {
+            b.addEventListener("click", function () { closeOverlay(ov); });
+          });
+        });
+        document.addEventListener("keydown", function (e) {
+          if (e.key === "Escape") {
+            document.querySelectorAll(".overlay.open").forEach(closeOverlay);
+          }
+        });
+        $("btn-howto").addEventListener("click", function () { openOverlay("overlay-howto"); newPractice(); });
+        $("btn-rules").addEventListener("click", function () { openOverlay("overlay-rules"); });
+        $("btn-source").addEventListener("click", function () { openOverlay("overlay-source"); });
+        $("btn-feedback").addEventListener("click", function () { openOverlay("overlay-feedback"); refreshFbCount(); });
+        $("howto-to-rules").addEventListener("click", function () {
+          closeOverlay($("overlay-howto"));
+          openOverlay("overlay-rules");
+        });
+
+        /* ---------- Tutorial practice question ---------- */
+        var practiceQ = null;
+        function newPractice() {
+          practiceQ = makeQuestion("easy", "visual");
+          $("practice-q").textContent = practiceQ.promptText;
+          $("practice-visual").innerHTML = visualSvg(practiceQ.visual);
+          var box = $("practice-options");
+          box.innerHTML = "";
+          practiceQ.options.forEach(function (opt, i) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "opt-btn";
+            b.innerHTML = '<span class="opt-key">' + (i + 1) + "</span>" + fracHtml(opt);
+            b.addEventListener("click", function () { checkPractice(i, b); });
+            box.appendChild(b);
+          });
+          $("practice-fb").textContent = "";
+          $("practice-fb").style.color = "";
+        }
+        function checkPractice(i, btn) {
+          var fb = $("practice-fb");
+          if (i === practiceQ.correctIndex) {
+            fb.textContent = "Exactly right — that's how every question works. Hit START when you're ready!";
+            fb.style.color = "var(--good)";
+            btn.classList.add("opt-correct");
+          } else {
+            fb.textContent = "Not quite — the answer is " + fracText(practiceQ.correct) + ". " + practiceQ.explanation;
+            fb.style.color = "var(--bad)";
+            btn.classList.add("opt-wrong");
+          }
+        }
+
+        /* ---------- Feedback ---------- */
+        var FB_KEY = "holos-arcade-feedback";
+        var fbRating = 0;
+        var fbTag = null;
+        var RATING_WORDS = ["Tap a star to rate", "1 star — needs work", "2 stars — not great", "3 stars — it's okay", "4 stars — good fun", "5 stars — love it"];
+        function loadFeedback() {
+          try {
+            var raw = localStorage.getItem(FB_KEY);
+            if (raw) { var p = JSON.parse(raw); if (Array.isArray(p)) return p; }
+          } catch (e) {}
+          return [];
+        }
+        function refreshFbCount() {
+          var n = loadFeedback().filter(function (e) { return e && e.game === "fraction-frenzy"; }).length;
+          $("fb-saved-count").textContent = n ? ("You've saved " + n + " feedback note" + (n === 1 ? "" : "s") + " for Fraction Frenzy on this device.") : "";
+        }
+        function paintStars() {
+          $("fb-stars").querySelectorAll("[data-stars]").forEach(function (b) {
+            var v = parseInt(b.getAttribute("data-stars"), 10);
+            b.classList.toggle("on", v <= fbRating);
+            b.setAttribute("aria-pressed", v === fbRating ? "true" : "false");
+          });
+          $("fb-rating-word").textContent = RATING_WORDS[fbRating];
+        }
+        function paintTags() {
+          $("fb-tags").querySelectorAll("[data-tag]").forEach(function (b) {
+            b.setAttribute("aria-pressed", b.getAttribute("data-tag") === fbTag ? "true" : "false");
+          });
+        }
+        $("fb-stars").addEventListener("click", function (e) {
+          var btn = e.target.closest("[data-stars]"); if (!btn) return;
+          fbRating = parseInt(btn.getAttribute("data-stars"), 10);
+          paintStars();
+          var st = $("fb-status"); st.textContent = ""; st.className = "fb-status";
+        });
+        $("fb-tags").addEventListener("click", function (e) {
+          var btn = e.target.closest("[data-tag]"); if (!btn) return;
+          var t = btn.getAttribute("data-tag");
+          fbTag = fbTag === t ? null : t; // tap again to clear — tag is optional
+          paintTags();
+        });
+        $("fb-send").addEventListener("click", function () {
+          var st = $("fb-status");
+          if (!fbRating) {
+            st.textContent = "Pick a star rating first — even 1 star tells us plenty.";
+            st.className = "fb-status bad";
+            return;
+          }
+          var entries = loadFeedback();
+          entries.push({
+            game: "fraction-frenzy",
+            rating: fbRating,
+            text: $("fb-comment").value.trim(),
+            tag: fbTag,
+            timestamp: new Date().toISOString()
+          });
+          try { localStorage.setItem(FB_KEY, JSON.stringify(entries)); } catch (e) {}
+          st.textContent = "Thanks! Feedback saved on this device.";
+          st.className = "fb-status good";
+          fbRating = 0;
+          fbTag = null;
+          $("fb-comment").value = "";
+          paintStars();
+          paintTags();
+          refreshFbCount();
+        });
+        paintStars();
+        paintTags();
+
+        /* ---------- Test hook: pure math + generators (harmless in production) ---------- */
+        window.__fractionFrenzy = {
+          makeQuestion: makeQuestion, gcd: gcd, lcm: lcm, reduce: reduce,
+          addFrac: addFrac, subFrac: subFrac, compareFrac: compareFrac,
+          toMixed: toMixed, toImproper: toImproper, fracText: fracText,
+          fracKey: fracKey, fracNum: fracNum, fracVal: fracVal,
+          TYPES_BY_DIFF: TYPES_BY_DIFF, POINTS: POINTS,
+          get settings() { return settings; },
+          get current() { return G ? G.current : null; },
+          get state() {
+            if (!G) return null;
+            return { score: G.score, streak: G.streak, right: G.right, answered: G.answered, timeLeft: G.timeLeft, mode: settings.mode, diff: settings.diff };
+          }
+        };
+
+        /* ---------- Init ---------- */
+        paintDiff();
+        refreshBests();
+        show("setup");
+      })();
+    </script>
+<script>
+/* INSERT-COIN-2026-11-22: place the blinking line under the title
+   on games with a start button; remove it once play starts. */
+(function(){try{
+  if(document.querySelector('.insert-coin'))return;
+  var ids=['btnStart','startBtn','playBtn','btnPlay','newBtn','newGameBtn','btnNew'];
+  var start=null,i,b;
+  for(i=0;i<ids.length;i++){start=document.getElementById(ids[i]);if(start)break;}
+  if(!start){var btns=document.querySelectorAll('button');for(i=0;i<btns.length;i++){b=btns[i];if(/^(\u25b6\s*)?(start game|start|play|new game|begin)$/i.test((b.textContent||'').trim())){start=b;break;}}}
+  if(!start)return;
+  var h=document.querySelector('h1')||document.querySelector('h2');if(!h||!h.parentNode)return;
+  var p=document.createElement('p');p.className='insert-coin';p.setAttribute('aria-hidden','true');p.textContent='INSERT COIN TO CONTINUE';
+  h.parentNode.insertBefore(p,h.nextSibling);
+  start.addEventListener('click',function(){if(p.parentNode)p.parentNode.removeChild(p);});
+}catch(e){}})();
+</script>
+<script>
+/* BACK-TO-HUB-2026-11-23: every game gets a way back to the Arcade hub
+   when opened directly (dead-end fix). Hidden inside the hub iframe,
+   where the hub itself provides navigation. */
+(function(){try{
+  if(window.self!==window.top)return;
+  if(document.querySelector('a[href*="games-hub"]'))return;
+  var a=document.createElement('a');a.href='../games-hub/';a.textContent='\u2190 Back to the Arcade';
+  a.style.cssText='position:fixed;left:10px;bottom:10px;z-index:9990;background:rgba(20,16,60,.88);color:#fff;padding:7px 14px;border-radius:999px;font:600 13px system-ui,sans-serif;text-decoration:none;border:1px solid rgba(255,255,255,.4);box-shadow:0 2px 10px rgba(0,0,0,.35)';
+  document.body.appendChild(a);
+}catch(e){}})();
+</script>
+</body>
+</html>
