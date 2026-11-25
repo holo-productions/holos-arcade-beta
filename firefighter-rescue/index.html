@@ -1,0 +1,1049 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Firefighter Rescue — Holo's Arcade</title>
+<!-- GATE-GUARD-2026-11-24 -->
+<script src="../shared/gate-guard.js"></script>
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+<style>
+  :root{
+    --navy:#0a0620; --panel:#1a1033; --yellow:#ffd93b; --violet:#7c3aed;
+    --pink:#ff3ec8; --ink:#fff; --muted:#b9aee6; --teal:#2dd4bf;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #2a1b5e, var(--navy) 62%);
+    color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    height:100dvh; overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  .wrap{ width:100%; max-width:560px; margin:0 auto; height:100dvh; display:flex; flex-direction:column; padding:10px 12px 12px; }
+  header{ text-align:center; }
+  .title{ font-size:26px; font-weight:900; letter-spacing:.5px; color:var(--yellow); text-shadow:0 2px 0 #7a4d00, 0 0 18px rgba(255,217,59,.45); line-height:1.1; }
+  .sub{ font-size:13px; color:var(--muted); margin-top:2px; }
+  .hud{ display:flex; gap:8px; align-items:stretch; margin:10px 0; }
+  .stat{ flex:1; background:rgba(255,255,255,.08); border:2px solid var(--violet); border-radius:10px; padding:4px 6px; text-align:center; min-width:0; }
+  .stat .lbl{ display:block; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
+  .stat .val{ display:block; font-size:18px; font-weight:800; line-height:1.2; }
+  .lives{ display:flex; gap:3px; justify-content:center; align-items:center; min-height:20px; }
+  .lives svg{ width:16px; height:16px; }
+  .iconbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:10px; padding:6px 12px; font-size:15px; font-weight:800; cursor:pointer; }
+  .iconbtn:hover{ border-color:var(--pink); }
+  .stage{ flex:1; min-height:0; position:relative; display:flex; align-items:center; justify-content:center; }
+  canvas{ display:block; border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,.5); touch-action:none; background:#0d0830; }
+  .overlay{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; background:rgba(10,6,32,.86); border-radius:16px; padding:18px; text-align:center; z-index:5; overflow-y:auto; }
+  .hidden{ display:none !important; }
+  .overlay h2{ margin:0; color:var(--yellow); font-size:24px; }
+  .overlay p{ margin:0; font-size:15px; line-height:1.5; max-width:400px; color:#e9e4ff; }
+  .big{ font-size:34px; font-weight:900; color:var(--yellow); }
+  .card{ background:var(--panel); border:2px solid var(--violet); border-radius:14px; padding:14px 16px; max-width:420px; width:100%; text-align:left; }
+  .card ul{ margin:0; padding-left:20px; font-size:14px; line-height:1.6; color:#e9e4ff; }
+  .card li{ margin-bottom:6px; }
+  .btn{ background:linear-gradient(#ffe45e,#ffc93b); color:#241200; font-weight:800; border:none; border-radius:999px; padding:13px 30px; font-size:18px; box-shadow:0 0 18px rgba(255,217,59,.55), 0 4px 0 #b98a00; cursor:pointer; min-width:200px; }
+  .btn:active{ transform:translateY(2px); box-shadow:0 0 18px rgba(255,217,59,.55), 0 2px 0 #b98a00; }
+  .btn2{ background:linear-gradient(135deg,var(--violet),var(--pink)); color:#fff; border:none; border-radius:999px; padding:11px 24px; font-size:16px; font-weight:700; box-shadow:0 4px 0 rgba(0,0,0,.35); cursor:pointer; min-width:200px; }
+  .btn2:active{ transform:translateY(2px); }
+  .btn3{ background:none; border:none; color:#cfc4ff; text-decoration:underline; cursor:pointer; font-size:15px; padding:6px 10px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .setrow{ display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 2px; border-bottom:1px solid rgba(255,255,255,.1); font-size:15px; }
+  .setrow:last-child{ border-bottom:none; }
+  .setrow label{ display:flex; gap:8px; align-items:center; cursor:pointer; }
+  .diffbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:999px; padding:7px 14px; font-weight:700; cursor:pointer; }
+  .diffbtn[aria-pressed="true"]{ background:var(--yellow); color:#241200; border-color:var(--yellow); }
+  .hint{ text-align:center; color:var(--muted); font-size:12px; padding-top:8px; }
+  .bestline{ font-size:14px; color:var(--muted); }
+  .bestline b{ color:var(--yellow); }
+  .newbest{ color:#7dff9e; font-weight:800; }
+  .pracbadge{ display:inline-block; background:#0a0620; color:#ffe9a3; border:2px solid var(--pink); border-radius:999px; padding:3px 12px; font-size:12px; font-weight:700; }
+  @media (max-width:360px){ .title{ font-size:22px; } .btn,.btn2{ min-width:170px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title">Firefighter Rescue</div>
+    <div class="sub">Put out the fires. Save everyone inside.</div>
+  </header>
+  <div class="hud">
+    <div class="stat"><span class="lbl">Score</span><span class="val" id="hudScore">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="hudBest">0</span></div>
+    <div class="stat"><span class="lbl">Level</span><span class="val" id="hudLevel">1</span></div>
+    <div class="stat"><span class="lbl">Lives</span><span class="val lives" id="hudLives"></span></div>
+    <button id="btnPause" class="iconbtn" aria-label="Pause game">II</button>
+  </div>
+  <div class="stage" id="stage">
+    <canvas id="game" width="480" height="640"></canvas>
+
+    <div class="overlay" id="ovMenu">
+      <h2>Firefighter Rescue</h2>
+      <p>Fires are breaking out all over the apartment block. Aim the hose, spray them out, and rescue the people and pets trapped inside — before a fire burns out of control.</p>
+      <p class="bestline">Best score: <b id="menuBest">0</b> &nbsp;·&nbsp; Difficulty: <b id="menuDiff">Normal</b></p>
+      <button class="btn" id="btnPlay">Play</button>
+      <button class="btn2" id="btnPractice">Practice</button>
+      <div class="row">
+        <button class="btn2" id="btnRules">How to Play</button>
+        <button class="btn2" id="btnSettings">Settings</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="ovRules">
+      <h2>How to Play</h2>
+      <div class="card"><ul>
+        <li><b>Aim</b> with your mouse or finger — drag across the building. On a keyboard, use the arrow keys.</li>
+        <li><b>Spray</b> by holding the mouse button or your finger down. On a keyboard, hold <b>Space</b>.</li>
+        <li>Water puts fires out. A small fire is worth <b>10</b>, a medium one <b>20</b>, a big one <b>30</b>.</li>
+        <li>If a fire is in a window with a <b>person, cat or dog</b>, putting it out rescues them for <b>+25</b>.</li>
+        <li>A fire left burning too long <b>burns out</b> and costs a life. You have <b>3 lives</b>.</li>
+        <li>Every <b>8 fires</b> out, you level up — fires come faster and grow quicker. Level up is worth <b>+50</b>.</li>
+        <li><b>Practice mode:</b> no lives lost, no score saved — just learning the ropes.</li>
+        <li>Press <b>P</b> to pause.</li>
+      </ul></div>
+      <button class="btn" id="btnRulesClose">Got it</button>
+    </div>
+
+    <div class="overlay hidden" id="ovSettings">
+      <h2>Settings</h2>
+      <div class="card">
+        <div class="setrow"><label><input type="checkbox" id="setSound" checked /> Sound effects</label></div>
+        <div class="setrow"><label><input type="checkbox" id="setMusic" checked /> Music</label></div>
+        <div class="setrow"><label><input type="checkbox" id="setHaptics" checked /> Vibration</label></div>
+        <div class="setrow"><span>Difficulty</span><span class="row" id="diffRow">
+          <button class="diffbtn" data-diff="easy" aria-pressed="false">Easy</button>
+          <button class="diffbtn" data-diff="normal" aria-pressed="true">Normal</button>
+          <button class="diffbtn" data-diff="hard" aria-pressed="false">Hard</button>
+        </span></div>
+      </div>
+      <button class="btn" id="btnSettingsClose">Done</button>
+    </div>
+
+    <div class="overlay hidden" id="ovPause">
+      <h2>Paused</h2>
+      <p>Take a breath. The fires will wait.</p>
+      <button class="btn" id="btnResume">Resume</button>
+      <button class="btn2" id="btnRestart">Restart</button>
+      <button class="btn3" id="btnExit">Exit game</button>
+    </div>
+
+    <div class="overlay hidden" id="ovEnd">
+      <h2 id="endTitle">Game Over</h2>
+      <p id="endLine">The building is safe for now.</p>
+      <div class="big" id="endScore">0</div>
+      <p class="bestline">Best: <b id="endBest">0</b> <span class="newbest hidden" id="endNewBest">New best!</span></p>
+      <p class="bestline" id="endStats"></p>
+      <button class="btn" id="btnAgain">Play again</button>
+      <button class="btn3" id="btnMenu">Main menu</button>
+    </div>
+  </div>
+  <div class="hint">Drag to aim — hold to spray. Arrow keys + Space work too.</div>
+</div>
+<script>
+(function(){
+'use strict';
+/* FIREFIGHTER-GAME-2026-11-24: Firefighter Rescue — solo score game.
+   Aim the hose, spray fires out, rescue occupants. 3 lives, levels rise. */
+var cv = document.getElementById('game');
+var ctx = cv.getContext('2d');
+var W = 480, H = 640;
+
+/* ---- layout ---- */
+var B = { x: 50, y: 70, w: 380, h: 510 }; /* building */
+var COLS = 4, ROWS = 5, WW = 80, WH = 72, GX = 20, GY = 10;
+var NOZZLE = { x: 240, y: 572 };
+var FF = { x: 240, y: 612 }; /* firefighter feet */
+function winRect(c, r){ return { x: B.x + c * (WW + GX), y: 90 + r * (WH + GY), w: WW, h: WH }; }
+function winKey(c, r){ return c + ',' + r; }
+
+/* ---- state ---- */
+var state = 'menu'; /* menu | playing | paused | over */
+var practiceMode = false;
+var score = 0, best = 0, level = 1, lives = 3, firesOut = 0, rescued = 0;
+var fires = [];      /* {c,r,heat,maxStage,occ,seed,smokeT} */
+var droplets = [];   /* {x,y,vx,vy} */
+var smoke = [];      /* {x,y,r,a} */
+var floats = [];     /* {x,y,txt,color,t} */
+var charred = {};    /* "c,r" -> until (ms) */
+var aim = { x: 240, y: 280 };
+var spraying = false;
+var keys = {};
+var spawnTimer = 2.0;
+var shakeT = 0, flashT = 0, bannerT = 0, bannerTxt = '';
+var difficulty = 'normal';
+var LS_BEST = 'firefighterRescue.best', LS_DIFF = 'firefighterRescue.difficulty';
+try {
+  best = parseInt(localStorage.getItem(LS_BEST) || '0', 10) || 0;
+  var d0 = localStorage.getItem(LS_DIFF); if (d0) difficulty = d0;
+} catch (e) {}
+
+var DIFF = {
+  easy:   { growth: 4.5, spawn: 3.8, maxFires: 2, occ: 0.35 },
+  normal: { growth: 6.0, spawn: 3.2, maxFires: 2, occ: 0.30 },
+  hard:   { growth: 8.0, spawn: 2.6, maxFires: 3, occ: 0.25 }
+};
+function params(){
+  var d = DIFF[difficulty] || DIFF.normal;
+  var lv = level - 1;
+  return {
+    growth: d.growth + lv * 1.1,
+    spawn: Math.max(1.1, d.spawn - lv * 0.22),
+    maxFires: Math.min(6, d.maxFires + Math.floor(lv / 2)),
+    occ: d.occ
+  };
+}
+
+/* ---- helpers ---- */
+function $(id){ return document.getElementById(id); }
+function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
+function rnd(a, b){ return a + Math.random() * (b - a); }
+
+/* ---- audio (gated by holoSettings) ---- */
+var AC = null;
+function ac(){
+  if (!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  return AC;
+}
+function beep(f, dur, type, g, slide){
+  try {
+    if (!window.holoSettings || !window.holoSettings.sound) return;
+    var c = ac(); if (!c) return;
+    var o = c.createOscillator(), gn = c.createGain();
+    o.type = type || 'sine'; o.frequency.value = f;
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, slide), c.currentTime + dur);
+    gn.gain.value = g || 0.1;
+    gn.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+    o.connect(gn); gn.connect(c.destination);
+    o.start(); o.stop(c.currentTime + dur);
+  } catch (e) {}
+}
+function sfx(name){
+  if (name === 'out') beep(520, 0.18, 'triangle', 0.09, 170);
+  else if (name === 'rescue'){ beep(660, 0.12, 'sine', 0.11); setTimeout(function(){ beep(880, 0.2, 'sine', 0.11); }, 110); }
+  else if (name === 'lost') beep(220, 0.4, 'sawtooth', 0.11, 110);
+  else if (name === 'level'){ [523, 659, 784].forEach(function(f, i){ setTimeout(function(){ beep(f, 0.14, 'sine', 0.11); }, i * 110); }); }
+  else if (name === 'over'){ [392, 330, 262].forEach(function(f, i){ setTimeout(function(){ beep(f, 0.22, 'triangle', 0.1); }, i * 160); }); }
+}
+function buzz(ms){ try { if (window.holoBuzz) window.holoBuzz(ms); } catch (e) {} }
+
+/* ---- overlays ---- */
+var overlays = ['ovMenu', 'ovRules', 'ovSettings', 'ovPause', 'ovEnd'];
+function show(id){
+  overlays.forEach(function(o){ $(o).classList.toggle('hidden', o !== id); });
+}
+function showNone(){ overlays.forEach(function(o){ $(o).classList.add('hidden'); }); }
+function showMenu(){
+  state = 'menu';
+  $('menuBest').textContent = best;
+  $('menuDiff').textContent = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+  show('ovMenu');
+  updateHUD();
+}
+
+/* ---- HUD ---- */
+var FLAME_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 C9 4 13 5 13 9.5 A5 5 0 1 1 3 9.5 C3 6.5 5.5 5.5 6 3 C6.8 4.2 7.4 4.8 8 1 Z" fill="FILL"/></svg>';
+function updateHUD(){
+  $('hudScore').textContent = score;
+  $('hudBest').textContent = best;
+  $('hudLevel').textContent = level;
+  var h = '';
+  for (var i = 0; i < 3; i++){
+    h += FLAME_SVG.replace('FILL', i < lives ? '#ff7b1c' : '#3a3450');
+  }
+  $('hudLives').innerHTML = h;
+}
+
+/* ---- game flow ---- */
+function startGame(practice){
+  practiceMode = !!practice;
+  score = 0; level = 1; lives = 3; firesOut = 0; rescued = 0;
+  fires = []; droplets = []; smoke = []; floats = []; charred = {};
+  spawnTimer = 1.6; shakeT = 0; flashT = 0; bannerT = 0;
+  aim = { x: 240, y: 280 };
+  state = 'playing';
+  showNone();
+  updateHUD();
+}
+function pauseGame(){
+  if (state !== 'playing') return;
+  state = 'paused';
+  show('ovPause');
+}
+function resumeGame(){
+  if (state !== 'paused') return;
+  state = 'playing';
+  showNone();
+}
+function gameOver(){
+  state = 'over';
+  sfx('over');
+  var isBest = false;
+  if (!practiceMode && score > best){
+    best = score; isBest = true;
+    try { localStorage.setItem(LS_BEST, String(best)); } catch (e) {}
+  }
+  $('endTitle').textContent = 'Out of Lives!';
+  $('endLine').textContent = practiceMode
+    ? 'Practice run over — the fires got the better of the building this time.'
+    : 'The building is safe for now. The crew will be back for the next call.';
+  $('endScore').textContent = score;
+  $('endBest').textContent = best;
+  $('endNewBest').classList.toggle('hidden', !isBest);
+  $('endStats').textContent = 'Level ' + level + '  ·  ' + firesOut + ' fires out  ·  ' + rescued + ' rescued';
+  show('ovEnd');
+  updateHUD();
+}
+
+/* ---- fires ---- */
+function freeWindows(){
+  var out = [], now = Date.now();
+  for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++){
+    var k = winKey(c, r);
+    if (charred[k] && charred[k] > now) continue;
+    var busy = false;
+    for (var i = 0; i < fires.length; i++) if (fires[i].c === c && fires[i].r === r){ busy = true; break; }
+    if (!busy) out.push({ c: c, r: r });
+  }
+  return out;
+}
+function spawnFire(){
+  var free = freeWindows();
+  if (!free.length) return;
+  var w = free[Math.floor(Math.random() * free.length)];
+  var occ = null;
+  if (Math.random() < params().occ){
+    var roll = Math.random();
+    occ = roll < 0.6 ? 'person' : (roll < 0.8 ? 'cat' : 'dog');
+  }
+  fires.push({ c: w.c, r: w.r, heat: 0, maxStage: 0, occ: occ, seed: Math.random() * 10, smokeT: 0 });
+}
+function fireStage(f){ return f.heat < 35 ? 0 : (f.heat < 70 ? 1 : 2); }
+function extinguish(f, idx){
+  var pts = [10, 20, 30][f.maxStage];
+  score += pts;
+  firesOut++;
+  var w = winRect(f.c, f.r);
+  floats.push({ x: w.x + w.w / 2, y: w.y + 8, txt: '+' + pts, color: '#7dff9e', t: 1.2 });
+  if (f.occ){
+    score += 25; rescued++;
+    floats.push({ x: w.x + w.w / 2, y: w.y + 30, txt: 'Rescued! +25', color: '#ffd93b', t: 1.5 });
+    sfx('rescue'); buzz(30);
+  } else {
+    sfx('out');
+  }
+  fires.splice(idx, 1);
+  if (firesOut % 8 === 0){
+    level++;
+    score += 50;
+    bannerTxt = 'LEVEL ' + level + '!  +50';
+    bannerT = 1.6;
+    sfx('level');
+  }
+  updateHUD();
+}
+function burnOut(f, idx){
+  var w = winRect(f.c, f.r);
+  charred[winKey(f.c, f.r)] = Date.now() + 6000;
+  fires.splice(idx, 1);
+  shakeT = 0.35; flashT = 0.3;
+  if (practiceMode){
+    floats.push({ x: w.x + w.w / 2, y: w.y + 8, txt: 'Burned out — practice, no life lost', color: '#cfc4ff', t: 1.6 });
+    return;
+  }
+  lives--;
+  sfx('lost'); buzz(80);
+  floats.push({ x: w.x + w.w / 2, y: w.y + 8, txt: 'Fire burned out! -1 life', color: '#ff5b5b', t: 1.6 });
+  updateHUD();
+  if (lives <= 0) gameOver();
+}
+
+/* ---- water ---- */
+var sprayAcc = 0;
+function spawnDroplets(dt){
+  sprayAcc += dt * 100;
+  while (sprayAcc >= 1){
+    sprayAcc -= 1;
+    var dx = aim.x - NOZZLE.x, dy = aim.y - NOZZLE.y;
+    var len = Math.sqrt(dx * dx + dy * dy) || 1;
+    var ang = Math.atan2(dy, dx) + rnd(-0.06, 0.06);
+    var sp = rnd(620, 760);
+    droplets.push({ x: NOZZLE.x, y: NOZZLE.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp });
+  }
+}
+function updateDroplets(dt){
+  var aimDist = Math.sqrt(Math.pow(aim.x - NOZZLE.x, 2) + Math.pow(aim.y - NOZZLE.y, 2));
+  for (var i = droplets.length - 1; i >= 0; i--){
+    var d = droplets[i];
+    d.x += d.vx * dt; d.y += d.vy * dt;
+    var dead = false;
+    if (d.y > H + 10 || d.x < -10 || d.x > W + 10) dead = true;
+    var travelled = Math.sqrt(Math.pow(d.x - NOZZLE.x, 2) + Math.pow(d.y - NOZZLE.y, 2));
+    if (travelled > aimDist + 26) dead = true;
+    if (!dead){
+      for (var j = fires.length - 1; j >= 0; j--){
+        var f = fires[j], w = winRect(f.c, f.r);
+        if (d.x >= w.x && d.x <= w.x + w.w && d.y >= w.y && d.y <= w.y + w.h){
+          f.heat -= 12;
+          dead = true;
+          if (f.heat <= 0) extinguish(f, j);
+          break;
+        }
+      }
+    }
+    if (dead) droplets.splice(i, 1);
+  }
+}
+
+/* ---- update ---- */
+var lastT = 0;
+function update(dt){
+  if (state !== 'playing') return;
+  /* keyboard aim */
+  var kSpeed = 300 * dt;
+  if (keys['ArrowLeft']) aim.x -= kSpeed;
+  if (keys['ArrowRight']) aim.x += kSpeed;
+  if (keys['ArrowUp']) aim.y -= kSpeed;
+  if (keys['ArrowDown']) aim.y += kSpeed;
+  aim.x = clamp(aim.x, 20, W - 20);
+  aim.y = clamp(aim.y, 40, H - 60);
+  if (spraying) spawnDroplets(dt);
+  updateDroplets(dt);
+  /* fires grow */
+  var p = params();
+  for (var i = fires.length - 1; i >= 0; i--){
+    var f = fires[i];
+    f.heat += p.growth * dt;
+    var st = fireStage(f);
+    if (st > f.maxStage) f.maxStage = st;
+    f.smokeT -= dt;
+    if (f.smokeT <= 0){
+      f.smokeT = 0.35;
+      var w = winRect(f.c, f.r);
+      smoke.push({ x: w.x + w.w / 2 + rnd(-14, 14), y: w.y + 6, r: rnd(5, 9), a: 0.5 });
+    }
+    if (f.heat >= 100) burnOut(f, i);
+  }
+  /* spawning */
+  spawnTimer -= dt;
+  if (spawnTimer <= 0){
+    spawnTimer = p.spawn * rnd(0.85, 1.15);
+    if (fires.length < p.maxFires) spawnFire();
+  }
+  /* smoke + floats */
+  for (var s = smoke.length - 1; s >= 0; s--){
+    smoke[s].y -= 34 * dt; smoke[s].r += 9 * dt; smoke[s].a -= 0.35 * dt;
+    if (smoke[s].a <= 0) smoke.splice(s, 1);
+  }
+  for (var q = floats.length - 1; q >= 0; q--){
+    floats[q].y -= 26 * dt; floats[q].t -= dt;
+    if (floats[q].t <= 0) floats.splice(q, 1);
+  }
+  if (shakeT > 0) shakeT -= dt;
+  if (flashT > 0) flashT -= dt;
+  if (bannerT > 0) bannerT -= dt;
+}
+
+/* ---- drawing ---- */
+function drawFlame(x, y, s, t, seed){
+  var wob = Math.sin(t * 9 + seed) * s * 0.08;
+  ctx.save();
+  ctx.translate(x + wob, y);
+  function tear(scale, color){
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, -s * scale);
+    ctx.bezierCurveTo(s * 0.7 * scale, -s * 0.25 * scale, s * 0.55 * scale, s * 0.55 * scale, 0, s * 0.62 * scale);
+    ctx.bezierCurveTo(-s * 0.55 * scale, s * 0.55 * scale, -s * 0.7 * scale, -s * 0.25 * scale, 0, -s * scale);
+    ctx.fill();
+  }
+  tear(1.0, '#e63b12');
+  tear(0.72, '#ff7b1c');
+  tear(0.45, '#ffd93b');
+  ctx.restore();
+}
+function drawPerson(x, y, t, seed){
+  /* waving person in a window */
+  var wave = Math.sin(t * 6 + seed) * 6;
+  ctx.fillStyle = '#8ecbff';
+  ctx.beginPath(); ctx.arc(x, y - 16, 9, 0, Math.PI * 2); ctx.fill(); /* head */
+  ctx.fillStyle = '#ff8fb0';
+  ctx.fillRect(x - 11, y - 6, 22, 16); /* body */
+  ctx.strokeStyle = '#8ecbff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x + 9, y - 2); ctx.lineTo(x + 16, y - 16 + wave); ctx.stroke(); /* waving arm */
+  ctx.beginPath(); ctx.moveTo(x - 9, y - 2); ctx.lineTo(x - 15, y + 8); ctx.stroke();
+  ctx.fillStyle = '#241200';
+  ctx.beginPath(); ctx.arc(x - 3, y - 17, 1.4, 0, Math.PI * 2); ctx.arc(x + 3, y - 17, 1.4, 0, Math.PI * 2); ctx.fill();
+}
+function drawCat(x, y, t){
+  ctx.fillStyle = '#b8b8c8';
+  ctx.beginPath(); ctx.ellipse(x, y + 4, 13, 9, 0, 0, Math.PI * 2); ctx.fill(); /* body */
+  ctx.beginPath(); ctx.arc(x - 2, y - 8, 8, 0, Math.PI * 2); ctx.fill(); /* head */
+  ctx.beginPath(); ctx.moveTo(x - 9, y - 12); ctx.lineTo(x - 7, y - 20); ctx.lineTo(x - 3, y - 13); ctx.fill(); /* ear L */
+  ctx.beginPath(); ctx.moveTo(x + 3, y - 13); ctx.lineTo(x + 6, y - 20); ctx.lineTo(x + 8, y - 12); ctx.fill(); /* ear R */
+  ctx.strokeStyle = '#b8b8c8'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x + 12, y + 6); ctx.quadraticCurveTo(x + 20, y - 2, x + 16, y - 12 + Math.sin(t * 3) * 2); ctx.stroke(); /* tail */
+  ctx.fillStyle = '#241200';
+  ctx.beginPath(); ctx.arc(x - 5, y - 9, 1.3, 0, Math.PI * 2); ctx.arc(x + 1, y - 9, 1.3, 0, Math.PI * 2); ctx.fill();
+}
+function drawDog(x, y, t){
+  ctx.fillStyle = '#a8763e';
+  ctx.beginPath(); ctx.ellipse(x, y + 4, 13, 9, 0, 0, Math.PI * 2); ctx.fill(); /* body */
+  ctx.beginPath(); ctx.arc(x, y - 8, 9, 0, Math.PI * 2); ctx.fill(); /* head */
+  ctx.fillStyle = '#7a5228';
+  ctx.beginPath(); ctx.ellipse(x - 9, y - 6, 3.5, 7, 0.3, 0, Math.PI * 2); ctx.fill(); /* ear L */
+  ctx.beginPath(); ctx.ellipse(x + 9, y - 6, 3.5, 7, -0.3, 0, Math.PI * 2); ctx.fill(); /* ear R */
+  ctx.beginPath(); ctx.ellipse(x, y - 1, 5, 3.5, 0, 0, Math.PI * 2); ctx.fill(); /* snout */
+  ctx.fillStyle = '#241200';
+  ctx.beginPath(); ctx.arc(x - 3.5, y - 10, 1.3, 0, Math.PI * 2); ctx.arc(x + 3.5, y - 10, 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#241200';
+  ctx.beginPath(); ctx.arc(x, y - 2, 1.8, 0, Math.PI * 2); ctx.fill(); /* nose */
+}
+function drawFirefighter(t){
+  var x = FF.x, y = FF.y;
+  var aimAng = Math.atan2(aim.y - NOZZLE.y, aim.x - NOZZLE.x);
+  var facing = aim.x >= NOZZLE.x ? 1 : -1;
+  /* legs */
+  ctx.fillStyle = '#2b2b40';
+  ctx.fillRect(x - 11, y - 26, 9, 26);
+  ctx.fillRect(x + 2, y - 26, 9, 26);
+  /* coat */
+  ctx.fillStyle = '#c22f2f';
+  ctx.beginPath();
+  ctx.moveTo(x - 15, y - 24); ctx.lineTo(x + 15, y - 24); ctx.lineTo(x + 18, y + 2); ctx.lineTo(x - 18, y + 2);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffd93b';
+  ctx.fillRect(x - 15, y - 12, 30, 4); /* reflective stripe */
+  /* arms toward nozzle */
+  ctx.strokeStyle = '#c22f2f'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x + facing * 8, y - 20); ctx.lineTo(NOZZLE.x + facing * 2, NOZZLE.y + 6); ctx.stroke();
+  /* head + helmet */
+  ctx.fillStyle = '#f2c79b';
+  ctx.beginPath(); ctx.arc(x, y - 34, 10, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffd93b';
+  ctx.beginPath(); ctx.arc(x, y - 37, 11, Math.PI, 0); ctx.fill(); /* helmet dome */
+  ctx.fillRect(x - 14, y - 38, 28, 4); /* helmet brim */
+  ctx.fillStyle = '#c22f2f';
+  ctx.fillRect(x - 3, y - 50, 6, 6); /* helmet badge */
+  /* hose: nozzle to a loose coil at the feet */
+  ctx.strokeStyle = '#5a3d1e'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(NOZZLE.x, NOZZLE.y + 6);
+  ctx.quadraticCurveTo(x + facing * 26, y - 6, x + facing * 20, y + 4);
+  ctx.stroke();
+  /* nozzle */
+  ctx.save();
+  ctx.translate(NOZZLE.x, NOZZLE.y);
+  ctx.rotate(aimAng);
+  ctx.fillStyle = '#9aa3b2';
+  ctx.fillRect(0, -4, 16, 8);
+  ctx.fillStyle = '#6b7280';
+  ctx.fillRect(12, -5, 5, 10);
+  ctx.restore();
+}
+function drawScene(t){
+  if (!ctx) return; /* headless env without a 2d context: logic still runs */
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  if (shakeT > 0){
+    ctx.translate(rnd(-4, 4) * shakeT * 3, rnd(-4, 4) * shakeT * 3);
+  }
+  /* night sky */
+  var sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#141038'); sky.addColorStop(0.55, '#1d1445'); sky.addColorStop(1, '#0a0620');
+  ctx.fillStyle = sky; ctx.fillRect(-8, -8, W + 16, H + 16);
+  /* stars */
+  ctx.fillStyle = 'rgba(255,255,255,.75)';
+  for (var s = 0; s < 26; s++){
+    var sx = (s * 173) % W, sy = (s * 97) % 60;
+    ctx.fillRect(sx, sy, 2, 2);
+  }
+  /* moon */
+  ctx.fillStyle = '#ffe9a3';
+  ctx.beginPath(); ctx.arc(418, 34, 20, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e8cf8a';
+  ctx.beginPath(); ctx.arc(412, 30, 5, 0, Math.PI * 2); ctx.arc(424, 40, 3.5, 0, Math.PI * 2); ctx.fill();
+  /* sidewalk */
+  ctx.fillStyle = '#241d3d';
+  ctx.fillRect(0, 580, W, 60);
+  ctx.fillStyle = '#322a55';
+  ctx.fillRect(0, 580, W, 4);
+  /* building */
+  ctx.fillStyle = '#4a2c4d';
+  ctx.fillRect(B.x, B.y, B.w, B.h);
+  ctx.fillStyle = '#3a2140';
+  for (var by = B.y + 18; by < B.y + B.h; by += 26){
+    ctx.fillRect(B.x, by, B.w, 2);
+  }
+  /* roofline */
+  ctx.fillStyle = '#2c1830';
+  ctx.fillRect(B.x - 6, B.y - 10, B.w + 12, 12);
+  ctx.fillStyle = '#ffd93b';
+  ctx.font = '900 15px system-ui, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText('APARTMENTS', B.x + B.w / 2, B.y + 34);
+  /* door */
+  ctx.fillStyle = '#241200';
+  ctx.fillRect(200, 500, 80, 80);
+  ctx.fillStyle = '#7c3aed';
+  ctx.fillRect(206, 506, 68, 74);
+  ctx.fillStyle = '#ffd93b';
+  ctx.beginPath(); ctx.arc(266, 545, 3, 0, Math.PI * 2); ctx.fill();
+  /* windows */
+  var now = Date.now();
+  for (var r = 0; r < ROWS; r++) for (var c = 0; c < COLS; c++){
+    var w = winRect(c, r), k = winKey(c, r);
+    var fire = null;
+    for (var i = 0; i < fires.length; i++) if (fires[i].c === c && fires[i].r === r){ fire = fires[i]; break; }
+    /* frame */
+    ctx.fillStyle = '#2c1830';
+    ctx.fillRect(w.x - 4, w.y - 4, w.w + 8, w.h + 8);
+    /* glass */
+    if (charred[k] && charred[k] > now){
+      ctx.fillStyle = '#14101c';
+    } else if (fire && fire.occ){
+      ctx.fillStyle = '#ffe9a3';
+    } else {
+      ctx.fillStyle = '#1d2f55';
+    }
+    ctx.fillRect(w.x, w.y, w.w, w.h);
+    /* occupant (behind the fire) */
+    if (fire && fire.occ){
+      var ox = w.x + w.w / 2, oy = w.y + w.h - 12;
+      if (fire.occ === 'person') drawPerson(ox, oy, t, fire.seed);
+      else if (fire.occ === 'cat') drawCat(ox, oy, t);
+      else drawDog(ox, oy, t);
+    }
+    /* cross bars */
+    ctx.strokeStyle = 'rgba(44,24,48,.9)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(w.x + w.w / 2, w.y); ctx.lineTo(w.x + w.w / 2, w.y + w.h); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(w.x, w.y + w.h / 2); ctx.lineTo(w.x + w.w, w.y + w.h / 2); ctx.stroke();
+    /* fire */
+    if (fire){
+      var st = fireStage(fire);
+      var fs = [15, 23, 31][st];
+      drawFlame(w.x + w.w / 2, w.y + w.h - 8, fs, t, fire.seed);
+      /* heat bar */
+      ctx.fillStyle = 'rgba(0,0,0,.55)';
+      ctx.fillRect(w.x + 6, w.y + 4, w.w - 12, 5);
+      ctx.fillStyle = fire.heat > 70 ? '#ff3b30' : '#ff9f1c';
+      ctx.fillRect(w.x + 6, w.y + 4, (w.w - 12) * (fire.heat / 100), 5);
+    }
+    /* charred soot */
+    if (charred[k] && charred[k] > now){
+      ctx.fillStyle = 'rgba(0,0,0,.5)';
+      ctx.fillRect(w.x, w.y, w.w, 18);
+    }
+  }
+  /* smoke */
+  for (var sm = 0; sm < smoke.length; sm++){
+    ctx.fillStyle = 'rgba(160,160,175,' + Math.max(0, smoke[sm].a) + ')';
+    ctx.beginPath(); ctx.arc(smoke[sm].x, smoke[sm].y, smoke[sm].r, 0, Math.PI * 2); ctx.fill();
+  }
+  /* firefighter + hose */
+  drawFirefighter(t);
+  /* water droplets */
+  for (var d = 0; d < droplets.length; d++){
+    var dr = droplets[d];
+    ctx.fillStyle = '#7dd8ff';
+    ctx.beginPath(); ctx.arc(dr.x, dr.y, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath(); ctx.arc(dr.x - 1, dr.y - 1, 1.6, 0, Math.PI * 2); ctx.fill();
+  }
+  /* aim reticle */
+  if (state === 'playing'){
+    ctx.strokeStyle = 'rgba(45,212,191,.9)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(aim.x, aim.y, 11, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(aim.x - 16, aim.y); ctx.lineTo(aim.x - 6, aim.y);
+    ctx.moveTo(aim.x + 6, aim.y); ctx.lineTo(aim.x + 16, aim.y);
+    ctx.moveTo(aim.x, aim.y - 16); ctx.lineTo(aim.x, aim.y - 6);
+    ctx.moveTo(aim.x, aim.y + 6); ctx.lineTo(aim.x, aim.y + 16);
+    ctx.stroke();
+  }
+  /* float texts */
+  ctx.textAlign = 'center';
+  for (var f = 0; f < floats.length; f++){
+    ctx.globalAlpha = clamp(floats[f].t, 0, 1);
+    ctx.font = '800 15px system-ui, sans-serif';
+    ctx.fillStyle = floats[f].color;
+    ctx.fillText(floats[f].txt, floats[f].x, floats[f].y);
+  }
+  ctx.globalAlpha = 1;
+  /* level banner */
+  if (bannerT > 0){
+    ctx.globalAlpha = clamp(bannerT, 0, 1);
+    ctx.font = '900 30px system-ui, sans-serif';
+    ctx.fillStyle = '#ffd93b';
+    ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 5;
+    ctx.strokeText(bannerTxt, W / 2, 320);
+    ctx.fillText(bannerTxt, W / 2, 320);
+    ctx.globalAlpha = 1;
+  }
+  /* practice tag on canvas */
+  if (practiceMode && state === 'playing'){
+    ctx.font = '700 13px system-ui, sans-serif';
+    ctx.fillStyle = '#ffe9a3';
+    ctx.textAlign = 'left';
+    ctx.fillText('Practice — scores don\'t count', 10, 22);
+  }
+  ctx.restore();
+  /* red flash on life lost */
+  if (flashT > 0){
+    ctx.fillStyle = 'rgba(255,40,40,' + (flashT * 0.9) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+function loop(ts){
+  var t = ts / 1000;
+  var dt = lastT ? Math.min(0.05, (ts - lastT) / 1000) : 0.016;
+  lastT = ts;
+  update(dt);
+  drawScene(t);
+  requestAnimationFrame(loop);
+}
+
+/* ---- fit to size, no scroll ---- */
+function fit(){
+  var st = $('stage');
+  var r = st.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  var s = Math.min(r.width / W, r.height / H);
+  cv.style.width = Math.floor(W * s) + 'px';
+  cv.style.height = Math.floor(H * s) + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', function(){ setTimeout(fit, 100); });
+
+/* ---- input ---- */
+function toGame(e){
+  var r = cv.getBoundingClientRect();
+  var x = (e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0));
+  var y = (e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0));
+  return { x: (x - r.left) / r.width * W, y: (y - r.top) / r.height * H };
+}
+cv.addEventListener('pointerdown', function(e){
+  if (state !== 'playing') return;
+  e.preventDefault();
+  try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+  aim = toGame(e);
+  spraying = true;
+});
+cv.addEventListener('pointermove', function(e){
+  if (state !== 'playing') return;
+  aim = toGame(e);
+});
+function stopSpray(){ spraying = false; }
+cv.addEventListener('pointerup', stopSpray);
+cv.addEventListener('pointercancel', stopSpray);
+cv.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+window.addEventListener('keydown', function(e){
+  if (e.key === ' '){ if (state === 'playing'){ e.preventDefault(); spraying = true; } }
+  else if (e.key.indexOf('Arrow') === 0){ keys[e.key] = true; if (state === 'playing') e.preventDefault(); }
+  else if (e.key === 'p' || e.key === 'P'){ if (state === 'playing') pauseGame(); else if (state === 'paused') resumeGame(); }
+  else if (e.key === 'Enter'){
+    if (state === 'menu') startGame(false);
+    else if (state === 'over') startGame(practiceMode);
+  }
+});
+window.addEventListener('keyup', function(e){
+  if (e.key === ' '){ spraying = false; }
+  if (e.key.indexOf('Arrow') === 0) keys[e.key] = false;
+});
+
+/* ---- buttons ---- */
+$('btnPlay').addEventListener('click', function(){ startGame(false); });
+$('btnPractice').addEventListener('click', function(){ startGame(true); });
+$('btnRules').addEventListener('click', function(){ show('ovRules'); });
+$('btnRulesClose').addEventListener('click', function(){ show('ovMenu'); });
+$('btnSettings').addEventListener('click', function(){ show('ovSettings'); });
+$('btnSettingsClose').addEventListener('click', function(){ show('ovMenu'); });
+$('btnPause').addEventListener('click', function(){ if (state === 'playing') pauseGame(); else if (state === 'paused') resumeGame(); });
+$('btnResume').addEventListener('click', resumeGame);
+$('btnRestart').addEventListener('click', function(){ startGame(practiceMode); });
+$('btnExit').addEventListener('click', function(){ showMenu(); });
+$('btnAgain').addEventListener('click', function(){ startGame(practiceMode); });
+$('btnMenu').addEventListener('click', function(){ showMenu(); });
+
+/* ---- settings wiring ---- */
+function bindToggle(id, key, prop){
+  var el = $(id);
+  try { el.checked = !window.holoSettings || window.holoSettings[prop] !== false; } catch (e) {}
+  el.addEventListener('change', function(){
+    try {
+      if (window.holoSettings) window.holoSettings[prop] = el.checked;
+      localStorage.setItem(key, el.checked ? 'on' : 'off');
+    } catch (e) {}
+  });
+}
+bindToggle('setSound', 'holos-arcade-sound', 'sound');
+bindToggle('setMusic', 'holos-arcade-music', 'music');
+bindToggle('setHaptics', 'holos-arcade-haptics', 'haptics');
+function syncDiffUI(){
+  var btns = document.querySelectorAll('#diffRow .diffbtn');
+  for (var i = 0; i < btns.length; i++){
+    btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-diff') === difficulty ? 'true' : 'false');
+  }
+  $('menuDiff').textContent = difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+}
+document.querySelectorAll('#diffRow .diffbtn').forEach(function(b){
+  b.addEventListener('click', function(){
+    difficulty = b.getAttribute('data-diff');
+    try { localStorage.setItem(LS_DIFF, difficulty); } catch (e) {}
+    syncDiffUI();
+  });
+});
+syncDiffUI();
+
+/* ---- test hooks (for jsdom verification) ---- */
+window.__ff = {
+  get state(){ return state; },
+  get score(){ return score; },
+  get lives(){ return lives; },
+  get level(){ return level; },
+  get fires(){ return fires; },
+  get practice(){ return practiceMode; },
+  start: startGame,
+  spawn: spawnFire,
+  setLives: function(n){ lives = n; updateHUD(); },
+  aimAt: function(c, r){ var w = winRect(c, r); aim = { x: w.x + w.w / 2, y: w.y + w.h / 2 }; },
+  spray: function(on){ spraying = !!on; },
+  burn: function(){ if (fires.length) fires[0].heat = 99.5; }
+};
+
+/* ---- init ---- */
+if (window.__holoPractice){
+  /* hub opened in practice — the guard auto-clicks #btnPractice once loaded */
+}
+showMenu();
+updateHUD();
+fit();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
