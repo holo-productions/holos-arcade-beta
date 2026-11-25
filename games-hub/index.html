@@ -25715,6 +25715,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 .turn-match-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .turn-match-row b{color:#fff}
 .turn-match-status{color:#b8f4ff;font-weight:700;font-size:13px}
+  .turn-match-game{ font-size:11px; opacity:.75; }
 .turn-match-status.wait{color:#cfc8ff}
 .turn-match .btn{margin-left:auto}
 .turn-board-wrap{margin:12px 0}
@@ -25912,14 +25913,18 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       ['pointsBal','chipPointsBal'].forEach(function(id){ var el = document.getElementById(id); if(el) el.textContent = v; });
     } catch(e){}
   }
-  /* FRIEND-ROW-2026-11-24: the Play menu on a friend card lists ONLY games with turn-based match support. Today that is Tic Tac Toe alone (TURN-BASED Phase 1 pilot — the only game whose challenge() builds a match). The menu grows from this list as more games get multiplayer; do not add a game here until its match flow exists. */
-  /* PLAY-PICKER-2026-11-24: the Play menu on a friend card lists ONLY
-     games with turn-based match support. Tic Tac Toe (Phase 1 pilot)
-     + 8-Ball Pool (rooms). Rock Paper Scissors joins when its rules
-     publish (firebase-rules-turnmatches-rps-update-2026-11-24.md) —
-     do not add it before then: its match create 401s until the
-     allowlist gains 'rock-paper-scissors'. */
-  var TURN_GAMES = [{ slug:'tic-tac-toe', name:'Tic Tac Toe', icon:'❌' }, { slug:'8-ball-pool', name:'8-Ball Pool', icon:'🎱' }];
+  /* FRIEND-ROW-2026-11-24: the Play menu on a friend card lists ONLY games with turn-based match support. The menu grows from this list as more games get multiplayer; do not add a game here until its match flow exists. */
+  /* RPS-TURN-GAMES-2026-11-25 (Holo 2026-11-25): Rock Paper Scissors
+     joins the Play menu now — its match flow exists (the standalone
+     game creates matches on the same /turnMatches protocol, and the hub
+     challenge() below builds the same RPS-shaped payload). RULES GATE:
+     the create 401s until Holo publishes
+     firebase-rules-turnmatches-rps-update-2026-11-24.md — the menu item
+     is live anyway, and the game fails soft with a plain message until
+     then. The RPS game itself is the playable surface: the hub panel
+     shows the match summary + an Open button, never a board. */
+  var TURN_GAMES = [{ slug:'tic-tac-toe', name:'Tic Tac Toe', icon:'❌' }, { slug:'8-ball-pool', name:'8-Ball Pool', icon:'🎱' }, { slug:'rock-paper-scissors', name:'Rock Paper Scissors', icon:'✊' }];
+  function turnGameName(slug){ var n = 'Tic Tac Toe'; TURN_GAMES.forEach(function(g){ if(g.slug === slug) n = g.name; }); return n; }
   function challenge(uid, name, gameSlug){
     var me = myUid();
     if(!me){ toast('Sign in first to challenge a friend.'); return; }
@@ -25940,7 +25945,16 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         var gSlug = gameSlug || 'tic-tac-toe';
         var gName = 'Tic Tac Toe';
         TURN_GAMES.forEach(function(g){ if(g.slug === gSlug) gName = g.name; });
-        var match = { game:gSlug, aUid:me, bUid:uid, aName:myN, bName:String(name || friendName(uid)), xUid:me, oUid:uid, board:['','','','','','','','',''], turn:me, status:'waiting', winner:null, lastMoveAt:0, lastMoveBy:'', lastMoveCell:-1, history:[], moves:0, createdAt:now, updatedAt:now };
+        /* RPS-TURN-GAMES-2026-11-25: an RPS match reuses the TTT envelope
+           (xUid/oUid/turn/status/winner/moves — the .validate children),
+           but with an EMPTY board and the game state in `state` — the
+           same payload the standalone game's rpsChallenge() sends, so
+           either side can create it. The hub never renders a board
+           for RPS (see openHtml): the game is the playable surface. */
+        var wins0 = {}; wins0[me] = 0; wins0[uid] = 0;
+        var match = (gSlug === 'rock-paper-scissors')
+          ? { game:gSlug, aUid:me, bUid:uid, aName:myN, bName:String(name || friendName(uid)), xUid:me, oUid:uid, board:[], turn:me, status:'waiting', winner:null, lastMoveAt:0, lastMoveBy:'', lastMoveCell:-1, history:[], moves:0, state:{ round:1, first:me, need:3, bestOf:5, wins:wins0, picks:{}, lastResult:null }, createdAt:now, updatedAt:now }
+          : { game:gSlug, aUid:me, bUid:uid, aName:myN, bName:String(name || friendName(uid)), xUid:me, oUid:uid, board:['','','','','','','','',''], turn:me, status:'waiting', winner:null, lastMoveAt:0, lastMoveBy:'', lastMoveCell:-1, history:[], moves:0, createdAt:now, updatedAt:now };
         api('POST', '/turnMatches', match).then(function(r){
           if(!r || !r.name){ toast('Turn-based needs one more Arcade update — the new rules publish is still pending.'); return; }
           var mid = r.name;
@@ -25949,7 +25963,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           sendNotice(uid, { type:'turn-invite', title: gName + ' challenge!', body: myN + ' challenged you to ' + gName + '.', link:'game:' + gSlug + '?match=' + mid });
           matches[mid] = match; openMid = mid; render();
           toast('Challenge sent to ' + (name || friendName(uid)) + '!');
-          try { location.hash = '#game/tic-tac-toe'; } catch(e){}
+          try { location.hash = '#game/' + gSlug; } catch(e){}
         });
       });
     });
@@ -25965,7 +25979,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       if(r === null){ toast('That did not save — the new rules publish is still pending.'); return; }
       m.status = 'playing'; m.updatedAt = Date.now(); render();
       myName().then(function(myN){
-        sendNotice(m.aUid, { type:'turn', title:'Your turn in Tic Tac Toe', body:'Your turn in Tic Tac Toe vs ' + myN + ' — ' + myN + ' accepted at ' + timeShort(Date.now()) + '.', link:'game:tic-tac-toe?match=' + mid });
+        /* RPS-TURN-GAMES-2026-11-25: the accept notice names the real game (was hardcoded Tic Tac Toe). */
+        sendNotice(m.aUid, { type:'turn', title:'Your turn in ' + turnGameName(m.game), body:'Your turn in ' + turnGameName(m.game) + ' vs ' + myN + ' — ' + myN + ' accepted at ' + timeShort(Date.now()) + '.', link:'game:' + m.game + '?match=' + mid });
       });
     });
   }
@@ -26017,14 +26032,14 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var m = matches[mid], me = myUid();
     if(!m || !me || (m.status !== 'won' && m.status !== 'draw' && m.status !== 'declined')) return;
     var opp = oppOf(m, me);
-    challenge(opp.uid, opp.name);
+    challenge(opp.uid, opp.name, m.game);   /* RPS-TURN-GAMES-2026-11-25: a rematch re-challenges the SAME game (was Tic Tac Toe always). */
   }
   function reportMatch(mid){
     var m = matches[mid], me = myUid();
     if(!m || !me) return;
     var opp = oppOf(m, me);
     myName().then(function(n){
-      var payload = { username:n, testerName:n, game:'Tic Tac Toe', tag:'Turn-based report', comment:'Turn-based report on match ' + mid + ' vs ' + opp.name + ': ' + 'please review this match.', matchId:mid, reporterUid:me, reportedUid:opp.uid, timestamp:new Date().toISOString() };
+      var payload = { username:n, testerName:n, game:turnGameName(m.game), tag:'Turn-based report', comment:'Turn-based report on match ' + mid + ' vs ' + opp.name + ': ' + 'please review this match.', matchId:mid, reporterUid:me, reportedUid:opp.uid, timestamp:new Date().toISOString() };
       freshToken().then(function(tok){
         if(!tok) return null;
         return fetch(FB_RTDB + '/feedback.json?auth=' + encodeURIComponent(tok), { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
@@ -26148,7 +26163,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         var opp = oppOf(m, me);
         var st = statusText(m, me);
         var cls = (m.status === 'playing' && m.turn === me) ? ' your-turn' : '';
-        return '<div class="turn-match' + cls + '" data-turn-mid="' + esc(mid) + '"><div class="turn-match-row"><b>' + esc(opp.name) + '</b><span class="turn-match-status' + (m.status === 'playing' && m.turn !== me ? ' wait' : '') + '">' + esc(st) + '</span><button type="button" class="btn btn-dark dm-mini" data-turn-open="' + esc(mid) + '">' + (openMid === mid ? 'Close' : 'Open') + '</button></div></div>';
+        return '<div class="turn-match' + cls + '" data-turn-mid="' + esc(mid) + '"><div class="turn-match-row"><b>' + esc(opp.name) + '</b><span class="turn-match-game">' + esc(turnGameName(m.game)) + '</span><span class="turn-match-status' + (m.status === 'playing' && m.turn !== me ? ' wait' : '') + '">' + esc(st) + '</span><button type="button" class="btn btn-dark dm-mini" data-turn-open="' + esc(mid) + '">' + (openMid === mid ? 'Close' : 'Open') + '</button></div></div>';
       }).join('') + '</div>';
     } else {
       h += '<p class="turn-empty">No matches yet — challenge a friend above.</p>';
@@ -26177,12 +26192,53 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(un) un.addEventListener('click', function(){ hidden.forEach(function(mid){ delete muted[mid]; }); saveMuted(); render(); });
     bindOpen(root);
   }
+  /* RPS-TURN-GAMES-2026-11-25: the hub panel for an RPS match is a
+     SUMMARY only — score, last round, Accept/Decline, and an Open
+     button that takes the player to the game. It never renders the
+     Tic Tac Toe board below: the RPS game is the playable surface,
+     and the match is listed there under Play with a Friend. (The hub
+     cannot deep-link the game frame into the match: the RPS game reads
+     ?match= from its own URL and has no holo-match postMessage
+     listener. A ?friend= deep link is a follow-up that needs the RPS
+     file itself.) */
+  function rpsMatchHtml(mid, m, me){
+    var opp = oppOf(m, me);
+    var st = m.state || {};
+    var wins = st.wins || {};
+    var myWins = wins[me] || 0, oppWins = wins[opp.uid] || 0;
+    var need = st.need || 3, bestOf = st.bestOf || 5, round = st.round || 1;
+    var h = '<div class="turn-board-wrap"><p class="turn-summary">' + esc(m.aName) + ' vs ' + esc(m.bName) + ' — Rock Paper Scissors<br>' + esc(statusText(m, me)) + '</p>' +
+      '<p class="turn-sub">Best of ' + bestOf + ' — first to ' + need + ' round wins · Round ' + round + '<br>' + esc(m.aName) + ' ' + myWins + ' — ' + oppWins + ' ' + esc(m.bName) + '</p>';
+    if(st.lastResult && st.lastResult.text) h += '<p class="turn-lastmove">' + esc(st.lastResult.text) + '</p>';
+    h += '<p class="turn-sub">Play it in Rock Paper Scissors — your match is listed there under Play with a Friend.</p><div class="turn-actions">';
+    if(m.status === 'waiting' && m.bUid === me){
+      h += '<button type="button" class="btn btn-light" data-turn-accept="' + esc(mid) + '">Accept challenge</button><button type="button" class="btn btn-dark" data-turn-decline="' + esc(mid) + '">Decline</button>';
+    }
+    if(m.status === 'waiting' && m.aUid === me){
+      h += '<button type="button" class="btn btn-dark" data-turn-decline="' + esc(mid) + '">Cancel challenge</button>';
+    }
+    if(m.status === 'playing' || m.status === 'waiting'){
+      h += '<button type="button" class="btn btn-light" data-turn-open-game="rock-paper-scissors">Open in Rock Paper Scissors</button>';
+    }
+    if(m.status === 'won' || m.status === 'draw'){
+      h += '<button type="button" class="btn btn-light" data-turn-rematch="' + esc(mid) + '">Rematch — best of 5 again</button>';
+    }
+    h += '<button type="button" class="btn btn-dark" data-turn-report="' + esc(mid) + '">Report</button>' +
+      '<button type="button" class="btn btn-dark" data-turn-block="' + esc(mid) + '">Block ' + esc(opp.name) + '</button>' +
+      '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>';
+    if(m.status === 'waiting' || m.status === 'playing'){
+      h += '<button type="button" class="btn btn-dark" data-turn-reset="' + esc(mid) + '">Reset match</button>';
+    }
+    h += '</div></div>';
+    return h;
+  }
   function openHtml(mid, m, me){
     /* MULTIPLAYER-ENDGAME-2026-11-24 + MATCH-RESET-2026-11-24: pool
        matches render a pool summary here (no Tic Tac Toe board) —
        status, last move, Accept/Decline, Open in 8-Ball Pool, the
        endgame row (Rematch / Play a different game) and Reset match. */
     if(m.game === '8-ball-pool' && window.holoRooms && window.holoRooms.poolMatchHtml){ return window.holoRooms.poolMatchHtml(mid, m, me); }
+    if(m.game === 'rock-paper-scissors'){ return rpsMatchHtml(mid, m, me); }
     var opp = oppOf(m, me);
     var board = m.board || [];
     var win = winnerOf(board);
@@ -26222,6 +26278,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     root.querySelectorAll('[data-turn-cell]').forEach(function(b){
       /* TURN-AUTO-PASS-2026-11-24 (Holo 20:33): all turn-based games pass the turn automatically, pool-style — tapping a square places the mark and passes the turn at once, one move at a time, X then O. NO Send-button step anywhere (the earlier pick+Send design was removed per this rule). The passing itself was unblocked by the rules re-publish (the /turnMatches .validate board bug, POOL-BOARD-BUG-2026-11-24) — verified live 26/27. */
       b.addEventListener('click', function(){ makeMove(openMid, parseInt(b.getAttribute('data-turn-cell'), 10)); });
+    });
+    root.querySelectorAll('[data-turn-open-game]').forEach(function(b){
+      b.addEventListener('click', function(){ try { location.hash = '#game/' + b.getAttribute('data-turn-open-game'); } catch(e){} });
     });
     root.querySelectorAll('[data-turn-accept]').forEach(function(b){
       b.addEventListener('click', function(){ accept(b.getAttribute('data-turn-accept')); });
