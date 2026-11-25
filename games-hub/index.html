@@ -2381,6 +2381,7 @@ body.in-game:not(.auth-locked) .logo-full{max-height:40px}
    inside the top line; Sign out/gear sized small like neighbours.
    Phone: top line wraps, order preserved, right-aligned. */
 .nav-line-btns{flex-wrap:wrap}
+.nav-line-btns #hubFsBtn{order:0}
 .nav-line-btns #takeTourHubBtn{order:1}
 .nav-line-btns #loginFaqLink{order:2;margin-left:0}
 .nav-line-btns #helpChatHubBtn{order:3}
@@ -2656,6 +2657,8 @@ setTimeout(function(){
     <span id="ownerHeaderMount"></span>
     <div class="nav-right-stack">
       <div class="nav-line nav-line-btns">
+      <!-- HUB-FULLSCREEN-2026-11-24: fullscreen toggle outside games — same one state as the player-bar button -->
+      <button type="button" id="hubFsBtn" class="nav-actbtn" aria-label="Fullscreen" title="Fullscreen">⛶ Fullscreen</button>
       <button type="button" id="takeTourHubBtn" class="nav-actbtn take-tour-btn">Take the tour</button>
       <button type="button" id="loginFaqLink" class="nav-actbtn">FAQ</button>
         <button class="btn btn-light hc-open-btn" id="helpChatHubBtn" type="button" style="padding:6px 10px;min-height:30px">Contact</button>
@@ -21945,20 +21948,21 @@ function renderTesterAuth(){
     }, 500);
   }
 
-  /* Fullscreen (player container; hidden where unsupported). */
+  /* HUB-FULLSCREEN-2026-11-24 (Holo 2026-11-24: "Exit and turn on full screen when outside of game"): one fullscreen state, two buttons. The player-bar button (#playerFsBtn) fullscreens the player; the topbar button (#hubFsBtn) fullscreens the whole page (documentElement) so it works from home / Library / Daily without opening a game. Both show the same label from fsActive() and stay in sync via the fullscreenchange listeners. Both hidden where unsupported (same canFs check — iPhone Safari has no document fullscreen, so both hide). */
   var fsBtn = document.getElementById('playerFsBtn');
+  var hubFsBtn = document.getElementById('hubFsBtn');
   var fsEl = document.documentElement;
   var canFs = !!(fsEl.requestFullscreen || fsEl.webkitRequestFullscreen);
   if(fsBtn && !canFs) fsBtn.hidden = true;
+  if(hubFsBtn && !canFs) hubFsBtn.hidden = true;
   function fsActive(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
-  function syncFsBtn(){ if(fsBtn) fsBtn.textContent = fsActive() ? '✕ Exit fullscreen' : '⛶ Fullscreen'; }
+  function syncFsBtn(){ var t = fsActive() ? '✕ Exit fullscreen' : '⛶ Fullscreen'; if(fsBtn) fsBtn.textContent = t; if(hubFsBtn) hubFsBtn.textContent = t; }
+  function fsExit(){ try { if(document.exitFullscreen) document.exitFullscreen(); else if(document.webkitExitFullscreen) document.webkitExitFullscreen(); } catch(e){} }
   if(fsBtn){
     fsBtn.addEventListener('click', function(){
       try {
-        if(fsActive()){
-          if(document.exitFullscreen) document.exitFullscreen();
-          else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
-        } else if(player.requestFullscreen){
+        if(fsActive()){ fsExit(); }
+        else if(player.requestFullscreen){
           var p = player.requestFullscreen({ navigationUI:'hide' });
           if(p && p.catch) p.catch(function(){ try { player.requestFullscreen(); } catch(e){} });
         } else if(player.webkitRequestFullscreen){
@@ -21968,6 +21972,19 @@ function renderTesterAuth(){
     });
     document.addEventListener('fullscreenchange', syncFsBtn);
     document.addEventListener('webkitfullscreenchange', syncFsBtn);
+  }
+  if(hubFsBtn){
+    hubFsBtn.addEventListener('click', function(){
+      try {
+        if(fsActive()){ fsExit(); }
+        else if(fsEl.requestFullscreen){
+          var p = fsEl.requestFullscreen({ navigationUI:'hide' });
+          if(p && p.catch) p.catch(function(){ try { fsEl.requestFullscreen(); } catch(e){} });
+        } else if(fsEl.webkitRequestFullscreen){
+          fsEl.webkitRequestFullscreen();
+        }
+      } catch(e){}
+    });
   }
 
   /* FAQ phone shortcut. */
