@@ -1,0 +1,986 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>CAEC Prep — Holo's Arcade</title>
+<!-- GATE-GUARD-2026-11-24 -->
+<!-- CAEC-PREP-2026-11-24 -->
+<script src="../shared/gate-guard.js"></script>
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+<style>
+  :root{
+    --navy:#0a0620; --panel:#1a1033; --yellow:#ffd93b; --violet:#7c3aed;
+    --pink:#ff3ec8; --ink:#fff; --muted:#b9aee6; --teal:#2dd4bf; --green:#7dff9e; --red:#ff6b6b;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #2a1b5e, var(--navy) 62%);
+    color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    height:100dvh; overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  .wrap{ width:100%; max-width:640px; margin:0 auto; height:100dvh; display:flex; flex-direction:column; padding:10px 12px 12px; }
+  header{ text-align:center; flex:0 0 auto; }
+  .title{ font-size:26px; font-weight:900; letter-spacing:.5px; color:var(--yellow); text-shadow:0 2px 0 #7a4d00, 0 0 18px rgba(255,217,59,.45); line-height:1.1; }
+  .sub{ font-size:13px; color:var(--muted); margin-top:2px; }
+  .hud{ display:flex; gap:8px; align-items:stretch; margin:10px 0; flex:0 0 auto; }
+  .stat{ flex:1; background:rgba(255,255,255,.08); border:2px solid var(--violet); border-radius:10px; padding:4px 6px; text-align:center; min-width:0; }
+  .stat .lbl{ display:block; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
+  .stat .val{ display:block; font-size:18px; font-weight:800; line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .iconbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:10px; padding:6px 12px; font-size:15px; font-weight:800; cursor:pointer; }
+  .iconbtn:hover{ border-color:var(--pink); }
+  .stage{ flex:1; min-height:0; position:relative; display:flex; align-items:center; justify-content:center; }
+  .overlay{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:12px; background:rgba(10,6,32,.92); border-radius:16px; padding:18px 14px; text-align:center; z-index:5; overflow-y:auto; }
+  .hidden{ display:none !important; }
+  .overlay h2{ margin:0; color:var(--yellow); font-size:24px; }
+  .overlay p{ margin:0; font-size:15px; line-height:1.5; max-width:480px; color:#e9e4ff; }
+  .big{ font-size:34px; font-weight:900; color:var(--yellow); }
+  .passbig{ font-size:40px; font-weight:900; }
+  .passbig.pass{ color:var(--green); }
+  .passbig.fail{ color:var(--red); }
+  .card{ background:var(--panel); border:2px solid var(--violet); border-radius:14px; padding:14px 16px; max-width:520px; width:100%; text-align:left; }
+  .card ul{ margin:0; padding-left:20px; font-size:14px; line-height:1.6; color:#e9e4ff; }
+  .card li{ margin-bottom:6px; }
+  .btn{ background:linear-gradient(#ffe45e,#ffc93b); color:#241200; font-weight:800; border:none; border-radius:999px; padding:13px 30px; font-size:18px; box-shadow:0 0 18px rgba(255,217,59,.55), 0 4px 0 #b98a00; cursor:pointer; min-width:200px; }
+  .btn:active{ transform:translateY(2px); box-shadow:0 0 18px rgba(255,217,59,.55), 0 2px 0 #b98a00; }
+  .btn:disabled{ opacity:.45; cursor:default; }
+  .btn2{ background:linear-gradient(135deg,var(--violet),var(--pink)); color:#fff; border:none; border-radius:999px; padding:11px 24px; font-size:16px; font-weight:700; box-shadow:0 4px 0 rgba(0,0,0,.35); cursor:pointer; min-width:160px; }
+  .btn2:active{ transform:translateY(2px); }
+  .btn3{ background:none; border:none; color:#cfc4ff; text-decoration:underline; cursor:pointer; font-size:15px; padding:6px 10px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .setrow{ display:flex; justify-content:space-between; align-items:center; gap:12px; padding:9px 2px; border-bottom:1px solid rgba(255,255,255,.1); font-size:15px; }
+  .setrow:last-child{ border-bottom:none; }
+  .setrow label{ display:flex; gap:8px; align-items:center; cursor:pointer; }
+  .hint{ text-align:center; color:var(--muted); font-size:12px; padding-top:8px; flex:0 0 auto; }
+  .bestline{ font-size:14px; color:var(--muted); }
+  .bestline b{ color:var(--yellow); }
+  .newbest{ color:var(--green); font-weight:800; }
+  .pracbadge{ display:inline-block; background:#0a0620; color:#ffe9a3; border:2px solid var(--pink); border-radius:999px; padding:3px 12px; font-size:12px; font-weight:700; }
+  /* subject cards */
+  .subj{ width:100%; max-width:520px; background:var(--panel); border:2px solid var(--violet); border-radius:14px; padding:12px 14px; text-align:left; cursor:pointer; color:#fff; font-family:inherit; }
+  .subj:hover{ border-color:var(--pink); }
+  .subj[aria-pressed="true"]{ border-color:var(--yellow); box-shadow:0 0 14px rgba(255,217,59,.35); }
+  .subj .sname{ font-size:17px; font-weight:800; color:var(--yellow); display:flex; justify-content:space-between; gap:8px; }
+  .subj .sname .sbest{ font-size:13px; color:var(--muted); font-weight:700; white-space:nowrap; }
+  .subj .sname .sbest b{ color:var(--green); }
+  .subj .sdesc{ font-size:13px; color:#e9e4ff; margin-top:3px; line-height:1.45; }
+  .subj .sreal{ font-size:12px; color:var(--muted); margin-top:3px; }
+  .seg{ display:flex; gap:8px; justify-content:center; }
+  .segbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:999px; padding:9px 18px; font-weight:700; cursor:pointer; font-size:15px; }
+  .segbtn[aria-pressed="true"]{ background:var(--yellow); color:#241200; border-color:var(--yellow); }
+  /* quiz */
+  .qcard{ width:100%; max-width:560px; background:var(--panel); border:2px solid var(--violet); border-radius:14px; padding:14px 16px; text-align:left; }
+  .qpassage{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.18); border-radius:10px; padding:12px 14px; font-size:14px; line-height:1.6; color:#f2efff; margin-bottom:12px; }
+  .qpassage b{ color:var(--yellow); }
+  .qtext{ font-size:17px; font-weight:700; line-height:1.45; margin-bottom:12px; }
+  .qpart{ display:inline-block; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--teal); font-weight:800; margin-bottom:6px; }
+  .opt{ display:block; width:100%; text-align:left; background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:12px; padding:11px 14px; font-size:15px; line-height:1.4; margin-bottom:8px; cursor:pointer; font-family:inherit; }
+  .opt:hover:not(:disabled){ border-color:var(--pink); }
+  .opt:disabled{ cursor:default; opacity:.85; }
+  .opt.correct{ background:#123b22; border-color:var(--green); }
+  .opt.wrong{ background:#3b1220; border-color:var(--red); }
+  .opt .key{ display:inline-block; width:22px; height:22px; border-radius:50%; background:rgba(255,255,255,.15); text-align:center; line-height:22px; font-weight:800; font-size:13px; margin-right:8px; }
+  .why{ font-size:14px; line-height:1.5; color:#d9f7e3; background:rgba(125,255,158,.08); border:1px solid rgba(125,255,158,.35); border-radius:10px; padding:10px 12px; margin-top:4px; }
+  .why.bad{ color:#ffe1e1; background:rgba(255,107,107,.08); border-color:rgba(255,107,107,.35); }
+  .barwrap{ width:100%; max-width:420px; }
+  .bar{ height:16px; background:rgba(255,255,255,.12); border-radius:999px; position:relative; overflow:visible; }
+  .barfill{ height:100%; border-radius:999px; background:linear-gradient(90deg,var(--violet),var(--pink)); }
+  .barfill.pass{ background:linear-gradient(90deg,#2dd4bf,var(--green)); }
+  .bartick{ position:absolute; top:-4px; bottom:-4px; width:3px; background:var(--yellow); left:55%; }
+  .barlbl{ display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:4px; }
+  textarea{ width:100%; min-height:140px; background:rgba(255,255,255,.07); border:2px solid var(--violet); border-radius:12px; color:#fff; font-family:inherit; font-size:15px; line-height:1.5; padding:12px; resize:vertical; }
+  textarea:focus{ outline:2px solid var(--yellow); }
+  .rubric label{ display:flex; gap:10px; align-items:flex-start; padding:8px 2px; border-bottom:1px solid rgba(255,255,255,.1); font-size:14px; line-height:1.45; cursor:pointer; }
+  .rubric label:last-child{ border-bottom:none; }
+  .rubric input{ margin-top:2px; width:18px; height:18px; flex:0 0 auto; accent-color:var(--yellow); }
+  .wordcount{ font-size:12px; color:var(--muted); text-align:right; }
+  @media (max-width:360px){ .title{ font-size:22px; } .btn,.btn2{ min-width:150px; } }
+</style>
+</head>
+<body>
+<!-- CAEC-PREP-2026-11-24: five subjects, 55% pass mark, Canadian content only. -->
+<div class="wrap">
+  <header>
+    <div class="title">CAEC Prep</div>
+    <div class="sub">Study for the Canadian Adult Education Credential — the high school equivalency test.</div>
+  </header>
+  <div class="hud">
+    <div class="stat"><span class="lbl">Subject</span><span class="val" id="hudSubject">—</span></div>
+    <div class="stat"><span class="lbl">Question</span><span class="val" id="hudQ">—</span></div>
+    <div class="stat"><span class="lbl">Score</span><span class="val" id="hudScore">0</span></div>
+    <div class="stat"><span class="lbl">Time</span><span class="val" id="hudTime">—</span></div>
+    <button id="btnPause" class="iconbtn" aria-label="Pause game">II</button>
+  </div>
+  <div class="stage" id="stage">
+
+    <div class="overlay" id="ovMenu">
+      <h2>CAEC Prep</h2>
+      <p>Five subjects, just like the real CAEC test. Practice untimed and learn as you go — or take a timed test and see if you beat the <b>55% pass mark</b>.</p>
+      <div class="card"><ul>
+        <li><b>Reading</b> — Canadian passages + comprehension questions (real test: 50 questions, 75 min).</li>
+        <li><b>Writing</b> — one persuasive writing task (real test: 75 min). You write, then check yourself against the rubric.</li>
+        <li><b>Mathematics</b> — Part I without a calculator, Part II with one (real test: 2 hours).</li>
+        <li><b>Social Studies</b> — Canadian history, government, economics, civics (real test: 40 questions, 90 min).</li>
+        <li><b>Science</b> — general science (real test: 35 questions, 90 min).</li>
+        <li>The real CAEC is free to write in Saskatchewan. You need 55% on each subject to pass.</li>
+      </ul></div>
+      <div id="subjList" style="width:100%;max-width:520px;display:flex;flex-direction:column;gap:10px;"></div>
+      <div class="seg" id="modeRow" role="group" aria-label="Mode">
+        <button class="segbtn" data-mode="practice" aria-pressed="true">Practice</button>
+        <button class="segbtn" data-mode="test" aria-pressed="false">Timed Test</button>
+      </div>
+      <button class="btn" id="btnStart">Start</button>
+      <div class="row">
+        <button class="btn2" id="btnRules">How to Play</button>
+        <button class="btn2" id="btnSettings">Settings</button>
+      </div>
+      <p class="bestline" id="menuBestLine"></p>
+    </div>
+
+    <div class="overlay hidden" id="ovQuiz">
+      <div class="qcard" id="qCard"></div>
+      <div id="qWhy" class="qcard hidden" style="margin-top:10px;"></div>
+      <button class="btn hidden" id="btnNextQ" style="margin-top:12px;">Next question</button>
+    </div>
+
+    <div class="overlay hidden" id="ovWriting">
+      <div class="qcard">
+        <div class="qpart" id="wPart">Writing · Persuasive task</div>
+        <div class="qtext" id="wPrompt"></div>
+        <div class="qpassage" id="wGuide"></div>
+        <textarea id="wText" placeholder="Write your answer here…"></textarea>
+        <div class="wordcount" id="wCount">0 words</div>
+      </div>
+      <div class="qcard">
+        <div class="qtext" style="font-size:15px;">Self-check rubric — tick each one you did (2 points each, 10 total; 6+ passes)</div>
+        <div class="rubric" id="wRubric"></div>
+      </div>
+      <button class="btn" id="btnFinishWriting">Finish writing</button>
+      <button class="btn3" id="btnWritingMenu">Back to menu</button>
+    </div>
+
+    <div class="overlay hidden" id="ovRules">
+      <h2>How to Play</h2>
+      <div class="card"><ul>
+        <li>Pick a <b>subject</b>, then a <b>mode</b>: <b>Practice</b> is untimed and explains every answer; <b>Timed Test</b> is scored against the clock.</li>
+        <li>Tap an answer. In Practice you see right away if it was right, and why.</li>
+        <li>Reading: read the passage, then answer its questions.</li>
+        <li>Mathematics: Part I questions are no-calculator; Part II allows a calculator.</li>
+        <li>Writing: pick a prompt, write your answer, then tick the rubric honestly — 6 out of 10 passes.</li>
+        <li>The pass mark is <b>55%</b> on every subject, just like the real CAEC.</li>
+        <li>Your best score per subject is saved on this device.</li>
+        <li>Press <b>P</b> to pause.</li>
+      </ul></div>
+      <button class="btn" id="btnRulesClose">Got it</button>
+    </div>
+
+    <div class="overlay hidden" id="ovSettings">
+      <h2>Settings</h2>
+      <div class="card">
+        <div class="setrow"><label><input type="checkbox" id="setSound" checked /> Sound effects</label></div>
+        <div class="setrow"><label><input type="checkbox" id="setMusic" checked /> Music</label></div>
+        <div class="setrow"><label><input type="checkbox" id="setHaptics" checked /> Vibration</label></div>
+      </div>
+      <button class="btn" id="btnSettingsClose">Done</button>
+    </div>
+
+    <div class="overlay hidden" id="ovPause">
+      <h2>Paused</h2>
+      <p>Take a breath. Your answers so far are safe.</p>
+      <button class="btn" id="btnResume">Resume</button>
+      <button class="btn2" id="btnRestart">Restart</button>
+      <button class="btn3" id="btnExit">Exit game</button>
+    </div>
+
+    <div class="overlay hidden" id="ovEnd">
+      <h2 id="endTitle">Results</h2>
+      <div class="passbig" id="endPass"></div>
+      <div class="big" id="endScore">0%</div>
+      <div class="barwrap">
+        <div class="bar"><div class="barfill" id="endBar" style="width:0%"></div><div class="bartick"></div></div>
+        <div class="barlbl"><span>0%</span><span>Pass line 55%</span><span>100%</span></div>
+      </div>
+      <p class="bestline" id="endDetail"></p>
+      <p class="bestline">Best: <b id="endBest">—</b> <span class="newbest hidden" id="endNewBest">New best!</span></p>
+      <p id="endLine" style="max-width:440px;"></p>
+      <button class="btn" id="btnAgain">Play again</button>
+      <button class="btn3" id="btnMenu">Main menu</button>
+    </div>
+  </div>
+  <div class="hint">Pass mark 55% on every subject — just like the real CAEC.</div>
+</div>
+<script>
+(function(){
+'use strict';
+/* CAEC-PREP-2026-11-24: CAEC Prep — study game for the Canadian Adult
+   Education Credential (high school equivalency, replaced the GED in
+   Canada May 3, 2024). Five subjects, Canadian content only, 55% pass. */
+
+var PASS = 55;
+
+/* ---------------- question banks ---------------- */
+/* Reading: 4 passages x 4 questions = 16. All facts verified. */
+var READING = [
+{ title:'The Marathon of Hope', text:'Terry Fox was a young athlete from British Columbia. In 1980, after losing a leg to cancer, he set out to run across Canada to raise money for cancer research. He dipped his artificial leg in the Atlantic Ocean at St. John\u2019s, Newfoundland, on April 12, 1980, and began running toward the Pacific. He ran about 42 kilometres \u2014 a marathon \u2014 nearly every day. After 143 days and 5,373 kilometres, the cancer returned and forced him to stop near Thunder Bay, Ontario. Fox died on June 28, 1981, at the age of 22. His Marathon of Hope raised millions of dollars, and the Terry Fox Run is now held every year in Canada and around the world.',
+  qs:[
+  { q:'Where did Terry Fox begin his run?', opts:['Vancouver, British Columbia','Toronto, Ontario','St. John\u2019s, Newfoundland','Thunder Bay, Ontario'], a:2, why:'The passage says he dipped his leg in the Atlantic at St. John\u2019s, Newfoundland, on April 12, 1980.' },
+  { q:'How far did Fox run before he had to stop?', opts:['1,980 kilometres','4,200 kilometres','8,000 kilometres','5,373 kilometres'], a:3, why:'He ran 5,373 kilometres over 143 days before the cancer returned.' },
+  { q:'Why did Fox stop running near Thunder Bay?', opts:['He ran out of money','His leg broke','The cancer returned','Winter arrived'], a:2, why:'The passage says the cancer returned and forced him to stop.' },
+  { q:'What is the main idea of the passage?', opts:['Running a marathon every day is good exercise','A young Canadian ran across part of Canada to raise money for cancer research','Newfoundland is the best place to start a run','Cancer research began in 1980'], a:1, why:'The whole passage is about Fox\u2019s run to raise money for cancer research.' }
+  ]},
+{ title:'The Charter of Rights and Freedoms', text:'In 1982, Canada gained a new part of its Constitution: the Canadian Charter of Rights and Freedoms. The Charter guarantees freedoms that all Canadians share, such as freedom of conscience, religion, thought, belief, expression, and association. It also protects democratic rights, including the right to vote in federal and provincial elections, and legal rights, such as the right to a fair trial. The Charter applies to governments \u2014 federal, provincial, and territorial \u2014 and it limits what governments can do. Courts can strike down laws that violate the Charter. The Charter also recognizes that Canada has two official languages, English and French, and Section 35 of the Constitution Act, 1982 recognizes and affirms the existing Aboriginal and treaty rights of the Indigenous peoples of Canada.',
+  qs:[
+  { q:'In what year did the Charter of Rights and Freedoms come into force?', opts:['1867','1960','1982','2001'], a:2, why:'The passage says Canada gained the Charter in 1982.' },
+  { q:'Which of these is protected by the Charter?', opts:['The right to drive without a licence','Freedom of expression','The right to free housing','The right to skip school'], a:1, why:'Freedom of expression is listed among the freedoms the Charter guarantees.' },
+  { q:'Who must follow the Charter?', opts:['Only private companies','Only the courts','Governments \u2014 federal, provincial, and territorial','Only the Prime Minister'], a:2, why:'The Charter applies to governments at all three levels.' },
+  { q:'What does Section 35 recognize?', opts:['The right to vote at age 16','Two official languages','The right to a free trial','The existing Aboriginal and treaty rights of Indigenous peoples'], a:3, why:'Section 35 recognizes and affirms the existing Aboriginal and treaty rights of Indigenous peoples.' }
+  ]},
+{ title:'Winter in Yellowknife', text:'Every January, the town of Yellowknife, in the Northwest Territories, sees temperatures fall below minus 30 degrees Celsius. The days are short \u2014 the sun rises late and sets early \u2014 and the snow stays on the ground for months. People dress in layers, plug in their cars so the engines will start, and gather indoors for community events. The cold shapes daily life, but it also brings the northern lights: ribbons of green and purple light that dance across the night sky. Visitors travel from around the world to see them. For many northerners, winter is not something to endure \u2014 it is a season to enjoy, with skating, skiing, snowshoeing, and long evenings with family and friends.',
+  qs:[
+  { q:'Where is Yellowknife?', opts:['Yukon','Nunavut','Manitoba','Northwest Territories'], a:3, why:'The first sentence places Yellowknife in the Northwest Territories.' },
+  { q:'Why do people plug in their cars?', opts:['To charge the battery for summer','To keep the headlights on','To warm the seats','So the engines will start in the cold'], a:3, why:'The passage says people plug in their cars so the engines will start.' },
+  { q:'What brings visitors to Yellowknife in winter?', opts:['Warm weather','The long days','The short nights','The northern lights'], a:3, why:'Visitors travel from around the world to see the northern lights.' },
+  { q:'What is the author\u2019s main point?', opts:['Winter in the North is too cold for anyone','Yellowknife is the coldest place on Earth','Everyone in Yellowknife owns a car','Winter in the North shapes life but is also enjoyed'], a:3, why:'The passage ends by saying winter is a season to enjoy, not just endure.' }
+  ]},
+{ title:'The Railway That Joined Canada', text:'When Canada became a country on July 1, 1867, it had only four provinces: Ontario, Quebec, Nova Scotia, and New Brunswick. British Columbia joined in 1871, but only on one condition \u2014 that a railway be built across the country within ten years. The Canadian Pacific Railway was an enormous project. Workers laid track through the Rocky Mountains and across the Prairies, and the last spike was driven at Craigellachie, British Columbia, on November 7, 1885. The railway linked the country from coast to coast and helped new towns and farms grow along its route.',
+  qs:[
+  { q:'How many provinces did Canada have at Confederation?', opts:['Ten','Six','Three','Four'], a:3, why:'Canada began with four provinces: Ontario, Quebec, Nova Scotia, and New Brunswick.' },
+  { q:'Why did British Columbia agree to join Canada?', opts:['It would become the capital','It would keep its own army','It would not pay taxes','A railway would be built across the country'], a:3, why:'British Columbia joined on the condition that a railway be built within ten years.' },
+  { q:'When was the last spike driven?', opts:['July 1, 1867','April 9, 1917','June 6, 1944','November 7, 1885'], a:3, why:'The last spike was driven at Craigellachie on November 7, 1885.' },
+  { q:'What did the railway help to do?', opts:['End the fur trade','Build the first cars','Found the first university','Link the country from coast to coast'], a:3, why:'The railway linked the country from coast to coast.' }
+  ]}
+];
+
+/* Writing: 6 persuasive prompts + 5-item rubric (2 pts each, 10 total). */
+var WRITING_PROMPTS = [
+'Your town is deciding whether to build a new community centre. Write a letter to your town council persuading them to support it \u2014 or to spend the money differently.',
+'Should high school students be required to complete volunteer hours before they graduate? Give reasons for your opinion.',
+'Some people say every Canadian should learn about the history of residential schools. Do you agree or disagree? Explain your view.',
+'Your local library wants to cut its evening hours to save money. Write a letter persuading the library board to keep the evening hours.',
+'Should Canada Day celebrations include more Indigenous programming? Give reasons for your opinion.',
+'Is it better to live in a small town or a big city? Persuade a friend who is thinking of moving.'
+];
+var WRITING_RUBRIC = [
+'You stated a clear opinion in your opening.',
+'You gave at least two reasons, with examples or details.',
+'Your ideas are organized in paragraphs (intro, reasons, conclusion).',
+'You used persuasive language \u2014 words that convince, not just list.',
+'Your spelling, punctuation, and sentences are correct.'
+];
+var WRITING_GUIDE = 'A strong persuasive answer has 4 parts: (1) State your opinion clearly in the first paragraph. (2) Give two or three reasons, each with an example or detail. (3) Answer the other side \u2014 say why the opposite view is weaker. (4) Finish with a clear conclusion that repeats your opinion.';
+
+/* Mathematics: Part I = no calculator (10), Part II = calculator allowed (10). */
+var MATH1 = [
+{ q:'What is 48 + 37?', opts:['75','95','81','85'], a:3, why:'48 + 37 = 85.' },
+{ q:'What is 125 \u2212 68?', opts:['67','47','63','57'], a:3, why:'125 \u2212 68 = 57.' },
+{ q:'What is 7 \u00d7 9?', opts:['56','72','54','63'], a:3, why:'7 \u00d7 9 = 63.' },
+{ q:'What is 144 \u00f7 12?', opts:['14','11','16','12'], a:3, why:'12 \u00d7 12 = 144, so 144 \u00f7 12 = 12.' },
+{ q:'What is 3/4 of 80?', opts:['40','20','70','60'], a:3, why:'80 \u00f7 4 = 20, and 20 \u00d7 3 = 60.' },
+{ q:'What is 25% of 200?', opts:['25','75','100','50'], a:3, why:'25% is one quarter; 200 \u00f7 4 = 50.' },
+{ q:'What is 2.5 + 1.75?', opts:['4.00','3.75','4.50','4.25'], a:3, why:'2.50 + 1.75 = 4.25.' },
+{ q:'Solve for x: x + 14 = 30', opts:['44','14','26','16'], a:3, why:'30 \u2212 14 = 16, so x = 16.' },
+{ q:'A shirt costs $40 and is on sale for 10% off. How much do you save?', opts:['$10','$14','$36','$4'], a:3, why:'10% of $40 is $4.' },
+{ q:'What is the next number in the pattern 3, 6, 12, 24, \u2026?', opts:['36','30','42','48'], a:3, why:'Each number doubles: 24 \u00d7 2 = 48.' }
+];
+var MATH2 = [
+{ q:'A train travels 240 km in 3 hours. What is its average speed?', opts:['60 km/h','120 km/h','240 km/h','80 km/h'], a:3, why:'240 \u00f7 3 = 80 km/h.' },
+{ q:'A rectangle is 12 m long and 5 m wide. What is its area?', opts:['34 m\u00b2','17 m\u00b2','120 m\u00b2','60 m\u00b2'], a:3, why:'Area = length \u00d7 width = 12 \u00d7 5 = 60 m\u00b2.' },
+{ q:'A recipe needs 2/3 cup of flour for one batch. How much for 3 batches?', opts:['1\u00bd cups','6 cups','2/9 cup','2 cups'], a:3, why:'2/3 \u00d7 3 = 2 cups.' },
+{ q:'A phone plan costs $35 a month plus $0.10 per minute over 100 minutes. What is the bill for 150 minutes?', opts:['$50','$35','$45','$40'], a:3, why:'150 \u2212 100 = 50 extra minutes \u00d7 $0.10 = $5; $35 + $5 = $40.' },
+{ q:'A store sold 40, 55, 30, and 75 umbrellas in four weeks. What is the total?', opts:['190','210','180','200'], a:3, why:'40 + 55 + 30 + 75 = 200.' },
+{ q:'The temperature fell from 4\u00b0C to \u22126\u00b0C. How many degrees did it drop?', opts:['2','6','4','10'], a:3, why:'From 4 down to \u22126 is 4 + 6 = 10 degrees.' },
+{ q:'Solve for x: 3x = 45', opts:['135','42','48','15'], a:3, why:'45 \u00f7 3 = 15, so x = 15.' },
+{ q:'A jacket costs $120 after a 20% discount. What was the original price?', opts:['$144','$140','$96','$150'], a:3, why:'$120 is 80% of the price, so $120 \u00f7 0.8 = $150.' },
+{ q:'A cube has sides of 3 cm. What is its volume?', opts:['9 cm\u00b3','18 cm\u00b3','36 cm\u00b3','27 cm\u00b3'], a:3, why:'Volume = 3 \u00d7 3 \u00d7 3 = 27 cm\u00b3.' },
+{ q:'A car uses 8 litres of gas per 100 km. How much gas for 250 km?', opts:['16 litres','32 litres','25 litres','20 litres'], a:3, why:'250 \u00f7 100 = 2.5, and 2.5 \u00d7 8 = 20 litres.' }
+];
+
+/* Social Studies: 16 — Canadian history, government, economics, civics. */
+var SOCIAL = [
+{ q:'In what year did Canada become a country?', opts:['1867','1885','1905','1949'], a:0, why:'Confederation was July 1, 1867.' },
+{ q:'Which four provinces joined at Confederation?', opts:['Ontario, Quebec, Manitoba, Alberta','Ontario, Quebec, Nova Scotia, New Brunswick','British Columbia, Alberta, Saskatchewan, Manitoba','Quebec, Nova Scotia, New Brunswick, Prince Edward Island'], a:1, why:'The four original provinces were Ontario, Quebec, Nova Scotia, and New Brunswick.' },
+{ q:'What is Canada\u2019s capital city?', opts:['Toronto','Montr\u00e9al','Vancouver','Ottawa'], a:3, why:'Ottawa, Ontario, is the capital of Canada.' },
+{ q:'How many provinces and territories does Canada have?', opts:['10 provinces, 2 territories','13 provinces, 0 territories','9 provinces, 4 territories','10 provinces, 3 territories'], a:3, why:'Canada has 10 provinces and 3 territories.' },
+{ q:'Who is Canada\u2019s head of state?', opts:['The Prime Minister','The Governor General','The Speaker of the House','The King'], a:3, why:'The King is head of state; the Governor General represents the King in Canada.' },
+{ q:'Which document guarantees fundamental freedoms in Canada?', opts:['The British North America Act','The Canadian Charter of Rights and Freedoms','The Statute of Westminster','The Indian Act'], a:1, why:'The Charter of Rights and Freedoms (1982) guarantees fundamental freedoms.' },
+{ q:'What is the maximum time allowed between federal elections in Canada?', opts:['4 years','6 years','10 years','5 years'], a:3, why:'The Constitution requires a federal election at least every 5 years.' },
+{ q:'What are Canada\u2019s two official languages?', opts:['English and Cree','French and Inuktitut','English and French','English and Spanish'], a:2, why:'English and French are Canada\u2019s two official languages.' },
+{ q:'Which level of government is mainly responsible for delivering health care?', opts:['The federal government','Municipalities','The courts','The provinces'], a:3, why:'Provinces deliver health care, with funding shared with the federal government.' },
+{ q:'What happened at Vimy Ridge in 1917?', opts:['Canada signed a peace treaty','The Canadian Corps captured Vimy Ridge in the First World War','The last spike of the railway was driven','Canada joined the United Nations'], a:1, why:'In April 1917 the Canadian Corps captured Vimy Ridge in the First World War.' },
+{ q:'Which three groups are recognized as the Indigenous peoples of Canada?', opts:['First Nations, Inuit, and M\u00e9tis','Cree, Ojibwe, and Mohawk','Inuit, M\u00e9tis, and Acadians','First Nations, Francophones, and Anglophones'], a:0, why:'Section 35 recognizes First Nations, Inuit, and M\u00e9tis peoples.' },
+{ q:'What is the name of the report that made 94 Calls to Action?', opts:['The Royal Commission on Aboriginal Peoples','The Truth and Reconciliation Commission','The Charter of Rights and Freedoms','The Kelowna Accord'], a:1, why:'The Truth and Reconciliation Commission issued 94 Calls to Action.' },
+{ q:'Which province is the only one with French as its sole official language?', opts:['New Brunswick','Ontario','Manitoba','Quebec'], a:3, why:'Quebec is the only province with French as its sole official language.' },
+{ q:'What is the main job of the House of Commons?', opts:['To run the provinces','To judge court cases','To print money','To make and pass federal laws'], a:3, why:'Elected Members of Parliament in the House of Commons debate and pass federal laws.' },
+{ q:'Which province joined Confederation most recently?', opts:['Alberta','British Columbia','Saskatchewan','Newfoundland and Labrador'], a:3, why:'Newfoundland and Labrador joined in 1949 \u2014 the most recent province.' },
+{ q:'What is a treaty in the Canadian context?', opts:['A trade deal with the United States','A law about taxes','A type of court order','An agreement between the Crown and Indigenous peoples'], a:3, why:'Treaties are agreements between the Crown and Indigenous peoples.' }
+];
+
+/* Science: 14 — general science. */
+var SCIENCE = [
+{ q:'At sea level, at what temperature does water boil?', opts:['90\u00b0C','80\u00b0C','110\u00b0C','100\u00b0C'], a:3, why:'Water boils at 100\u00b0C at sea level.' },
+{ q:'What gas do plants take in for photosynthesis?', opts:['Oxygen','Nitrogen','Hydrogen','Carbon dioxide'], a:3, why:'Plants take in carbon dioxide and release oxygen.' },
+{ q:'What force pulls objects toward Earth?', opts:['Friction','Magnetism','Inertia','Gravity'], a:3, why:'Gravity pulls objects toward Earth.' },
+{ q:'How many bones are in the adult human body?', opts:['106','156','256','206'], a:3, why:'An adult human has 206 bones.' },
+{ q:'What is the chemical symbol for water?', opts:['CO2','O2','NaCl','H2O'], a:3, why:'Water is H2O \u2014 two hydrogen atoms and one oxygen atom.' },
+{ q:'Which planet is closest to the Sun?', opts:['Venus','Earth','Mars','Mercury'], a:3, why:'Mercury is the closest planet to the Sun.' },
+{ q:'What is the powerhouse of the cell?', opts:['Nucleus','Ribosome','Golgi body','Mitochondria'], a:3, why:'Mitochondria release energy for the cell.' },
+{ q:'What do we call the process by which a liquid changes to a gas?', opts:['Condensation','Freezing','Melting','Evaporation'], a:3, why:'Evaporation is liquid turning into gas.' },
+{ q:'How long does Earth take to orbit the Sun?', opts:['One day','One month','One week','One year'], a:3, why:'Earth orbits the Sun once a year \u2014 about 365 days.' },
+{ q:'What is the main function of red blood cells?', opts:['To fight infection','To clot blood','To carry nutrients','To carry oxygen'], a:3, why:'Red blood cells carry oxygen around the body.' },
+{ q:'What unit measures electric current?', opts:['Volt','Watt','Ohm','Ampere'], a:3, why:'Current is measured in amperes (amps).' },
+{ q:'Which of these is a renewable energy source?', opts:['Coal','Natural gas','Gasoline','Solar power'], a:3, why:'Solar power comes from sunlight, which is renewable.' },
+{ q:'What is the freezing point of water?', opts:['10\u00b0C','\u221210\u00b0C','32\u00b0C','0\u00b0C'], a:3, why:'Water freezes at 0\u00b0C.' },
+{ q:'Which organ pumps blood around the body?', opts:['Liver','Lungs','Kidney','Heart'], a:3, why:'The heart pumps blood around the body.' }
+];
+
+var SUBJECTS = {
+  reading: { name:'Reading', desc:'Canadian passages + comprehension questions.', real:'Real test: 50 questions \u00b7 75 min', testMin:10, testCount:8 },
+  writing: { name:'Writing', desc:'One persuasive writing task + self-check rubric.', real:'Real test: 1 persuasive task \u00b7 75 min', testMin:20, testCount:1 },
+  math: { name:'Mathematics', desc:'Part I no calculator, Part II calculator allowed.', real:'Real test: 2 hours \u00b7 Part I + Part II', testMin:12, testCount:10 },
+  social: { name:'Social Studies', desc:'Canadian history, government, economics, civics.', real:'Real test: 40 questions \u00b7 90 min', testMin:12, testCount:10 },
+  science: { name:'Science', desc:'General science.', real:'Real test: 35 questions \u00b7 90 min', testMin:12, testCount:10 }
+};
+var SUBJECT_ORDER = ['reading','writing','math','social','science'];
+
+/* ---------------- state ---------------- */
+var state = 'menu'; /* menu | quiz | writing | paused | over */
+var prevState = 'menu';
+var subject = 'reading';
+var mode = 'practice'; /* practice | test */
+var practiceMode = false;
+var qlist = []; /* {q, opts, a, why, part, passage} */
+var qi = 0, correct = 0;
+var timerId = null, timeLeft = 0;
+var writingScore = 0, writingDone = false;
+
+function $(id){ return document.getElementById(id); }
+function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
+function shuffle(arr){
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--){
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* ---------------- audio (gated by holoSettings) ---------------- */
+var AC = null;
+function ac(){ if (!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } return AC; }
+function beep(f, dur, type, g){
+  try {
+    if (!window.holoSettings || !window.holoSettings.sound) return;
+    var c = ac(); if (!c) return;
+    var o = c.createOscillator(), gn = c.createGain();
+    o.type = type || 'sine'; o.frequency.value = f;
+    gn.gain.value = g || 0.1;
+    gn.gain.exponentialRampToValueAtTime(0.001, c.currentTime + dur);
+    o.connect(gn); gn.connect(c.destination);
+    o.start(); o.stop(c.currentTime + dur);
+  } catch (e) {}
+}
+function sfx(n){
+  if (n === 'good'){ beep(660, 0.12, 'sine', 0.11); setTimeout(function(){ beep(880, 0.18, 'sine', 0.11); }, 110); }
+  else if (n === 'bad'){ beep(220, 0.3, 'sawtooth', 0.09); }
+  else if (n === 'pass'){ [523, 659, 784, 1047].forEach(function(f, i){ setTimeout(function(){ beep(f, 0.16, 'sine', 0.11); }, i * 120); }); }
+  else if (n === 'fail'){ [392, 330, 262].forEach(function(f, i){ setTimeout(function(){ beep(f, 0.2, 'triangle', 0.1); }, i * 160); }); }
+}
+function buzz(ms){ try { if (window.holoBuzz) window.holoBuzz(ms); } catch (e) {} }
+
+/* ---------------- best scores ---------------- */
+function bestKey(s){ return 'caecPrep.best.' + s; }
+function getBest(s){
+  try {
+    if (s === 'writing') return parseInt(localStorage.getItem('caecPrep.best.writing') || '-1', 10);
+    return parseInt(localStorage.getItem(bestKey(s)) || '-1', 10);
+  } catch (e) { return -1; }
+}
+function saveBest(s, pct){
+  try { localStorage.setItem(bestKey(s), String(pct)); } catch (e) {}
+}
+function bestLabel(s){
+  var b = getBest(s);
+  if (b < 0) return 'Not attempted yet';
+  if (s === 'writing') return 'Best self-score: <b>' + b + '/10</b>';
+  return 'Best: <b>' + b + '%</b>' + (b >= PASS ? ' \u00b7 Passed' : ' \u00b7 Not yet passed');
+}
+
+/* ---------------- overlays ---------------- */
+var overlays = ['ovMenu','ovQuiz','ovWriting','ovRules','ovSettings','ovPause','ovEnd'];
+function show(id){ overlays.forEach(function(o){ $(o).classList.toggle('hidden', o !== id); }); }
+function showNone(){ overlays.forEach(function(o){ $(o).classList.add('hidden'); }); }
+function updateHUD(){
+  $('hudSubject').textContent = (state === 'menu') ? '\u2014' : SUBJECTS[subject].name;
+  $('hudQ').textContent = (state === 'quiz' && qlist.length) ? (Math.min(qi + 1, qlist.length) + '/' + qlist.length) : '\u2014';
+  $('hudScore').textContent = correct;
+  $('hudTime').textContent = (mode === 'test' && (state === 'quiz' || state === 'writing')) ? fmtTime(timeLeft) : (mode === 'practice' ? 'Practice' : '\u2014');
+}
+function fmtTime(s){
+  s = Math.max(0, s);
+  var m = Math.floor(s / 60), ss = s % 60;
+  return m + ':' + (ss < 10 ? '0' : '') + ss;
+}
+
+/* ---------------- menu ---------------- */
+function renderMenu(){
+  var html = '';
+  SUBJECT_ORDER.forEach(function(k){
+    var s = SUBJECTS[k];
+    html += '<button class="subj" data-subj="' + k + '" aria-pressed="' + (subject === k) + '">'
+      + '<span class="sname">' + s.name + '<span class="sbest">' + bestLabel(k) + '</span></span>'
+      + '<span class="sdesc">' + s.desc + '</span>'
+      + '<span class="sreal">' + s.real + '</span>'
+      + '</button>';
+  });
+  $('subjList').innerHTML = html;
+  Array.prototype.forEach.call(document.querySelectorAll('#subjList .subj'), function(b){
+    b.addEventListener('click', function(){
+      subject = b.getAttribute('data-subj');
+      renderMenu();
+    });
+  });
+  var done = 0, total = 0;
+  SUBJECT_ORDER.forEach(function(k){
+    var b = getBest(k);
+    if (b >= 0){ done++; total += (k === 'writing' ? (b >= 6 ? 1 : 0) : (b >= PASS ? 1 : 0)); }
+  });
+  $('menuBestLine').innerHTML = done === 0 ? 'Pick a subject, pick a mode, and press Start.'
+    : 'Subjects attempted: <b>' + done + '/5</b> &nbsp;\u00b7&nbsp; Passed: <b>' + total + '/5</b>';
+}
+function showMenu(){
+  stopTimer();
+  state = 'menu';
+  renderMenu();
+  show('ovMenu');
+  updateHUD();
+}
+
+/* ---------------- run setup ---------------- */
+function buildList(){
+  var list = [];
+  if (subject === 'reading'){
+    var passages = shuffle(READING);
+    var take = (mode === 'test') ? 2 : passages.length;
+    for (var i = 0; i < take; i++){
+      var p = passages[i];
+      p.qs.forEach(function(q){
+        list.push({ q:q.q, opts:q.opts, a:q.a, why:q.why, passage:p.title, text:p.text, part:'' });
+      });
+    }
+  } else if (subject === 'math'){
+    var p1 = shuffle(MATH1), p2 = shuffle(MATH2);
+    if (mode === 'test'){
+      p1.slice(0, 5).forEach(function(q){ list.push({ q:q.q, opts:q.opts, a:q.a, why:q.why, part:'Part I \u00b7 No calculator', passage:'', text:'' }); });
+      p2.slice(0, 5).forEach(function(q){ list.push({ q:q.q, opts:q.opts, a:q.a, why:q.why, part:'Part II \u00b7 Calculator allowed', passage:'', text:'' }); });
+    } else {
+      p1.forEach(function(q){ list.push({ q:q.q, opts:q.opts, a:q.a, why:q.why, part:'Part I \u00b7 No calculator', passage:'', text:'' }); });
+      p2.forEach(function(q){ list.push({ q:q.q, opts:q.opts, a:q.a, why:q.why, part:'Part II \u00b7 Calculator allowed', passage:'', text:'' }); });
+    }
+  } else if (subject === 'social'){
+    var bank = shuffle(SOCIAL);
+    (mode === 'test' ? bank.slice(0, 10) : bank).forEach(function(q){
+      list.push({ q:q.q, opts:q.opts, a:q.a, why:q.why, part:'', passage:'', text:'' });
+    });
+  } else if (subject === 'science'){
+    var sb = shuffle(SCIENCE);
+    (mode === 'test' ? sb.slice(0, 10) : sb).forEach(function(q){
+      list.push({ q:q.q, opts:q.opts, a:q.a, why:q.why, part:'', passage:'', text:'' });
+    });
+  }
+  return list;
+}
+
+function startRun(){
+  practiceMode = (mode === 'practice');
+  if (subject === 'writing'){ startWriting(); return; }
+  qlist = buildList();
+  qi = 0; correct = 0;
+  state = 'quiz';
+  if (mode === 'test'){
+    timeLeft = SUBJECTS[subject].testMin * 60;
+    startTimer();
+  } else {
+    stopTimer();
+  }
+  show('ovQuiz');
+  $('btnNextQ').classList.add('hidden');
+  $('qWhy').classList.add('hidden');
+  renderQ();
+  updateHUD();
+}
+
+/* ---------------- quiz ---------------- */
+function renderQ(){
+  var item = qlist[qi];
+  var letters = ['A','B','C','D'];
+  var html = '';
+  if (item.part) html += '<div class="qpart">' + esc(item.part) + '</div>';
+  if (item.text) html += '<div class="qpassage"><b>' + esc(item.passage) + '</b><br>' + esc(item.text) + '</div>';
+  html += '<div class="qtext">' + esc(item.q) + '</div>';
+  item.opts.forEach(function(o, i){
+    html += '<button class="opt" data-i="' + i + '"><span class="key">' + letters[i] + '</span>' + esc(o) + '</button>';
+  });
+  $('qCard').innerHTML = html;
+  $('qWhy').classList.add('hidden');
+  $('btnNextQ').classList.add('hidden');
+  Array.prototype.forEach.call(document.querySelectorAll('#qCard .opt'), function(b){
+    b.addEventListener('click', function(){ answer(parseInt(b.getAttribute('data-i'), 10)); });
+  });
+  updateHUD();
+}
+function answer(i){
+  if (state !== 'quiz') return;
+  var item = qlist[qi];
+  var btns = document.querySelectorAll('#qCard .opt');
+  Array.prototype.forEach.call(btns, function(b){ b.disabled = true; });
+  var ok = (i === item.a);
+  if (ok){ correct++; btns[i].classList.add('correct'); sfx('good'); buzz(20); }
+  else { btns[i].classList.add('wrong'); btns[item.a].classList.add('correct'); sfx('bad'); buzz(60); }
+  if (mode === 'practice'){
+    var w = $('qWhy');
+    w.innerHTML = '<b>' + (ok ? 'Correct!' : 'Not quite \u2014 the answer is ' + item.opts[item.a] + '.') + '</b><br>' + esc(item.why);
+    w.className = 'qcard why' + (ok ? '' : ' bad');
+    w.classList.remove('hidden');
+    $('btnNextQ').classList.remove('hidden');
+  } else {
+    setTimeout(function(){ nextQ(); }, 350);
+  }
+  updateHUD();
+}
+function nextQ(){
+  qi++;
+  if (qi >= qlist.length){ endRun(false); return; }
+  renderQ();
+}
+function endRun(timeUp){
+  stopTimer();
+  state = 'over';
+  var total = qlist.length;
+  var pct = total ? Math.round(correct / total * 100) : 0;
+  var passed = pct >= PASS;
+  var isBest = false;
+  if (mode === 'test' && !practiceMode){
+    var prev = getBest(subject);
+    if (pct > prev){ saveBest(subject, pct); isBest = true; }
+  }
+  if (passed) sfx('pass'); else sfx('fail');
+  $('endTitle').textContent = SUBJECTS[subject].name + ' \u2014 ' + (mode === 'test' ? 'Timed Test' : 'Practice');
+  $('endPass').textContent = passed ? 'PASSED' : (mode === 'test' ? 'NOT YET' : 'PRACTICE DONE');
+  $('endPass').className = 'passbig ' + (passed ? 'pass' : 'fail');
+  $('endScore').textContent = pct + '%';
+  $('endBar').style.width = pct + '%';
+  $('endBar').className = 'barfill' + (passed ? ' pass' : '');
+  $('endDetail').textContent = correct + ' correct out of ' + total + ' questions' + (timeUp ? ' \u2014 time ran out.' : '.');
+  var b = getBest(subject);
+  $('endBest').textContent = (b < 0) ? '\u2014' : (b + '%');
+  $('endNewBest').classList.toggle('hidden', !isBest);
+  $('endLine').textContent = passed
+    ? 'That beats the 55% pass mark \u2014 well done. Try another subject, or take the test again to push your score higher.'
+    : (mode === 'test'
+      ? 'The pass mark is 55%. Try Practice mode \u2014 it explains every answer \u2014 then take the test again.'
+      : 'Practice never counts toward your best. Take the Timed Test when you feel ready.');
+  show('ovEnd');
+  updateHUD();
+}
+
+/* ---------------- writing ---------------- */
+var wPrompt = '';
+function startWriting(){
+  state = 'writing';
+  wPrompt = WRITING_PROMPTS[Math.floor(Math.random() * WRITING_PROMPTS.length)];
+  $('wPrompt').textContent = wPrompt;
+  $('wGuide').textContent = WRITING_GUIDE;
+  $('wText').value = '';
+  $('wCount').textContent = '0 words';
+  var rh = '';
+  WRITING_RUBRIC.forEach(function(r, i){
+    rh += '<label><input type="checkbox" data-r="' + i + '" /> ' + esc(r) + '</label>';
+  });
+  $('wRubric').innerHTML = rh;
+  if (mode === 'test'){
+    timeLeft = SUBJECTS.writing.testMin * 60;
+    startTimer();
+  } else {
+    stopTimer();
+  }
+  show('ovWriting');
+  updateHUD();
+}
+function countWords(){
+  var t = $('wText').value.trim();
+  var n = t ? t.split(/\s+/).length : 0;
+  $('wCount').textContent = n + ' word' + (n === 1 ? '' : 's');
+}
+function finishWriting(){
+  stopTimer();
+  var checked = document.querySelectorAll('#wRubric input:checked').length;
+  writingScore = checked * 2; /* 0-10 */
+  writingDone = true;
+  var passed = writingScore >= 6;
+  var isBest = false;
+  if (mode === 'test' && !practiceMode){
+    var prev = getBest('writing');
+    if (writingScore > prev){ saveBest('writing', writingScore); isBest = true; }
+  }
+  if (passed) sfx('pass'); else sfx('fail');
+  state = 'over';
+  qlist = [{ q:'writing', opts:[], a:0, why:'' }];
+  $('endTitle').textContent = 'Writing \u2014 ' + (mode === 'test' ? 'Timed Test' : 'Practice');
+  $('endPass').textContent = passed ? 'PASSED' : (mode === 'test' ? 'NOT YET' : 'DONE');
+  $('endPass').className = 'passbig ' + (passed ? 'pass' : 'fail');
+  $('endScore').textContent = writingScore + '/10';
+  $('endBar').style.width = (writingScore * 10) + '%';
+  $('endBar').className = 'barfill' + (passed ? ' pass' : '');
+  $('endDetail').textContent = 'Self-check rubric: ' + checked + ' of 5 boxes ticked \u00b7 ' + $('wText').value.trim().split(/\s+/).filter(Boolean).length + ' words written.';
+  var b = getBest('writing');
+  $('endBest').textContent = (b < 0) ? '\u2014' : (b + '/10');
+  $('endNewBest').classList.toggle('hidden', !isBest);
+  $('endLine').textContent = passed
+    ? 'That is 6 or more out of 10 \u2014 above the 55% pass line. Keep the rubric in mind next time you write.'
+    : 'The pass line is 6 out of 10. Read the structure guide, add reasons with examples, and try another prompt.';
+  show('ovEnd');
+  updateHUD();
+}
+
+/* ---------------- timer ---------------- */
+function startTimer(){
+  stopTimer();
+  timerId = setInterval(function(){
+    if (state !== 'quiz' && state !== 'writing') return;
+    timeLeft--;
+    if (timeLeft <= 0){
+      timeLeft = 0;
+      updateHUD();
+      if (state === 'writing') finishWriting();
+      else endRun(true);
+      return;
+    }
+    updateHUD();
+  }, 1000);
+}
+function stopTimer(){ if (timerId){ clearInterval(timerId); timerId = null; } }
+
+/* ---------------- pause ---------------- */
+function pauseGame(){
+  if (state !== 'quiz' && state !== 'writing') return;
+  prevState = state;
+  state = 'paused';
+  show('ovPause');
+}
+function resumeGame(){
+  if (state !== 'paused') return;
+  state = prevState;
+  show(state === 'quiz' ? 'ovQuiz' : 'ovWriting');
+}
+
+/* ---------------- buttons ---------------- */
+$('btnStart').addEventListener('click', startRun);
+$('btnRules').addEventListener('click', function(){ show('ovRules'); });
+$('btnRulesClose').addEventListener('click', function(){ show('ovMenu'); });
+$('btnSettings').addEventListener('click', function(){ show('ovSettings'); });
+$('btnSettingsClose').addEventListener('click', function(){ show('ovMenu'); });
+$('btnPause').addEventListener('click', function(){ if (state === 'quiz' || state === 'writing') pauseGame(); else if (state === 'paused') resumeGame(); });
+$('btnResume').addEventListener('click', resumeGame);
+$('btnRestart').addEventListener('click', function(){ if (subject === 'writing') startWriting(); else startRun(); });
+$('btnExit').addEventListener('click', function(){ showMenu(); });
+$('btnAgain').addEventListener('click', function(){ if (subject === 'writing') startWriting(); else startRun(); });
+$('btnMenu').addEventListener('click', function(){ showMenu(); });
+$('btnNextQ').addEventListener('click', nextQ);
+$('btnFinishWriting').addEventListener('click', finishWriting);
+$('btnWritingMenu').addEventListener('click', function(){ showMenu(); });
+$('wText').addEventListener('input', countWords);
+Array.prototype.forEach.call(document.querySelectorAll('#modeRow .segbtn'), function(b){
+  b.addEventListener('click', function(){
+    mode = b.getAttribute('data-mode');
+    Array.prototype.forEach.call(document.querySelectorAll('#modeRow .segbtn'), function(x){
+      x.setAttribute('aria-pressed', x === b ? 'true' : 'false');
+    });
+  });
+});
+window.addEventListener('keydown', function(e){
+  if (e.key === 'p' || e.key === 'P'){
+    if (state === 'quiz' || state === 'writing') pauseGame();
+    else if (state === 'paused') resumeGame();
+  } else if (e.key === 'Enter'){
+    if (state === 'menu') startRun();
+    else if (state === 'over'){ if (subject === 'writing') startWriting(); else startRun(); }
+  }
+});
+
+/* ---------------- settings wiring ---------------- */
+function bindToggle(id, key, prop){
+  var el = $(id);
+  try { el.checked = !window.holoSettings || window.holoSettings[prop] !== false; } catch (e) {}
+  el.addEventListener('change', function(){
+    try {
+      if (window.holoSettings) window.holoSettings[prop] = el.checked;
+      localStorage.setItem(key, el.checked ? 'on' : 'off');
+    } catch (e) {}
+  });
+}
+bindToggle('setSound', 'holos-arcade-sound', 'sound');
+bindToggle('setMusic', 'holos-arcade-music', 'music');
+bindToggle('setHaptics', 'holos-arcade-haptics', 'haptics');
+
+/* ---------------- test hooks (for jsdom verification) ---------------- */
+window.__caec = {
+  get state(){ return state; },
+  get subject(){ return subject; },
+  get mode(){ return mode; },
+  get correct(){ return correct; },
+  get total(){ return qlist.length; },
+  get qIndex(){ return qi; },
+  get timeLeft(){ return timeLeft; },
+  get current(){ return qlist[qi] || null; },
+  subjects: SUBJECT_ORDER,
+  counts: { reading: 16, writingPrompts: WRITING_PROMPTS.length, math1: MATH1.length, math2: MATH2.length, social: SOCIAL.length, science: SCIENCE.length },
+  pick: function(s){ subject = s; renderMenu(); },
+  setMode: function(m){ mode = m; },
+  start: startRun,
+  answer: answer,
+  next: nextQ,
+  finishWriting: finishWriting
+};
+
+/* ---------------- init ---------------- */
+if (window.__holoPractice){
+  /* hub opened in practice — the guard auto-clicks #btnPractice once loaded;
+     this game has no #btnPractice, so default to Practice mode. */
+  mode = 'practice';
+}
+showMenu();
+updateHUD();
+})();
+</script>
+</body>
+</html>
