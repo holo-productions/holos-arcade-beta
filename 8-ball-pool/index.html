@@ -358,6 +358,11 @@ a{color:var(--ha-cyan)}
 @keyframes haCoinBlink{50%{opacity:.25}}
 .insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
 @media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+.friend-row{display:flex;gap:8px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:8px 0;font-family:system-ui,sans-serif}
+.friend-row b{font-size:15px}
+.friend-row span{display:block;font-size:13px;color:var(--muted);margin-top:2px}
+.friend-row button{border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 12px;font-weight:700;cursor:pointer;font-size:13px;margin-left:4px}
+#friendBar button{border-radius:999px;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.12);color:#fff;padding:6px 10px;font-weight:700;cursor:pointer;font-size:12.5px}
 </style>
 </head>
 <body>
@@ -375,6 +380,7 @@ a{color:var(--ha-cyan)}
     <div class="seg" role="tablist" aria-label="Choose mode">
       <button id="modeMatchBtn" class="active">🎯 Match Play</button>
       <button id="modePracticeBtn">🎱 Practice Round</button>
+      <button id="modeFriendBtn">👥 Play with a Friend</button>
     </div>
     <p id="modeDesc"><b>Match Play:</b> You vs. Rack, groups, wins &amp; streaks count. <b>Practice:</b> solo, no score, no timer, hints on — just learn the table.</p>
   </div>
@@ -395,6 +401,7 @@ a{color:var(--ha-cyan)}
       <div class="player" id="aiCard"><b>🤖 RACK — AI</b><small id="aiGroup">Waiting for groups to be decided.</small><div class="mini-balls" id="aiBalls"></div></div>
     </div>
     <div class="status" id="status">Your break! Drag / move on the table to aim, set power, then tap <strong>SHOOT</strong>. First ball potted decides solids vs. stripes.</div>
+    <div class="status" id="friendBar" style="display:none"></div>
 
     <div class="practice-panel" id="practicePanel" aria-live="polite">
       <h3>🎱 Practice Round — no pressure, just practice</h3>
@@ -494,6 +501,18 @@ a{color:var(--ha-cyan)}
   <div style="font-size:52px" id="overEmoji">🏆</div><h2 id="overTitle">You win!</h2><p id="overText" style="font-family:system-ui,sans-serif;line-height:1.6"></p>
   <button onclick="closeModal('overModal'); newRack()" style="background:#12291b;color:#fff;border:none;border-radius:999px;padding:12px 18px;font-weight:800">Rack 'em again</button>
   <button onclick="closeModal('overModal')" style="border-radius:999px;padding:12px 16px;margin-left:6px">View table</button>
+</div></div>
+
+<!-- FRIEND MODAL — POOL-MULTIPLAYER-2026-11-24 -->
+<div class="modal" id="friendModal"><div class="sheet">
+  <h2>👥 Play with a Friend</h2>
+  <p id="friendStatus" style="font-family:system-ui,sans-serif;line-height:1.5"></p>
+  <h3 style="font-family:system-ui,sans-serif;margin:14px 0 4px">Challenge a friend</h3>
+  <div id="friendList"></div>
+  <h3 style="font-family:system-ui,sans-serif;margin:14px 0 4px">Your pool matches</h3>
+  <div id="friendMatches"></div>
+  <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><button onclick="closeModal('friendModal')" style="border-radius:999px;padding:10px 14px">Close</button></div>
+  <p style="font-family:system-ui,sans-serif;font-size:13px;color:var(--muted);line-height:1.5">Turn-based — no live server. A finished match earns the usual 10 Glitch XP. Code names only, friends only.</p>
 </div></div>
 
 <script>
@@ -718,6 +737,9 @@ function resolveTurn(){
     const onBreak = totalShots[shooter]===1 && !groups[shooter]; // break shot
     if(cleared && !scratched){ endGame(shooter,'eight'); } else { endGame(opp,'eightEarly'); }
     if(cue().pocketed){ cue().pocketed=false; cue().x=220; cue().y=230; cue().vx=cue().vy=0; }
+    /* POOL-MULTIPLAYER-2026-11-24: record the shot outcome for the sync hook. */
+    window.__poolLastShot={shooter:shooter,potted:potted.map(function(b){return b.n;}),scratched:scratched,eight:true,winnerUid:((cleared&&!scratched)?shooter:opp)};
+    if(typeof poolFriendAfterShot==='function') poolFriendAfterShot(shooter);
     draw(); return;
   }
   // assign groups if open and a non-cue ball potted (not on break shot? simplified: assign after break too if groups open and it's not first shot? We'll assign on any shot except break)
@@ -750,16 +772,25 @@ function resolveTurn(){
     else if(assigned) setStatus(`Groups set! ${shooter==='you'?'You':'Rack'} took ${myGroup==='solid'?'solids':'stripes'}. ${turn==='you'?'<strong>Your turn.</strong>':'<strong>Rack to play…</strong>'}`);
     else setStatus(turn==='you'? `No pot — <strong>your turn</strong>. Aim for ${groups.you? (groupBalls(groups.you).length? 'your group':'the 8-ball') : 'any ball except the 8'}.` : `No pot from you — <strong>Rack is thinking…</strong>`);
   }
+  /* POOL-MULTIPLAYER-2026-11-24: record the shot outcome for the sync hook. */
+  window.__poolLastShot={shooter:shooter,potted:potted.map(function(b){return b.n;}),scratched:scratched,eight:false,winnerUid:null};
   updateCards(); draw();
-  if(!gameOver && turn==='ai'){ aiThinking=true; setTimeout(aiShoot, 900); }
+  if(!gameOver && turn==='ai' && !(typeof isFriend==='function' && isFriend())){ aiThinking=true; setTimeout(aiShoot, 900); }
   if(turn==='you') updateCards();
+  if(typeof poolFriendAfterShot==='function') poolFriendAfterShot(shooter);
+  if(typeof pfFixStatus==='function') pfFixStatus();
 }
 
 function endGame(winner, reason){
-  gameOver=true; bests.played++;
-  if(winner==='you'){ bests.wins++; bests.streak++; bests.bestStreak=Math.max(bests.bestStreak,bests.streak); if(bests.fewest===null||totalShots.you<bests.fewest) bests.fewest=totalShots.you; }
-  else { bests.losses++; bests.streak=0; }
-  saveBests(); updateCards();
+  gameOver=true;
+  /* POOL-MULTIPLAYER-2026-11-24: friend matches don't touch solo bests. */
+  if(!(typeof isFriend==='function' && isFriend())){
+    bests.played++;
+    if(winner==='you'){ bests.wins++; bests.streak++; bests.bestStreak=Math.max(bests.bestStreak,bests.streak); if(bests.fewest===null||totalShots.you<bests.fewest) bests.fewest=totalShots.you; }
+    else { bests.losses++; bests.streak=0; }
+    saveBests();
+  }
+  updateCards();
   const youWon=winner==='you';
   document.getElementById('overEmoji').textContent=youWon?'🏆':'🎱';
   document.getElementById('overTitle').textContent=youWon?'You win!':'Rack wins';
@@ -827,13 +858,16 @@ function aiShoot(){
 // Mode — Match vs Practice
 function setMode(next, silent){
   mode=next; localStorage.setItem('pool8_mode',mode);
+  var fr=(typeof isFriend==='function' && isFriend());
   document.body.classList.toggle('is-practice', isPractice());
   document.getElementById('practicePanel').classList.toggle('show', isPractice());
-  document.getElementById('modeMatchBtn').classList.toggle('active', !isPractice());
+  document.getElementById('modeMatchBtn').classList.toggle('active', !isPractice() && !fr);
   document.getElementById('modePracticeBtn').classList.toggle('active', isPractice());
   document.getElementById('modePracticeBtn').classList.toggle('practice-active', isPractice());
+  var mfb=document.getElementById('modeFriendBtn'); if(mfb) mfb.classList.toggle('active', fr);
   document.getElementById('modeDesc').innerHTML = isPractice()
     ? `<b>Practice Round:</b> Solo table, no score saved, no timer, no opponent, hints on. Perfect for breaks, pots and the 8-ball finish.`
+    : fr ? `<b>Play with a Friend:</b> Turn-based vs a friend — shoot, they get a nudge, they shoot back. Your table syncs through the Arcade.`
     : `<b>Match Play:</b> You vs. Rack, groups, wins &amp; streaks count. <b>Practice:</b> solo, no score, no timer, hints on — just learn the table.`;
   document.getElementById('newBtn').textContent = isPractice() ? '🔄 New Practice Rack' : '🎱 New Rack';
   if(!silent) newRack(); else { updateCards(); renderStats(); }
@@ -933,6 +967,610 @@ setMode(mode, true); renderStats(); newRack();
 <script src="../shared/gamepad.js"></script>
 <script>
 if (window.HoloGamepad) HoloGamepad.bind({ keys: { action: 'Space', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp' } });
+</script>
+<script>
+/* ================= POOL-MULTIPLAYER-2026-11-24 =================
+   8-Ball Pool — Play with a Friend (turn-based, Firebase, no server).
+   Holo 2026-11-24 19:31: "Make pool multi-player for testing."
+   Single-player (Match vs Rack + Practice) is untouched: same physics,
+   same feel. Friend mode reuses the two-seat engine: locally I am
+   always the 'you' seat and my friend is the 'ai' seat; the AI never
+   shoots in friend mode. After each of MY shots resolves, the final
+   resting state (ball positions, groups, turn, ball-in-hand, win) is
+   published to the SAME /turnMatches protocol as Tic Tac Toe
+   (game:'8-ball-pool', board:[] for rules compat). My friend polls
+   and applies the state — no re-simulation, no real-time needed.
+   State lives in Firebase, so a reload mid-match restores the table.
+   Challenge from inside this game, or join via a private room link
+   (?room=<CODE> or a 'holo-room-join' postMessage — see
+   poolJoinRoom; the hub writes /challengeRooms/<CODE>).
+   RULES GATE: the live /turnMatches rules only allow
+   game==='tic-tac-toe' — Holo must publish
+   firebase-rules-turnmatches-pool-update-2026-11-24.md before any
+   friend match can be created live. Until then every cloud call
+   fails soft with a plain message, and solo play is unaffected.
+   Code names only in every match UI. Beta friends only. */
+(function(){
+'use strict';
+var FB_RTDB='https://holos-arcade-default-rtdb.firebaseio.com';
+var FB_API_KEY='AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak';
+var AUTH_KEY='holos-firebase-auth';
+var GAME='8-ball-pool';
+var POLL_MS=4000;
+var ROOM_NODE='challengeRooms';
+var LS_MATCH='pool8_friend_match';
+var LS_NUDGE='pool8_nudge_';
+
+/* ---------- auth + REST (mirrors the hub's api()/freshToken()) ---------- */
+function pfAuth(){ try{ var v=JSON.parse(localStorage.getItem(AUTH_KEY)||'null'); if(v&&v.idToken&&v.uid) return v; }catch(e){} return null; }
+function pfUid(){ var a=pfAuth(); return a?a.uid:null; }
+function pfFreshToken(){
+  var a=pfAuth(); if(!a) return Promise.resolve(null);
+  if(a.exp&&a.exp>Date.now()+60000) return Promise.resolve(a.idToken);
+  if(!a.refreshToken) return Promise.resolve(null);
+  return fetch('https://securetoken.googleapis.com/v1/token?key='+FB_API_KEY,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'grant_type=refresh_token&refresh_token='+encodeURIComponent(a.refreshToken)})
+    .then(function(r){return r.json();})
+    .then(function(j){ if(j&&j.id_token){ a.idToken=j.id_token; a.refreshToken=j.refresh_token||a.refreshToken; a.exp=Date.now()+((parseInt(j.expires_in,10)||3600)*1000); try{localStorage.setItem(AUTH_KEY,JSON.stringify(a));}catch(e){} return a.idToken; } return null; })
+    .catch(function(){return null;});
+}
+function pfApi(method,path,body){
+  return pfFreshToken().then(function(tok){
+    if(!tok) return null;
+    var opts={method:method,headers:{'Content-Type':'application/json'}};
+    if(body!==undefined) opts.body=JSON.stringify(body);
+    return fetch(FB_RTDB+path+'.json?auth='+encodeURIComponent(tok),opts)
+      .then(function(r){ return r.ok?r.json().catch(function(){return true;}):null; })
+      .catch(function(){return null;});
+  }).catch(function(){return null;});
+}
+function pfTimeShort(ts){ try{ var d=new Date(ts); var h=d.getHours(),m=d.getMinutes(); var ap=h>=12?'PM':'AM'; h=h%12||12; return h+':'+(m<10?'0':'')+m+' '+ap; }catch(e){ return ''; } }
+function pfEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+var myNameCache=null;
+function pfMyName(){
+  if(myNameCache) return Promise.resolve(myNameCache);
+  var uid=pfUid(); if(!uid) return Promise.resolve('A tester');
+  return pfApi('GET','/users/'+encodeURIComponent(uid)).then(function(u){
+    var n=(u&&(u.username||u.name))?String(u.username||u.name):'A tester';
+    myNameCache=n; return n;
+  });
+}
+function pfNotice(toUid,notice){
+  if(!toUid||!notice) return Promise.resolve(null);
+  var body={type:String(notice.type||'system').slice(0,40),title:String(notice.title||'').slice(0,120),body:String(notice.body||'').slice(0,600),createdAt:Date.now(),read:false};
+  if(notice.link) body.link=String(notice.link).slice(0,120);
+  if(notice.fromName) body.fromName=String(notice.fromName).slice(0,60);
+  if(notice.fromUid) body.fromUid=String(notice.fromUid).slice(0,80);
+  return pfApi('POST','/users/'+encodeURIComponent(toUid)+'/notifications',body);
+}
+
+/* ---------- match state ---------- */
+var pfMatch=null, pfMid=null, pfPollTimer=null, pfRoomCode=null, pfRoomPollTimer=null;
+var pfSeenMoves=-1, pfSeenUpdated=0, pfFriendsCache=null, pfBusy=false;
+function isFriend(){ return (typeof mode!=='undefined' && mode==='friend'); }
+window.isFriend=isFriend;
+function pfOtherUid(m,me){ if(!m) return null; return m.aUid===me?m.bUid:m.aUid; }
+function pfOtherName(m,me){ if(!m) return 'Tester'; return m.aUid===me?(m.bName||'Tester'):(m.aName||'Tester'); }
+function pfIsMyTurn(m,me){ return !!m && m.status==='playing' && m.turn===me; }
+function pfSeatOf(m,uid){ return null; } /* seats are local: I am always 'you' */
+
+function pfSerialize(){
+  var me=pfUid();
+  var ballsNow=balls.map(function(b){ return {n:b.n,x:Math.round(b.x*10)/10,y:Math.round(b.y*10)/10,pocketed:!!b.pocketed}; });
+  var g={}; g[me]=groups.you||null; var opp=pfMatch?pfOtherUid(pfMatch,me):null; if(opp) g[opp]=groups.ai||null;
+  var shots={}; shots[me]=totalShots.you||0; if(opp) shots[opp]=totalShots.ai||0;
+  var c=cue();
+  return { balls:ballsNow, groups:g, ballInHand:!!ballInHand, cue:{x:c?Math.round(c.x*10)/10:220,y:c?Math.round(c.y*10)/10:230}, shots:shots, turnUid: (turn==='you'?me:(opp||me)) };
+}
+function pfApplyState(st){
+  if(!st||!pfMatch) return;
+  var me=pfUid(), opp=pfOtherUid(pfMatch,me);
+  (st.balls||[]).forEach(function(sb){
+    var b=balls.find(function(x){return x.n===sb.n;});
+    if(b){ b.x=sb.x; b.y=sb.y; b.pocketed=!!sb.pocketed; b.vx=0; b.vy=0; }
+  });
+  if(st.groups){ groups.you=st.groups[me]||null; groups.ai=opp?(st.groups[opp]||null):null; }
+  ballInHand=!!st.ballInHand;
+  var c=cue();
+  if(c&&st.cue){ c.x=st.cue.x; c.y=st.cue.y; }
+  if(st.shots){ totalShots.you=st.shots[me]||0; if(opp) totalShots.ai=st.shots[opp]||0; }
+  turn=(st.turnUid===me)?'you':'ai';
+  moving=false;
+  document.getElementById('placeHint').style.display=(ballInHand&&turn==='you')?'block':'none';
+  updateCards(); draw();
+}
+function pfApplyMatch(m){
+  pfMatch=m;
+  if(m&&m.state) pfApplyState(m.state);
+  if(m&&m.status==='won'&&m.winner){ gameOver=true; pfShowEnd(m); }
+  if(m&&m.status==='playing'){
+    var me2=pfUid();
+    if(m.turn===me2){
+      var ls=(m.state&&m.state.lastShot)||null;
+      setStatus('<strong>Your turn!</strong> '+(ls&&ls.text?pfEsc(ls.text):'Aim and shoot when ready.'));
+    } else {
+      setStatus('⏳ <strong>'+pfEsc(pfOtherName(m,me2))+'’s turn…</strong> Their shot will appear here when it lands.');
+    }
+  }
+  pfUpdateFriendBar(); updateCards(); draw();
+}
+function pfShowEnd(m){
+  var me=pfUid();
+  var iWon=m.winner===me;
+  var oppName=pfOtherName(m,me);
+  document.getElementById('overEmoji').textContent=iWon?'🏆':'🎱';
+  document.getElementById('overTitle').textContent=iWon?'You win!':(oppName+' wins');
+  document.getElementById('overText').textContent=iWon?('Brilliant — you beat '+oppName+' at 8-Ball Pool.'): (oppName+' cleared the table and sank the 8. Rematch?');
+  setStatus(iWon?('<strong>🏆 You win!</strong> Rematch '+pfEsc(oppName)+' when you are ready.'):('<strong>'+pfEsc(oppName)+' wins this rack.</strong> Tap Rematch to go again.'));
+  var btns=document.querySelectorAll('#overModal button');
+  if(btns[0]){ btns[0].textContent='🔄 Rematch '+oppName; btns[0].onclick=function(){ closeModal('overModal'); pfRematch(); }; }
+  if(btns[1]){ btns[1].textContent='View table'; btns[1].onclick=function(){ closeModal('overModal'); }; }
+  document.getElementById('overModal').classList.add('open');
+}
+
+/* ---------- publish a finished shot ---------- */
+function pfPublishTurn(outcome){
+  if(!pfMatch||!pfMid) return Promise.resolve(false);
+  var me=pfUid(); if(!me) return Promise.resolve(false);
+  var m=pfMatch, now=Date.now();
+  var prevTurn=m.turn; /* turn before this shot — only nudge when it changes */
+  var st=pfSerialize();
+  /* outcome refines the published state: ball-in-hand goes to the
+     player whose turn it is next; an 8-ball ends the match. */
+  var nextTurnUid=st.turnUid;
+  if(outcome&&outcome.eight){
+    st.turnUid=me; /* game over; turn stays with the shooter for the record */
+  } else if(outcome&&outcome.scratched){
+    st.ballInHand=true; /* the player to move places the cue ball */
+  }
+  var status=m.status, winner=m.winner;
+  if(outcome&&outcome.eight){ status='won'; winner=outcome.winnerUid||me; }
+  var hist=(m.history||[]).slice();
+  var shotTxt='';
+  if(outcome){
+    if(outcome.eight) shotTxt=(outcome.winnerUid===me?'You sank the 8 — you win!':pfOtherName(m,me)+' sank the 8');
+    else if(outcome.potted&&outcome.potted.length) shotTxt='potted '+outcome.potted.join(', ')+(outcome.scratched?' (scratch)':'');
+    else if(outcome.scratched) shotTxt='scratched — ball in hand';
+    else shotTxt='no pot';
+    hist.push({by:me,text:shotTxt,at:now});
+    if(hist.length>20) hist=hist.slice(-20);
+    st.lastShot={by:me,text:shotTxt,at:now};
+  }
+  if(status==='won'){ pfShowEnd({status:'won',winner:winner,aUid:m.aUid,bUid:m.bUid,aName:m.aName,bName:m.bName}); }
+  var patch={state:st,turn:nextTurnUid,status:status,winner:winner,lastMoveAt:now,lastMoveBy:me,lastMoveCell:-1,history:hist,moves:(m.moves||0)+1,updatedAt:now};
+  function attempt(n){
+    return pfApi('PATCH','/turnMatches/'+encodeURIComponent(pfMid),patch).then(function(r){
+      if(r===null&&n<3){ return new Promise(function(res){ setTimeout(function(){ attempt(n+1).then(res); },1500); }); }
+      if(r===null){ pfSetSyncError(true); return false; }
+      pfSetSyncError(false);
+      Object.keys(patch).forEach(function(k){ m[k]=patch[k]; });
+      pfSeenMoves=m.moves; pfSeenUpdated=m.updatedAt;
+      if(status==='won'){
+        pfShowEnd(m);
+        pfMyName().then(function(myN){
+          pfNotice(pfOtherUid(m,me),{type:'turn',title:'8-Ball Pool result',body:(winner===me?myN:pfOtherName(m,me))+' won the 8-Ball Pool match.',link:'game:8-ball-pool',fromName:myN,fromUid:me});
+        });
+      } else if(nextTurnUid!==prevTurn){
+        /* Only nudge when the turn actually passed to the friend —
+           potting on the break keeps the turn, so no notice then. */
+        pfMyName().then(function(myN){
+          pfNotice(pfOtherUid(m,me),{type:'turn',title:'Your turn in 8-Ball Pool',body:'Your turn in 8-Ball Pool vs '+myN+' — '+myN+' played at '+pfTimeShort(now)+'.',link:'game:8-ball-pool',fromName:myN,fromUid:me});
+        });
+      }
+      pfUpdateFriendBar();
+      return true;
+    });
+  }
+  return attempt(1);
+}
+function pfSetSyncError(on){
+  var bar=document.getElementById('friendBar');
+  if(!bar) return;
+  var err=document.getElementById('friendSyncErr');
+  if(on&&!err){
+    var b=document.createElement('button'); b.id='friendSyncErr'; b.textContent='⚠️ Shot didn’t sync — Retry';
+    b.style.cssText='border-radius:999px;padding:8px 12px;font-weight:700;cursor:pointer';
+    b.onclick=function(){ var o=window.__poolLastShot||{}; pfPublishTurn(o); };
+    bar.appendChild(b);
+  } else if(!on&&err){ err.parentNode.removeChild(err); }
+}
+/* Called from resolveTurn (hooked at the end + in the 8-ball branch).
+   Only publishes when the shot was MINE in a friend match. */
+function poolFriendAfterShot(shooter){
+  if(!isFriend()||!pfMatch||!pfMid) return;
+  if(shooter!=='you') return; /* remote shots arrive via poll, never publish */
+  var o=window.__poolLastShot||{};
+  var outcome={potted:o.potted||[],scratched:!!o.scratched,eight:!!o.eight,winnerUid:o.winnerUid||null};
+  /* The game stashes the SEAT ('you'/'ai') as winnerUid; translate to a UID. */
+  if(outcome.eight&&outcome.winnerUid){
+    var me=pfUid();
+    outcome.winnerUid=(outcome.winnerUid==='you')?me:pfOtherUid(pfMatch,me);
+  }
+  /* The local table already shows the result; sync it to Firebase. */
+  pfPublishTurn(outcome);
+}
+window.poolFriendAfterShot=poolFriendAfterShot;
+
+/* ---------- challenge / accept / decline / rematch / leave / nudge ---------- */
+function pfChallenge(uid,name){
+  var me=pfUid();
+  if(!me){ setStatus('Sign in to the Arcade to play with a friend — friend matches need your Arcade account.'); return Promise.resolve(null); }
+  if(!uid||uid===me) return Promise.resolve(null);
+  if(pfBusy) return Promise.resolve(null); pfBusy=true;
+  return pfMyName().then(function(myN){
+    var now=Date.now();
+    newRack();
+    var match={game:GAME,aUid:me,bUid:uid,aName:myN,bName:String(name||'Tester'),xUid:me,oUid:uid,board:[],turn:me,status:'waiting',winner:null,
+      state:{balls:balls.map(function(b){return {n:b.n,x:Math.round(b.x*10)/10,y:Math.round(b.y*10)/10,pocketed:false};}),groups:{},ballInHand:false,cue:{x:220,y:230},shots:{},turnUid:me},
+      lastMoveAt:0,lastMoveBy:'',lastMoveCell:-1,history:[],moves:0,createdAt:now,updatedAt:now};
+    match.state.groups[me]=null; match.state.groups[uid]=null;
+    match.state.shots[me]=0; match.state.shots[uid]=0;
+    return pfApi('POST','/turnMatches',match).then(function(r){
+      pfBusy=false;
+      if(!r||!r.name){ setStatus('⚠️ Friend matches need one more Arcade update — the new rules publish is still pending. Solo play still works.'); pfRenderPanel(); return null; }
+      var mid=r.name;
+      pfApi('PUT','/users/'+encodeURIComponent(me)+'/turnMatches/'+encodeURIComponent(mid),true);
+      pfApi('PUT','/users/'+encodeURIComponent(uid)+'/turnMatches/'+encodeURIComponent(mid),true);
+      pfNotice(uid,{type:'turn-invite',title:'8-Ball Pool challenge!',body:myN+' challenged you to 8-Ball Pool.',link:'game:8-ball-pool',fromName:myN,fromUid:me});
+      pfMid=mid; pfMatch=match; pfSeenMoves=0; pfSeenUpdated=now;
+      try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
+      setMode('friend',true); updateCards(); draw(); pfStartPoll();
+      setStatus('Challenge sent to <strong>'+pfEsc(name||'your friend')+'</strong>! You break when they accept.');
+      pfUpdateFriendBar(); pfRenderPanel();
+      return mid;
+    });
+  }).catch(function(){ pfBusy=false; return null; });
+}
+function pfAccept(mid){
+  var me=pfUid(); if(!me) return Promise.resolve(false);
+  function go(){
+    var m=pfMatchList[mid];
+    if(!m||m.status!=='waiting'||m.bUid!==me) return Promise.resolve(false);
+    return pfApi('PATCH','/turnMatches/'+encodeURIComponent(mid),{status:'playing',updatedAt:Date.now()}).then(function(r){
+    if(r===null){ setStatus('⚠️ That did not save — the new rules publish is still pending.'); return false; }
+    m.status='playing'; m.updatedAt=Date.now();
+    pfMid=mid; pfMatch=m; pfSeenMoves=m.moves||0; pfSeenUpdated=m.updatedAt;
+    try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
+    setMode('friend',true); pfApplyMatch(m); pfStartPoll();
+    pfMyName().then(function(myN){
+      pfNotice(m.aUid,{type:'turn',title:'Your turn in 8-Ball Pool',body:'Your turn in 8-Ball Pool vs '+myN+' — '+myN+' accepted at '+pfTimeShort(Date.now())+'.',link:'game:8-ball-pool',fromName:myN,fromUid:me});
+    });
+    setStatus('<strong>'+pfEsc(m.aName||'Your friend')+'</strong> breaks first — watch the table, your turn is next.');
+    return true;
+  });
+  }
+  if(pfMatchList[mid]) return go();
+  return pfApi('GET','/turnMatches/'+encodeURIComponent(mid)).then(function(m){
+    if(m&&typeof m==='object') pfMatchList[mid]=m;
+    return go();
+  });
+}
+function pfDecline(mid){
+  var me=pfUid(); if(!me) return Promise.resolve(false);
+  var m=pfMatchList[mid]; if(!m||m.status!=='waiting') return Promise.resolve(false);
+  return pfApi('PATCH','/turnMatches/'+encodeURIComponent(mid),{status:'declined',updatedAt:Date.now()}).then(function(r){
+    if(r===null){ setStatus('⚠️ That did not save — the new rules publish is still pending.'); return false; }
+    m.status='declined'; pfRenderPanel(); return true;
+  });
+}
+function pfCancel(mid){
+  var me=pfUid(); if(!me) return Promise.resolve(false);
+  var m=pfMatchList[mid]; if(!m||m.status!=='waiting'||m.aUid!==me) return Promise.resolve(false);
+  return pfDecline(mid);
+}
+function pfRematch(){
+  if(!pfMatch) return;
+  var me=pfUid(); var opp=pfOtherUid(pfMatch,me), name=pfOtherName(pfMatch,me);
+  pfStopPoll(); pfMatch=null; pfMid=null;
+  try{localStorage.removeItem(LS_MATCH);}catch(e){}
+  pfChallenge(opp,name);
+}
+function pfLeave(){
+  if(!pfMatch||!pfMid) return Promise.resolve(false);
+  var me=pfUid(); var m=pfMatch, mid=pfMid;
+  if(m.status!=='playing'&&m.status!=='waiting') return Promise.resolve(false);
+  return pfApi('PATCH','/turnMatches/'+encodeURIComponent(mid),{status:'left',winner:null,updatedAt:Date.now()}).then(function(r){
+    if(r===null){ setStatus('⚠️ That did not save — the new rules publish is still pending. Try again in a moment.'); return false; }
+    var opp=pfOtherUid(m,me);
+    pfMyName().then(function(myN){
+      pfNotice(opp,{type:'turn',title:'8-Ball Pool match ended',body:myN+' left your 8-Ball Pool match.',link:'game:8-ball-pool',fromName:myN,fromUid:me});
+    });
+    pfStopPoll(); pfMatch=null; pfMid=null;
+    try{localStorage.removeItem(LS_MATCH);}catch(e){}
+    setMode('match',true); newRack();
+    setStatus('You left the match. Solo Match Play is back on — challenge again any time.');
+    pfUpdateFriendBar(); pfRenderPanel();
+    return true;
+  });
+}
+function pfNudge(){
+  if(!pfMatch||!pfMid) return;
+  var me=pfUid(); var opp=pfOtherUid(pfMatch,me);
+  try{
+    var last=+localStorage.getItem(LS_NUDGE+pfMid)||0;
+    if(Date.now()-last<10*60*1000){ setStatus('Nudge already sent — give '+pfEsc(pfOtherName(pfMatch,me))+' a few more minutes.'); return; }
+    localStorage.setItem(LS_NUDGE+pfMid,String(Date.now()));
+  }catch(e){}
+  pfMyName().then(function(myN){
+    pfNotice(opp,{type:'turn',title:'Your turn in 8-Ball Pool',body:myN+' is waiting for your shot in 8-Ball Pool.',link:'game:8-ball-pool',fromName:myN,fromUid:me});
+  });
+  setStatus('Nudge sent to <strong>'+pfEsc(pfOtherName(pfMatch,me))+'</strong>.');
+}
+
+/* ---------- load + poll ---------- */
+var pfMatchList={};
+function pfLoadMyMatches(){
+  var me=pfUid(); if(!me) return Promise.resolve({});
+  return pfApi('GET','/users/'+encodeURIComponent(me)+'/turnMatches').then(function(idx){
+    if(!idx||typeof idx!=='object') return {};
+    var keys=Object.keys(idx);
+    var jobs=keys.map(function(mid){
+      return pfApi('GET','/turnMatches/'+encodeURIComponent(mid)).then(function(m){
+        if(m&&typeof m==='object'&&m.game===GAME) pfMatchList[mid]=m;
+      });
+    });
+    return Promise.all(jobs).then(function(){ return pfMatchList; });
+  });
+}
+function pfStartPoll(){
+  pfStopPoll();
+  pfPollTimer=setInterval(pfPollTick,POLL_MS);
+}
+function pfStopPoll(){ if(pfPollTimer){ clearInterval(pfPollTimer); pfPollTimer=null; } }
+function pfPollTick(){
+  if(!pfMatch||!pfMid) return;
+  if(document.hidden) return;
+  if(pfMatch.status!=='waiting'&&pfMatch.status!=='playing') return;
+  pfApi('GET','/turnMatches/'+encodeURIComponent(pfMid)).then(function(m){
+    if(!m||typeof m!=='object') return;
+    if(m.updatedAt===pfSeenUpdated&& (m.moves||0)===pfSeenMoves) return;
+    var wasStatus=pfMatch.status;
+    pfMatch=m; pfSeenMoves=m.moves||0; pfSeenUpdated=m.updatedAt||0;
+    if(m.status==='won'&&m.winner){ gameOver=true; pfApplyMatch(m); return; }
+    if(m.status==='left'||m.status==='declined'){
+      setStatus('<strong>'+pfEsc(pfOtherName(m,pfUid()))+'</strong> '+(m.status==='left'?'left the match.':'declined the challenge.'));
+      pfStopPoll(); pfMatch=null; pfMid=null;
+      try{localStorage.removeItem(LS_MATCH);}catch(e){}
+      setMode('match',true); newRack(); pfUpdateFriendBar(); pfRenderPanel(); return;
+    }
+    if(m.status==='playing'&&wasStatus==='waiting'){
+      setStatus('<strong>'+pfEsc(pfOtherName(m,pfUid()))+'</strong> accepted! '+(m.turn===pfUid()?'Your break — shoot when ready.':'They break first — watch the table.'));
+    }
+    pfApplyMatch(m);
+  });
+}
+
+/* ---------- room join (?room=<CODE> / postMessage) ---------- */
+function pfJoinRoom(code){
+  code=String(code||'').trim().toUpperCase();
+  if(!code) return Promise.resolve(false);
+  var me=pfUid();
+  if(!me){ setStatus('Sign in to the Arcade to join a room — rooms need your Arcade account.'); return Promise.resolve(false); }
+  pfRoomCode=code;
+  return pfApi('GET','/'+ROOM_NODE+'/'+encodeURIComponent(code)).then(function(room){
+    if(!room||typeof room!=='object'||room.game!==GAME){
+      setStatus('⚠️ That room link didn’t work — ask the host to share it again.');
+      return false;
+    }
+    var isHost=room.hostUid===me;
+    var isGuest=room.guestUid===me||!room.guestUid;
+    if(!isHost&&!isGuest){ setStatus('⚠️ That room is already full.'); return false; }
+    if(!room.guestUid&&!isHost){
+      return pfMyName().then(function(myN){
+        return pfApi('PATCH','/'+ROOM_NODE+'/'+encodeURIComponent(code),{guestUid:me,guestName:myN}).then(function(){
+          room.guestUid=me; room.guestName=myN;
+          return pfEnterRoom(room);
+        });
+      });
+    }
+    return pfEnterRoom(room);
+  });
+}
+function pfEnterRoom(room){
+  var me=pfUid();
+  if(room.matchId){
+    return pfApi('GET','/turnMatches/'+encodeURIComponent(room.matchId)).then(function(m){
+      if(!m||typeof m!=='object'){ setStatus('⚠️ That room’s match couldn’t be found — ask the host to share a fresh link.'); return false; }
+      pfMatchList[room.matchId]=m;
+      pfMid=room.matchId; pfMatch=m; pfSeenMoves=m.moves||0; pfSeenUpdated=m.updatedAt||0;
+      try{localStorage.setItem(LS_MATCH,room.matchId);}catch(e){}
+      setMode('friend',true); pfApplyMatch(m); pfStartPoll();
+      return true;
+    });
+  }
+  /* No match yet — the first arrival creates it (host breaks). */
+  var hostUid=room.hostUid, guestUid=room.guestUid||me;
+  var oppUid=(me===hostUid)?guestUid:hostUid;
+  var oppName=(me===hostUid)?(room.guestName||'Tester'):(room.hostName||'Tester');
+  return pfMyName().then(function(myN){
+    var now=Date.now();
+    newRack();
+    var match={game:GAME,aUid:hostUid,bUid:guestUid,aName:(me===hostUid?myN:room.hostName),bName:(me===hostUid?(room.guestName||'Tester'):myN),xUid:hostUid,oUid:guestUid,board:[],turn:hostUid,status:'waiting',winner:null,roomCode:pfRoomCode,
+      state:{balls:balls.map(function(b){return {n:b.n,x:Math.round(b.x*10)/10,y:Math.round(b.y*10)/10,pocketed:false};}),groups:{},ballInHand:false,cue:{x:220,y:230},shots:{},turnUid:hostUid},
+      lastMoveAt:0,lastMoveBy:'',lastMoveCell:-1,history:[],moves:0,createdAt:now,updatedAt:now};
+    match.state.groups[hostUid]=null; match.state.groups[guestUid]=null;
+    match.state.shots[hostUid]=0; match.state.shots[guestUid]=0;
+    return pfApi('POST','/turnMatches',match).then(function(r){
+      if(!r||!r.name){ setStatus('⚠️ Friend matches need one more Arcade update — the new rules publish is still pending.'); return false; }
+      var mid=r.name;
+      pfApi('PUT','/users/'+encodeURIComponent(hostUid)+'/turnMatches/'+encodeURIComponent(mid),true);
+      pfApi('PUT','/users/'+encodeURIComponent(guestUid)+'/turnMatches/'+encodeURIComponent(mid),true);
+      pfApi('PATCH','/'+ROOM_NODE+'/'+encodeURIComponent(pfRoomCode),{matchId:mid,status:'ready'});
+      pfNotice(oppUid,{type:'turn-invite',title:'8-Ball Pool challenge!',body:myN+' challenged you to 8-Ball Pool.',link:'game:8-ball-pool',fromName:myN,fromUid:me});
+      pfMid=mid; pfMatch=match; pfSeenMoves=0; pfSeenUpdated=now;
+      try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
+      setMode('friend',true); updateCards(); draw(); pfStartPoll();
+      setStatus('Room joined! '+(me===hostUid?'Waiting for '+pfEsc(oppName)+' to join — you break first.':'Match ready — '+pfEsc(room.hostName||'the host')+' breaks first.'));
+      pfUpdateFriendBar();
+      return true;
+    });
+  });
+}
+function pfPollRoom(){
+  if(!pfRoomCode) return;
+  pfApi('GET','/'+ROOM_NODE+'/'+encodeURIComponent(pfRoomCode)).then(function(room){
+    if(room&&room.matchId){ pfRoomCode=null; if(pfRoomPollTimer){clearInterval(pfRoomPollTimer); pfRoomPollTimer=null;} pfEnterRoom(room); }
+  });
+}
+
+/* ---------- panel + friend bar UI ---------- */
+function pfMatchStatusText(m,me){
+  var opp=pfOtherName(m,me);
+  if(m.status==='waiting') return (m.aUid===me)?('Waiting for '+opp+' to accept…'):('Challenge from '+opp+' — accept?');
+  if(m.status==='playing') return (m.turn===me)?'🔥 Your turn!':('Waiting for '+opp+'…');
+  if(m.status==='won') return (m.winner===me)?'🏆 You won!':(opp+' won');
+  if(m.status==='declined') return 'Declined';
+  if(m.status==='left') return opp+' left';
+  return m.status;
+}
+function pfOpenPanel(){
+  var me=pfUid();
+  if(!me){
+    document.getElementById('friendStatus').innerHTML='Sign in to the Arcade to play with a friend — friend matches need your Arcade account. Solo Match Play still works below.';
+    document.getElementById('friendList').innerHTML=''; document.getElementById('friendMatches').innerHTML='';
+    document.getElementById('friendModal').classList.add('open'); return;
+  }
+  document.getElementById('friendModal').classList.add('open');
+  pfRenderPanel();
+}
+function pfRenderPanel(){
+  var me=pfUid();
+  var st=document.getElementById('friendStatus');
+  var fl=document.getElementById('friendList');
+  var ml=document.getElementById('friendMatches');
+  if(!me){ if(st) st.textContent='Sign in to play with a friend.'; return; }
+  if(st) st.innerHTML='Turn-based, no live server needed — shoot, your friend gets a nudge, they shoot back whenever they like. Code names only, friends only.';
+  pfApi('GET','/friends/'+encodeURIComponent(me)).then(function(fr){
+    pfFriendsCache=(fr&&typeof fr==='object')?fr:{};
+    var keys=Object.keys(pfFriendsCache);
+    fl.innerHTML=keys.length?keys.map(function(uid){
+      var nm=(pfFriendsCache[uid]&&pfFriendsCache[uid].name)||'Tester';
+      return '<div class="friend-row"><b>'+pfEsc(nm)+'</b><button type="button" data-pf-challenge="'+pfEsc(uid)+'" data-pf-name="'+pfEsc(nm)+'">🎱 Challenge</button></div>';
+    }).join(''):'<p style="font-family:system-ui,sans-serif;color:var(--muted)">No friends yet — add a friend in the Arcade first, then challenge them here.</p>';
+    fl.querySelectorAll('[data-pf-challenge]').forEach(function(b){
+      b.addEventListener('click',function(){ pfChallenge(b.getAttribute('data-pf-challenge'),b.getAttribute('data-pf-name')); });
+    });
+  });
+  pfLoadMyMatches().then(function(){
+    var mids=Object.keys(pfMatchList).sort(function(a,b){ return (pfMatchList[b].updatedAt||0)-(pfMatchList[a].updatedAt||0); });
+    ml.innerHTML=mids.length?mids.map(function(mid){
+      var m=pfMatchList[mid];
+      var txt=pfMatchStatusText(m,me);
+      var acts='';
+      if(m.status==='waiting'&&m.bUid===me) acts+='<button type="button" data-pf-accept="'+mid+'">✅ Accept</button><button type="button" data-pf-decline="'+mid+'">Decline</button>';
+      else if(m.status==='waiting'&&m.aUid===me) acts+='<button type="button" data-pf-cancel="'+mid+'">Cancel</button>';
+      else if(m.status==='playing'||m.status==='won') acts+='<button type="button" data-pf-open="'+mid+'">Open</button>';
+      if(m.status==='won') acts+='<button type="button" data-pf-rematch="'+mid+'">🔄 Rematch</button>';
+      return '<div class="friend-row"><div><b>'+pfEsc(pfOtherName(m,me))+'</b><span>'+pfEsc(txt)+'</span></div><div>'+acts+'</div></div>';
+    }).join(''):'<p style="font-family:system-ui,sans-serif;color:var(--muted)">No pool matches yet — challenge a friend above.</p>';
+    ml.querySelectorAll('[data-pf-accept]').forEach(function(b){ b.addEventListener('click',function(){ pfAccept(b.getAttribute('data-pf-accept')).then(function(){ document.getElementById('friendModal').classList.remove('open'); }); }); });
+    ml.querySelectorAll('[data-pf-decline]').forEach(function(b){ b.addEventListener('click',function(){ pfDecline(b.getAttribute('data-pf-decline')); }); });
+    ml.querySelectorAll('[data-pf-cancel]').forEach(function(b){ b.addEventListener('click',function(){ pfCancel(b.getAttribute('data-pf-cancel')); }); });
+    ml.querySelectorAll('[data-pf-open]').forEach(function(b){ b.addEventListener('click',function(){ pfOpenMatch(b.getAttribute('data-pf-open')); }); });
+    ml.querySelectorAll('[data-pf-rematch]').forEach(function(b){ b.addEventListener('click',function(){ var m=pfMatchList[b.getAttribute('data-pf-rematch')]; if(m){ pfMatch=m; pfRematch(); } }); });
+  });
+}
+function pfOpenMatch(mid){
+  var m=pfMatchList[mid]; if(!m) return;
+  var me=pfUid();
+  pfMid=mid; pfMatch=m; pfSeenMoves=m.moves||0; pfSeenUpdated=m.updatedAt||0;
+  try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
+  document.getElementById('friendModal').classList.remove('open');
+  setMode('friend',true);
+  if(m.status==='playing'||m.status==='won'||m.status==='waiting'){ pfApplyMatch(m); pfStartPoll(); }
+  else { updateCards(); draw(); setStatus(pfMatchStatusText(m,me)); }
+  pfUpdateFriendBar();
+}
+function pfUpdateFriendBar(){
+  var bar=document.getElementById('friendBar'); if(!bar) return;
+  if(!isFriend()||!pfMatch){ bar.style.display='none'; bar.innerHTML=''; return; }
+  var me=pfUid(), opp=pfOtherName(pfMatch,me);
+  var last=pfMatch.lastMoveAt?(' • Last move '+pfTimeShort(pfMatch.lastMoveAt)):'';
+  var turnTxt=pfMatch.status==='won'?(pfMatch.winner===me?'🏆 You won!':('🎱 '+opp+' won')):(pfIsMyTurn(pfMatch,me)?'🔥 Your turn — shoot!':('⏳ Waiting for '+opp+'…'));
+  bar.style.display='block';
+  bar.innerHTML='<strong>👥 Friend match vs '+pfEsc(opp)+'</strong> • '+turnTxt+last+' <span style="float:right;display:inline-flex;gap:6px;flex-wrap:wrap">'
+    +(pfMatch.status==='playing'&&!pfIsMyTurn(pfMatch,me)?'<button type="button" id="pfNudgeBtn">🔔 Nudge</button>':'')
+    +(pfMatch.status==='won'?'<button type="button" id="pfRematchBtn">🔄 Rematch</button>':'')
+    +'<button type="button" id="pfLeaveBtn">🚪 Leave match</button></span>';
+  var nb=document.getElementById('pfNudgeBtn'); if(nb) nb.onclick=pfNudge;
+  var rb=document.getElementById('pfRematchBtn'); if(rb) rb.onclick=pfRematch;
+  var lb=document.getElementById('pfLeaveBtn'); if(lb) lb.onclick=pfLeave;
+}
+
+/* ---------- hooks into the existing engine ---------- */
+/* Friend-aware card labels (wrapped around the original updateCards). */
+var _pfOrigUpdateCards=updateCards;
+updateCards=function(){
+  _pfOrigUpdateCards();
+  if(!isFriend()) return;
+  var me=pfUid();
+  var opp=pfMatch?pfOtherName(pfMatch,me):'Friend';
+  var yb=document.querySelector('#youCard b'); if(yb) yb.textContent='🟢 YOU'+(myNameCache?' — '+myNameCache:'');
+  var ab=document.querySelector('#aiCard b'); if(ab) ab.textContent='🎱 '+opp;
+  var ag=document.getElementById('aiGroup');
+  if(ag){
+    ag.textContent=groups.ai? (opp+'’s group: '+(groups.ai==='solid'?'Solids (1–7)':'Stripes (9–15)')+' • '+groupBalls(groups.ai).length+' left') : 'Waiting for groups to be decided.';
+  }
+  var nb=document.getElementById('newBtn'); if(nb) nb.disabled=!!pfMatch;
+  var sb=document.getElementById('statsBar');
+  if(sb&&pfMatch){
+    var st=pfMatchStatusText(pfMatch,me);
+    sb.innerHTML='<span class="stat">👥 Friend match vs <b>'+pfEsc(opp)+'</b></span><span class="stat">'+pfEsc(st)+'</span><span class="stat">Shots — you '+(totalShots.you||0)+' • '+pfEsc(opp)+' '+(totalShots.ai||0)+'</span><span class="stat">Turn-based • No live server</span>';
+  }
+};
+/* Rewrite 'Rack' mentions in the status line while in friend mode. */
+function pfFixStatus(){
+  if(!isFriend()||!pfMatch) return;
+  var el=document.getElementById('status'); if(!el) return;
+  var opp=pfOtherName(pfMatch,pfUid());
+  el.innerHTML=el.innerHTML.replace(/Rack/g,pfEsc(opp));
+}
+window.pfFixStatus=pfFixStatus;
+
+/* ---------- boot: restore a match, room/match links ---------- */
+function pfBoot(){
+  var q=null; try{ q=new URLSearchParams(window.location.search); }catch(e){}
+  var roomCode=q?q.get('room'):null;
+  var matchParam=q?q.get('match'):null;
+  window.addEventListener('message',function(e){
+    try{
+      if(e&&e.data&&e.data.type==='holo-room-join'&&e.data.room){ pfJoinRoom(e.data.room); }
+      if(e&&e.data&&e.data.type==='holo-pool-match'&&e.data.mid){ pfLoadMyMatches().then(function(){ pfOpenMatch(e.data.mid); }); }
+    }catch(err){}
+  });
+  if(roomCode){ pfJoinRoom(roomCode); return; }
+  if(matchParam){
+    pfLoadMyMatches().then(function(){
+      if(pfMatchList[matchParam]) pfOpenMatch(matchParam);
+      else setStatus('⚠️ That match couldn’t be found — it may have ended, or it isn’t yours.');
+    });
+    return;
+  }
+  var stored=null; try{ stored=localStorage.getItem(LS_MATCH); }catch(e){}
+  if(mode==='friend'&&stored){
+    pfLoadMyMatches().then(function(){
+      var m=pfMatchList[stored];
+      if(m&&(m.status==='playing'||m.status==='won'||m.status==='waiting')){
+        pfOpenMatch(stored);
+      } else {
+        try{localStorage.removeItem(LS_MATCH);}catch(e){}
+        setMode('match',true); newRack();
+      }
+    });
+  }
+}
+window.holoPoolFriend={
+  isFriend:isFriend, openPanel:pfOpenPanel, openMatch:pfOpenMatch,
+  challenge:pfChallenge, accept:pfAccept, decline:pfDecline,
+  joinRoom:pfJoinRoom, state:function(){ return pfMatch; },
+  matchId:function(){ return pfMid; }, serialize:pfSerialize, applyState:pfApplyState,
+  publishTurn:pfPublishTurn, loadMyMatches:pfLoadMyMatches, renderPanel:pfRenderPanel,
+  pollNow:pfPollTick, leave:pfLeave, nudge:pfNudge, rematch:pfRematch
+};
+document.getElementById('modeFriendBtn').addEventListener('click',pfOpenPanel);
+pfBoot();
+})();
+
 </script>
 </body>
 </html>
