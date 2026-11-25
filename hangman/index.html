@@ -556,9 +556,9 @@ a{color:var(--ha-cyan)}
       <option value="fun">Fun &amp; Fantasy</option>
     </select>
     <select id="difficulty" aria-label="Difficulty">
-      <option value="easy">Chill · 9 misses</option>
+      <option value="easy">Chill · 10 misses, short words</option>
       <option value="normal" selected>Classic · 7 misses</option>
-      <option value="hard">Expert · 6 misses, longer words</option>
+      <option value="hard">Expert · 5 misses, long words</option>
     </select>
     <button class="ghost-btn" id="howBtn" type="button">How to play</button>
     <button class="ghost-btn" id="rulesBtn" type="button">Rules</button>
@@ -734,14 +734,14 @@ a{color:var(--ha-cyan)}
     <ul>
       <li><strong>Show clue</strong> is always free and can be used once per round. Every word-list word has its own clue; a Pass &amp; Play word uses the clue its setter typed (or a default note if they left it blank).</li>
       <li><strong>Reveal a letter</strong> reveals one randomly chosen still-hidden letter and costs 1 miss. It is disabled when you have only 1 miss left — it can never spend your last miss — but if the revealed letter completes the word, you still win the round.</li>
-      <li>The figure on the gallows fills in proportionally: the same six body parts are spread across however many misses your difficulty allows, so on Chill (9 misses) some misses add no new part.</li>
+      <li>The figure on the gallows fills in proportionally: the same six body parts are spread across however many misses your difficulty allows, so on Chill (10 misses) some misses add no new part.</li>
     </ul>
     <h3>Difficulty levels</h3>
     <table>
       <tr><th>Level</th><th>Misses allowed</th><th>Word pool</th><th>Score multiplier</th></tr>
-      <tr><td>Chill</td><td>9</td><td>Any length</td><td>×1</td></tr>
+      <tr><td>Chill</td><td>10</td><td>Short words (6 letters or fewer; a list with few short words uses its shortest words)</td><td>×1</td></tr>
       <tr><td>Classic</td><td>7</td><td>Any length</td><td>×1.5</td></tr>
-      <tr><td>Expert</td><td>6</td><td>Words of 7+ letters preferred</td><td>×2</td></tr>
+      <tr><td>Expert</td><td>5</td><td>Words of 7+ letters</td><td>×2</td></tr>
     </table>
     <p>Changing the word list or the difficulty starts a fresh game: score, streak and round counter reset. Your saved records (below) do not.</p>
     <h3>Scoring — exact formula</h3>
@@ -998,10 +998,12 @@ var LISTS = {
 };
 LISTS.fun.words = LISTS.fun.words.filter(function(w){ return w[0] !== "JUGGLE"; });
 
+/* DIFFICULTY-SCALE-2026-11-24: misses 10/7/5 + word-length scaling — Chill draws short
+   words only, Expert long words only, so each level feels clearly different. */
 var DIFFS = {
-  easy:   {label:"Chill",   maxWrong:9, mult:1,   longOnly:false},
-  normal: {label:"Classic", maxWrong:7, mult:1.5, longOnly:false},
-  hard:   {label:"Expert",  maxWrong:6, mult:2,   longOnly:true}
+  easy:   {label:"Chill",   maxWrong:10, mult:1,   shortOnly:true,  longOnly:false},
+  normal: {label:"Classic", maxWrong:7,  mult:1.5, shortOnly:false, longOnly:false},
+  hard:   {label:"Expert",  maxWrong:5,  mult:2,   shortOnly:false, longOnly:true}
 };
 var CAT_KEYS = Object.keys(LISTS);
 var LS_BEST = "rff-hangman-bests-v1", LS_SEEN = "rff-hangman-seen-v1", LS_SET = "rff-hangman-settings-v1";
@@ -1028,10 +1030,17 @@ function poolFor(catKey, diffKey){
   } else {
     LISTS[catKey].words.forEach(function(w){ pool.push({word:w[0], clue:w[1], cat:LISTS[catKey].label}); });
   }
+  var lettersOnly = function(w){ return w.word.replace(/[^A-Z]/g,"").length; };
   if(DIFFS[diffKey].longOnly){
-    var lettersOnly = function(w){ return w.word.replace(/[^A-Z]/g,"").length; };
     var long = pool.filter(function(w){ return lettersOnly(w) >= 7; });
     if(long.length >= 5) pool = long;
+  }
+  if(DIFFS[diffKey].shortOnly){
+    var short = pool.filter(function(w){ return lettersOnly(w) <= 6; });
+    if(short.length >= 5) pool = short;
+    else { /* some lists have almost no short words: use that list's 8 shortest */
+      pool = pool.slice().sort(function(a,b){ return lettersOnly(a)-lettersOnly(b); }).slice(0,8);
+    }
   }
   return pool;
 }
@@ -1395,7 +1404,7 @@ var TOUR = [
   {sel:"#board", title:"1 · The board", text:"The blanks are your secret word, picked by the computer from the word list you chose. Every wrong guess adds a piece to the figure — run out of misses and the round is over."},
   {sel:"#keyboardPanel", title:"2 · Guess letters", text:"Tap letters here, type on a real keyboard, or — if you're sure — type the whole word in the Solve box. Right letters fill in everywhere; wrong ones cost a miss."},
   {sel:"#category", title:"3 · Pick a word list", text:"Six lists plus a Mixed bag: Animals, Food & Drink, Places & Travel, Nature & Weather, Sports & Hobbies, and Fun & Fantasy. Changing the list starts a fresh word."},
-  {sel:"#difficulty", title:"4 · Set the challenge", text:"Chill gives you 9 misses, Classic 7, and Expert just 6 with longer words — but Expert wins pay double points."},
+  {sel:"#difficulty", title:"4 · Set the challenge", text:"Chill gives you 10 misses and short words, Classic 7, and Expert just 5 with longer words — but Expert wins pay double points."},
   {sel:"#actionsPanel", title:"5 · Stuck? Get help", text:"The clue is always free. Revealing a letter costs 1 miss (it won't spend your last one). Give up ends the round and shows the word."},
   {sel:"#modeSeg", title:"6 · Pass & Play", text:"Switch modes and a friend can set the secret word and clue instead — the word stays hidden while they type, then you pass the device and guess."},
   {sel:"#statsBar", title:"7 · Your records", text:"Words played, win rate, best streak and best score are saved on this device, ready to beat next visit."}
