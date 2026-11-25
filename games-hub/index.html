@@ -1204,7 +1204,12 @@ body.preview-as-tester #pointsWallet{display:none!important}
 .egg.anim-spin svg{animation:eggSpin .9s ease}
 .egg.anim-wave svg{animation:eggWave .9s ease;transform-origin:50% 85%}
 .egg.anim-squeak svg{animation:eggSqueak .8s ease}
-@media (prefers-reduced-motion: reduce){ .egg.dancing svg,.egg.anim-bounce svg,.egg.anim-spin svg,.egg.anim-wave svg,.egg.anim-squeak svg,.egg-sparkle,.egg-burst,.egg-pop{animation:none!important} }
+/* EASTER-EGG-ANIMATION-2026-11-25 (Holo 2026-11-25 10:21: "Can we make easter eggs pop and disappear when clicked or spin and disappear"): a found daily egg does not just vanish from its hiding spot — after its dance it plays a per-character exit, then leaves. Gizmo POPS (scale up + fade out); Eevee SPINS away (rotate + fade out). The exit runs on the button itself (the dance animates the inner svg, so the two never fight). Daily eggs only: the footer eggs (already home) just dance and stay put. Skipped under prefers-reduced-motion, same as the dance. */
+@keyframes eggExitPop{0%{transform:scale(1);opacity:1}100%{transform:scale(1.4);opacity:0}}
+@keyframes eggExitSpin{0%{transform:rotate(0) scale(1);opacity:1}100%{transform:rotate(360deg) scale(.6);opacity:0}}
+.egg.egg-exit-pop{animation:eggExitPop .35s ease-in forwards}
+.egg.egg-exit-spin{animation:eggExitSpin .35s ease-in forwards}
+@media (prefers-reduced-motion: reduce){ .egg.dancing svg,.egg.anim-bounce svg,.egg.anim-spin svg,.egg.anim-wave svg,.egg.anim-squeak svg,.egg-sparkle,.egg-burst,.egg-pop,.egg.egg-exit-pop,.egg.egg-exit-spin{animation:none!important} }
 /* GLITCH-SQUASH-2026-11-24 (Holo picked this, 2026-11-24 00:39): a little
    pixel bug gets squashed flat with a splat when a tester opens a
    fixed-report thank-you. Custom keyframes for this moment only. The
@@ -18160,6 +18165,7 @@ function renderTesterAuth(){
           '<button type="button" data-owner-jump="ownerDashRecovery">\uD83D\uDD11 Recovery</button>' +
           '<button type="button" data-owner-jump="ownerDashReports">\uD83D\uDEA9 Reports</button>' +
           '<button type="button" data-owner-jump="liveInviteMount">\uD83C\uDF9F\uFE0F Invites</button>' +
+          '<button type="button" data-owner-jump="ownerDashEggs">🥚 Eggs</button>' +
         '</nav>' +
         '<details class="dash-cat" id="ownerDashTesterView" open>' +
           '<summary>\uD83D\uDC40 Tester view</summary>' +
@@ -18191,9 +18197,33 @@ function renderTesterAuth(){
         '<details class="dash-cat" id="ownerDashReports">' +
           '<summary>\uD83D\uDEA9 User reports</summary>' +
           '<div class="dash-cat-body"><div id="userReportsCard"></div></div>' +
+        '</details>' +
+        '<details class="dash-cat" id="ownerDashEggs">' +
+          '<summary>🥚 Easter eggs — testing</summary>' +
+          '<div class="dash-cat-body"><p style="margin:0 0 10px;color:var(--muted);max-width:680px">Reset today\'s found eggs so Eevee and Gizmo hide again in today\'s spots — for testing the pop/spin animation. This clears ONLY today\'s found state. It never touches the lifetime found collection, the Egg Hunter trophy, or any XP/badges. The eggs reset on this device only.</p>' +
+          '<button type="button" class="btn btn-dark" id="ownerResetEggsBtn">Reset today\'s eggs</button>' +
+          '<p class="dash-status" id="ownerEggsStatus" role="status"></p></div>' +
         '</details>';
       var openBtn = document.getElementById('openTesterLiveBtn');
       if(openBtn) openBtn.addEventListener('click', openTesterLiveView);
+      /* EGG-RESET-2026-11-25 (Holo 2026-11-25 10:22: "Reset the easter egg i just clicked so I can test"): owner-only. Clears ONLY today's found state (state.eggs.daily.kinds) — never the lifetime found collection (state.found), the Egg Hunter trophy (state.trophyAt), or XP/badges — then rebuilds today's eggs so Eevee and Gizmo hide again in today's spots immediately. The found state lives in the device-cached account state (loadAccountState/saveAccountState, or the guest localStorage key), so this resets the eggs on THIS device only. The button exists only inside the owner-built Owner Dash mount; the handler double-checks owner status before doing anything. */
+      var resetEggsBtn = document.getElementById('ownerResetEggsBtn');
+      if(resetEggsBtn) resetEggsBtn.addEventListener('click', function(){
+        var status = document.getElementById('ownerEggsStatus');
+        try {
+          var t = (typeof getTester === 'function') ? getTester() : null;
+          var ownerOk = false;
+          try { ownerOk = (typeof isOwnerMode === 'function') && isOwnerMode(); } catch(e0){}
+          try { ownerOk = ownerOk || (t && (typeof isBossTester === 'function') && isBossTester(t)); } catch(e1){}
+          if(!ownerOk){ if(status) status.textContent = 'Owner only.'; return; }
+          var st = eggLoad();
+          var before = st.daily && st.daily.kinds ? Object.keys(st.daily.kinds).length : 0;
+          st.daily = { date: eggDayKey(), kinds: {} };
+          eggSave(st);
+          rebuildDailyEggs();
+          if(status) status.textContent = before ? ('Today\'s eggs reset — ' + before + ' found egg' + (before > 1 ? 's' : '') + ' back in hiding. Tap one to test the pop/spin.') : 'No eggs were found today, so both are hiding already.';
+        } catch(e){ if(status) status.textContent = 'Could not reset the eggs — try reloading the page.'; }
+      });
       mount.querySelectorAll('[data-owner-jump]').forEach(function(btn){
         btn.addEventListener('click', function(){
           var target = document.getElementById(btn.getAttribute('data-owner-jump'));
@@ -19672,6 +19702,11 @@ function renderTesterAuth(){
     if(!reduced && anim !== 'sparkle') b.classList.add('anim-' + anim);
     setTimeout(function(){ b.classList.remove('anim-bounce','anim-spin','anim-wave','anim-squeak'); }, 1200);
     /* EGG-FINAL-2026-11-25: a found daily egg leaves its hiding spot once its animation finishes and goes home to the footer (syncFooterEggs shows it there) — it no longer sits in the spot dimmed. */
+    /* EASTER-EGG-ANIMATION (marker in the CSS above): a found daily egg pops/spins away instead of just vanishing — Gizmo POPS (scale up + fade), Eevee SPINS away (rotate + fade). The exit starts at ~900ms, just as the dance ends, and the egg leaves at 1250ms, same as before. Footer eggs (already home, no data-daily) just dance and stay put; skipped under prefers-reduced-motion. */
+    if(b.getAttribute('data-daily') && !reduced){
+      var exitClass = (kind === 'eevee') ? 'egg-exit-spin' : 'egg-exit-pop';
+      setTimeout(function(){ b.classList.remove('anim-bounce','anim-spin','anim-wave','anim-squeak'); b.classList.add(exitClass); }, 900);
+    }
     if(b.getAttribute('data-daily')) setTimeout(function(){ try { b.remove(); } catch(e){} }, 1250);
     spawnEggFx(b, kind, anim);
     if(anim === 'squeak' && !reduced) playSqueak(kind);
