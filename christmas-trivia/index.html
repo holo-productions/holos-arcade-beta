@@ -227,6 +227,19 @@
   .tvled{ width:8px; height:8px; border-radius:50%; background:#ff3b30; box-shadow:0 0 6px #ff3b30; }
   .tvspeaker{ width:34px; height:6px; background-image:radial-gradient(circle,#555 2px,transparent 2.5px); background-size:9px 6px; background-repeat:repeat-x; }
   .copied{ color:var(--green); font-weight:800; font-size:14px; }
+  /* CHRISTMAS-TRIVIA-DUEL-2026-11-25 */
+  .duelbar{ display:flex; gap:8px; align-items:center; justify-content:space-between; background:rgba(255,217,59,.12); border:2px solid var(--yellow); border-radius:10px; padding:6px 10px; font-size:13px; font-weight:700; margin-bottom:8px; width:100%; max-width:520px; }
+  .duelbar .leave{ background:none; border:none; color:#cfc4ff; text-decoration:underline; cursor:pointer; font-size:13px; padding:2px 6px; }
+  .friend-row{ display:flex; gap:8px; align-items:center; justify-content:space-between; background:rgba(255,255,255,.06); border:2px solid var(--violet); border-radius:10px; padding:8px 10px; font-size:14px; text-align:left; }
+  .friend-row b{ color:var(--yellow); }
+  .friend-row .fr-sub{ display:block; font-size:12px; color:var(--muted); font-weight:400; }
+  .friend-row .fr-acts{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+  .friend-row .mini{ background:linear-gradient(135deg,var(--violet),var(--pink)); color:#fff; border:none; border-radius:999px; padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer; }
+  .friend-row .mini.ghost{ background:rgba(255,255,255,.08); border:2px solid var(--violet); }
+  .friend-row.hl{ border-color:var(--yellow); box-shadow:0 0 14px rgba(255,217,59,.35); }
+  .duelres{ font-size:13px; line-height:1.6; text-align:left; }
+  .duelres .dr-q{ margin:8px 0 2px; font-weight:700; }
+  .duelres .dr-a{ color:#d9f7e3; }
   @media (max-width:360px){ .title{ font-size:16px; } .btn,.btn2{ min-width:160px; } .scene svg{ width:42px; height:36px; } }
 </style>
 </head>
@@ -262,6 +275,7 @@
       </div>
       <button class="btn" id="btnPlay">Play</button>
       <button class="btn2" id="btnPractice">Practice</button>
+      <button class="btn2" id="btnDuel">Duel a friend</button>
       <div class="row">
         <button class="btn2" id="btnRules">How to Play</button>
       </div>
@@ -288,7 +302,20 @@
       <button class="btn" id="btnRulesClose">Got it</button>
     </div>
 
+    <!-- CHRISTMAS-TRIVIA-DUEL-2026-11-25 -->
+    <div class="overlay hidden" id="ovDuel">
+      <h2>Duel a friend</h2>
+      <p>Turn-based — same 5 questions, higher score wins. Code names only, friends only.</p>
+      <p class="bestline" id="duelSetup"></p>
+      <p class="bestline" id="duelStatus"></p>
+      <div id="duelFriends" style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:8px;"></div>
+      <h2 style="font-size:13px;margin-top:6px;">Your Duel matches</h2>
+      <div id="duelMatches" style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:8px;"></div>
+      <button class="btn3" id="btnDuelBack">Back to menu</button>
+    </div>
+
     <div class="overlay hidden" id="ovQuiz">
+      <div class="duelbar hidden" id="duelBar"></div>
       <div class="timerbar" id="timerWrap"><div class="timerfill" id="timerFill" style="width:100%"></div></div>
       <div class="qcard" id="qCard"></div>
       <div id="qWhy" class="qcard hidden" style="margin-top:8px;"></div>
@@ -305,9 +332,11 @@
       <p class="bestline" id="endDetail"></p>
       <p class="bestline">Best: <b id="endBest">—</b> <span class="newbest hidden" id="endNewBest">New best!</span></p>
       <p id="endLine" style="max-width:440px;"></p>
+      <div id="duelResult" class="card hidden"></div>
       <button class="btn" id="btnReplay">Replay</button>
       <button class="btn2" id="btnStartOver">Start over</button>
       <button class="btn2" id="btnInvite">Invite friend</button>
+      <button class="btn2" id="btnChallenge">Challenge friend</button>
       <button class="btn2" id="btnExit">Exit</button>
       <p class="copied hidden" id="copiedMsg">Link copied!</p>
     </div>
@@ -436,7 +465,7 @@ function sfx(name){
 function buzz(ms){ try { if (window.holoBuzz) window.holoBuzz(ms); } catch (e) {} }
 
 /* ---- overlays ---- */
-var overlays = ['ovMenu', 'ovStart', 'ovRules', 'ovQuiz', 'ovEnd'];
+var overlays = ['ovMenu', 'ovStart', 'ovRules', 'ovQuiz', 'ovEnd', 'ovDuel'];
 function show(id){ overlays.forEach(function(o){ $(o).classList.toggle('hidden', o !== id); }); }
 
 /* CHRISTMAS-OWNER-ONLY-2026-11-25: December drop — this game is owner-only until
@@ -475,7 +504,7 @@ function christmasOwnerGate() {
 }
 
 function showMenu(){
-  state = 'menu'; stopTimer();
+  state = 'menu'; stopTimer(); duelActive = false; endMode = 'solo'; ctStopPoll();
   $('hudCat').textContent = '—'; $('hudQ').textContent = '—'; $('hudScore').textContent = '0'; $('hudBest').textContent = getBest();
   var lines = [];
   CATS.forEach(function(c){ var b = 0; try { b = parseInt(localStorage.getItem('christmasTrivia.best.' + c.id + '.' + diff) || '0', 10) || 0; } catch (e) {} lines.push(c.name.split(' ')[0] + ' ' + b); });
@@ -495,7 +524,7 @@ function buildCats(){
 }
 function showStart(){
   if (!christmasOwnerGate()) return;
-  state = 'start';
+  state = 'start'; duelActive = false;
   $('startTitle').textContent = cat().name + ' — ' + DIFF[diff].label + (practiceMode ? ' · Practice' : '');
   $('startList').innerHTML =
     '<li><b>5 questions</b> from ' + cat().name + '.</li>' +
@@ -507,9 +536,21 @@ function showStart(){
 }
 function startRound(){
   if (!christmasOwnerGate()) return;
-  qs = Q[catId].slice();
-  for (var i = qs.length - 1; i > 0; i--){ var j = Math.floor(Math.random() * (i + 1)); var t = qs[i]; qs[i] = qs[j]; qs[j] = t; } /* shuffle the 10, then draw 5 */
-  qs = qs.slice(0, 5);
+  var duelQs = null;
+  if (duelActive && ctMatch && ctMatch.state && ctMatch.status === 'playing' && ctMatch.turn === ctUid()){
+    var st = ctMatch.state;
+    if (st.cat && Q[st.cat] && Array.isArray(st.qIdx) && st.qIdx.length === 5){
+      catId = st.cat; diff = st.diff || diff; practiceMode = false; buildCats();
+      duelQs = st.qIdx.map(function(i){ return Q[catId][i]; }).filter(function(q){ return !!q; });
+      if (duelQs.length !== 5) duelQs = null;
+    }
+  }
+  if (duelQs){ qs = duelQs; ctDuelAnswers = []; }
+  else {
+    qs = Q[catId].slice();
+    for (var i = qs.length - 1; i > 0; i--){ var j = Math.floor(Math.random() * (i + 1)); var t = qs[i]; qs[i] = qs[j]; qs[j] = t; } /* shuffle the 10, then draw 5 */
+    qs = qs.slice(0, 5);
+  }
   qi = 0; score = 0; correct = 0;
   state = 'quiz'; show('ovQuiz');
   $('hudCat').textContent = cat().name; $('hudBest').textContent = getBest();
@@ -531,6 +572,7 @@ function renderQ(){
   var btns = $('qCard').querySelectorAll('.opt');
   for (var i = 0; i < btns.length; i++) btns[i].addEventListener('click', function(){ answer(parseInt(this.getAttribute('data-i'), 10)); });
   startTimer();
+  ctUpdateDuelBar(ctMatch);
 }
 function startTimer(){
   stopTimer();
@@ -552,6 +594,7 @@ function stopTimer(){ if (timerId){ clearInterval(timerId); timerId = null; } }
 function answer(i){
   if (answered) return;
   answered = true; stopTimer();
+  if (duelActive) ctDuelAnswers[qi] = i;
   var q = qs[qi];
   var btns = $('qCard').querySelectorAll('.opt');
   for (var j = 0; j < btns.length; j++){
@@ -582,6 +625,8 @@ function nextQ(){
 }
 function endRound(){
   state = 'over'; stopTimer();
+  if (duelActive && ctMatch){ sfx('end'); endMode = 'duel'; ctFinishMyTurn(); return; }
+  endMode = 'solo';
   var best = getBest(), isBest = false;
   if (!practiceMode && score > best){ saveBest(score); best = score; isBest = true; }
   sfx('end');
@@ -658,7 +703,10 @@ $('btnRulesClose').addEventListener('click', function(){ showMenu(); });
 $('btnBegin').addEventListener('click', startRound);
 $('btnStartBack').addEventListener('click', showMenu);
 $('btnNextQ').addEventListener('click', nextQ);
-$('btnReplay').addEventListener('click', function(){ startRound(); }); /* Replay: same category + difficulty, fresh round */
+$('btnReplay').addEventListener('click', function(){
+  if (endMode === 'duel' && ctMatch && (ctMatch.status === 'won' || ctMatch.status === 'draw')){ ctRematch(); return; }
+  startRound();
+}); /* Replay: same category + difficulty, fresh round — or a Duel rematch */
 $('btnStartOver').addEventListener('click', function(){ showMenu(); }); /* Start over: back to the title menu */
 $('btnInvite').addEventListener('click', function(){ /* Invite friend: copy the game URL, show "Link copied!" briefly */
   function done(){
@@ -708,9 +756,487 @@ window.__ct = {
   gameUrl: GAME_URL, hubUrl: HUB_URL
 };
 
+/* ---- Christmas Trivia Duel (turn-based, same /turnMatches protocol as
+   Tic Tac Toe, 8-Ball Pool and Rock Paper Scissors) ----
+   CHRISTMAS-TRIVIA-DUEL-2026-11-25: challenge a friend from the menu
+   ("Duel a friend"), from the end screen ("Challenge friend"), from a
+   turn-invite notice (link game:christmas-trivia?match=<mid>), or from
+   the Friends page (the hub hands the friend over with ?challenge=<uid>
+   or a {type:'holo-challenge'} postMessage). Both players answer the
+   SAME 5 questions (the challenger draws 5 indices from the category's
+   10 and stores them in the match state) at the same difficulty.
+   Sequential turns (TURN-AUTO-PASS — no Send button anywhere): the
+   challenger answers first, then the turn passes to the friend
+   automatically; when the friend finishes, the match resolves —
+   higher score wins, equal scores draw. Code names only, friends only.
+   RULES GATE: the live /turnMatches rules only allow game
+   'tic-tac-toe', '8-ball-pool' and 'rock-paper-scissors' until Holo
+   publishes firebase-rules-turnmatches-xmastrivia-update-2026-11-25.md
+   (adds 'christmas-trivia'). Until then, Duel challenge creates fail
+   soft with a plain message; solo play is unaffected. */
+var CT_GAME = 'christmas-trivia';
+var CT_FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+var CT_FB_API_KEY = 'AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak';
+var CT_AUTH_KEY = 'holos-firebase-auth';
+var CT_POLL_MS = 4000;
+var CT_LS_MATCH = 'christmasTrivia.duel.match';
+var ctMatch = null, ctMid = null, ctPollTimer = null, ctMatchList = {};
+var ctSeenMoves = -1, ctSeenUpdated = 0, ctBusy = false;
+var ctPendingChallenge = null;
+var ctDuelAnswers = [];
+var duelActive = false;
+var endMode = 'solo';
+
+function ctAuth(){ try{ var v=JSON.parse(localStorage.getItem(CT_AUTH_KEY)||'null'); if(v&&v.idToken&&v.uid) return v; }catch(e){} return null; }
+function ctUid(){ var a=ctAuth(); return a?a.uid:null; }
+function ctFreshToken(){
+  var a=ctAuth(); if(!a) return Promise.resolve(null);
+  if(a.exp&&a.exp>Date.now()+60000) return Promise.resolve(a.idToken);
+  if(!a.refreshToken) return Promise.resolve(null);
+  return fetch('https://securetoken.googleapis.com/v1/token?key='+CT_FB_API_KEY,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'grant_type=refresh_token&refresh_token='+encodeURIComponent(a.refreshToken)})
+    .then(function(r){return r.json();})
+    .then(function(j){ if(j&&j.id_token){ a.idToken=j.id_token; a.refreshToken=j.refresh_token||a.refreshToken; a.exp=Date.now()+((parseInt(j.expires_in,10)||3600)*1000); try{localStorage.setItem(CT_AUTH_KEY,JSON.stringify(a));}catch(e){} return a.idToken; } return null; })
+    .catch(function(){return null;});
+}
+function ctApi(method,path,body){
+  return ctFreshToken().then(function(tok){
+    if(!tok) return null;
+    var opts={method:method,headers:{'Content-Type':'application/json'}};
+    if(body!==undefined) opts.body=JSON.stringify(body);
+    return fetch(CT_FB_RTDB+path+'.json?auth='+encodeURIComponent(tok),opts)
+      .then(function(r){ return r.ok?r.json().catch(function(){return true;}):null; })
+      .catch(function(){return null;});
+  }).catch(function(){return null;});
+}
+function ctEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+var ctNameCache = null;
+function ctMyName(){
+  if(ctNameCache) return Promise.resolve(ctNameCache);
+  var uid=ctUid(); if(!uid) return Promise.resolve('A tester');
+  return ctApi('GET','/users/'+encodeURIComponent(uid)).then(function(u){
+    var n=(u&&(u.username||u.name))?String(u.username||u.name):'A tester';
+    ctNameCache=n; return n;
+  });
+}
+function ctNotice(toUid,notice){
+  if(!toUid||!notice) return Promise.resolve(null);
+  var body={type:String(notice.type||'system').slice(0,40),title:String(notice.title||'').slice(0,120),body:String(notice.body||'').slice(0,600),createdAt:Date.now(),read:false};
+  if(notice.link) body.link=String(notice.link).slice(0,120);
+  if(notice.fromName) body.fromName=String(notice.fromName).slice(0,60);
+  if(notice.fromUid) body.fromUid=String(notice.fromUid).slice(0,80);
+  return ctApi('POST','/users/'+encodeURIComponent(toUid)+'/notifications',body);
+}
+function ctOtherUid(m,me){ if(!m) return null; return m.aUid===me?m.bUid:m.aUid; }
+function ctOtherName(m,me){ if(!m) return 'Tester'; return m.aUid===me?(m.bName||'Tester'):(m.aName||'Tester'); }
+function ctCatName(id){ for(var i=0;i<CATS.length;i++) if(CATS[i].id===id) return CATS[i].name; return CATS[0].name; }
+function ctScores(m,me){
+  var st=m.state||{};
+  var my=(me===m.aUid)?(st.aScore||0):(st.bScore||0);
+  var th=(me===m.aUid)?(st.bScore||0):(st.aScore||0);
+  return {my:my, th:th, a:st.aScore||0, b:st.bScore||0};
+}
+function ctCorrectCount(m,uid){
+  var st=m.state||{}; var arr=(uid===m.aUid)?(st.aAnswers||[]):(st.bAnswers||[]);
+  var idx=st.qIdx||[]; var n=0;
+  for(var i=0;i<arr.length && i<idx.length;i++){
+    var q=Q[st.cat] && Q[st.cat][idx[i]];
+    if(q && arr[i]===q.a) n++;
+  }
+  return n;
+}
+function ctMatchStatusText(m,me){
+  var opp=ctOtherName(m,me); var sc=ctScores(m,me);
+  var scoreBit=' · '+sc.my+'–'+sc.th+' pts';
+  if(m.status==='waiting') return m.aUid===me?('Waiting for '+opp+' to accept'):(opp+' challenged you');
+  if(m.status==='playing'){
+    var st=m.state||{};
+    var doneBit=(st.aDone||st.bDone)?scoreBit:'';
+    return (m.turn===me?('Your turn — answer the 5 questions'):('Waiting on '+opp))+doneBit;
+  }
+  if(m.status==='won') return (m.winner===me?('You won '+sc.a+'–'+sc.b):(opp+' won '+sc.a+'–'+sc.b));
+  if(m.status==='draw') return 'Draw '+sc.a+'–'+sc.b;
+  if(m.status==='declined') return 'Declined';
+  if(m.status==='left') return 'Match ended';
+  return m.status||'';
+}
+function ctRulesPending(){ var el=$('duelStatus'); if(el) el.textContent='Friend Duels need one more Arcade update — the new rules publish is still pending. Solo play still works.'; }
+function ctDrawQIdx(){
+  var idx=[0,1,2,3,4,5,6,7,8,9];
+  for(var i=idx.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=idx[i]; idx[i]=idx[j]; idx[j]=t; }
+  return idx.slice(0,5);
+}
+function ctEnterDuel(){
+  if(!christmasOwnerGate()) return;
+  state='duel'; duelActive=false;
+  show('ovDuel');
+  ctRenderDuelPanel();
+  try {
+    var saved=localStorage.getItem(CT_LS_MATCH);
+    if(saved){ ctApi('GET','/turnMatches/'+encodeURIComponent(saved)).then(function(m){ if(m&&typeof m==='object'&&m.game===CT_GAME&&(m.status==='waiting'||m.status==='playing')){ ctOpenMatch(saved); } }); }
+  } catch(e){}
+}
+function ctRenderDuelPanel(){
+  var me=ctUid();
+  var setup=$('duelSetup'), status=$('duelStatus'), fl=$('duelFriends'), ml=$('duelMatches');
+  if(setup) setup.innerHTML='Duelling with: <b>'+ctEsc(ctCatName(catId))+'</b> · <b>'+ctEsc(DIFF[diff].label)+'</b> <button type="button" class="btn3" id="btnDuelChange">Change</button>';
+  var ch=$('btnDuelChange'); if(ch) ch.addEventListener('click', function(){ showMenu(); });
+  if(!me){
+    if(status) status.textContent='Sign in to Duel a friend.';
+    if(fl) fl.innerHTML=''; if(ml) ml.innerHTML='';
+    return;
+  }
+  if(status){
+    if(ctPendingChallenge) status.textContent='Ready to challenge your friend — tap Challenge below.';
+    else status.textContent='Turn-based — same 5 questions, higher score wins. Code names only, friends only.';
+  }
+  ctApi('GET','/friends/'+encodeURIComponent(me)).then(function(fr){
+    var cache=(fr&&typeof fr==='object')?fr:{};
+    var keys=Object.keys(cache);
+    if(!fl) return;
+    fl.innerHTML=keys.length?keys.map(function(uid){
+      var nm=(cache[uid]&&cache[uid].name)||'Tester';
+      var hl=(ctPendingChallenge===uid)?' hl':'';
+      return '<div class="friend-row'+hl+'"><span><b>'+ctEsc(nm)+'</b></span><span class="fr-acts"><button type="button" class="mini" data-ct-challenge="'+ctEsc(uid)+'" data-ct-name="'+ctEsc(nm)+'">Challenge</button></span></div>';
+    }).join(''):'<p class="bestline">No friends yet — add a friend in the Arcade first, then challenge them here.</p>';
+    fl.querySelectorAll('[data-ct-challenge]').forEach(function(b){
+      b.addEventListener('click',function(){ ctChallenge(b.getAttribute('data-ct-challenge'),b.getAttribute('data-ct-name')); });
+    });
+  });
+  ctLoadMyMatches().then(function(){
+    if(!ml) return;
+    var mids=Object.keys(ctMatchList).sort(function(a,b){ return (ctMatchList[b].updatedAt||0)-(ctMatchList[a].updatedAt||0); });
+    ml.innerHTML=mids.length?mids.map(function(mid){
+      var m=ctMatchList[mid];
+      var txt=ctMatchStatusText(m,me);
+      var acts='';
+      if(m.status==='waiting'&&m.bUid===me) acts+='<button type="button" class="mini" data-ct-accept="'+mid+'">Accept</button><button type="button" class="mini ghost" data-ct-decline="'+mid+'">Decline</button>';
+      else if(m.status==='waiting'&&m.aUid===me) acts+='<button type="button" class="mini ghost" data-ct-decline="'+mid+'">Cancel</button>';
+      else if(m.status==='playing'||m.status==='won'||m.status==='draw') acts+='<button type="button" class="mini" data-ct-open="'+mid+'">Open</button>';
+      if(m.status==='won'||m.status==='draw'||m.status==='left') acts+='<button type="button" class="mini ghost" data-ct-rematch="'+mid+'">Rematch</button>';
+      return '<div class="friend-row"><span><b>'+ctEsc(ctOtherName(m,me))+'</b><span class="fr-sub">'+ctEsc(txt)+'</span></span><span class="fr-acts">'+acts+'</span></div>';
+    }).join(''):'<p class="bestline">No Christmas Trivia Duels yet — challenge a friend above.</p>';
+    ml.querySelectorAll('[data-ct-accept]').forEach(function(b){ b.addEventListener('click',function(){ ctAccept(b.getAttribute('data-ct-accept')); }); });
+    ml.querySelectorAll('[data-ct-decline]').forEach(function(b){ b.addEventListener('click',function(){ ctDecline(b.getAttribute('data-ct-decline')); }); });
+    ml.querySelectorAll('[data-ct-open]').forEach(function(b){ b.addEventListener('click',function(){ ctOpenMatch(b.getAttribute('data-ct-open')); }); });
+    ml.querySelectorAll('[data-ct-rematch]').forEach(function(b){ b.addEventListener('click',function(){ var m=ctMatchList[b.getAttribute('data-ct-rematch')]; if(m){ ctMatch=m; ctRematch(); } }); });
+  });
+}
+function ctLoadMyMatches(){
+  var me=ctUid(); if(!me) return Promise.resolve({});
+  return ctApi('GET','/users/'+encodeURIComponent(me)+'/turnMatches').then(function(idx){
+    if(!idx||typeof idx!=='object') return {};
+    var keys=Object.keys(idx);
+    var jobs=keys.map(function(mid){
+      return ctApi('GET','/turnMatches/'+encodeURIComponent(mid)).then(function(m){
+        if(m&&typeof m==='object'&&m.game===CT_GAME) ctMatchList[mid]=m;
+      });
+    });
+    return Promise.all(jobs).then(function(){ return ctMatchList; });
+  });
+}
+function ctChallenge(uid,name){
+  var me=ctUid(); if(!me||!uid||uid===me||ctBusy) return;
+  ctBusy=true;
+  ctMyName().then(function(myN){
+    ctApi('GET','/friends/'+encodeURIComponent(me)).then(function(fr){
+      var isFriend=!!(fr&&typeof fr==='object'&&fr[uid]);
+      if(!isFriend){ ctBusy=false; var s=$('duelStatus'); if(s) s.textContent='You can only Duel a friend — add them first.'; return; }
+      var now=Date.now();
+      var qIdx=ctDrawQIdx();
+      var match={game:CT_GAME,aUid:me,bUid:uid,aName:myN,bName:String(name||'Tester'),xUid:me,oUid:uid,board:[],turn:me,status:'waiting',winner:null,lastMoveAt:0,lastMoveBy:'',lastMoveCell:-1,history:[],moves:0,state:{cat:catId,diff:diff,qIdx:qIdx,aScore:0,bScore:0,aDone:false,bDone:false,aAnswers:[],bAnswers:[]},createdAt:now,updatedAt:now};
+      return ctApi('POST','/turnMatches',match).then(function(r){
+        ctBusy=false;
+        if(!r||!r.name){ ctRenderDuelPanel(); ctRulesPending(); return null; }
+        var mid=r.name;
+        ctApi('PUT','/users/'+encodeURIComponent(me)+'/turnMatches/'+encodeURIComponent(mid),true);
+        ctApi('PUT','/users/'+encodeURIComponent(uid)+'/turnMatches/'+encodeURIComponent(mid),true);
+        ctNotice(uid,{type:'turn-invite',title:'Christmas Trivia Duel!',body:myN+' challenged you to a Christmas Trivia Duel — '+ctCatName(catId)+' · '+DIFF[diff].label+'.',link:'game:christmas-trivia?match='+mid,fromName:myN,fromUid:me});
+        ctMid=mid; ctMatch=match; ctSeenMoves=0; ctSeenUpdated=now;
+        ctPendingChallenge=null;
+        try{localStorage.setItem(CT_LS_MATCH,mid);}catch(e){}
+        ctMatchList[mid]=match;
+        ctRenderDuelPanel(); ctApplyMatch(match); ctStartPoll();
+        var s2=$('duelStatus'); if(s2) s2.textContent='Challenge sent to '+(name||'your friend')+'! You answer first when they accept.';
+        return mid;
+      });
+    });
+  }).catch(function(){ ctBusy=false; return null; });
+}
+function ctAccept(mid){
+  var me=ctUid(); if(!me) return Promise.resolve(false);
+  function go(){
+    var m=ctMatchList[mid];
+    if(!m||m.status!=='waiting'||m.bUid!==me) return Promise.resolve(false);
+    return ctApi('PATCH','/turnMatches/'+encodeURIComponent(mid),{status:'playing',updatedAt:Date.now()}).then(function(r){
+      if(r===null){ ctRulesPending(); return false; }
+      m.status='playing'; m.updatedAt=Date.now();
+      ctMid=mid; ctMatch=m; ctSeenMoves=m.moves||0; ctSeenUpdated=m.updatedAt;
+      try{localStorage.setItem(CT_LS_MATCH,mid);}catch(e){}
+      ctApplyMatch(m); ctStartPoll();
+      ctMyName().then(function(myN){
+        ctNotice(m.aUid,{type:'turn',title:'Your turn in Christmas Trivia',body:'Your turn in Christmas Trivia vs '+myN+' — '+myN+' accepted. You answer the 5 questions first.',link:'game:christmas-trivia?match='+mid,fromName:myN,fromUid:me});
+      });
+      return true;
+    });
+  }
+  if(ctMatchList[mid]) return go();
+  return ctApi('GET','/turnMatches/'+encodeURIComponent(mid)).then(function(m){
+    if(m&&typeof m==='object') ctMatchList[mid]=m;
+    return go();
+  });
+}
+function ctDecline(mid){
+  var me=ctUid(); if(!me) return Promise.resolve(false);
+  var m=ctMatchList[mid]; if(!m||m.status!=='waiting') return Promise.resolve(false);
+  return ctApi('PATCH','/turnMatches/'+encodeURIComponent(mid),{status:'declined',updatedAt:Date.now()}).then(function(r){
+    if(r===null){ ctRulesPending(); return false; }
+    m.status='declined'; ctRenderDuelPanel(); return true;
+  });
+}
+function ctLeave(){
+  if(!ctMatch||!ctMid) return Promise.resolve(false);
+  var me=ctUid(); var m=ctMatch, mid=ctMid;
+  if(m.status!=='playing'&&m.status!=='waiting') return Promise.resolve(false);
+  return ctApi('PATCH','/turnMatches/'+encodeURIComponent(mid),{status:'left',winner:null,updatedAt:Date.now()}).then(function(r){
+    if(r===null){ ctRulesPending(); return false; }
+    var opp=ctOtherUid(m,me);
+    ctMyName().then(function(myN){
+      ctNotice(opp,{type:'turn',title:'Christmas Trivia Duel ended',body:myN+' left your Christmas Trivia Duel.',link:'game:christmas-trivia',fromName:myN,fromUid:me});
+    });
+    ctStopPoll(); ctMatch=null; ctMid=null; duelActive=false;
+    try{localStorage.removeItem(CT_LS_MATCH);}catch(e){}
+    showMenu();
+    return true;
+  });
+}
+function ctRematch(){
+  if(!ctMatch) return;
+  var me=ctUid(); var opp=ctOtherUid(ctMatch,me), name=ctOtherName(ctMatch,me);
+  var st=ctMatch.state||{};
+  if(st.cat) catId=st.cat;
+  if(st.diff) diff=st.diff;
+  buildCats();
+  ctStopPoll(); ctMatch=null; ctMid=null; duelActive=false;
+  try{localStorage.removeItem(CT_LS_MATCH);}catch(e){}
+  ctEnterDuel();
+  ctChallenge(opp,name);
+}
+function ctOpenMatch(mid){
+  var me=ctUid(); if(!me) return Promise.resolve(false);
+  function go(){
+    var m=ctMatchList[mid];
+    if(!m) return Promise.resolve(false);
+    ctMid=mid; ctMatch=m; ctSeenMoves=m.moves||0; ctSeenUpdated=m.updatedAt||0;
+    try{localStorage.setItem(CT_LS_MATCH,mid);}catch(e){}
+    ctApplyMatch(m); ctStartPoll();
+    return Promise.resolve(true);
+  }
+  if(ctMatchList[mid]) return go();
+  return ctApi('GET','/turnMatches/'+encodeURIComponent(mid)).then(function(m){
+    if(m&&typeof m==='object'&&m.game===CT_GAME) ctMatchList[mid]=m;
+    return go();
+  });
+}
+/* My 5 answers are in — record them, then TURN-AUTO-PASS: the turn
+   passes to my friend in the same PATCH (no Send button anywhere).
+   If both sides are done, resolve here: higher score wins, tie draws. */
+function ctFinishMyTurn(){
+  var me=ctUid(), m=ctMatch;
+  if(!me||!m||!ctMid){ showMenu(); return; }
+  var now=Date.now();
+  var amI_a=(me===m.aUid);
+  var st=m.state||{};
+  var newState={cat:st.cat,diff:st.diff,qIdx:st.qIdx||[],aScore:st.aScore||0,bScore:st.bScore||0,aDone:!!st.aDone,bDone:!!st.bDone,aAnswers:st.aAnswers||[],bAnswers:st.bAnswers||[]};
+  if(amI_a){ newState.aScore=score; newState.aDone=true; newState.aAnswers=ctDuelAnswers.slice(); }
+  else { newState.bScore=score; newState.bDone=true; newState.bAnswers=ctDuelAnswers.slice(); }
+  var opp=ctOtherUid(m,me);
+  var patch={updatedAt:now,lastMoveAt:now,lastMoveBy:me,moves:(m.moves||0)+1,state:newState,history:(m.history||[]).slice()};
+  patch.history.push({by:me,score:score,at:now});
+  var done=false;
+  if(newState.aDone&&newState.bDone){
+    done=true;
+    if(newState.aScore>newState.bScore){ patch.status='won'; patch.winner=m.aUid; }
+    else if(newState.bScore>newState.aScore){ patch.status='won'; patch.winner=m.bUid; }
+    else { patch.status='draw'; patch.winner=null; }
+    patch.turn=patch.winner||m.aUid;
+  } else {
+    patch.turn=opp;
+  }
+  ctApi('PATCH','/turnMatches/'+encodeURIComponent(ctMid),patch).then(function(r){
+    if(r===null){ state='duel'; show('ovDuel'); ctRenderDuelPanel(); ctRulesPending(); return; }
+    Object.keys(patch).forEach(function(k){ m[k]=patch[k]; });
+    ctSeenMoves=m.moves; ctSeenUpdated=m.updatedAt;
+    ctMyName().then(function(myN){
+      if(done){
+        var w=patch.winner;
+        var body=w?((w===me?'You won ':ctOtherName(m,me)+' won ')+newState.aScore+'–'+newState.bScore+' in Christmas Trivia.'):(('Draw '+newState.aScore+'–'+newState.bScore+' in Christmas Trivia vs '+myN+'.'));
+        ctNotice(opp,{type:'turn',title:'Christmas Trivia result',body:body,link:'game:christmas-trivia?match='+ctMid,fromName:myN,fromUid:me});
+      } else {
+        ctNotice(opp,{type:'turn',title:'Your turn in Christmas Trivia',body:'Your turn in Christmas Trivia vs '+myN+' — '+myN+' scored '+score+'. Answer the same 5 questions.',link:'game:christmas-trivia?match='+ctMid,fromName:myN,fromUid:me});
+      }
+    });
+    ctApplyMatch(m);
+  });
+}
+function ctDuelResultHtml(m,me){
+  var st=m.state||{}; var idx=st.qIdx||[];
+  var h='<div class="duelres">';
+  for(var i=0;i<idx.length;i++){
+    var q=Q[st.cat]&&Q[st.cat][idx[i]];
+    if(!q) continue;
+    var aAns=(st.aAnswers||[])[i], bAns=(st.bAnswers||[])[i];
+    function mark(ans){
+      if(ans===undefined||ans===null) return '— not answered yet';
+      if(ans===-1) return 'Timed out ✗';
+      return ctEsc(q.opts[ans]||'')+(ans===q.a?' ✓':' ✗');
+    }
+    var myAns=(me===m.aUid)?aAns:bAns, thAns=(me===m.aUid)?bAns:aAns;
+    h+='<div class="dr-q">Q'+(i+1)+' — '+ctEsc(q.q)+'</div>';
+    h+='<div class="dr-a">You: '+mark(myAns)+'</div>';
+    h+='<div class="dr-a">'+ctEsc(ctOtherName(m,me))+': '+mark(thAns)+'</div>';
+  }
+  return h+'</div>';
+}
+function ctShowDuelEnd(m,phase){
+  var me=ctUid(); var st=m.state||{};
+  var sc=ctScores(m,me);
+  var opp=ctOtherName(m,me);
+  var myCorrect=ctCorrectCount(m,me), thCorrect=ctCorrectCount(m,ctOtherUid(m,me));
+  duelActive=false; endMode='duel'; state='over'; stopTimer();
+  $('btnReplay').classList.toggle('hidden', phase!=='result');
+  $('btnStartOver').classList.remove('hidden');
+  $('btnChallenge').classList.remove('hidden');
+  $('btnInvite').classList.add('hidden');
+  $('btnExit').classList.add('hidden');
+  $('copiedMsg').classList.add('hidden');
+  $('hudScore').textContent=sc.my;
+  var duelRes=$('duelResult');
+  if(duelRes){ duelRes.innerHTML=ctDuelResultHtml(m,me); duelRes.classList.remove('hidden'); }
+  if(phase==='result'){
+    sfx('end');
+    if(m.status==='draw'){ $('endTitle').textContent='A Christmas draw!'; }
+    else if(m.winner===me){ $('endTitle').textContent='You win the Duel!'; }
+    else { $('endTitle').textContent=opp+' wins the Duel'; }
+    $('endScore').textContent=sc.my+' – '+sc.th+' pts';
+    $('endDetail').textContent='Duel vs '+opp+' · '+ctCatName(st.cat)+' · '+DIFF[st.diff].label+' · You '+myCorrect+' of 5 · '+opp+' '+thCorrect+' of 5';
+    $('endLine').textContent=(m.status==='draw')?'Exactly even — Santa calls it a draw. Rematch?':(m.winner===me?'You take the Duel — nice work under the mistletoe.':opp+' takes this one. Rematch and take it back.');
+  } else {
+    $('endTitle').textContent='Your turn is done!';
+    $('endScore').textContent=sc.my+' pts';
+    $('endDetail').textContent='Duel vs '+opp+' · '+ctCatName(st.cat)+' · '+DIFF[st.diff].label+' · You got '+myCorrect+' of 5 right';
+    $('endLine').textContent='Waiting on '+opp+' to answer the same 5 questions. We will let you know when it is your turn to see the result.';
+  }
+  $('endBest').textContent='—';
+  $('endNewBest').classList.add('hidden');
+  show('ovEnd');
+}
+function ctUpdateDuelBar(m){
+  var bar=$('duelBar'); if(!bar) return;
+  if(!duelActive||!m){ bar.classList.add('hidden'); bar.innerHTML=''; return; }
+  var me=ctUid();
+  bar.classList.remove('hidden');
+  bar.innerHTML='<span>Duel vs '+ctEsc(ctOtherName(m,me))+' · '+ctEsc(ctMatchStatusText(m,me))+'</span><button type="button" class="leave" id="btnDuelLeave">Leave Duel</button>';
+  var lv=$('btnDuelLeave'); if(lv) lv.addEventListener('click', function(){ ctLeave(); });
+}
+function ctApplyMatch(m){
+  if(!m) return;
+  var me=ctUid();
+  ctUpdateDuelBar(m);
+  if(m.status==='won'||m.status==='draw'){
+    ctShowDuelEnd(m,'result');
+    return;
+  }
+  if(m.status==='left'||m.status==='declined'){
+    var s=$('duelStatus');
+    if(s) s.textContent=ctOtherName(m,me)+(m.status==='left'?' left the Duel.':' declined the Duel.');
+    ctStopPoll(); ctMatch=null; ctMid=null; duelActive=false;
+    try{localStorage.removeItem(CT_LS_MATCH);}catch(e){}
+    if(state!=='quiz'){ state='duel'; show('ovDuel'); ctRenderDuelPanel(); }
+    return;
+  }
+  if(m.status==='waiting'){
+    if(state!=='quiz'){ state='duel'; show('ovDuel'); ctRenderDuelPanel(); }
+    return;
+  }
+  /* playing */
+  var st=m.state||{};
+  var myDone=(me===m.aUid)?!!st.aDone:!!st.bDone;
+  if(m.turn===me){
+    if(state==='quiz'&&duelActive) return; /* already answering — the poll must not yank the quiz */
+    duelActive=true;
+    state='start';
+    $('startTitle').textContent='Duel vs '+ctOtherName(m,me);
+    var firstLine;
+    if(me===m.aUid) firstLine='<li><b>You answer first</b> — '+ctEsc(ctOtherName(m,me))+' gets the same 5 questions after you.</li>';
+    else firstLine='<li><b>Your turn</b> — '+ctEsc(ctOtherName(m,me))+' scored <b>'+ctEsc(String(st.aScore||0))+'</b>. Now answer the same 5 questions.</li>';
+    $('startList').innerHTML=
+      firstLine+
+      '<li><b>5 questions</b> from '+ctEsc(ctCatName(st.cat))+' · '+ctEsc(DIFF[st.diff].label)+'.</li>'+
+      '<li>'+(DIFF[st.diff].secs?'<b>'+DIFF[st.diff].secs+' seconds</b> per question — answer before the bar runs out.':'<b>No timer</b> — take your time.')+' Each right answer is worth <b>'+DIFF[st.diff].pts+' points</b>.</li>'+
+      '<li><b>Hint</b> (one per question, no penalty) removes two wrong answers.</li>'+
+      '<li><b>Source</b> on every question shows the real source. The timer pauses while you check.</li>'+
+      '<li>Higher score wins — a tie is a draw.</li>';
+    show('ovStart');
+    return;
+  }
+  if(myDone){
+    ctShowDuelEnd(m,'waiting');
+    return;
+  }
+  if(state!=='quiz'){ state='duel'; show('ovDuel'); ctRenderDuelPanel(); }
+}
+function ctStartPoll(){ ctStopPoll(); ctPollTimer=setInterval(ctPollTick,CT_POLL_MS); }
+function ctStopPoll(){ if(ctPollTimer){ clearInterval(ctPollTimer); ctPollTimer=null; } }
+function ctPollTick(){
+  if(!ctMatch||!ctMid) return;
+  if(document.hidden) return;
+  if(ctMatch.status!=='waiting'&&ctMatch.status!=='playing') return;
+  ctApi('GET','/turnMatches/'+encodeURIComponent(ctMid)).then(function(m){
+    if(!m||typeof m!=='object') return;
+    if(m.updatedAt===ctSeenUpdated&&(m.moves||0)===ctSeenMoves) return;
+    ctMatch=m; ctSeenMoves=m.moves||0; ctSeenUpdated=m.updatedAt||0;
+    ctApplyMatch(m);
+  });
+}
+function ctBootDeepLink(){
+  var q=null, ch=null;
+  try { var sp=new URLSearchParams(window.location.search); q=sp.get('match'); ch=sp.get('challenge'); } catch(e){}
+  if(ch){ ctPendingChallenge=ch; }
+  if(q){ ctEnterDuel(); ctOpenMatch(q); return; }
+  if(ch){ ctEnterDuel(); }
+}
+window.addEventListener('message', function(e){
+  try {
+    if(!e||!e.data) return;
+    if(e.data.type==='holo-challenge' && e.data.uid){
+      ctPendingChallenge=e.data.uid;
+      ctEnterDuel();
+    }
+  } catch(err){}
+});
+
+/* ---- Duel wiring ---- */
+$('btnDuel').addEventListener('click', function(){ ctEnterDuel(); });
+$('btnDuelBack').addEventListener('click', function(){ showMenu(); });
+$('btnChallenge').addEventListener('click', function(){ ctEnterDuel(); });
+
+/* ---- Duel test hooks ---- */
+window.__ct = window.__ct || {};
+window.__ct.duel = {
+  get match(){ return ctMatch; },
+  get mid(){ return ctMid; },
+  get answers(){ return ctDuelAnswers; },
+  get active(){ return duelActive; },
+  challenge: ctChallenge, open: ctOpenMatch, accept: ctAccept, decline: ctDecline,
+  leave: ctLeave, rematch: ctRematch, enter: ctEnterDuel, finish: ctFinishMyTurn,
+  poll: ctPollTick,
+  drawQIdx: ctDrawQIdx, statusText: ctMatchStatusText, apply: ctApplyMatch,
+  setPendingChallenge: function(uid){ ctPendingChallenge = uid; }
+};
+
 /* ---- init ---- */
 buildCats();
-if (christmasOwnerGate()) showMenu();
+if (christmasOwnerGate()){ showMenu(); ctBootDeepLink(); }
 })();
 </script>
 </body>
