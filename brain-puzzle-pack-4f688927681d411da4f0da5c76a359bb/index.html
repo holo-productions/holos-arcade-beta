@@ -531,6 +531,12 @@ var GAMES=[
 function $(id){return document.getElementById(id)}
 function shuffle(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
 function pick(a){return a[Math.floor(Math.random()*a.length)]}
+/* BRAIN-REPEAT-FIX-2026-11-24: deal questions from a shuffled deck instead
+   of picking with replacement, so the same question can't repeat until
+   every item in the pool has been seen once (then the deck reshuffles).
+   Fixes Odd One Out / Pattern Pop / Clue Crack repeats within a session. */
+var decks={};
+function dealFrom(key,pool){var d=decks[key];if(!d||!d.length){d=shuffle(pool);decks[key]=d}return d.pop()}
 function setDiff(d){diff=d;localStorage.setItem('bpp_diff',d);renderDiff();renderGrid();updateStats()}
 function renderDiff(){document.querySelectorAll('#diffBar button').forEach(function(b){b.classList.toggle('on',b.dataset.d===diff)})}
 function bestFor(id){var k=id+'_'+diff;return bests[k]||0}
@@ -571,7 +577,7 @@ var CLUES=[
  {q:'I am the only mammal that can truly fly.',opts:['Bat','Owl','Flying squirrel','Bee'],a:'Bat'}
 ];
 var SCENE=['🌳','🏠','☀️','🐶','🌷','🚗','🐱','⛅','🦋','🌻','🍄','🐦','🏡','🌈','🐝','🍎'];
-function genOdd(){var s=pick(ODD_SETS);return{type:'odd',q:'Which one does NOT belong?',items:shuffle(s.items),answer:s.odd,why:s.why}}
+function genOdd(){var s=dealFrom('odd',ODD_SETS);return{type:'odd',q:'Which one does NOT belong?',items:shuffle(s.items),answer:s.odd,why:s.why}}
 function genSeq(){
  var kind=diff==='Easy'?pick(['add','add']):diff==='Normal'?pick(['add','mul','alt']):pick(['mul','grow','alt','sub']);
  var seq=[],ans=0;
@@ -594,10 +600,10 @@ function genPattern(){
   {seq:['⬛','⬜','⬜','⬛','⬜'],ans:'⬜',opts:['⬜','⬛','🔴','🔵'],why:'One black, two white — repeating.'},
   {seq:['🐾','🐾','🦴','🐾','🐾'],ans:'🦴',opts:['🦴','🐾','🐶','🐱'],why:'Two paws, one bone — repeating.'}
  ];
- var p=pick(pats); if(diff==='Hard'){p=pick(pats)}
- return{type:'pattern',q:'What comes next in the pattern?',seq:p.seq,opts:p.opts,answer:p.ans,why:p.why}
+ var p=dealFrom('pattern',pats);
+ return{type:'pattern',q:'What comes next in the pattern?',seq:p.seq,opts:shuffle(p.opts),answer:p.ans,why:p.why}
 }
-function genClue(){var c=pick(CLUES);return{type:'clue',q:c.q,opts:shuffle(c.opts),answer:c.a,why:'Only “'+c.a+'” fits every part of the clue.'}}
+function genClue(){var c=dealFrom('clue',CLUES);return{type:'clue',q:c.q,opts:shuffle(c.opts),answer:c.a,why:'Only “'+c.a+'” fits every part of the clue.'}}
 function genSpot(){
  var base=[];for(var i=0;i<16;i++)base.push(pick(SCENE));
  var diffIdx=shuffle([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]).slice(0,DIFFS[diff].diffs);
