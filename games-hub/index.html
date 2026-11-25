@@ -15730,18 +15730,32 @@ function accountGameTitle(slug){
   }
   return slug;
 }
-function accountTotalGames(){
+/* GREETING-VISIBLE-COUNT-2026-11-25 (Holo 2026-11-25 10:35): the greeting counted the FULL catalog (215 distinct [data-game] slugs) while libCount reads 200 visible — they disagreed on the same page. Both now count the same visible set libCount uses: distinct .game-card [data-game] slugs, minus HIDDEN_GAMES (SHOW-200-HIDE), minus 18+ adult cards for kid accounts (window.holoAge18). As drops reveal games weekly (HIDDEN_GAMES shrinks), both numbers rise together. Math today: 215 cards - 15 hidden in the DOM (firefighter-rescue is in HIDDEN_GAMES but has no card rendered, so it subtracts nothing) = 200 visible. */
+function visibleGameSlugs(){
   var seen = {};
-  document.querySelectorAll('[data-game]').forEach(function(b){ var g = b.getAttribute('data-game'); if(g) seen[g] = 1; });
-  return Object.keys(seen).length;
+  var age18Hidden = !!(window.holoAge18 && !window.holoAge18.adultGamesVisible());
+  document.querySelectorAll('.game-card').forEach(function(c){
+    if(age18Hidden && window.holoAge18.isAdultCard(c)) return;
+    var b = c.querySelector('[data-game]');
+    var sg = b && b.getAttribute('data-game');
+    if(!sg || seen[sg]) return;
+    if(window.isHiddenGame && window.isHiddenGame(sg)) return;
+    seen[sg] = 1;
+  });
+  return seen;
+}
+function accountTotalGames(){
+  return Object.keys(visibleGameSlugs()).length;
 }
 function renderContinueBanner(){
   var bn = document.getElementById('continueBanner'); if(!bn) return;
   var t = getTester();
   if(!t || continueDismissed){ bn.hidden = true; return; }
   var s = loadAccountState();
-  var reviewed = Object.keys(s.reviewed || {}).length;
-  var total = accountTotalGames();
+  /* GREETING-VISIBLE-COUNT (same marker as visibleGameSlugs above): played-among-visible + remaining visible — a game played that is now hidden (or has no card) does not count toward the visible total, so played + remaining always equals the visible count (200 today). */
+  var visible = visibleGameSlugs();
+  var reviewed = Object.keys(s.reviewed || {}).filter(function(sg){ return visible[sg]; }).length;
+  var total = Object.keys(visible).length;
   var remaining = Math.max(0, total - reviewed);
   if(!s.lastGame && !reviewed){ bn.hidden = true; return; }
   var title = document.getElementById('continueTitle');
