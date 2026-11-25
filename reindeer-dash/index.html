@@ -1,0 +1,1254 @@
+<!-- REINDEER-DASH-2026-11-25 -->
+<!-- December drop — hidden from the hub count until the hub agent cards it. -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Reindeer Dash — Holo's Arcade</title>
+<!-- GATE-GUARD-2026-11-24 -->
+<script src="../shared/gate-guard.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+<style>
+  :root{
+    --navy:#0a0620; --panel:#1a1033; --yellow:#ffd93b; --violet:#7c3aed;
+    --pink:#ff3ec8; --ink:#fff; --muted:#b9aee6; --teal:#2dd4bf; --red:#e63b2e; --green:#2fbf5a;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background:radial-gradient(1200px 800px at 50% -10%, #2a1b5e, var(--navy) 62%);
+    color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    height:100dvh; overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  .wrap{ width:100%; max-width:560px; margin:0 auto; height:100dvh; display:flex; flex-direction:column; padding:10px 12px 12px; }
+  header{ text-align:center; }
+  .title{ font-family:"Press Start 2P",monospace; font-size:22px; letter-spacing:1px; color:var(--yellow); text-shadow:0 2px 0 #7a4d00, 0 0 18px rgba(255,217,59,.45); line-height:1.4; }
+  .sub{ font-size:13px; color:var(--muted); margin-top:6px; }
+  .pracbanner{ display:none; margin-top:6px; }
+  .pracbanner.on{ display:inline-block; background:#0a0620; color:#ffe9a3; border:2px solid var(--pink); border-radius:999px; padding:3px 12px; font-size:12px; font-weight:700; }
+  .hud{ display:flex; gap:8px; align-items:stretch; margin:10px 0; }
+  .stat{ flex:1; background:rgba(255,255,255,.08); border:2px solid var(--violet); border-radius:10px; padding:4px 6px; text-align:center; min-width:0; }
+  .stat .lbl{ display:block; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); }
+  .stat .val{ display:block; font-size:18px; font-weight:800; line-height:1.2; }
+  .lives{ display:flex; gap:3px; justify-content:center; align-items:center; min-height:20px; }
+  .lives svg{ width:16px; height:16px; }
+  .iconbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:10px; padding:6px 12px; font-size:15px; font-weight:800; cursor:pointer; }
+  .iconbtn:hover{ border-color:var(--pink); }
+  .stage{ flex:1; min-height:0; position:relative; display:flex; align-items:center; justify-content:center; }
+  canvas{ display:block; border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,.5); touch-action:none; background:#0d0830; }
+  .overlay{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; background:rgba(10,6,32,.88); border-radius:16px; padding:18px; text-align:center; z-index:5; overflow-y:auto; }
+  .hidden{ display:none !important; }
+  .overlay h2{ margin:0; color:var(--yellow); font-family:"Press Start 2P",monospace; font-size:18px; line-height:1.5; }
+  .overlay p{ margin:0; font-size:15px; line-height:1.5; max-width:420px; color:#e9e4ff; }
+  .big{ font-size:34px; font-weight:900; color:var(--yellow); }
+  .card{ background:var(--panel); border:2px solid var(--violet); border-radius:14px; padding:14px 16px; max-width:430px; width:100%; text-align:left; }
+  .card ul{ margin:0; padding-left:20px; font-size:14px; line-height:1.6; color:#e9e4ff; }
+  .card li{ margin-bottom:6px; }
+  .btn{ background:linear-gradient(#ffe45e,#ffc93b); color:#241200; font-weight:800; border:none; border-radius:999px; padding:13px 30px; font-size:18px; box-shadow:0 0 18px rgba(255,217,59,.55), 0 4px 0 #b98a00; cursor:pointer; min-width:200px; }
+  .btn:active{ transform:translateY(2px); box-shadow:0 0 18px rgba(255,217,59,.55), 0 2px 0 #b98a00; }
+  .btn2{ background:linear-gradient(135deg,var(--violet),var(--pink)); color:#fff; border:none; border-radius:999px; padding:11px 24px; font-size:16px; font-weight:700; box-shadow:0 4px 0 rgba(0,0,0,.35); cursor:pointer; min-width:200px; }
+  .btn2:active{ transform:translateY(2px); }
+  .btn3{ background:none; border:none; color:#cfc4ff; text-decoration:underline; cursor:pointer; font-size:15px; padding:6px 10px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .diffbtn{ background:rgba(255,255,255,.08); border:2px solid var(--violet); color:#fff; border-radius:999px; padding:7px 14px; font-weight:700; cursor:pointer; }
+  .diffbtn[aria-pressed="true"]{ background:var(--yellow); color:#241200; border-color:var(--yellow); }
+  .hint{ text-align:center; color:var(--muted); font-size:12px; padding-top:8px; }
+  .bestline{ font-size:14px; color:var(--muted); }
+  .bestline b{ color:var(--yellow); }
+  .newbest{ color:#7dff9e; font-weight:800; }
+  .blink{ animation:blink 1.1s steps(2,start) infinite; color:#7dff9e; font-family:"Press Start 2P",monospace; font-size:11px; letter-spacing:1px; }
+  @keyframes blink{ to{ visibility:hidden; } }
+  .toast{ position:absolute; left:50%; bottom:14px; transform:translateX(-50%); background:#0a0620; color:#7dff9e; border:2px solid var(--green); border-radius:999px; padding:8px 16px; font-weight:700; font-size:14px; z-index:9; white-space:nowrap; }
+  .menuarte{ width:100%; max-width:420px; }
+  @media (max-width:360px){ .title{ font-size:18px; } .btn,.btn2{ min-width:170px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title">Reindeer Dash</div>
+    <div class="sub">Santa's sleigh team is practising for the big night — dash through the North Pole, leap the logs, and grab every present on the way.</div>
+    <div class="pracbanner" id="pracBanner">Practice &mdash; scores don&rsquo;t count</div>
+  </header>
+  <div class="hud">
+    <div class="stat"><span class="lbl">Score</span><span class="val" id="hudScore">0</span></div>
+    <div class="stat"><span class="lbl">Best</span><span class="val" id="hudBest">0</span></div>
+    <div class="stat"><span class="lbl">Distance</span><span class="val" id="hudDist">0m</span></div>
+    <div class="stat"><span class="lbl">Hearts</span><span class="val lives" id="hudLives"></span></div>
+    <button id="btnPause" class="iconbtn" aria-label="Pause game">II</button>
+  </div>
+  <div class="stage" id="stage">
+    <canvas id="game" width="560" height="360"></canvas>
+
+    <div class="overlay" id="ovMenu">
+      <h2>Reindeer Dash</h2>
+      <!-- Reindeer + Santa's sleigh, drawn as inline SVG (no emoji). -->
+      <svg class="menuarte" viewBox="0 0 420 120" role="img" aria-label="A reindeer pulling Santa's sleigh under a snowy moon">
+        <circle cx="368" cy="26" r="18" fill="#ffe9a3"/><circle cx="362" cy="22" r="4" fill="#e8cf8a"/><circle cx="374" cy="30" r="3" fill="#e8cf8a"/>
+        <g fill="#fff" opacity=".85"><circle cx="30" cy="18" r="1.6"/><circle cx="90" cy="10" r="1.4"/><circle cx="150" cy="22" r="1.6"/><circle cx="210" cy="12" r="1.4"/><circle cx="300" cy="16" r="1.6"/><circle cx="60" cy="34" r="1.3"/><circle cx="250" cy="30" r="1.3"/></g>
+        <path d="M0 108 L420 108 L420 120 L0 120 Z" fill="#e8ecf7"/>
+        <path d="M40 108 L55 62 L70 108 Z" fill="#1d5c33"/><path d="M48 108 L56 84 L64 108 Z" fill="#2fbf5a"/>
+        <path d="M350 108 L365 62 L380 108 Z" fill="#1d5c33"/><path d="M358 108 L366 84 L374 108 Z" fill="#2fbf5a"/>
+        <!-- sleigh -->
+        <path d="M120 92 q4 16 22 16 l52 0 q14 0 12 -12 l-3 -8 -70 0 q-8 0 -13 4 Z" fill="#c22f2f"/>
+        <path d="M120 92 q2 8 10 10" fill="none" stroke="#ffd93b" stroke-width="2"/>
+        <path d="M196 84 q14 -4 10 8 q-3 8 -12 6" fill="none" stroke="#ffd93b" stroke-width="3"/>
+        <circle cx="132" cy="110" r="5" fill="#7a5228"/><circle cx="184" cy="110" r="5" fill="#7a5228"/>
+        <!-- gift sack in the sleigh -->
+        <path d="M138 84 q6 -14 18 -12 q14 2 12 12 Z" fill="#8a5a2b"/>
+        <rect x="150" y="66" width="18" height="18" fill="#ff3ec8"/><rect x="157" y="66" width="4" height="18" fill="#ffd93b"/>
+        <!-- Santa waving -->
+        <circle cx="176" cy="52" r="10" fill="#f2c79b"/>
+        <path d="M166 52 a10 10 0 0 1 20 0 l0 -3 -20 0 Z" fill="#e63b2e"/>
+        <circle cx="176" cy="42" r="3" fill="#fff"/>
+        <path d="M168 60 q8 8 16 0 q-2 10 -8 10 q-6 0 -8 -10 Z" fill="#fff"/>
+        <path d="M160 66 q16 -6 32 0 l4 18 -40 0 Z" fill="#e63b2e"/>
+        <path d="M192 66 q10 -8 6 -18" fill="none" stroke="#e63b2e" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="199" cy="46" r="4" fill="#f2c79b"/>
+        <!-- reins to the reindeer -->
+        <path d="M196 76 L258 66" stroke="#5a3d1e" stroke-width="2"/>
+        <!-- reindeer -->
+        <path d="M252 78 q-6 -12 4 -16 q4 -10 12 -8 q6 2 4 8 q8 -2 10 4 q-2 6 -10 6 l-2 10 q-10 6 -18 -4 Z" fill="#8a5a2b"/>
+        <path d="M258 50 l-6 -12 M258 50 l2 -13 M258 50 l10 -9" stroke="#5a3d1e" stroke-width="3" stroke-linecap="round" fill="none"/>
+        <path d="M268 52 l-2 -12 M268 52 l8 -10" stroke="#5a3d1e" stroke-width="3" stroke-linecap="round" fill="none"/>
+        <circle cx="282" cy="60" r="3.5" fill="#ff2e2e"/>
+        <circle cx="274" cy="56" r="1.6" fill="#241200"/>
+        <path d="M246 84 q-8 2 -10 8 q6 2 10 -2 Z" fill="#a8763e"/>
+        <path d="M252 84 L246 108 M262 86 L260 108 M272 86 L276 108 M282 84 L290 108" stroke="#8a5a2b" stroke-width="4" stroke-linecap="round"/>
+        <path d="M250 76 q-14 2 -12 12 q10 2 14 -6 Z" fill="#a8763e"/>
+        <path d="M256 74 l14 4 -2 8 -14 -4 Z" fill="#e63b2e"/>
+      </svg>
+      <p class="blink">PRESS START</p>
+      <p class="bestline">Best score: <b id="menuBest">0</b> &nbsp;&middot;&nbsp; Best distance: <b id="menuBestDist">0m</b></p>
+      <div class="row" id="diffRow" role="group" aria-label="Difficulty">
+        <button class="diffbtn" data-diff="easy" aria-pressed="false">Easy</button>
+        <button class="diffbtn" data-diff="medium" aria-pressed="true">Medium</button>
+        <button class="diffbtn" data-diff="hard" aria-pressed="false">Hard</button>
+      </div>
+      <button class="btn" id="btnPlay">Play</button>
+      <button class="btn2" id="btnPractice">Practice</button>
+      <div class="row">
+        <button class="btn2" id="btnRules">How to Play</button>
+      </div>
+    </div>
+
+    <div class="overlay hidden" id="ovRules">
+      <h2>How to Play</h2>
+      <div class="card"><ul>
+        <li><b>Jump</b> by tapping anywhere on the snowy trail, clicking, or pressing <b>Space</b>. The reindeer runs on its own — you just time the leaps.</li>
+        <li>Leap the <b>pine logs, snowdrifts and rocks</b> on the trail. The run gets faster the further you dash.</li>
+        <li>Grab <b>stars (+10)</b>, <b>gift boxes (+25)</b> and <b>stockings hung on the trees (+15)</b> — they float at jump height.</li>
+        <li><b>Cookies &amp; milk</b> are rare — grab a plate to win back <b>one heart</b> (or +25 if your hearts are already full).</li>
+        <li>You have <b>3 hearts</b>. Hitting an obstacle costs one heart, and the reindeer flashes for about <b>1.5 seconds</b> while it can't be hurt again. Lose all 3 and the run is over.</li>
+        <li><b>Score</b> = distance (1 point per 10 metres) + everything you collect. Best score and best distance are saved on this device.</li>
+        <li><b>Practice mode:</b> hearts still apply, but no score and no best are saved — scores don't count.</li>
+        <li>Wave to the <b>elf</b> as you pass, mind the <b>North Pole signposts</b>, and don't keep Santa waiting — the big night is coming.</li>
+        <li>Press <b>P</b> to pause.</li>
+      </ul></div>
+      <button class="btn" id="btnRulesClose">Got it</button>
+    </div>
+
+    <div class="overlay hidden" id="ovPause">
+      <h2>Paused</h2>
+      <p>The reindeer is catching its breath. Santa is patient — mostly.</p>
+      <button class="btn" id="btnResume">Resume</button>
+      <button class="btn2" id="btnRestart">Restart</button>
+      <button class="btn3" id="btnExitPause">Main menu</button>
+    </div>
+
+    <div class="overlay hidden" id="ovEnd">
+      <h2 id="endTitle">Out of Hearts!</h2>
+      <p id="endLine">The reindeer tripped over one log too many.</p>
+      <div class="big" id="endScore">0</div>
+      <p class="bestline">Best: <b id="endBest">0</b> <span class="newbest hidden" id="endNewBest">New best!</span></p>
+      <p class="bestline" id="endStats"></p>
+      <button class="btn" id="btnReplay">Replay</button>
+      <button class="btn2" id="btnStartOver">Start over</button>
+      <button class="btn2" id="btnInvite">Invite friend</button>
+      <button class="btn2" id="btnExit">Exit</button>
+    </div>
+
+    <div class="toast hidden" id="toast" role="status">Link copied!</div>
+  </div>
+  <div class="hint">Tap anywhere or press Space to jump. Collect stars, gifts, stockings — and cookies &amp; milk for a heart.</div>
+</div>
+<script>
+(function(){
+'use strict';
+/* REINDEER-DASH-2026-11-25: Reindeer Dash — Christmas runner.
+   A reindeer pulls Santa's sleigh through a snowy North Pole
+   forest. Jump logs, snowdrifts and rocks; collect stars, gifts,
+   stockings and rare cookies & milk. 3 hearts, speed rises. */
+var cv = document.getElementById('game');
+var ctx = null;
+try { ctx = cv.getContext('2d'); } catch (e) { ctx = null; }
+var W = 560, H = 360;
+var GROUND = 300; /* ground line y */
+
+/* ---- state ---- */
+var state = 'menu'; /* menu | playing | paused | over */
+var practiceMode = false;
+var score = 0, pickupScore = 0, best = 0, bestDist = 0;
+var hearts = 3, elapsed = 0, distPx = 0, speed = 0;
+var obstacles = [];   /* {x,w,h,type} */
+var pickups = [];     /* {x,y,kind,taken} */
+var floats = [];      /* {x,y,txt,color,t} */
+var flakes = [];      /* {x,y,r,v,sway} */
+var bgTrees = [];     /* {x,h,layer} */
+var decor = [];       /* {x,kind} signpost / elf passing by */
+var invulnT = 0, flashT = 0, waveT = 0;
+var spawnTimer = 1.2, decorTimer = 6;
+var reindeer = { x: 140, feet: GROUND, vy: 0, jumping: false };
+var difficulty = 'medium';
+var LS_BEST = 'reindeerDash.best', LS_BESTDIST = 'reindeerDash.bestDist', LS_DIFF = 'reindeerDash.difficulty';
+try {
+  best = parseInt(localStorage.getItem(LS_BEST) || '0', 10) || 0;
+  bestDist = parseInt(localStorage.getItem(LS_BESTDIST) || '0', 10) || 0;
+  var d0 = localStorage.getItem(LS_DIFF); if (d0) difficulty = d0;
+} catch (e) {}
+
+/* Difficulty — what each level changes:
+   Easy:   slow start (240 px/s), gentle ramp (+6/s), sparse obstacles
+           (spawn every ~1.35s), low obstacles (max 44px), forgiving jump.
+   Medium: steady start (300 px/s), ramp +9/s, obstacles every ~1.05s,
+           taller obstacles (max 56px).
+   Hard:   fast start (370 px/s), steep ramp (+13/s), dense obstacles
+           (every ~0.8s), tallest obstacles (max 70px) — needs a full,
+           well-timed jump; jump itself is a touch higher to match. */
+var DIFF = {
+  easy:   { speed0: 240, accel: 6,  spawn: 1.35, jumpV: 800, maxH: 44, cookie: 0.09 },
+  medium: { speed0: 300, accel: 9,  spawn: 1.05, jumpV: 850, maxH: 56, cookie: 0.07 },
+  hard:   { speed0: 370, accel: 13, spawn: 0.80, jumpV: 900, maxH: 70, cookie: 0.05 }
+};
+function params(){ return DIFF[difficulty] || DIFF.medium; }
+function distM(){ return Math.floor(distPx / 50); }        /* 50px = 1 metre */
+function distScore(){ return Math.floor(distM() / 10); }    /* 1 pt per 10m */
+function totalScore(){ return distScore() + pickupScore; }
+
+/* ---- helpers ---- */
+function $(id){ return document.getElementById(id); }
+function clamp(v, a, b){ return v < a ? a : (v > b ? b : v); }
+function rnd(a, b){ return a + Math.random() * (b - a); }
+
+/* ---- audio (gated by holoSettings) ---- */
+var AC = null;
+function ac(){
+  if (!AC){ try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  return AC;
+}
+function tone(f, dur, type, g, slideTo, delay){
+  try {
+    if (!window.holoSettings || !window.holoSettings.sound) return;
+    var c = ac(); if (!c) return;
+    var t0 = c.currentTime + (delay || 0);
+    var o = c.createOscillator(), gn = c.createGain();
+    o.type = type || 'sine'; o.frequency.setValueAtTime(f, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(30, slideTo), t0 + dur);
+    gn.gain.setValueAtTime(g || 0.1, t0);
+    gn.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    o.connect(gn); gn.connect(c.destination);
+    o.start(t0); o.stop(t0 + dur + 0.02);
+  } catch (e) {}
+}
+function bell(f, dur, g, delay){
+  /* sleigh-bell shimmer: bright triangle + a high harmonic */
+  tone(f, dur, 'triangle', g, null, delay);
+  tone(f * 2.76, dur * 0.6, 'sine', (g || 0.1) * 0.35, null, delay);
+}
+function sfx(name){
+  if (name === 'jump'){ tone(520, 0.18, 'sine', 0.09, 180); }                       /* whoosh */
+  else if (name === 'star'){ tone(987, 0.1, 'sine', 0.11); tone(1318, 0.16, 'sine', 0.11, null, 0.08); } /* jingle */
+  else if (name === 'gift'){ [523, 659, 784, 1046].forEach(function(f, i){ tone(f, 0.12, 'triangle', 0.1, null, i * 0.07); }); }
+  else if (name === 'stocking'){ tone(784, 0.1, 'sine', 0.1); tone(988, 0.16, 'sine', 0.1, null, 0.08); }
+  else if (name === 'cookie'){ tone(660, 0.12, 'sine', 0.11); tone(880, 0.2, 'sine', 0.11, null, 0.1); }
+  else if (name === 'hit'){ tone(140, 0.28, 'sawtooth', 0.14, 55); tone(70, 0.2, 'sine', 0.12, 45); } /* thud */
+  else if (name === 'over'){ /* sleigh-bell arpeggio */
+    [1046, 880, 1174, 1318, 1568].forEach(function(f, i){ bell(f, 0.35, 0.12, i * 0.16); });
+    bell(2093, 0.5, 0.08, 0.85);
+  }
+}
+function buzz(ms){ try { if (window.holoBuzz) window.holoBuzz(ms); } catch (e) {} }
+
+/* ---- overlays ---- */
+var overlays = ['ovMenu', 'ovRules', 'ovPause', 'ovEnd'];
+function show(id){
+  overlays.forEach(function(o){ $(o).classList.toggle('hidden', o !== id); });
+}
+function showNone(){ overlays.forEach(function(o){ $(o).classList.add('hidden'); }); }
+function showMenu(){
+  state = 'menu';
+  $('menuBest').textContent = best;
+  $('menuBestDist').textContent = bestDist + 'm';
+  $('pracBanner').classList.toggle('on', practiceMode);
+  show('ovMenu');
+  updateHUD();
+}
+
+/* ---- HUD ---- */
+var HEART_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14 C3 10 1 7.5 1 5 A3.2 3.2 0 0 1 8 3.4 A3.2 3.2 0 0 1 15 5 C15 7.5 13 10 8 14 Z" fill="FILL"/></svg>';
+function updateHUD(){
+  $('hudScore').textContent = totalScore();
+  $('hudBest').textContent = best;
+  $('hudDist').textContent = distM() + 'm';
+  var h = '';
+  for (var i = 0; i < 3; i++){
+    h += HEART_SVG.replace('FILL', i < hearts ? '#ff3b5c' : '#3a3450');
+  }
+  $('hudLives').innerHTML = h;
+}
+
+/* ---- game flow ---- */
+function startGame(practice){
+  practiceMode = !!practice;
+  score = 0; pickupScore = 0; hearts = 3; elapsed = 0; distPx = 0;
+  speed = params().speed0;
+  obstacles = []; pickups = []; floats = []; decor = [];
+  invulnT = 0; flashT = 0; waveT = 3; /* Santa waves at the start */
+  spawnTimer = 1.1; decorTimer = 5;
+  reindeer = { x: 140, feet: GROUND, vy: 0, jumping: false };
+  state = 'playing';
+  $('pracBanner').classList.toggle('on', practiceMode);
+  showNone();
+  updateHUD();
+}
+function pauseGame(){
+  if (state !== 'playing') return;
+  state = 'paused';
+  show('ovPause');
+}
+function resumeGame(){
+  if (state !== 'paused') return;
+  state = 'playing';
+  showNone();
+}
+function gameOver(){
+  state = 'over';
+  sfx('over');
+  var isBest = false, isBestDist = false;
+  if (!practiceMode){
+    if (totalScore() > best){ best = totalScore(); isBest = true; try { localStorage.setItem(LS_BEST, String(best)); } catch (e) {} }
+    if (distM() > bestDist){ bestDist = distM(); isBestDist = true; try { localStorage.setItem(LS_BESTDIST, String(bestDist)); } catch (e) {} }
+  }
+  $('endTitle').textContent = 'Out of Hearts!';
+  $('endLine').textContent = practiceMode
+    ? 'Practice run over — the reindeer is heading back to the stable for a warm-up and some cookies.'
+    : (isBest || isBestDist)
+      ? 'What a dash! The reindeer are ready for the big night.'
+      : 'The reindeer tripped over one log too many. Santa says shake it off and try again.';
+  $('endScore').textContent = totalScore();
+  $('endBest').textContent = best;
+  $('endNewBest').classList.toggle('hidden', !(isBest || isBestDist));
+  $('endStats').textContent = 'Distance ' + distM() + 'm  ·  Best distance ' + bestDist + 'm  ·  ' + difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+  show('ovEnd');
+  updateHUD();
+}
+
+/* ---- jump ---- */
+function doJump(){
+  if (state !== 'playing') return;
+  if (reindeer.jumping) return;
+  reindeer.jumping = true;
+  reindeer.vy = -params().jumpV;
+  sfx('jump');
+}
+
+/* ---- spawning ---- */
+function spawnObstacle(){
+  var p = params();
+  var roll = Math.random();
+  var type = roll < 0.4 ? 'log' : (roll < 0.75 ? 'drift' : 'rock');
+  var o = { x: W + 20, type: type, w: 0, h: 0 };
+  if (type === 'log'){ o.w = rnd(46, 62); o.h = rnd(26, Math.min(40, p.maxH)); }
+  else if (type === 'drift'){ o.w = rnd(64, 90); o.h = rnd(20, 34); }
+  else { o.w = rnd(30, 40); o.h = rnd(38, p.maxH); }
+  obstacles.push(o);
+  /* sometimes a pickup rides just past the obstacle, at jump height */
+  if (Math.random() < 0.55){
+    var kinds = ['star', 'star', 'gift', 'stocking'];
+    var kind = kinds[Math.floor(Math.random() * kinds.length)];
+    pickups.push({ x: o.x + o.w + rnd(70, 130), y: GROUND - rnd(95, 130), kind: kind });
+  }
+}
+function spawnPickup(){
+  var p = params();
+  var kind;
+  if (Math.random() < p.cookie) kind = 'cookie';
+  else {
+    var kinds = ['star', 'star', 'star', 'gift', 'gift', 'stocking'];
+    kind = kinds[Math.floor(Math.random() * kinds.length)];
+  }
+  pickups.push({ x: W + 20, y: GROUND - rnd(90, 135), kind: kind });
+}
+function spawnDecor(){
+  var kind = Math.random() < 0.5 ? 'sign' : 'elf';
+  decor.push({ x: W + 30, kind: kind, seed: Math.random() * 10 });
+}
+
+/* ---- pickups & hits ---- */
+var PICKUP_VAL = { star: 10, gift: 25, stocking: 15 };
+function collect(pk){
+  if (pk.kind === 'cookie'){
+    if (hearts < 3){
+      hearts++;
+      floats.push({ x: pk.x, y: pk.y - 14, txt: 'Cookies & milk! +1 heart', color: '#7dff9e', t: 1.5 });
+    } else {
+      pickupScore += 25;
+      floats.push({ x: pk.x, y: pk.y - 14, txt: 'Cookies & milk! +25', color: '#ffd93b', t: 1.5 });
+    }
+    sfx('cookie'); buzz(25);
+  } else {
+    var v = PICKUP_VAL[pk.kind] || 10;
+    pickupScore += v;
+    var label = pk.kind === 'star' ? 'Star +10' : (pk.kind === 'gift' ? 'Gift +25' : 'Stocking +15');
+    floats.push({ x: pk.x, y: pk.y - 14, txt: label, color: '#ffd93b', t: 1.2 });
+    sfx(pk.kind === 'gift' ? 'gift' : (pk.kind === 'stocking' ? 'stocking' : 'star'));
+    buzz(15);
+    if (pk.kind === 'gift') waveT = 1.2; /* Santa waves when you grab a gift */
+  }
+  updateHUD();
+}
+function hitObstacle(){
+  if (invulnT > 0) return;
+  hearts--;
+  invulnT = 1.5;
+  flashT = 0.35;
+  sfx('hit'); buzz(80);
+  floats.push({ x: reindeer.x + 30, y: reindeer.feet - 60, txt: 'Ouch! -1 heart', color: '#ff5b5b', t: 1.5 });
+  updateHUD();
+  if (hearts <= 0) gameOver();
+}
+
+/* ---- update ---- */
+function update(dt){
+  if (state !== 'playing') return;
+  dt = Math.min(dt, 0.05); /* clamp: one huge step (tab-switch lag) must not teleport the reindeer or the run */
+  var p = params();
+  elapsed += dt;
+  speed = Math.min(p.speed0 + 220, p.speed0 + p.accel * elapsed);
+  distPx += speed * dt;
+
+  /* reindeer physics */
+  if (reindeer.jumping){
+    reindeer.feet += reindeer.vy * dt;
+    reindeer.vy += 2600 * dt;
+    if (reindeer.feet >= GROUND){ reindeer.feet = GROUND; reindeer.jumping = false; reindeer.vy = 0; }
+  }
+  if (invulnT > 0) invulnT -= dt;
+  if (flashT > 0) flashT -= dt;
+  if (waveT > 0) waveT -= dt;
+
+  /* spawning */
+  spawnTimer -= dt;
+  if (spawnTimer <= 0){
+    spawnTimer = p.spawn * rnd(0.85, 1.15);
+    if (Math.random() < 0.72) spawnObstacle(); else spawnPickup();
+  }
+  decorTimer -= dt;
+  if (decorTimer <= 0){ decorTimer = rnd(9, 16); spawnDecor(); }
+
+  /* move world */
+  var dx = speed * dt;
+  for (var i = obstacles.length - 1; i >= 0; i--){
+    obstacles[i].x -= dx;
+    if (obstacles[i].x + obstacles[i].w < -20) obstacles.splice(i, 1);
+  }
+  for (var j = pickups.length - 1; j >= 0; j--){
+    pickups[j].x -= dx;
+    if (pickups[j].x < -20) pickups.splice(j, 1);
+  }
+  for (var k = decor.length - 1; k >= 0; k--){
+    decor[k].x -= dx;
+    if (decor[k].x < -90) decor.splice(k, 1);
+  }
+  for (var f = floats.length - 1; f >= 0; f--){
+    floats[f].y -= 26 * dt; floats[f].t -= dt;
+    if (floats[f].t <= 0) floats.splice(f, 1);
+  }
+
+  /* collisions: obstacles */
+  var rx0 = reindeer.x - 6, rx1 = reindeer.x + 62;
+  var rTop = reindeer.feet - 46, rBot = reindeer.feet;
+  for (var m = obstacles.length - 1; m >= 0; m--){
+    var o = obstacles[m];
+    var oTop = GROUND - o.h;
+    if (rx1 > o.x + 4 && rx0 < o.x + o.w - 4 && rBot > oTop + 2 && rTop < GROUND){
+      hitObstacle();
+      obstacles.splice(m, 1);
+      if (state !== 'playing') return;
+    }
+  }
+  /* collisions: pickups */
+  var cx = reindeer.x + 28, cy = reindeer.feet - 24;
+  for (var n = pickups.length - 1; n >= 0; n--){
+    var pk = pickups[n];
+    var ddx = pk.x - cx, ddy = pk.y - cy;
+    if (ddx * ddx + ddy * ddy < 34 * 34){
+      collect(pk);
+      pickups.splice(n, 1);
+    }
+  }
+  updateHUD();
+}
+
+/* ---- drawing ---- */
+function drawPine(x, baseY, h, colA, colB, snow){
+  if (!ctx) return;
+  ctx.fillStyle = colA;
+  ctx.beginPath();
+  ctx.moveTo(x, baseY - h);
+  ctx.lineTo(x + h * 0.28, baseY - h * 0.45);
+  ctx.lineTo(x + h * 0.16, baseY - h * 0.45);
+  ctx.lineTo(x + h * 0.38, baseY);
+  ctx.lineTo(x - h * 0.38, baseY);
+  ctx.lineTo(x - h * 0.16, baseY - h * 0.45);
+  ctx.lineTo(x - h * 0.28, baseY - h * 0.45);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = colB;
+  ctx.beginPath();
+  ctx.moveTo(x, baseY - h);
+  ctx.lineTo(x + h * 0.2, baseY - h * 0.55);
+  ctx.lineTo(x - h * 0.2, baseY - h * 0.55);
+  ctx.closePath(); ctx.fill();
+  if (snow){
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath();
+    ctx.moveTo(x, baseY - h);
+    ctx.lineTo(x + h * 0.1, baseY - h * 0.72);
+    ctx.lineTo(x - h * 0.1, baseY - h * 0.72);
+    ctx.closePath(); ctx.fill();
+  }
+}
+function drawReindeer(t){
+  if (!ctx) return;
+  var x = reindeer.x, feet = reindeer.feet;
+  var flash = invulnT > 0 && Math.floor(t * 12) % 2 === 0;
+  ctx.save();
+  if (flash) ctx.globalAlpha = 0.35;
+  var trot = Math.sin(t * 14) * 5;
+  var air = reindeer.jumping ? 6 : 0;
+  /* legs (trot) */
+  ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  var legs = [[-16, trot], [-4, -trot], [8, -trot], [18, trot]];
+  for (var i = 0; i < 4; i++){
+    ctx.beginPath();
+    ctx.moveTo(x + legs[i][0], feet - 18);
+    ctx.lineTo(x + legs[i][0] + legs[i][1] * 0.4, feet - air);
+    ctx.stroke();
+  }
+  /* body */
+  ctx.fillStyle = '#a8763e';
+  ctx.beginPath(); ctx.ellipse(x + 8, feet - 26, 26, 13, 0, 0, Math.PI * 2); ctx.fill();
+  /* tail */
+  ctx.fillStyle = '#8a5a2b';
+  ctx.beginPath(); ctx.ellipse(x - 18, feet - 30, 6, 4, -0.5, 0, Math.PI * 2); ctx.fill();
+  /* neck + head */
+  ctx.fillStyle = '#a8763e';
+  ctx.beginPath(); ctx.ellipse(x + 30, feet - 38, 8, 12, 0.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 38, feet - 48, 9, 0, Math.PI * 2); ctx.fill();
+  /* ear */
+  ctx.fillStyle = '#8a5a2b';
+  ctx.beginPath(); ctx.ellipse(x + 32, feet - 56, 3, 6, -0.4, 0, Math.PI * 2); ctx.fill();
+  /* antlers */
+  ctx.strokeStyle = '#5a3d1e'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x + 34, feet - 55); ctx.lineTo(x + 28, feet - 68);
+  ctx.moveTo(x + 30, feet - 62); ctx.lineTo(x + 24, feet - 66);
+  ctx.moveTo(x + 32, feet - 59); ctx.lineTo(x + 38, feet - 66);
+  ctx.moveTo(x + 40, feet - 56); ctx.lineTo(x + 44, feet - 68);
+  ctx.moveTo(x + 42, feet - 62); ctx.lineTo(x + 48, feet - 65);
+  ctx.stroke();
+  /* red glowing nose */
+  var glow = 0.5 + 0.3 * Math.sin(t * 5);
+  ctx.save();
+  ctx.shadowColor = '#ff2e2e'; ctx.shadowBlur = 14;
+  ctx.fillStyle = '#ff2e2e';
+  ctx.globalAlpha = flash ? 0.35 : (0.75 + glow * 0.25);
+  ctx.beginPath(); ctx.arc(x + 47, feet - 47, 4.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  /* eye */
+  ctx.fillStyle = '#241200';
+  ctx.beginPath(); ctx.arc(x + 40, feet - 51, 1.8, 0, Math.PI * 2); ctx.fill();
+  /* red scarf */
+  ctx.fillStyle = '#e63b2e';
+  ctx.fillRect(x + 22, feet - 40, 14, 6);
+  ctx.fillRect(x + 14, feet - 38, 5, 12);
+  ctx.restore();
+}
+function drawSleigh(t){
+  if (!ctx) return;
+  var x = reindeer.x - 96, y = GROUND;
+  var bob = Math.sin(t * 6) * 1.5;
+  var waving = waveT > 0;
+  /* runners */
+  ctx.strokeStyle = '#ffd93b'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x - 6, y + 2); ctx.quadraticCurveTo(x + 30, y + 10, x + 66, y + 2); ctx.stroke();
+  /* sleigh body */
+  ctx.fillStyle = '#c22f2f';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 6 + bob);
+  ctx.quadraticCurveTo(x + 4, y + 8 + bob, x + 22, y + 6 + bob);
+  ctx.lineTo(x + 62, y + 6 + bob);
+  ctx.quadraticCurveTo(x + 70, y + 4 + bob, x + 68, y - 10 + bob);
+  ctx.lineTo(x + 58, y - 10 + bob);
+  ctx.lineTo(x + 56, y - 2 + bob);
+  ctx.lineTo(x + 12, y - 2 + bob);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#ffd93b';
+  ctx.fillRect(x + 8, y - 2 + bob, 52, 2);
+  /* gift sack */
+  ctx.fillStyle = '#8a5a2b';
+  ctx.beginPath(); ctx.ellipse(x + 20, y - 12 + bob, 12, 9, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ff3ec8';
+  ctx.fillRect(x + 30, y - 22 + bob, 12, 12);
+  ctx.fillStyle = '#ffd93b';
+  ctx.fillRect(x + 35, y - 22 + bob, 3, 12);
+  /* Santa */
+  ctx.fillStyle = '#e63b2e';
+  ctx.beginPath(); ctx.ellipse(x + 48, y - 16 + bob, 11, 12, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f2c79b';
+  ctx.beginPath(); ctx.arc(x + 50, y - 30 + bob, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(x + 50, y - 24 + bob, 7, 0, Math.PI); ctx.fill(); /* beard */
+  ctx.fillStyle = '#e63b2e';
+  ctx.beginPath(); ctx.arc(x + 50, y - 35 + bob, 8, Math.PI, 0); ctx.fill(); /* hat */
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(x + 58, y - 36 + bob, 3, 0, Math.PI * 2); ctx.fill(); /* pom */
+  /* Santa's waving arm */
+  ctx.strokeStyle = '#e63b2e'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x + 54, y - 20 + bob);
+  if (waving){
+    var wv = Math.sin(t * 10) * 6;
+    ctx.lineTo(x + 64, y - 34 + bob + wv);
+  } else {
+    ctx.lineTo(x + 60, y - 12 + bob);
+  }
+  ctx.stroke();
+  /* reins to the reindeer */
+  ctx.strokeStyle = '#5a3d1e'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x + 66, y - 8 + bob); ctx.lineTo(reindeer.x - 2, reindeer.feet - 30); ctx.stroke();
+}
+function drawObstacle(o){
+  if (!ctx) return;
+  var top = GROUND - o.h;
+  if (o.type === 'log'){
+    ctx.fillStyle = '#6b4423';
+    ctx.beginPath(); ctx.ellipse(o.x + o.w / 2, top + o.h / 2, o.w / 2, o.h / 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#8a5a2b';
+    ctx.beginPath(); ctx.ellipse(o.x + o.w / 2, top + o.h / 2, o.w / 2 - 4, o.h / 2 - 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c9a06a';
+    ctx.beginPath(); ctx.ellipse(o.x + o.w - 3, top + o.h / 2, 4, o.h / 2 - 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(o.x + o.w - 3, top + o.h / 2, 2, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(o.x + 4, top - 2, o.w - 8, 4);
+  } else if (o.type === 'drift'){
+    ctx.fillStyle = '#dfe8ff';
+    ctx.beginPath();
+    ctx.moveTo(o.x, GROUND);
+    ctx.quadraticCurveTo(o.x + o.w * 0.3, top - 4, o.x + o.w * 0.55, top + 4);
+    ctx.quadraticCurveTo(o.x + o.w * 0.8, top - 2, o.x + o.w, GROUND);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(o.x + o.w * 0.5, top + 5, o.w * 0.22, 4, 0, 0, Math.PI * 2); ctx.fill();
+  } else { /* rock */
+    ctx.fillStyle = '#5c5a6e';
+    ctx.beginPath();
+    ctx.moveTo(o.x + 3, GROUND);
+    ctx.lineTo(o.x + 6, top + 8);
+    ctx.lineTo(o.x + o.w * 0.45, top);
+    ctx.lineTo(o.x + o.w - 4, top + 10);
+    ctx.lineTo(o.x + o.w - 2, GROUND);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#7c7a92';
+    ctx.beginPath(); ctx.moveTo(o.x + 6, top + 8); ctx.lineTo(o.x + o.w * 0.45, top); ctx.lineTo(o.x + o.w * 0.6, top + 12); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(o.x + o.w * 0.45, top + 2, o.w * 0.3, 3, 0, 0, Math.PI * 2); ctx.fill();
+  }
+}
+function drawPickup(pk, t){
+  if (!ctx) return;
+  var bob = Math.sin(t * 4 + pk.x * 0.05) * 3;
+  var y = pk.y + bob;
+  if (pk.kind === 'star'){
+    ctx.save();
+    ctx.translate(pk.x, y);
+    ctx.shadowColor = '#ffd93b'; ctx.shadowBlur = 10;
+    ctx.fillStyle = '#ffd93b';
+    ctx.beginPath();
+    for (var i = 0; i < 5; i++){
+      var a = -Math.PI / 2 + i * (Math.PI * 2 / 5);
+      var a2 = a + Math.PI / 5;
+      ctx.lineTo(Math.cos(a) * 13, Math.sin(a) * 13);
+      ctx.lineTo(Math.cos(a2) * 5.5, Math.sin(a2) * 5.5);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  } else if (pk.kind === 'gift'){
+    ctx.save();
+    ctx.shadowColor = '#ff3ec8'; ctx.shadowBlur = 8;
+    ctx.fillStyle = '#ff3ec8';
+    ctx.fillRect(pk.x - 11, y - 10, 22, 20);
+    ctx.fillStyle = '#ffd93b';
+    ctx.fillRect(pk.x - 2.5, y - 10, 5, 20);
+    ctx.fillRect(pk.x - 11, y - 2.5, 22, 5);
+    ctx.fillStyle = '#ffd93b';
+    ctx.beginPath(); ctx.arc(pk.x - 5, y - 12, 4, 0, Math.PI * 2); ctx.arc(pk.x + 5, y - 12, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  } else if (pk.kind === 'stocking'){
+    /* stocking hung on a little pine branch */
+    ctx.strokeStyle = '#2fbf5a'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(pk.x - 16, y - 14); ctx.lineTo(pk.x + 16, y - 8); ctx.stroke();
+    ctx.fillStyle = '#e63b2e';
+    ctx.beginPath();
+    ctx.moveTo(pk.x - 7, y - 12);
+    ctx.lineTo(pk.x + 7, y - 10);
+    ctx.lineTo(pk.x + 7, y + 8);
+    ctx.quadraticCurveTo(pk.x + 12, y + 14, pk.x + 4, y + 14);
+    ctx.quadraticCurveTo(pk.x - 2, y + 14, pk.x - 4, y + 8);
+    ctx.lineTo(pk.x - 7, y + 2);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(pk.x - 8, y - 14, 17, 5);
+    ctx.fillStyle = '#2fbf5a';
+    ctx.fillRect(pk.x - 7, y + 10, 8, 4);
+  } else if (pk.kind === 'cookie'){
+    /* plate of cookies + glass of milk */
+    ctx.save();
+    ctx.shadowColor = '#ffe9a3'; ctx.shadowBlur = 10;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(pk.x - 4, y + 8, 13, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#a8763e';
+    ctx.beginPath(); ctx.arc(pk.x - 8, y + 4, 5, 0, Math.PI * 2); ctx.arc(pk.x + 1, y + 3, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#5a3d1e';
+    ctx.beginPath(); ctx.arc(pk.x - 9, y + 3, 1, 0, Math.PI * 2); ctx.arc(pk.x - 6, y + 5, 1, 0, Math.PI * 2); ctx.arc(pk.x + 2, y + 2, 1, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e8f4ff';
+    ctx.fillRect(pk.x + 10, y - 8, 9, 16);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(pk.x + 10, y - 10, 9, 3);
+    ctx.restore();
+  }
+}
+function drawDecor(d, t){
+  if (!ctx) return;
+  if (d.kind === 'sign'){
+    /* North Pole signpost */
+    ctx.fillStyle = '#6b4423';
+    ctx.fillRect(d.x - 3, GROUND - 64, 6, 64);
+    ctx.fillStyle = '#8a5a2b';
+    ctx.beginPath(); ctx.moveTo(d.x - 26, GROUND - 62); ctx.lineTo(d.x + 26, GROUND - 62); ctx.lineTo(d.x + 20, GROUND - 48); ctx.lineTo(d.x - 26, GROUND - 48); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = '700 9px system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('NORTH POLE', d.x - 2, GROUND - 52);
+    ctx.fillStyle = '#ffd93b';
+    ctx.beginPath(); ctx.moveTo(d.x, GROUND - 66); ctx.lineTo(d.x + 5, GROUND - 58); ctx.lineTo(d.x - 5, GROUND - 58); ctx.closePath(); ctx.fill();
+  } else {
+    /* elf waving as you pass */
+    var wave = Math.sin(t * 8 + d.seed) * 7;
+    ctx.fillStyle = '#2fbf5a';
+    ctx.beginPath(); ctx.ellipse(d.x, GROUND - 22, 11, 16, 0, 0, Math.PI * 2); ctx.fill(); /* body */
+    ctx.fillStyle = '#f2c79b';
+    ctx.beginPath(); ctx.arc(d.x, GROUND - 44, 8, 0, Math.PI * 2); ctx.fill(); /* head */
+    ctx.fillStyle = '#2fbf5a';
+    ctx.beginPath(); ctx.moveTo(d.x - 8, GROUND - 48); ctx.lineTo(d.x + 2, GROUND - 58); ctx.lineTo(d.x + 8, GROUND - 48); ctx.closePath(); ctx.fill(); /* hat */
+    ctx.fillStyle = '#ffd93b';
+    ctx.beginPath(); ctx.arc(d.x + 2, GROUND - 58, 2.5, 0, Math.PI * 2); ctx.fill(); /* hat bell */
+    ctx.strokeStyle = '#2fbf5a'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(d.x + 9, GROUND - 28); ctx.lineTo(d.x + 17, GROUND - 42 + wave); ctx.stroke(); /* waving arm */
+    ctx.beginPath(); ctx.moveTo(d.x - 9, GROUND - 28); ctx.lineTo(d.x - 15, GROUND - 14); ctx.stroke();
+    ctx.fillStyle = '#241200';
+    ctx.beginPath(); ctx.arc(d.x - 3, GROUND - 45, 1.3, 0, Math.PI * 2); ctx.arc(d.x + 3, GROUND - 45, 1.3, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#8a5a2b'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(d.x - 5, GROUND - 6); ctx.lineTo(d.x - 5, GROUND); ctx.moveTo(d.x + 5, GROUND - 6); ctx.lineTo(d.x + 5, GROUND); ctx.stroke();
+  }
+}
+function drawScene(t){
+  if (!ctx) return; /* headless env without a 2d context: logic still runs */
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  /* night sky */
+  var sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#141038'); sky.addColorStop(0.55, '#1d1445'); sky.addColorStop(1, '#0a0620');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  /* twinkling stars */
+  for (var s = 0; s < 34; s++){
+    var sx = (s * 173) % W, sy = (s * 97) % 90;
+    ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(t * 1.5 + s));
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(sx, sy, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+  /* moon */
+  ctx.fillStyle = '#ffe9a3';
+  ctx.beginPath(); ctx.arc(496, 40, 24, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e8cf8a';
+  ctx.beginPath(); ctx.arc(488, 34, 6, 0, Math.PI * 2); ctx.arc(504, 48, 4, 0, Math.PI * 2); ctx.fill();
+  /* far pines (parallax 0.25) */
+  var off1 = (distPx * 0.25) % 140;
+  for (var i = -1; i < 6; i++){
+    var tx1 = i * 140 - off1 + ((i * 53) % 40);
+    drawPine(tx1, GROUND + 2, 74 + ((i * 37) % 30), '#1d3a2a', '#22452f', true);
+  }
+  /* near pines (parallax 0.6) */
+  var off2 = (distPx * 0.6) % 190;
+  for (var j = -1; j < 5; j++){
+    var tx2 = j * 190 - off2 + ((j * 71) % 50);
+    drawPine(tx2, GROUND + 4, 96 + ((j * 41) % 34), '#14301f', '#1d5c33', true);
+  }
+  /* snowy ground */
+  ctx.fillStyle = '#e8ecf7';
+  ctx.fillRect(0, GROUND, W, H - GROUND);
+  ctx.fillStyle = '#cdd8f2';
+  ctx.fillRect(0, GROUND, W, 4);
+  /* passing decor: North Pole signposts + waving elf */
+  for (var d = 0; d < decor.length; d++) drawDecor(decor[d], t);
+  /* obstacles + pickups */
+  for (var m = 0; m < obstacles.length; m++) drawObstacle(obstacles[m]);
+  for (var n = 0; n < pickups.length; n++) drawPickup(pickups[n], t);
+  /* sleigh + Santa, then the reindeer pulling it */
+  drawSleigh(t);
+  drawReindeer(t);
+  /* falling snow */
+  ctx.fillStyle = 'rgba(255,255,255,.9)';
+  for (var f = 0; f < flakes.length; f++){
+    var fl = flakes[f];
+    ctx.beginPath(); ctx.arc(fl.x, fl.y, fl.r, 0, Math.PI * 2); ctx.fill();
+  }
+  /* float texts */
+  ctx.textAlign = 'center';
+  for (var q = 0; q < floats.length; q++){
+    ctx.globalAlpha = clamp(floats[q].t, 0, 1);
+    ctx.font = '800 15px system-ui, sans-serif';
+    ctx.fillStyle = floats[q].color;
+    ctx.fillText(floats[q].txt, floats[q].x, floats[q].y);
+  }
+  ctx.globalAlpha = 1;
+  /* practice tag on canvas */
+  if (practiceMode && state === 'playing'){
+    ctx.font = '700 13px system-ui, sans-serif';
+    ctx.fillStyle = '#ffe9a3';
+    ctx.textAlign = 'left';
+    ctx.fillText('Practice — scores don\'t count', 10, 22);
+  }
+  ctx.restore();
+  /* red flash on hit */
+  if (flashT > 0){
+    ctx.fillStyle = 'rgba(255,40,40,' + (flashT * 0.9) + ')';
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+/* snowflakes */
+for (var fi = 0; fi < 70; fi++){
+  flakes.push({ x: rnd(0, W), y: rnd(0, H), r: rnd(1, 2.6), v: rnd(24, 60), sway: rnd(0, 10) });
+}
+function updateSnow(dt, t){
+  for (var i = 0; i < flakes.length; i++){
+    var fl = flakes[i];
+    fl.y += fl.v * dt;
+    fl.x += Math.sin(t * 1.2 + fl.sway) * 12 * dt;
+    if (fl.y > H + 4){ fl.y = -4; fl.x = rnd(0, W); }
+    if (fl.x < -4) fl.x = W + 4;
+    if (fl.x > W + 4) fl.x = -4;
+  }
+}
+var lastT = 0;
+function loop(ts){
+  var t = ts / 1000;
+  var dt = lastT ? Math.min(0.05, (ts - lastT) / 1000) : 0.016;
+  lastT = ts;
+  update(dt);
+  updateSnow(dt, t);
+  drawScene(t);
+  requestAnimationFrame(loop);
+}
+
+/* ---- fit to size, no scroll ---- */
+function fit(){
+  var st = $('stage');
+  var r = st.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  var s = Math.min(r.width / W, r.height / H);
+  cv.style.width = Math.floor(W * s) + 'px';
+  cv.style.height = Math.floor(H * s) + 'px';
+}
+window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', function(){ setTimeout(fit, 100); });
+
+/* ---- input: tap anywhere on the play area, click, or Space ---- */
+function jumpFromEvent(e){
+  if (state !== 'playing') return;
+  e.preventDefault();
+  doJump();
+}
+cv.addEventListener('pointerdown', jumpFromEvent);
+cv.addEventListener('touchstart', function(e){ if (state === 'playing') e.preventDefault(); }, { passive: false });
+cv.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+window.addEventListener('keydown', function(e){
+  if (e.key === ' '){
+    if (state === 'playing'){ e.preventDefault(); doJump(); }
+    else if (state === 'menu'){ e.preventDefault(); startGame(false); }
+    else if (state === 'over'){ e.preventDefault(); startGame(practiceMode); }
+  }
+  else if (e.key === 'p' || e.key === 'P'){ if (state === 'playing') pauseGame(); else if (state === 'paused') resumeGame(); }
+  else if (e.key === 'Enter'){
+    if (state === 'menu') startGame(false);
+    else if (state === 'over') startGame(practiceMode);
+  }
+});
+
+/* ---- invite friend: copy the game link ---- */
+var GAME_URL = 'https://beta.holosarcade.ca/reindeer-dash/';
+var toastTimer = null;
+function showToast(msg){
+  var t = $('toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ t.classList.add('hidden'); }, 2200);
+}
+function copyGameLink(){
+  window.__rdLastCopied = GAME_URL;
+  function done(){ showToast('Link copied!'); }
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      var pr = navigator.clipboard.writeText(GAME_URL);
+      if (pr && pr.then){ pr.then(done, function(){ fallbackCopy(); }); return; }
+      done(); return;
+    }
+  } catch (e) {}
+  fallbackCopy();
+  function fallbackCopy(){
+    try {
+      var ta = document.createElement('textarea');
+      ta.value = GAME_URL;
+      ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      if (document.execCommand) document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e2) {}
+    done();
+  }
+}
+
+/* ---- buttons ---- */
+$('btnPlay').addEventListener('click', function(){ startGame(false); });
+$('btnPractice').addEventListener('click', function(){ startGame(true); });
+$('btnRules').addEventListener('click', function(){ show('ovRules'); });
+$('btnRulesClose').addEventListener('click', function(){ show('ovMenu'); });
+$('btnPause').addEventListener('click', function(){ if (state === 'playing') pauseGame(); else if (state === 'paused') resumeGame(); });
+$('btnResume').addEventListener('click', resumeGame);
+$('btnRestart').addEventListener('click', function(){ startGame(practiceMode); });
+$('btnExitPause').addEventListener('click', function(){ showMenu(); });
+$('btnReplay').addEventListener('click', function(){ startGame(practiceMode); });
+$('btnStartOver').addEventListener('click', function(){ showMenu(); });
+$('btnInvite').addEventListener('click', copyGameLink);
+$('btnExit').addEventListener('click', function(){ window.location.href = 'https://beta.holosarcade.ca/games-hub/'; });
+
+/* ---- difficulty picker ---- */
+function syncDiffUI(){
+  var btns = document.querySelectorAll('#diffRow .diffbtn');
+  for (var i = 0; i < btns.length; i++){
+    btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-diff') === difficulty ? 'true' : 'false');
+  }
+}
+document.querySelectorAll('#diffRow .diffbtn').forEach(function(b){
+  b.addEventListener('click', function(){
+    difficulty = b.getAttribute('data-diff');
+    try { localStorage.setItem(LS_DIFF, difficulty); } catch (e) {}
+    syncDiffUI();
+  });
+});
+syncDiffUI();
+
+/* ---- hub practice entry: the guard auto-clicks #btnPractice ---- */
+window.addEventListener('holo-practice-on', function(){
+  practiceMode = true;
+  $('pracBanner').classList.add('on');
+});
+
+/* ---- test hooks (for jsdom verification) ---- */
+window.__rd = {
+  get state(){ return state; },
+  get score(){ return totalScore(); },
+  get pickupScore(){ return pickupScore; },
+  get hearts(){ return hearts; },
+  get distM(){ return distM(); },
+  get speed(){ return speed; },
+  get speed0(){ return params().speed0; },
+  get difficulty(){ return difficulty; },
+  get practice(){ return practiceMode; },
+  get obstacles(){ return obstacles; },
+  get pickups(){ return pickups; },
+  get invuln(){ return invulnT; },
+  get best(){ return best; },
+  get bestDist(){ return bestDist; },
+  get reindeer(){ return { x: reindeer.x, feet: reindeer.feet, jumping: reindeer.jumping }; },
+  diffParams: function(){ return params(); },
+  start: startGame,
+  toMenu: showMenu,
+  jump: doJump,
+  step: function(dt){ update(dt); },
+  fit: fit,
+  spawnObstacleAt: function(type, x){
+    var p = params();
+    var o = { x: (x === undefined ? W + 20 : x), type: type || 'log', w: 50, h: 34 };
+    if (type === 'drift'){ o.w = 70; o.h = 26; }
+    if (type === 'rock'){ o.w = 34; o.h = Math.min(56, p.maxH); }
+    obstacles.push(o);
+    return o;
+  },
+  spawnPickupAt: function(kind, x, y){
+    var pk = { x: (x === undefined ? W + 20 : x), y: (y === undefined ? GROUND - 110 : y), kind: kind || 'star' };
+    pickups.push(pk);
+    return pk;
+  },
+  setHearts: function(n){ hearts = n; updateHUD(); },
+  clearInvuln: function(){ invulnT = 0; },
+  forceHit: hitObstacle,
+  collect: collect,
+  gameOver: gameOver,
+  copyLink: copyGameLink,
+  get lastCopied(){ return window.__rdLastCopied || null; }
+};
+
+/* ---- init ---- */
+showMenu();
+updateHUD();
+fit();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
