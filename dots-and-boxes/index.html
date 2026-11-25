@@ -246,7 +246,7 @@
   html,body { height:100%; }
   body { margin:0; background:#171021; color:#f5efff; font-family:monospace,"Courier New",Courier; -webkit-tap-highlight-color:transparent; overflow:hidden; }
   .wrap { max-width:390px; margin:0 auto; padding:10px 14px 10px; height:100vh; height:100dvh; display:flex; flex-direction:column; }
-  @media (max-height:480px){ html,body{overflow:auto;} .wrap{height:auto;min-height:100vh;min-height:100dvh;} }
+  @media (max-height:600px){ html,body{overflow:auto;} .wrap{height:auto;min-height:100vh;min-height:100dvh;} }
   a.back { color:#4cc9f0; text-decoration:none; font-size:14px; }
   h1 { font-size:24px; margin:6px 0 2px; color:#ff6ec7; letter-spacing:1px; text-align:center; text-shadow:2px 2px 0 #9b5de5; }
   .sub { text-align:center; color:#c9b8ff; font-size:13px; margin:0 0 8px; }
@@ -285,6 +285,33 @@
   .modal li { margin:8px 0; line-height:1.5; }
   textarea { width:100%; min-height:90px; background:#171021; color:#fff; border:2px solid #9b5de5; font-family:inherit; padding:10px; font-size:15px; }
   .small { font-size:12px; color:#c9b8ff; text-align:center; }
+/* DOTS-UPGRADES-2026-11-25: board-size + difficulty pickers, match + streak lines.
+   Picker rows are compact (38px buttons) so the no-scroll budget
+   survives: +~46px in 2-player, +~92px in vs-Computer (diff row
+   hidden in 2-player), +~36px for the two info lines.
+   CHROME DIET (measured on real headless layout): the original chrome
+   is ~615px at 360 wide, so the 180px board floor already overflowed
+   568px and 700px-tall phones. These overrides slim the chrome so the
+   board can actually fit: tighter rows/margins, one hr in the card. */
+.picker{display:flex;gap:6px;align-items:center;margin:4px 0}
+.picker .lbl{flex:0 0 auto;font-size:13px;color:#c9b8ff}
+.picker .btn{min-height:38px;padding:5px 3px;font-size:13px}
+.row{margin:4px 0}
+.turn{margin:4px 0}
+.pass{min-height:16px;margin:2px 0}
+.status{min-height:20px;margin:3px 0}
+.wrap{padding:8px 14px}
+.boardWrap{margin:3px 0}
+.board[data-size="4"] .dot{width:12px;height:12px}
+.board[data-size="5"] .dot{width:10px;height:10px}
+.card{padding:8px 10px}
+.card hr{margin:2px 0}
+.score b{font-size:19px}
+.matchline{text-align:center;font-size:13px;color:#ffd166;min-height:16px;margin:2px 0}
+.streakline{text-align:center;font-size:12px;color:#c9b8ff;min-height:14px;margin:2px 0 0}
+.match-banner{display:none;position:absolute;left:50%;bottom:10px;transform:translateX(-50%) rotate(2deg);z-index:5;pointer-events:none;background:rgba(10,6,32,.92);border:3px solid #ffb020;border-radius:14px;padding:8px 16px;box-shadow:0 0 26px rgba(255,176,32,.55);white-space:nowrap;text-align:center}
+.match-banner span{display:block;font-family:var(--ha-pixel);font-size:clamp(13px,4vw,18px);line-height:1.6;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.match-banner.show{display:block}
 /* DOTS-PERFECT-2026-11-25: "PERFECT!" banner. Absolutely positioned over
    the board inside .boardWrap, so showing it adds zero layout height and
    can never reintroduce a scroll. */
@@ -295,7 +322,7 @@
    outlined by the theme canvas rule below. */
 #confettiCanvas{position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:70;outline:none !important;box-shadow:none !important;border-radius:0 !important}
 /* Very short viewports: shed the niceties so the board keeps room. */
-@media (max-height:560px){ .sub,.small{display:none} h1{font-size:15px} .card{padding:6px 10px} .btn{min-height:40px} .turn{padding:6px 10px} }
+@media (max-height:800px){ .sub,.small{display:none} h1{font-size:15px;margin:3px 0 1px} .card{padding:6px 10px} .btn{min-height:40px} .turn{padding:4px 10px;margin:2px 0} .picker{margin:2px 0} .picker .btn{min-height:32px;font-size:12px} .matchline{font-size:12px} .streakline{font-size:11px} .wrap{padding:6px 14px} .row{margin:3px 0} .pass{min-height:14px} .status{min-height:18px} a.back{font-size:13px} }
 /* vtut visual steps */
 .vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
 @media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
@@ -352,26 +379,42 @@ a{color:var(--ha-cyan)}
     <button class="btn" id="modeCpu">vs Computer</button>
   </div>
 
+  <div class="picker" id="sizeRow">
+    <span class="lbl">Board</span>
+    <button class="btn" id="size3" data-size="3">3&times;3</button>
+    <button class="btn" id="size4" data-size="4">4&times;4</button>
+    <button class="btn" id="size5" data-size="5">5&times;5</button>
+  </div>
+
+  <div class="picker" id="diffRow" style="display:none">
+    <span class="lbl">Computer</span>
+    <button class="btn" id="diffEasy" data-level="easy">Easy</button>
+    <button class="btn" id="diffMed" data-level="medium">Medium</button>
+    <button class="btn" id="diffHard" data-level="hard">Hard</button>
+  </div>
+
   <div class="turn" id="turnBox">Player 1 turn</div>
   <div class="pass" id="passMsg"></div>
   <div class="status" id="status"></div>
 
-  <div class="boardWrap"><div class="board" id="board" aria-label="Dots and Boxes board"></div><div id="perfectBanner" class="perfect-banner" role="status" aria-live="polite"><span>&#9733; PERFECT! &#9733;</span></div></div>
+  <div class="boardWrap"><div class="board" id="board" aria-label="Dots and Boxes board"></div><div id="perfectBanner" class="perfect-banner" role="status" aria-live="polite"><span>&#9733; PERFECT! &#9733;</span></div><div id="matchBanner" class="match-banner" role="status" aria-live="polite"><span id="matchBannerText"></span></div></div>
 
   <div class="card">
-    <div style="text-align:center;font-size:13px;margin-bottom:6px">Boxes this round</div>
+    <div style="text-align:center;font-size:13px;margin-bottom:2px">Boxes this round</div>
     <div class="score">
       <div>Player 1<b id="box1">0</b></div>
       <div>Boxes left<b id="boxLeft">9</b></div>
       <div>Player 2<b id="box2">0</b></div>
     </div>
     <hr style="border-color:#4a2f7a;margin:10px 0">
-    <div style="text-align:center;font-size:13px;margin-bottom:6px">Rounds won</div>
+    <div style="text-align:center;font-size:13px;margin-bottom:2px">Rounds won</div>
     <div class="score">
       <div>Player 1 wins<b id="s1">0</b></div>
       <div>Draws<b id="sd">0</b></div>
       <div>Player 2 wins<b id="s2">0</b></div>
     </div>
+    <div class="matchline" id="matchLine"></div>
+    <div class="streakline" id="streakLine"></div>
   </div>
 
   <div class="row">
@@ -383,7 +426,7 @@ a{color:var(--ha-cyan)}
     <button class="btn" id="rulesBtn">Rules</button>
     <button class="btn" id="feedbackBtn">Feedback</button>
   </div>
-  <p class="small">Scores save on this device.</p>
+  <p class="small">Scores, streaks &amp; settings save on this device.</p>
 </div>
 
 <div class="overlay" id="howOverlay">
@@ -395,7 +438,7 @@ a{color:var(--ha-cyan)}
 <div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#a78bfa" stroke-width="3" stroke-linecap="round"><rect x="15" y="5" width="18" height="38" rx="4"/><path d="M21 37h6"/></svg></div><b>Pass phone</b><p>Pass phone after turn in 2 Players.</p></div>
 <div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#34d399" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="17"/><path d="M16 24l6 6 10-12"/></svg></div><b>Complete box</b><p>Complete a box, get another turn.</p></div>
 <div class="vtut-card"><span class="vtut-num">5</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#fbbf24" stroke="#f59e0b" stroke-width="2" stroke-linejoin="round"><path d="M24 6l5.5 11.5L42 19l-9.5 8.5L35 40 24 33.5 13 40l2.5-12.5L6 19l12.5-1.5z"/></svg></div><b>Your boxes</b><p>Boxes fill with colour and initial.</p></div>
-<div class="vtut-card"><span class="vtut-num">6</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"><path d="M14 8h20v10a10 10 0 0 1-20 0zM14 12H8a6 6 0 0 0 6 6M34 12h6a6 6 0 0 1-6 6M24 28v6M16 40h16M20 34h8v6h-8z"/></svg></div><b>Most boxes wins</b><p>Most of 9 boxes wins.</p></div>
+<div class="vtut-card"><span class="vtut-num">6</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"><path d="M14 8h20v10a10 10 0 0 1-20 0zM14 12H8a6 6 0 0 0 6 6M34 12h6a6 6 0 0 1-6 6M24 28v6M16 40h16M20 34h8v6h-8z"/></svg></div><b>Most boxes wins</b><p id="howMost">Most of 9 boxes wins.</p></div>
 </div>
     <button class="btn primary" data-close="howOverlay" style="width:100%">Got it</button>
   </div>
@@ -405,7 +448,7 @@ a{color:var(--ha-cyan)}
   <div class="modal">
     <h2>Rules</h2>
     <ul>
-      <li>The board has 4 dots across and 4 dots down, making 9 boxes.</li>
+      <li id="rulesBoard">The board has 4 dots across and 4 dots down, making 9 boxes.</li>
       <li>Each turn you claim one empty edge.</li>
       <li>Completing a box gives you an extra turn right away.</li>
       <li>You cannot claim an edge that is already taken.</li>
@@ -432,7 +475,37 @@ a{color:var(--ha-cyan)}
 <script>
 var GAME_NAME = "Dots and Boxes";
 var SCORE_KEY = "holos-arcade-dotsboxes-scores";
-var DOTS = 4; // 4x4 dots, 3x3 boxes
+var SETTINGS_KEY = "holos-arcade-dotsboxes-settings";
+var STREAK_KEY = "holos-arcade-dotsboxes-streaks";
+/* DOTS-UPGRADES-2026-11-25: board sizes (boxes per side), computer difficulty,
+   best-of-3 matches, win streaks. */
+var boardSize = 3; // 3x3 boxes (default); 4 = 4x4, 5 = 5x5
+var cpuLevel = "medium"; // easy | medium | hard
+var matchWins = { p1:0, p2:0 }; // round wins inside the current match
+var matchOver = false;
+var streaks = loadStreaks();
+function totalBoxes(){ return boardSize * boardSize; }
+function loadSettings(){
+  try { var raw = localStorage.getItem(SETTINGS_KEY); if (raw) { var p = JSON.parse(raw);
+    if (p.size===3 || p.size===4 || p.size===5) boardSize = p.size;
+    if (p.level==="easy" || p.level==="medium" || p.level==="hard") cpuLevel = p.level;
+  } } catch(e) {}
+}
+function saveSettings(){
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify({ size: boardSize, level: cpuLevel })); } catch(e) {}
+}
+function loadStreaks(){
+  try { var raw = localStorage.getItem(STREAK_KEY); if (raw) { var p = JSON.parse(raw);
+    return { p1: { cur: (p.p1 && p.p1.cur) || 0, best: (p.p1 && p.p1.best) || 0 },
+             p2: { cur: (p.p2 && p.p2.cur) || 0, best: (p.p2 && p.p2.best) || 0 } };
+  } } catch(e) {}
+  return { p1:{cur:0,best:0}, p2:{cur:0,best:0} };
+}
+function saveStreaks(){
+  try { localStorage.setItem(STREAK_KEY, JSON.stringify(streaks)); } catch(e) {}
+}
+loadSettings();
+var DOTS = boardSize + 1; // dots per side; boxes = boardSize x boardSize
 var mode = "2p";
 var current = 1; // 1 or 2
 var gameOver = false;
@@ -501,7 +574,12 @@ function fitBoardSize(){
     chrome += (parseFloat(ws.paddingTop)||0) + (parseFloat(ws.paddingBottom)||0);
   } catch(e){ chrome = 470; }
   var availH = (window.innerHeight || 800) - chrome - 8;
-  return Math.max(180, Math.min(340, contentW, availH));
+  /* DOTS-UPGRADES-2026-11-25: floor lowered 180 -> 90. Real headless measurement showed
+     the original 180px floor already overflowed 568px and 700px-tall
+     phones (chrome ~615px at 360 wide); with the chrome diet + compact
+     rules the board now shrinks to fit instead of clipping — cells get
+     small on the shortest phones, by design. */
+  return Math.max(90, Math.min(340, contentW, availH));
 }
 var __dotsResizeT = null;
 window.addEventListener('resize', function(){
@@ -566,6 +644,71 @@ function hidePerfect(){
   if (b) b.classList.remove('show');
 }
 
+/* DOTS-UPGRADES-2026-11-25: best-of-3 match (first to 2 round wins) + streaks.
+   A drawn round gives nobody a match win and does not touch streaks.
+   A match win gives the winner's streak +1 (best updated); losing a
+   match resets that player's streak to 0. In vs-Computer, Player 1 is
+   you; in 2-player each player has their own streak. */
+function recordRoundResult(winner){
+  /* A round cannot end once the match is over (the board is finished
+     and New Match resets first) — ignore stray results so a match win
+     is never counted twice. */
+  if (matchOver) { updateMatchUI(); return; }
+  if (winner === 1 || winner === 2) {
+    matchWins[winner===1 ? "p1" : "p2"]++;
+    if (matchWins.p1 >= 2 || matchWins.p2 >= 2) {
+      matchOver = true;
+      var mw = matchWins.p1 >= 2 ? 1 : 2;
+      var wk = mw===1 ? "p1" : "p2";
+      var lk = mw===1 ? "p2" : "p1";
+      streaks[wk].cur++;
+      if (streaks[wk].cur > streaks[wk].best) streaks[wk].best = streaks[wk].cur;
+      streaks[lk].cur = 0;
+      saveStreaks();
+      var mt = document.getElementById("matchBannerText");
+      if (mt) mt.textContent = playerName(mw) + " wins the match!";
+      var mb = document.getElementById("matchBanner");
+      if (mb) mb.classList.add("show");
+      var nr = document.getElementById("newRoundBtn");
+      if (nr) nr.textContent = "New Match";
+    }
+  }
+  updateMatchUI();
+}
+function updateMatchUI(){
+  var ml = document.getElementById("matchLine");
+  if (ml) {
+    var a = mode==="cpu" ? "You" : "P1";
+    var b = mode==="cpu" ? "CPU" : "P2";
+    ml.textContent = "Match: " + a + " " + matchWins.p1 + " \u2013 " + matchWins.p2 + " " + b + " \u00b7 first to 2";
+  }
+  var sl = document.getElementById("streakLine");
+  if (sl) {
+    if (mode==="cpu") sl.textContent = "Your win streak: " + streaks.p1.cur + " \u00b7 Best: " + streaks.p1.best;
+    else sl.textContent = "Streaks \u2014 P1: " + streaks.p1.cur + " (best " + streaks.p1.best + ") \u00b7 P2: " + streaks.p2.cur + " (best " + streaks.p2.best + ")";
+  }
+  var hm = document.getElementById("howMost");
+  if (hm) hm.textContent = "Most of " + totalBoxes() + " boxes wins.";
+  var rb = document.getElementById("rulesBoard");
+  if (rb) rb.textContent = "The board has " + DOTS + " dots across and " + DOTS + " dots down, making " + totalBoxes() + " boxes.";
+  var sizes = { 3:"size3", 4:"size4", 5:"size5" };
+  for (var s in sizes) { var el = document.getElementById(sizes[s]); if (el) el.className = "btn" + (boardSize===+s ? " activeMode" : ""); }
+  var levels = { easy:"diffEasy", medium:"diffMed", hard:"diffHard" };
+  for (var lv in levels) { var el2 = document.getElementById(levels[lv]); if (el2) el2.className = "btn" + (cpuLevel===lv ? " activeMode" : ""); }
+  var dr = document.getElementById("diffRow");
+  if (dr) dr.style.display = mode==="cpu" ? "flex" : "none";
+}
+function hideMatchBanner(){
+  var mb = document.getElementById("matchBanner");
+  if (mb) mb.classList.remove("show");
+  var nr = document.getElementById("newRoundBtn");
+  if (nr) nr.textContent = "New Round";
+}
+function resetMatch(){
+  matchWins = { p1:0, p2:0 };
+  matchOver = false;
+  hideMatchBanner();
+}
 function render() {
   var boardEl = document.getElementById("board");
   boardEl.innerHTML = "";
@@ -573,7 +716,7 @@ function render() {
   boardEl.style.width = size + "px";
   boardEl.style.height = size + "px";
   var step = size / (DOTS - 1); // distance between dots, but pad inside
-  var pad = 30;
+  var pad = Math.max(10, Math.min(30, Math.round(size * 0.12)));
   var inner = size - pad*2;
   var gap = inner / (DOTS - 1);
   function x(col){ return pad + col*gap; }
@@ -629,6 +772,9 @@ function render() {
   turnBox.className = "turn" + (current===2 ? " p2" : "");
   document.getElementById("mode2p").className = "btn" + (mode==="2p" ? " activeMode" : "");
   document.getElementById("modeCpu").className = "btn" + (mode==="cpu" ? " activeMode" : "");
+  var bd = document.querySelector(".board");
+  if (bd) bd.setAttribute("data-size", String(boardSize));
+  updateMatchUI();
 }
 function claimEdge(type, r, c) {
   if (gameOver) return;
@@ -646,12 +792,15 @@ function applyEdge(type, r, c) {
   if (counts.left===0) {
     gameOver = true;
     /* DOTS-PERFECT-2026-11-25: a perfect game is a shutout — one player
-       claims all 9 boxes and the other scores 0. In vs-Computer the
-       computer's own 9-0 is NOT celebrated (the human lost). */
-    var perfect = (counts.p1===9 || counts.p2===9) && !(mode==="cpu" && counts.p2===9);
+       claims ALL boxes on the current board size and the other scores 0.
+       In vs-Computer the computer's own shutout is NOT celebrated (the
+       human lost). */
+    var total = totalBoxes();
+    var perfect = (counts.p1===total || counts.p2===total) && !(mode==="cpu" && counts.p2===total);
     if (counts.p1 > counts.p2) { scores.p1++; document.getElementById("status").textContent = (perfect ? "Perfect! " : "") + playerName(1) + " wins " + counts.p1 + " to " + counts.p2 + "."; }
     else if (counts.p2 > counts.p1) { scores.p2++; document.getElementById("status").textContent = (perfect ? "Perfect! " : "") + playerName(2) + " wins " + counts.p2 + " to " + counts.p1 + "."; }
     else { scores.draws++; document.getElementById("status").textContent = "It is a draw " + counts.p1 + " to " + counts.p2 + "."; }
+    recordRoundResult(counts.p1 > counts.p2 ? 1 : counts.p2 > counts.p1 ? 2 : 0);
     if (perfect) showPerfect();
     document.getElementById("passMsg").textContent = "";
     saveScores();
@@ -688,19 +837,75 @@ function wouldComplete(edge, h, v, bx) {
   }
   return false;
 }
-function chooseCpuEdge(h, v, bx) {
+function completingCount(edge, h, v, bx) {
+  var h2 = h.map(function(row){ return row.slice(); });
+  var v2 = v.map(function(row){ return row.slice(); });
+  if (edge.type==="h") h2[edge.r][edge.c]=2; else v2[edge.r][edge.c]=2;
+  var n = 0;
+  for (var br=0;br<bx.length;br++) for (var bc=0;bc<bx[br].length;bc++) {
+    if (bx[br][bc]===0 && boxComplete(br, bc, h2, v2)) n++;
+  }
+  return n;
+}
+function threeSidedAfter(edge, h, v, bx) {
+  /* Boxes this move leaves with exactly 3 edges — boxes the opponent
+     can complete on their next turn. Only the 1-2 boxes touching the
+     played edge can change; a box already sitting at 3 edges elsewhere
+     is not this move's doing. */
+  var h2 = h.map(function(row){ return row.slice(); });
+  var v2 = v.map(function(row){ return row.slice(); });
+  if (edge.type==="h") h2[edge.r][edge.c]=2; else v2[edge.r][edge.c]=2;
+  var n = 0;
+  function checkBox(br, bc){
+    if (br<0 || bc<0 || br>=bx.length || bc>=bx[0].length) return;
+    if (bx[br][bc]!==0) return;
+    var c = (h2[br][bc]!==0?1:0)+(h2[br+1][bc]!==0?1:0)+(v2[br][bc]!==0?1:0)+(v2[br][bc+1]!==0?1:0);
+    if (c===3) n++;
+  }
+  if (edge.type==="h") { checkBox(edge.r-1, edge.c); checkBox(edge.r, edge.c); }
+  else { checkBox(edge.r, edge.c-1); checkBox(edge.r, edge.c); }
+  return n;
+}
+/* DOTS-UPGRADES-2026-11-25: computer difficulty.
+   Easy: mostly random — takes a free box only 1 time in 4, otherwise
+   ignores the board entirely.
+   Medium (the original computer): takes a box when it can, else random.
+   Hard: takes every box it can (most boxes first, so chains keep
+   going), never hands the opponent a box unless forced, and when
+   forced gives away as few as possible. */
+function chooseCpuEdge(h, v, bx, level) {
   var edges = legalEdges(h, v);
   if (!edges.length) return null;
-  for (var i=0;i<edges.length;i++) if (wouldComplete(edges[i], h, v, bx)) return edges[i];
+  var lv = level || cpuLevel || "medium";
+  var i;
+  if (lv === "easy") {
+    var comp = [];
+    for (i=0;i<edges.length;i++) if (wouldComplete(edges[i], h, v, bx)) comp.push(edges[i]);
+    if (comp.length && Math.random() < 0.25) return comp[Math.floor(Math.random()*comp.length)];
+    return edges[Math.floor(Math.random()*edges.length)];
+  }
+  if (lv === "hard") {
+    var best = null, bestComp = -1;
+    for (i=0;i<edges.length;i++) { var cc = completingCount(edges[i], h, v, bx); if (cc > bestComp) { bestComp = cc; best = edges[i]; } }
+    if (bestComp > 0) return best;
+    var safe = [];
+    for (i=0;i<edges.length;i++) if (threeSidedAfter(edges[i], h, v, bx) === 0) safe.push(edges[i]);
+    if (safe.length) return safe[Math.floor(Math.random()*safe.length)];
+    var minGive = 99, cands = [];
+    for (i=0;i<edges.length;i++) { var g = threeSidedAfter(edges[i], h, v, bx); if (g < minGive) { minGive = g; cands = [edges[i]]; } else if (g === minGive) cands.push(edges[i]); }
+    return cands[Math.floor(Math.random()*cands.length)];
+  }
+  for (i=0;i<edges.length;i++) if (wouldComplete(edges[i], h, v, bx)) return edges[i];
   return edges[Math.floor(Math.random()*edges.length)];
 }
 function cpuMove() {
   if (gameOver || current!==2) return;
-  var edge = chooseCpuEdge(hEdges, vEdges, boxes);
+  var edge = chooseCpuEdge(hEdges, vEdges, boxes, cpuLevel);
   if (edge) applyEdge(edge.type, edge.r, edge.c);
 }
 function newRound() {
   hidePerfect();
+  if (matchOver) resetMatch();
   initState();
   current = 1;
   gameOver = false;
@@ -711,14 +916,29 @@ function newRound() {
 function restartAll() {
   scores = { p1:0, p2:0, draws:0 };
   saveScores();
+  resetMatch();
   newRound();
 }
-function setMode(m) { mode=m; newRound(); }
+function setMode(m) { mode=m; resetMatch(); newRound(); }
+function setSize(n) {
+  if (n===boardSize) return;
+  boardSize = n; DOTS = boardSize + 1;
+  saveSettings();
+  resetMatch();
+  newRound();
+}
+function setLevel(lv) { cpuLevel = lv; saveSettings(); updateMatchUI(); }
 
 document.getElementById("newRoundBtn").addEventListener("click", newRound);
 document.getElementById("restartBtn").addEventListener("click", restartAll);
 document.getElementById("mode2p").addEventListener("click", function(){ setMode("2p"); });
 document.getElementById("modeCpu").addEventListener("click", function(){ setMode("cpu"); });
+document.getElementById("size3").addEventListener("click", function(){ setSize(3); });
+document.getElementById("size4").addEventListener("click", function(){ setSize(4); });
+document.getElementById("size5").addEventListener("click", function(){ setSize(5); });
+document.getElementById("diffEasy").addEventListener("click", function(){ setLevel("easy"); });
+document.getElementById("diffMed").addEventListener("click", function(){ setLevel("medium"); });
+document.getElementById("diffHard").addEventListener("click", function(){ setLevel("hard"); });
 document.getElementById("howBtn").addEventListener("click", function(){ document.getElementById("howOverlay").className="overlay open"; });
 document.getElementById("rulesBtn").addEventListener("click", function(){ document.getElementById("rulesOverlay").className="overlay open"; });
 document.getElementById("feedbackBtn").addEventListener("click", function(){ document.getElementById("feedbackOverlay").className="overlay open"; document.getElementById("feedbackDone").textContent=""; });
@@ -743,7 +963,7 @@ saveScores();
 newRound();
 
 if (typeof module !== "undefined" && module.exports) {
-  module.exports = { boxComplete: boxComplete, countBoxes: countBoxes, legalEdges: legalEdges, chooseCpuEdge: chooseCpuEdge, wouldComplete: wouldComplete };
+  module.exports = { boxComplete: boxComplete, countBoxes: countBoxes, legalEdges: legalEdges, chooseCpuEdge: chooseCpuEdge, wouldComplete: wouldComplete, completingCount: completingCount, threeSidedAfter: threeSidedAfter, totalBoxes: totalBoxes };
 }
 </script>
 
