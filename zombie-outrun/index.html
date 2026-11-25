@@ -354,7 +354,7 @@
   canvas{ display:block; width:100%; height:auto; touch-action:none; }
 
   .overlay{
-    position:absolute; inset:0; display:flex; flex-direction:column;
+    position:absolute; inset:0; z-index:40; display:flex; flex-direction:column;
     align-items:center; justify-content:center; text-align:center;
     background:rgba(16,22,14,.72); color:#f4f8ee; padding:20px;
   }
@@ -433,6 +433,24 @@
     border-radius:12px; min-height:56px; cursor:pointer; box-shadow:var(--shadow);
   }
   .touch-pad button:active{ background:var(--chip); }
+  /* ZOMBIE-TOUCH-FLOAT-2026-11-24 (Holo: "IPhone can't scroll to the buttons"):
+     on touch devices the pad floats over the bottom of the gameplay area
+     instead of sitting below the canvas in normal flow, where it was
+     unreachable inside the hub frame. Semi-transparent so the game shows
+     through underneath. Desktop (fine pointer) unchanged. */
+  @media (pointer:coarse){
+    .touch-pad{
+      position:fixed; left:50%; transform:translateX(-50%);
+      bottom:calc(8px + env(safe-area-inset-bottom, 0px));
+      width:min(560px, calc(100vw - 16px));
+      margin-top:0; z-index:30;
+    }
+    .touch-pad button{
+      background:color-mix(in srgb, var(--panel) 62%, transparent);
+      border-color:color-mix(in srgb, var(--line) 70%, transparent);
+      -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px);
+    }
+  }
   .hint{ text-align:center; color:var(--ink-soft); font-size:13px; margin:10px 0 0; font-weight:600; }
 
   .sheet{
@@ -729,7 +747,22 @@ a{color:var(--ha-cyan)}
   var overOverlay = document.getElementById("overOverlay");
   var pauseOverlay = document.getElementById("pauseOverlay");
 
+  /* ZOMBIE-TOUCH-FLOAT-2026-11-24: on phones, try to open fullscreen when
+     the run starts (user gesture, so the request is allowed). Best effort:
+     iPhone Safari has no Fullscreen API (skipped silently) and the hub
+     iframe must allow fullscreen; either way the game still plays and the
+     floating pad is reachable. */
+  function tryPhoneFullscreen(){
+    try{
+      if(window.matchMedia && window.matchMedia('(pointer:coarse)').matches &&
+         document.documentElement && document.documentElement.requestFullscreen){
+        var p = document.documentElement.requestFullscreen();
+        if(p && p.catch) p.catch(function(){});
+      }
+    }catch(e){}
+  }
   function startGame(){
+    tryPhoneFullscreen();
     reset();
     state = "running";
     startOverlay.hidden = true;
