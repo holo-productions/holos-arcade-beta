@@ -314,7 +314,7 @@
       .bubble::before{ content:""; position:absolute; left:-9px; top:16px; width:14px; height:14px; background:var(--panel); border-left:2px solid var(--line); border-bottom:2px solid var(--line); transform:rotate(45deg); }
       .bubble small{ display:block; font-family:"Nunito",sans-serif; font-size:.72rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--orange2); }
       /* ---------- stats ---------- */
-      .stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px; }
+      .stats{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin-bottom:12px; }
       .stat{ background:var(--panel); border:2px solid var(--line); border-radius:14px; padding:7px 4px 6px; text-align:center; }
       .stat b{ display:block; font-family:"Fredoka",sans-serif; font-size:1.25rem; font-weight:600; color:#fff; line-height:1.1; }
       .stat span{ font-size:.66rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-dim); }
@@ -553,13 +553,14 @@ a{color:var(--ha-cyan)}
         <div class="stat best"><b id="stBest">0</b><span>Best</span></div>
         <div class="stat"><b id="stBig">🌱</b><span>Biggest</span></div>
         <div class="stat"><b id="stMerges">0</b><span>Merges</span></div>
+        <div class="stat"><b id="stMoves">∞</b><span>Drops left</span></div>
       </div>
 
       <div class="controls">
         <div class="seg" role="group" aria-label="Difficulty">
-          <button type="button" data-diff="cozy" aria-pressed="false">Cozy<small>5 × 7 · gentle</small></button>
-          <button type="button" data-diff="classic" aria-pressed="true">Classic<small>5 × 6 · the patch</small></button>
-          <button type="button" data-diff="spooky" aria-pressed="false">Spooky<small>4 × 6 · snug!</small></button>
+          <button type="button" data-diff="cozy" aria-pressed="false">Cozy<small>6 × 8 · 48 tiles, roomy</small></button>
+          <button type="button" data-diff="classic" aria-pressed="true">Classic<small>5 × 6 · 30 tiles</small></button>
+          <button type="button" data-diff="spooky" aria-pressed="false">Spooky<small>4 × 5 · 20 tiles, 40 drops</small></button>
         </div>
         <button type="button" class="btn" id="practiceBtn" aria-pressed="false">🧪 Practice</button>
         <button type="button" class="btn primary" id="newBtn">↻ New Patch</button>
@@ -645,9 +646,9 @@ a{color:var(--ha-cyan)}
         <p>Points are multiplied by how many pumpkins merged and by your chain count — bigger merges, bigger boos… er, boosts!</p>
         <h3>🌙 Difficulties</h3>
         <ul>
-          <li><strong>Cozy</strong> — a roomy 5 × 7 patch. Best for learning and relaxed merging.</li>
-          <li><strong>Classic</strong> — the standard 5 × 6 patch.</li>
-          <li><strong>Spooky</strong> — a snug 4 × 6 patch with trickier drops. Plan ahead!</li>
+          <li><strong>Cozy</strong> — a roomy 6 × 8 patch (48 tiles). Best for learning and relaxed merging.</li>
+          <li><strong>Classic</strong> — the standard 5 × 6 patch (30 tiles).</li>
+          <li><strong>Spooky</strong> — a snug 4 × 5 patch (20 tiles) with trickier drops — and only 40 drops before the game ends. Plan ahead!</li>
           <li>Your difficulty and best score for each patch are saved on this device.</li>
         </ul>
         <h3>🧪 Practice mode</h3>
@@ -714,10 +715,12 @@ a{color:var(--ha-cyan)}
           { name:"Jack-o'-Lantern", short:"Jack", emoji:"🎃", pts:640 },
           { name:"Grand Jack",    short:"Grand",  emoji:"🎃", pts:1280 }
         ];
+        /* DIFFICULTY-SCALE-2026-11-24: grid spread widened to 48/30/20 tiles; Spooky has a
+           40-drop move limit (moves:0 = unlimited). Each level now feels clearly different. */
         var DIFFS = {
-          cozy:   { cols:5, rows:7, weights:[50,30,15,5],  label:"Cozy" },
-          classic:{ cols:5, rows:6, weights:[45,30,17,8],  label:"Classic" },
-          spooky: { cols:4, rows:6, weights:[40,28,20,12], label:"Spooky" }
+          cozy:   { cols:8, rows:6, moves:0,  weights:[50,30,15,5],  label:"Cozy" },
+          classic:{ cols:6, rows:5, moves:0,  weights:[45,30,17,8],  label:"Classic" },
+          spooky: { cols:5, rows:4, moves:40, weights:[40,28,20,12], label:"Spooky" }
         };
         var MERGE_MSGS = ["Boo-tiful merge!","Poof! It grew!","That's the spirit! 👻","Pumpkin power!","Gourd-geous!","A hauntingly good merge!"];
         var CHAIN_MSGS = ["Chain reaction! Spooky-sweet!","It chained! Pip is impressed!","Double trouble — the friendly kind!"];
@@ -732,7 +735,7 @@ a{color:var(--ha-cyan)}
         var practice = false;
 
         // ---------- state ----------
-        var cols, rows, board, score, merges, biggest, nextTier, deckTier, busy, over, wonOnce, history, idSeq, lastDropId, lastMergeId;
+        var cols, rows, board, score, merges, biggest, nextTier, deckTier, busy, over, wonOnce, history, idSeq, lastDropId, lastMergeId, movesLeft;
         function newBoard(){
           board = [];
           for(var c=0;c<cols;c++){ var col=[]; for(var r=0;r<rows;r++) col.push(null); board.push(col); }
@@ -748,6 +751,7 @@ a{color:var(--ha-cyan)}
           cols = DIFFS[difficulty].cols; rows = DIFFS[difficulty].rows;
           newBoard();
           score=0; merges=0; biggest=0; busy=false; over=false; wonOnce=false; history=[]; idSeq=1;
+          movesLeft = DIFFS[difficulty].moves;
           lastDropId=0; lastMergeId=0;
           nextTier = randomTier(); deckTier = randomTier();
           buildBoardDom(); render(); pip(IDLE_MSGS[Math.floor(Math.random()*IDLE_MSGS.length)]);
@@ -807,6 +811,7 @@ a{color:var(--ha-cyan)}
           $("stBest").textContent = (practice? bestFor(difficulty) : Math.max(bestFor(difficulty), score)).toLocaleString();
           $("stBig").textContent = biggest? TIERS[biggest].emoji : "—";
           $("stMerges").textContent = merges;
+          $("stMoves").textContent = DIFFS[difficulty].moves>0 ? movesLeft : "∞";
           $("nextEmoji").textContent = TIERS[nextTier].emoji;
           $("nextName").textContent = TIERS[nextTier].name;
           $("deckEmoji").textContent = TIERS[deckTier].emoji;
@@ -867,12 +872,12 @@ a{color:var(--ha-cyan)}
         function snapshot(){
           var b=[];
           for(var c=0;c<cols;c++){ var col=[]; for(var r=0;r<rows;r++) col.push(board[c][r]? board[c][r].t : 0); board[c] && col; b.push(col); }
-          return { b:b, score:score, merges:merges, biggest:biggest, next:nextTier, deck:deckTier };
+          return { b:b, score:score, merges:merges, biggest:biggest, next:nextTier, deck:deckTier, moves:movesLeft };
         }
         function restore(s){
           newBoard();
           for(var c=0;c<cols;c++) for(var r=0;r<rows;r++) if(s.b[c][r]) board[c][r]={ t:s.b[c][r], id:idSeq++ };
-          score=s.score; merges=s.merges; biggest=s.biggest; nextTier=s.next; deckTier=s.deck; over=false;
+          score=s.score; merges=s.merges; biggest=s.biggest; nextTier=s.next; deckTier=s.deck; movesLeft=s.moves; over=false;
         }
         function lowestEmpty(c){
           for(var r=rows-1;r>=0;r--) if(!board[c][r]) return r;
@@ -966,6 +971,7 @@ a{color:var(--ha-cyan)}
           }
           if(practice) { history.push(snapshot()); if(history.length>30) history.shift(); }
           busy=true;
+          if(!practice && DIFFS[difficulty].moves>0) movesLeft--;
           var cell={ t:nextTier, id:idSeq++ };
           board[c][r]=cell;
           lastDropId=cell.id; lastMergeId=0;
@@ -986,7 +992,8 @@ a{color:var(--ha-cyan)}
           return true;
         }
         function afterTurn(){
-          if(!boardFull()) return;
+          var movesOut = DIFFS[difficulty].moves>0 && movesLeft<=0;
+          if(!boardFull() && !movesOut) return;
           if(practice){
             // clear the shortest column's pumpkins for breathing room
             var bestC=0, bestCount=Infinity;
@@ -1005,7 +1012,9 @@ a{color:var(--ha-cyan)}
           $("finBig").textContent=biggest? TIERS[biggest].emoji+(biggest===8?"👑":"") : "—";
           $("finMerges").textContent=merges;
           $("overBest").style.display=isBest? "block":"none";
-          $("overMsg").textContent = biggest>=7
+          $("overMsg").textContent = movesOut
+            ? "Out of drops! Spooky only gives you 40 drops — the patch is still standing, but the game is over. What a harvest!"
+            : biggest>=7
             ? "The moon is up and the patch is packed — and look at that Jack-o'-Lantern glowing! What a harvest!"
             : "The moon is up and there's no room for one more pumpkin. What a harvest!";
           render();
