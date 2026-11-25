@@ -605,6 +605,42 @@ function buzz(ms){ try { if (window.holoBuzz) window.holoBuzz(ms); } catch (e) {
 var overlays = ['ovMenu', 'ovRules', 'ovPause', 'ovEnd'];
 function show(id){ overlays.forEach(function(o){ $(o).classList.toggle('hidden', o !== id); }); }
 function showNone(){ overlays.forEach(function(o){ $(o).classList.add('hidden'); }); }
+
+/* CHRISTMAS-OWNER-ONLY-2026-11-25: December drop — this game is owner-only until
+   Holo approves the go-live. Flip CHRISTMAS_OWNER_ONLY to false (one place, below)
+   to open it to testers. The gate reads the same Firebase session marker the hub
+   itself stores (localStorage 'holos-firebase-auth', an object with a uid) — the
+   same marker shared/gate-guard.js uses. Signed-out visitors never reach here:
+   gate-guard.js sends them to the hub gate first. */
+const CHRISTMAS_OWNER_ONLY = true;
+const CHRISTMAS_OWNER_UID = 'wQEvX4fiG6QSDMWaxx20JaQwRPP2'; /* HoloElizabeth */
+function christmasIsOwner() {
+  if (!CHRISTMAS_OWNER_ONLY) return true;
+  try {
+    var v = JSON.parse(localStorage.getItem('holos-firebase-auth') || 'null');
+    return !!(v && v.uid === CHRISTMAS_OWNER_UID);
+  } catch (e) { return false; }
+}
+function christmasOwnerGate() {
+  /* Returns true when the game may proceed (owner, or gate flipped off).
+     Otherwise shows the not-ready panel once, hides the game, returns false. */
+  if (christmasIsOwner()) return true;
+  try { var w = document.querySelector('.wrap'); if (w) w.style.display = 'none'; } catch (e) {}
+  if (document.getElementById('xmas-owner-only')) return false;
+  var d = document.createElement('div');
+  d.id = 'xmas-owner-only';
+  d.setAttribute('role', 'dialog');
+  d.setAttribute('aria-label', 'Game not ready yet');
+  d.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(120% 100% at 50% 0%,#1b0f3d 0%,#0a0620 60%,#06030f 100%);font-family:"Press Start 2P",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#fff;box-sizing:border-box;';
+  d.innerHTML = '<div style="max-width:520px;width:100%;text-align:center;background:#140b33;border:2px solid #8b5cff;border-radius:24px;padding:28px 22px;box-shadow:0 18px 40px rgba(0,0,0,.5),0 0 34px rgba(139,92,255,.25);box-sizing:border-box;">'
+    + '<div style="font-size:13px;line-height:1.8;color:#ffd43b;letter-spacing:1px;">NOT READY YET</div>'
+    + '<div style="font-size:15px;line-height:1.9;margin:18px 0 24px;">This game isn\'t ready for testers yet \u2014 check back in December!</div>'
+    + '<a href="https://beta.holosarcade.ca/games-hub/" style="display:inline-block;background:#ffd43b;color:#1a1033;text-decoration:none;font-weight:700;font-size:13px;padding:14px 22px;border-radius:999px;border:2px solid #ffdf6b;box-shadow:0 0 18px rgba(255,212,59,.55);">Back to the Arcade</a>'
+    + '</div>';
+  document.body.appendChild(d);
+  return false;
+}
+
 function showMenu(){
   state = 'menu';
   $('menuBest').textContent = best;
@@ -755,6 +791,7 @@ function tick(dt){
   updateHUD();
 }
 function startGame(practice){
+  if (!christmasOwnerGate()) return;
   practiceMode = !!practice;
   score = 0; hits = 0; misses = 0; streak = 0; bestStreak = 0; doubleNext = false;
   timeLeft = ROUND; gameNow = 0; spawnTimer = 400;
@@ -914,7 +951,7 @@ if (window.__holoPractice){
   /* hub opened in practice — the guard auto-clicks #btnPractice once loaded */
 }
 buildSnow();
-showMenu();
+if (christmasOwnerGate()) showMenu();
 updateHUD();
 })();
 </script>
