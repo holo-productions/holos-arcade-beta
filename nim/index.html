@@ -235,6 +235,7 @@
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Nim | Holo's Arcade</title>
+<!-- DIFFICULTY-SCALE-2026-11-24: Normal level added; blunder rates now Easy 35% / Normal 10% / Hard 0%. -->
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin:0; padding:0; background:#171021; color:#f3eaff; font-family:"Courier New", Courier, monospace; }
@@ -357,9 +358,11 @@ a{color:var(--ha-cyan)}
     <div id="diffWrap" class="hidden" style="margin-top:10px;">
       <p class="label" style="margin-bottom:4px;">Computer difficulty</p>
       <select id="difficulty" aria-label="Computer difficulty">
-        <option value="easy">Easy - Computer sometimes slips up</option>
-        <option value="hard" selected>Hard - Computer plays perfectly</option>
+        <option value="easy">Easy - Computer slips up 35% of the time</option>
+        <option value="normal">Normal - Computer slips up 10% of the time</option>
+        <option value="hard" selected>Hard - Computer never slips up, plays perfectly</option>
       </select>
+      <p id="diffDesc" style="margin:6px 0 0 0; font-size:13px; color:#cdb8ff;">Hard: the computer never slips up — it always plays the best move it can find.</p>
     </div>
     <label class="checkrow" style="margin-top:6px;">
       <input type="checkbox" id="misereToggle">
@@ -435,7 +438,7 @@ a{color:var(--ha-cyan)}
     <h2 id="howTitle">How to play</h2>
 <div class="vtut-grid">
 <div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#ff5fa2" stroke="#db2777" stroke-width="2" stroke-linejoin="round"><path d="M16 10l22 14-22 14z"/></svg></div><b>Pick mode</b><p>2 Players share phone, or vs Computer.</p></div>
-<div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#facc15" stroke="#eab308" stroke-width="2" stroke-linejoin="round"><path d="M27 4L10 28h11l-3 16 18-25H24z"/></svg></div><b>Pick difficulty</b><p>Vs Computer: pick Easy or Hard.</p></div>
+<div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#facc15" stroke="#eab308" stroke-width="2" stroke-linejoin="round"><path d="M27 4L10 28h11l-3 16 18-25H24z"/></svg></div><b>Pick difficulty</b><p>Vs Computer: pick Easy, Normal or Hard. Easy slips up 35% of the time, Normal 10%, Hard never.</p></div>
 <div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#34d399" stroke-width="3"><rect x="8" y="8" width="32" height="32" rx="3"/><path d="M18.7 8v32M29.3 8v32M8 18.7h32M8 29.3h32"/></svg></div><b>Three piles</b><p>Piles are 3, 5 and 7. Tap one pile.</p></div>
 <div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#7dd3fc" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="18" r="7"/><path d="M24 25v13M14 38h20"/></svg></div><b>Take tokens</b><p>Tap number. Take 1 to whole pile.</p></div>
 <div class="vtut-card"><span class="vtut-num">5</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#34d399" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="17"/><path d="M16 24l6 6 10-12"/></svg></div><b>One pile only</b><p>Take at least 1. One pile per turn.</p></div>
@@ -459,7 +462,7 @@ a{color:var(--ha-cyan)}
       <li>Misere play (when ticked): the player who takes the last token loses the round, so the other player wins.</li>
       <li>Changing the Misere tick or the mode starts a fresh round.</li>
       <li>Scores are saved on this device across rounds. Restart Scores clears them back to zero.</li>
-      <li>Easy Computer sometimes makes a random move. Hard Computer always plays the best move it can find.</li>
+      <li>Easy Computer slips up with a random move 35% of the time. Normal slips up 10% of the time. Hard never slips up — it always plays the best move it can find.</li>
     </ul>
     <button type="button" class="btn btn-pink" data-close="rulesOverlay" style="width:100%;">Close</button>
   </div>
@@ -571,13 +574,21 @@ a{color:var(--ha-cyan)}
     return randomMove(piles);
   }
 
+  /* DIFFICULTY-SCALE-2026-11-24: Normal and Hard used to play identically
+     (both perfect). Now each level has its own blunder rate: Easy slips up
+     with a random move 35% of the time, Normal 10%, Hard 0% (always optimal). */
+  var BLUNDER_RATES = { easy: 0.35, normal: 0.10, hard: 0 };
   function computerChooseMove(piles, misere, difficulty) {
-    if (difficulty === "easy" && Math.random() < 0.35) {
+    var rate = BLUNDER_RATES[difficulty];
+    if (rate === undefined) { rate = 0; }
+    if (Math.random() < rate) {
       var rm = randomMove(piles);
       if (rm) { return rm; }
     }
     return nimBestMove(piles, misere);
   }
+  /* Test hook for the Arcade verification harness (read-only move picker). */
+  window.__nimChoose = computerChooseMove;
 
   function totalTokens(piles) {
     var t = 0;
@@ -839,9 +850,20 @@ a{color:var(--ha-cyan)}
 
   $("mode2p").addEventListener("click", function () { setMode("2p"); });
   $("modeCpu").addEventListener("click", function () { setMode("cpu"); });
+  var DIFF_DESCS = {
+    easy: "Easy: the computer slips up with a random move 35% of the time.",
+    normal: "Normal: the computer slips up with a random move 10% of the time.",
+    hard: "Hard: the computer never slips up \u2014 it always plays the best move it can find."
+  };
+  function updateDiffDesc() {
+    var el = $("diffDesc");
+    if (el) { el.textContent = DIFF_DESCS[state.difficulty] || DIFF_DESCS.hard; }
+  }
   $("difficulty").addEventListener("change", function (ev) {
     state.difficulty = ev.target.value;
+    updateDiffDesc();
   });
+  updateDiffDesc();
   $("misereToggle").addEventListener("change", function (ev) {
     state.misere = ev.target.checked;
     if (state.mode === "cpu") {
