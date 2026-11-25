@@ -2559,7 +2559,7 @@ body.in-game .nav-line-btns #signOutBtn,body.in-game .nav-line-btns #settingsGea
    the gradient (the pressed rule below must beat the ID rule
    above it, so it is listed with [aria-pressed="true"]). */
 #cbToggle,#bigToggle,#hapToggle,#soundToggle,#musicToggle,#friendReqToggle,
-#emailPrefMessages,#emailPrefNotifications,#emailPrefFriendRequests,#emailPrefReportReplies,#hide18Toggle{
+#emailPrefMessages,#emailPrefNotifications,#emailPrefFriendRequests,#emailPrefReportReplies,#emailPrefTurnMoves,#hide18Toggle{
   font-family:var(--pixel);font-size:10px;line-height:1.6;
   padding:10px 16px;min-height:44px;
   border:2px solid var(--violet);border-radius:999px;
@@ -2568,7 +2568,7 @@ body.in-game .nav-line-btns #signOutBtn,body.in-game .nav-line-btns #settingsGea
 #cbToggle[aria-pressed="true"],#bigToggle[aria-pressed="true"],#hapToggle[aria-pressed="true"],
 #soundToggle[aria-pressed="true"],#musicToggle[aria-pressed="true"],#friendReqToggle[aria-pressed="true"],
 #emailPrefMessages[aria-pressed="true"],#emailPrefNotifications[aria-pressed="true"],
-#emailPrefFriendRequests[aria-pressed="true"],#emailPrefReportReplies[aria-pressed="true"],
+#emailPrefFriendRequests[aria-pressed="true"],#emailPrefReportReplies[aria-pressed="true"],#emailPrefTurnMoves[aria-pressed="true"],
 #hide18Toggle[aria-pressed="true"]{background:var(--grad);color:#fff;border-color:transparent}
 #hide18Toggle:disabled{opacity:.45;cursor:not-allowed}
 /* Same focus ring on every Settings button. */
@@ -2581,7 +2581,7 @@ body.in-game .nav-line-btns #signOutBtn,body.in-game .nav-line-btns #settingsGea
 #cbToggle:focus-visible,#bigToggle:focus-visible,#hapToggle:focus-visible,
 #soundToggle:focus-visible,#musicToggle:focus-visible,#friendReqToggle:focus-visible,
 #emailPrefMessages:focus-visible,#emailPrefNotifications:focus-visible,
-#emailPrefFriendRequests:focus-visible,#emailPrefReportReplies:focus-visible,
+#emailPrefFriendRequests:focus-visible,#emailPrefReportReplies:focus-visible,#emailPrefTurnMoves:focus-visible,
 #hide18Toggle:focus-visible{outline:2px solid var(--cyan);outline-offset:2px}
 </style>
 </head>
@@ -2889,6 +2889,8 @@ setTimeout(function(){
     </form>
     <div class="friend-results" id="friendResults" aria-live="polite"></div>
     <p class="friend-msg" id="friendMsg" role="status"></p>
+    <!-- CHALLENGE-ROOM-2026-11-24: Rooms live here on the Friends page — next-move tiles + the room list. Filled by the Rooms module (window.holoRooms); empty until it renders. -->
+    <div id="roomsSection" aria-label="Game rooms"></div>
     <p id="friendEmpty" style="margin:14px 0 0;font-weight:700">No friends yet — search for a tester by username above and they’ll show up here.</p>
     <div class="friend-grid" id="friendGrid"></div>
     <p style="margin:16px 0 0;color:var(--muted);font-size:13.5px">Friend requests work across devices — accept in your Inbox or right here.</p>
@@ -3198,7 +3200,7 @@ setTimeout(function(){
       <details class="acct-fold" id="fold-emailprefs">
         <summary>Email notifications</summary>
       <div class="email-prefs" id="emailPrefsBox">
-        <p class="contact-note">Pick which emails you get. Emails come from Holo's Arcade &lt;topsecret@holosarcade.ca&gt;. All four are on by default — turn off anything you don't want.</p>
+        <p class="contact-note">Pick which emails you get. Emails come from Holo's Arcade &lt;topsecret@holosarcade.ca&gt;. All five are on by default — turn off anything you don't want.</p>
         <div class="tgl-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0">
           <span>Messages<br><small>Direct messages from friends and support.</small></span>
           <button class="tgl" id="emailPrefMessages" data-email-pref="messages" type="button" aria-pressed="true">On</button>
@@ -3214,6 +3216,15 @@ setTimeout(function(){
         <div class="tgl-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0">
           <span>Report replies<br><small>When we reply to a report you filed.</small></span>
           <button class="tgl" id="emailPrefReportReplies" data-email-pref="reportReplies" type="button" aria-pressed="true">On</button>
+        </div>
+        <!-- TURN-EMAIL-SUBSCRIBE-2026-11-24: opt in/out of email when
+             it's your turn in a friend game, or a match ends. The send
+             side rides the turn-email watcher (turn-email-sync.py) —
+             blocked until the service-account key exists, same unblock
+             as the owner-requests watcher. -->
+        <div class="tgl-row" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0">
+          <span>Turn moves<br><small>When it's your turn in a friend game, or a match ends.</small></span>
+          <button class="tgl" id="emailPrefTurnMoves" data-email-pref="turnMoves" type="button" aria-pressed="true">On</button>
         </div>
         <p id="emailPrefsMsg" role="status" hidden></p>
       </div>
@@ -15635,9 +15646,11 @@ function renderTesterAuth(){
      account record, and Firebase /users/$uid/emailPrefs via
      window.betaSetEmailPrefs (fail-soft). On load, cloud prefs
      win over this device's copy so they travel across devices. */
-  var EP_KEYS = ['messages','notifications','friendRequests','reportReplies'];
+  /* TURN-EMAIL-SUBSCRIBE-2026-11-24: 'turnMoves' subscribes to email
+     when it's your turn in a friend game (or a match ends). */
+  var EP_KEYS = ['messages','notifications','friendRequests','reportReplies','turnMoves'];
   var epState = null;
-  function epDefaults(){ return { messages:true, notifications:true, friendRequests:true, reportReplies:true }; }
+  function epDefaults(){ return { messages:true, notifications:true, friendRequests:true, reportReplies:true, turnMoves:true }; }
   function epKey(){ try { var s = nlSession(); return 'holos-arcade-email-prefs-' + (s && s.code ? s.code : 'guest'); } catch(e){ return 'holos-arcade-email-prefs-guest'; } }
   function epCurrent(){
     if(epState) return epState;
@@ -20126,7 +20139,7 @@ function renderTesterAuth(){
     var rec = loadAuth();
     if(!rec) return Promise.resolve(false);
     var clean = {};
-    ['messages','notifications','friendRequests','reportReplies'].forEach(function(k){ clean[k] = !(prefs && prefs[k] === false); });
+    ['messages','notifications','friendRequests','reportReplies','turnMoves'].forEach(function(k){ clean[k] = !(prefs && prefs[k] === false); });
     return patchUser(rec, { emailPrefs: clean });
   };
   window.betaGetEmailPrefs = function(){
@@ -22534,7 +22547,12 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   var FB_API_KEY = 'AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak';
   var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
   var AUTH_KEY = 'holos-firebase-auth';
-  var TYPES = { 'review-fixed':'✅', 'friend-request':'👥', 'friend-accepted':'🤝', 'announcement':'📣', 'support-reply':'💬', 'system':'🔔' };
+  /* TURN-DM-NOTIFY-2026-11-24: turn notices are individual per
+     account only — Inbox notification + unread badge, NO banner while
+     anyone is playing a game (the inbox tick only updates the badge;
+     nothing toasts on a new turn notice). Notices show the Code Name
+     + the time the move was submitted (see the turn module). */
+  var TYPES = { 'review-fixed':'✅', 'friend-request':'👥', 'friend-accepted':'🤝', 'announcement':'📣', 'support-reply':'💬', 'system':'🔔', 'turn':'🎮', 'turn-invite':'🎮' };
   function loadAuth(){
     /* INBOX-LEAK-FIX-2026-11-24 (Holo 2026-11-24 07:58): never trust a
        Firebase record that disagrees with the signed-in tester
@@ -23092,6 +23110,12 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var mm = rest.match(/match=([A-Za-z0-9_-]+)/);
     if(mm && mm[1] && window.holoTurn && window.holoTurn.openSoon){ try { window.holoTurn.openSoon(mm[1]); } catch(e){} }
     try { location.hash = '#game/' + slug; } catch(e){}
+    /* CHALLENGE-ROOM-2026-11-24: a room link carries ?room=<CODE> — the
+       hub opens the game in its iframe, so the code would be lost from
+       the hash; hand it to the Rooms module, which postMessages
+       {type:'holo-room-join'} into the game frame once it loads. */
+    var rm = rest.match(/room=([A-Za-z0-9_-]+)/);
+    if(rm && rm[1] && window.holoRooms && window.holoRooms.joinRoom){ try { window.holoRooms.joinRoom(rm[1]); } catch(e){} }
   }
   function openMessage(id){
     var n = null; items.forEach(function(x){ if(x.id === id) n = x; });
@@ -23350,7 +23374,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       return found;
     }).then(function(found){ return markAccepts(found || []); });
   }
-  function sendRequest(toUid, toName){
+  function sendRequest(toUid, toName, opts){
     var uid = myUid(); if(!uid || !toUid || toUid === uid) return Promise.resolve(false);
     /* ACCOUNT-SETTINGS-2026-11-23: block the send when the
        other tester turned friend requests off. Unreadable
@@ -23378,7 +23402,14 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           : Promise.resolve(null);
         return Promise.resolve(noticeP).catch(function(){ return null; }).then(function(nr){
           var noticeKey = (nr && nr.name) ? String(nr.name) : '';
-          return api('PUT', '/friendRequests/' + encodeURIComponent(toUid) + '/' + encodeURIComponent(uid), { fromName:name, ts:Date.now(), noticeKey:noticeKey }).then(function(r){
+          var rowBody = { fromName:name, ts:Date.now(), noticeKey:noticeKey };
+          /* CHALLENGE-ROOM-2026-11-24: game + friend request together —
+             a challenge to a non-friend rides on the friend request. The
+             game invite stays PENDING until the request is accepted (see
+             acceptRequest); extra children are allowed by the
+             friendRequests .validate (it only requires fromName + ts). */
+          if(opts && opts.gameInvite) rowBody.gameInvite = { game:String(opts.gameInvite.game || '8-ball-pool').slice(0, 40), roomCode:String(opts.gameInvite.roomCode || '').slice(0, 40) };
+          return api('PUT', '/friendRequests/' + encodeURIComponent(toUid) + '/' + encodeURIComponent(uid), rowBody).then(function(r){
             if(r === null) return false;
             outgoing[toUid] = { name: toName || 'Tester', ts: Date.now(), noticeKey:noticeKey }; saveOut(outgoing);
             renderAll();
@@ -23414,6 +23445,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       return Promise.resolve(false);
     }
     var fromName = (incoming[fromUid] && incoming[fromUid].fromName) || 'Tester';
+    /* CHALLENGE-ROOM-2026-11-24: a game invite riding on this request
+       (gameInvite) is captured before the row is deleted below. */
+    var gameInvite = (incoming[fromUid] && incoming[fromUid].gameInvite) || null;
     return myName().then(function(name){
       var now = Date.now();
       return api('PUT', '/friends/' + encodeURIComponent(uid) + '/' + encodeURIComponent(fromUid), { name:fromName, ts:now }).then(function(r1){
@@ -23425,6 +23459,17 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
             if(window.holoInbox && window.holoInbox.sendNotice){
               try { window.holoInbox.sendNotice(fromUid, { type:'friend-accepted', title:'Quest accepted!', body:name + ' accepted your quest \u2014 you\u2019re friends now!', link:'friends' }); } catch(e){}
             }
+            /* CHALLENGE-ROOM-2026-11-24: game + friend request together —
+               the request carried a game invite, so accepting the friend
+               request ACTIVATES it: the guest (me, the acceptor) gets
+               the room invite notice right now; the room opens from it.
+               On a decline the invite is withdrawn instead (see
+               declineRequest) — no orphan invite. */
+            try {
+              if(gameInvite && gameInvite.roomCode && window.holoInbox && window.holoInbox.notifySelf){
+                window.holoInbox.notifySelf('turn-invite', '8-Ball Pool challenge!', fromName + ' challenged you to 8-Ball Pool — your game is ready. Tap to open the room.', 'game:8-ball-pool?room=' + String(gameInvite.roomCode));
+              }
+            } catch(e){}
             try { if(typeof showBadgeToast === 'function') showBadgeToast('🤝 ' + fromName + ' is now your friend!'); } catch(e){}
             return refresh().then(function(){ return true; });
           });
@@ -23442,6 +23487,12 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
        record when its refresh finds the request row gone. Quiet by
        design — decline sends no message to the sender. */
     var fromName = (incoming[fromUid] && incoming[fromUid].fromName) || '';
+    /* CHALLENGE-ROOM-2026-11-24: a declined friend request withdraws
+       any game invite riding on it — the room stays pendingFriend and
+       the pool refuses entry until the two are friends (see the pool
+       file), so the invite can never activate; the challenger's Rooms
+       list drops it when its refresh finds the request row gone.
+       No message goes to the sender (declines stay quiet by design). */
     var nk = (incoming[fromUid] && incoming[fromUid].noticeKey) || '';
     return api('DELETE', '/friendRequests/' + encodeURIComponent(uid) + '/' + encodeURIComponent(fromUid)).then(function(r){
       delete incoming[fromUid]; renderAll();
@@ -24952,6 +25003,35 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 .turn-history li:first-child{border-top:0}
 .turn-empty{color:#cfc8ff;font-size:14px;margin:6px 0}
 .turn-muted-head{margin:10px 0 0;color:#cfc8ff;font-size:13px;font-weight:700}
+/* CHALLENGE-ROOM-2026-11-24: Rooms live on the Friends page — the
+   next-move tiles row (Recently Played tile style, horizontal) plus
+   one card per room. ROOM-PRIVACY-2026-11-24: beta is PRIVATE-ONLY —
+   no public option is built or shown; public rooms are live-gated
+   (the public list + join-anyone flow do not exist in beta). */
+#roomsSection{margin:18px 0 0}
+.rooms-head{margin:0 0 4px;font-family:var(--pixel);font-size:13px;color:#ffd43b}
+.rooms-sub{margin:0 0 12px;color:#cfc8ff;font-size:13.5px}
+.nextmove-row{display:flex;gap:10px;overflow-x:auto;padding:6px 2px 10px;-webkit-overflow-scrolling:touch}
+.nextmove-tile{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:150px;max-width:196px;text-align:left;background:var(--card);border:1.5px solid var(--gold);border-radius:14px;padding:12px 13px;cursor:pointer;font-family:inherit;color:var(--ink)}
+.nextmove-tile:hover{border-color:var(--pink)}
+.nextmove-tile b{font-size:14.5px;line-height:1.35}
+.nextmove-tile span{font-size:12.5px;color:var(--muted);line-height:1.4}
+.nextmove-tile .nextmove-play{font-size:13px;font-weight:800;color:var(--ink)}
+.room-list{display:grid;gap:8px;margin:0 0 12px}
+.room-card{border:2px solid #2a1b5e;border-radius:12px;background:#0a0620;padding:10px 12px}
+.room-card.your-turn{border-color:#ffd43b;box-shadow:0 0 10px rgba(255,212,59,.35)}
+.room-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.room-row b{color:#fff}
+.room-status{color:#b8f4ff;font-weight:700;font-size:13px}
+.room-status.wait{color:#cfc8ff}
+.room-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
+.room-share{margin:10px 0 0;padding:10px 12px;border:2px dashed #2a1b5e;border-radius:12px;background:#171040}
+.room-share input{width:100%;box-sizing:border-box;background:#0a0620;color:#e9e4ff;border:1.5px solid #2a1b5e;border-radius:8px;padding:8px 10px;font-size:13px;margin:0 0 8px}
+.room-note{margin:8px 0 0;color:#cfc8ff;font-size:13.5px}
+/* YOUR-TURN-BUTTON-2026-11-24: Tier 1 yellow, same size as Play, sits
+   immediately LEFT of Play on a friend's row — only when it is
+   actually your turn in a match with them. */
+.turn-yourturn-btn{background:linear-gradient(180deg,#ffd23f,#ffb020)!important;color:#241300!important;border:2px solid #ffd23f!important;font-weight:800}
 @media(max-width:520px){.turn-board{grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,64px)}}
 </style>
 <script>
@@ -25102,11 +25182,24 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     } catch(e){}
   }
   /* FRIEND-ROW-2026-11-24: the Play menu on a friend card lists ONLY games with turn-based match support. Today that is Tic Tac Toe alone (TURN-BASED Phase 1 pilot — the only game whose challenge() builds a match). The menu grows from this list as more games get multiplayer; do not add a game here until its match flow exists. */
-  var TURN_GAMES = [{ slug:'tic-tac-toe', name:'Tic Tac Toe', icon:'❌' }];
+  /* PLAY-PICKER-2026-11-24: the Play menu on a friend card lists ONLY
+     games with turn-based match support. Tic Tac Toe (Phase 1 pilot)
+     + 8-Ball Pool (rooms). Rock Paper Scissors joins when its rules
+     publish (firebase-rules-turnmatches-rps-update-2026-11-24.md) —
+     do not add it before then: its match create 401s until the
+     allowlist gains 'rock-paper-scissors'. */
+  var TURN_GAMES = [{ slug:'tic-tac-toe', name:'Tic Tac Toe', icon:'❌' }, { slug:'8-ball-pool', name:'8-Ball Pool', icon:'🎱' }];
   function challenge(uid, name, gameSlug){
     var me = myUid();
     if(!me){ toast('Sign in first to challenge a friend.'); return; }
     if(!uid || uid === me) return;
+    /* CHALLENGE-ROOM-2026-11-24: pool challenges go through rooms —
+       including to a NON-friend (game + friend request together; the
+       invite stays pending until the friend request is accepted). */
+    if(gameSlug === '8-ball-pool'){
+      if(window.holoRooms && window.holoRooms.challengePool){ window.holoRooms.challengePool(uid, name); return; }
+      toast('Rooms are still loading — try again in a moment.'); return;
+    }
     if(!isMutualFriend(uid)){ toast('You can only challenge a friend — add them first.'); return; }
     if(!rateOk()){ toast('Slow down a little — too many challenges at once.'); return; }
     isBlockedWith(uid).then(function(blocked){
@@ -25133,6 +25226,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   function accept(mid){
     var m = matches[mid], me = myUid();
     if(!m || !me || m.status !== 'waiting' || m.bUid !== me) return;
+    /* CHALLENGE-ROOM-2026-11-24: pool matches accept through the Rooms
+       module (pending-friend gate + pool-titled notice). */
+    if(m.game === '8-ball-pool' && window.holoRooms && window.holoRooms.acceptMatch){ window.holoRooms.acceptMatch(mid); return; }
     if(!rateOk()){ toast('Slow down a little.'); return; }
     api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'playing', updatedAt:Date.now() }).then(function(r){
       if(r === null){ toast('That did not save — the new rules publish is still pending.'); return; }
@@ -25145,6 +25241,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   function decline(mid){
     var m = matches[mid], me = myUid();
     if(!m || !me || m.status !== 'waiting') return;
+    /* CHALLENGE-ROOM-2026-11-24: pool matches decline through the Rooms
+       module (the room link dies with the match). */
+    if(m.game === '8-ball-pool' && window.holoRooms && window.holoRooms.declineMatch){ window.holoRooms.declineMatch(mid); return; }
     api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'declined', updatedAt:Date.now() }).then(function(r){
       if(r === null){ toast('That did not save — the new rules publish is still pending.'); return; }
       m.status = 'declined'; m.updatedAt = Date.now(); render();
@@ -25348,6 +25447,11 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     bindOpen(root);
   }
   function openHtml(mid, m, me){
+    /* MULTIPLAYER-ENDGAME-2026-11-24 + MATCH-RESET-2026-11-24: pool
+       matches render a pool summary here (no Tic Tac Toe board) —
+       status, last move, Accept/Decline, Open in 8-Ball Pool, the
+       endgame row (Rematch / Play a different game) and Reset match. */
+    if(m.game === '8-ball-pool' && window.holoRooms && window.holoRooms.poolMatchHtml){ return window.holoRooms.poolMatchHtml(mid, m, me); }
     var opp = oppOf(m, me);
     var board = m.board || [];
     var win = winnerOf(board);
@@ -25374,8 +25478,13 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     }
     h += '<button type="button" class="btn btn-dark" data-turn-report="' + esc(mid) + '">Report</button>' +
       '<button type="button" class="btn btn-dark" data-turn-block="' + esc(mid) + '">Block ' + esc(opp.name) + '</button>' +
-      '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>' +
-      '</div>' + historyHtml(m) + '</div>';
+      '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>';
+    /* MATCH-RESET-2026-11-24: Reset match on the match view too (either
+       player; ends a stuck match cleanly — see the Rooms module). */
+    if(m.status === 'waiting' || m.status === 'playing'){
+      h += '<button type="button" class="btn btn-dark" data-turn-reset="' + esc(mid) + '">Reset match</button>';
+    }
+    h += '</div>' + historyHtml(m) + '</div>';
     return h;
   }
   function bindOpen(root){
@@ -25401,14 +25510,53 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     root.querySelectorAll('[data-turn-mute]').forEach(function(b){
       b.addEventListener('click', function(){ toggleMute(b.getAttribute('data-turn-mute')); });
     });
+    root.querySelectorAll('[data-turn-reset]').forEach(function(b){
+      b.addEventListener('click', function(){ if(window.holoRooms && window.holoRooms.resetMatch) window.holoRooms.resetMatch(b.getAttribute('data-turn-reset')); });
+    });
+  }
+  function turnMidFor(uid){
+    var me = myUid(); if(!me) return null;
+    var mids = Object.keys(matches).sort(function(a, b){ return (matches[b].updatedAt || 0) - (matches[a].updatedAt || 0); });
+    for(var i = 0; i < mids.length; i++){
+      var m = matches[mids[i]];
+      if(m && m.status === 'playing' && m.turn === me && (m.aUid === uid || m.bUid === uid) && (m.aUid === me || m.bUid === me)) return mids[i];
+    }
+    return null;
+  }
+  function syncYourTurnButton(card, uid){
+    var mid = turnMidFor(uid);
+    var existing = card.querySelector('.turn-yourturn-btn');
+    if(!mid){ if(existing) existing.remove(); return; }
+    if(existing){ existing.setAttribute('data-turn-mid', mid); return; }
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn btn-dark dm-mini turn-yourturn-btn'; btn.textContent = '★ Your turn';
+    btn.setAttribute('data-turn-mid', mid);
+    btn.addEventListener('click', function(ev){
+      ev.stopPropagation();
+      var mm = matches[btn.getAttribute('data-turn-mid')];
+      if(mm && mm.game === '8-ball-pool' && window.holoRooms && window.holoRooms.openMatch){ window.holoRooms.openMatch(btn.getAttribute('data-turn-mid')); return; }
+      openMid = btn.getAttribute('data-turn-mid'); render();
+      try { location.hash = '#game/' + (mm ? mm.game : 'tic-tac-toe'); } catch(e){}
+    });
+    var actions = card.querySelector('.friend-top-actions') || card.querySelector('.friend-actions');
+    var playBtn = card.querySelector('.turn-play-btn');
+    if(actions && playBtn && playBtn.parentNode === actions) actions.insertBefore(btn, playBtn);
+    else if(actions) actions.appendChild(btn);
+    else if(card.querySelector('.dm-open-btn')){ var anchor = card.querySelector('.dm-open-btn'); anchor.parentNode.insertBefore(btn, anchor); }
   }
   function injectFriendCardButtons(){
     var grid = document.getElementById('cloudFriendGrid'); if(!grid) return;
     grid.querySelectorAll('.friend-card').forEach(function(card){
-      if(card.querySelector('.turn-challenge-btn')) return;
       var rem = card.querySelector('[data-freq-remove]');
       if(!rem) return;
       var uid = rem.getAttribute('data-freq-remove');
+      /* YOUR-TURN-BUTTON-2026-11-24: a YELLOW "Your turn" button (Tier 1
+         yellow, SAME size as Play, immediately LEFT of Play) on this
+         friend's row — only when it is actually your turn in a match
+         with them. Tap opens that game room. Synced every pass: it
+         appears when a turn lands on you and leaves when it passes. */
+      syncYourTurnButton(card, uid);
+      if(card.querySelector('.turn-challenge-btn')) return;
       var name = 'Tester';
       try { var b = card.querySelector('.friend-main b'); if(b) name = b.textContent; } catch(e){}
       var btn = document.createElement('button');
@@ -25475,9 +25623,730 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   setInterval(function(){ injectFriendCardButtons(); }, 5000);
   setTimeout(function(){ buildUI(); loadMatches(); injectFriendCardButtons(); }, 2500);
   window.addEventListener('hashchange', function(){ try { if((location.hash || '').indexOf('#game/tic-tac-toe') !== -1){ var pm = pendingMatchFromHash(); if(pm) pendingOpenMid = pm; loadMatches(); } } catch(e){} });
-  window.holoTurn = { challenge:challenge, refresh:loadMatches, matches:function(){ return matches; }, myTurnCount:myTurnCount, open:function(mid){ openMid = mid; render(); }, openSoon:function(mid){ pendingOpenMid = mid; if(matches[mid] && !muted[mid]){ openMid = mid; render(); } } };
+  window.holoTurn = { challenge:challenge, refresh:loadMatches, matches:function(){ return matches; }, turnGames:function(){ return TURN_GAMES.slice(); }, myTurnCount:myTurnCount, open:function(mid){ openMid = mid; render(); }, openSoon:function(mid){ pendingOpenMid = mid; if(matches[mid] && !muted[mid]){ openMid = mid; render(); } } };
 })();
 </script>
+
+<script>
+/* CHALLENGE-ROOM-2026-11-24 (Holo 2026-11-24 19:33-21:37): private
+   game rooms for turn-based multiplayer — inviting/challenging a
+   friend creates a PRIVATE room holding the match (one invite per
+   friend, one room per match). The room offers a textable share link;
+   it locks when the match starts; the sender can cancel a pending
+   request from Rooms. ROOM-PRIVACY-2026-11-24: beta is PRIVATE-ONLY
+   (link-only, never listed) — the public option is live-gated and is
+   NOT built here: no public/private toggle, no public rooms list, no
+   join-anyone flow. POOL-LINK-SELFDESTRUCT-2026-11-24: the link does
+   NOT die on join; it self-destructs AFTER THE GAME (reload-safe
+   during the match; dead after win/lose/leave — the pool file gates
+   on the match status, so a late tap sees "this invite is used up").
+   The ROOM entry self-destructs after the game UNLESS the players
+   choose Replay (rematch, same friend + game — the card carries on
+   with the new match) or a different game (room continues with the
+   new game); if neither, the room dies (Close room, or it drops off
+   once resolved). Opening a room link REQUIRES sign-in (signed-out
+   -> sign-in gate; no guest access — the pool file enforces it).
+   The room link is created ONLY when Holo asks for it (she taps
+   "Share link" — links are never auto-created) and ONLY the host can
+   create/share it; the guest gets NO share action and cannot
+   re-share. Holo gets an instant Inbox notification ("<Code Name>
+   joined your pool game") on first join (sent by the pool file when
+   the guest first enters a waiting match).
+   Works under the LIVE turnmatches-pool rules (published 2026-11-24
+   20:15): the room create needs game/hostUid/status waiting; the
+   match create rides the room (roomCode, no matchId yet); the guest
+   writes matchId into the room on first entry (the pool file adopts
+   a hub-created match from the guest's own match index). No rules
+   publish is needed for this phase. */
+(function(){
+  "use strict";
+  var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+  var FB_API_KEY = 'AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak'; /* filled at splice time from the live hub bytes — never hand-typed */
+  var AUTH_KEY = 'holos-firebase-auth';
+  var ROOMS_KEY = 'holoArcade_v1_rooms';
+  var POOL_URL = 'https://beta.holosarcade.ca/8-ball-pool/';
+  var BOARD_FIX_TS = Date.parse('2026-11-25T02:15:00Z'); /* 2026-11-24 20:15 CST rules re-publish (board fix) */
+  var DAY_MS = 24 * 3600 * 1000;
+  var RATE_MAX = 5, RATE_WINDOW = 60000;
+  function esc(s){ var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+  function toast(m){ try { if(typeof showBadgeToast === 'function') showBadgeToast(m); } catch(e){} }
+  function loadAuth(){ try { var v = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); return (v && v.uid) ? v : null; } catch(e){ return null; } }
+  function myUid(){ var a = loadAuth(); return a ? a.uid : null; }
+  function freshToken(){
+    var a = loadAuth(); if(!a) return Promise.resolve(null);
+    if(a.exp && a.exp > Date.now() + 60000) return Promise.resolve(a.idToken);
+    if(!a.refreshToken) return Promise.resolve(null);
+    return fetch('https://securetoken.googleapis.com/v1/token?key=' + FB_API_KEY, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:'grant_type=refresh_token&refresh_token=' + encodeURIComponent(a.refreshToken) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(j && j.id_token){ a.idToken = j.id_token; a.refreshToken = j.refresh_token || a.refreshToken; a.exp = Date.now() + ((parseInt(j.expires_in,10)||3600)*1000); try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e){} return a.idToken; } return null; })
+      .catch(function(){ return null; });
+  }
+  function api(method, path, body){
+    return freshToken().then(function(tok){
+      if(!tok) return null;
+      var q = '', p = path, qi = path.indexOf('?');
+      if(qi !== -1){ p = path.slice(0, qi); q = path.slice(qi + 1); }
+      var url = FB_RTDB + p + '.json?auth=' + encodeURIComponent(tok) + (q ? '&' + q : '');
+      return fetch(url, { method:method, headers:{ 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined })
+        .then(function(r){ if(!r.ok) return null; if(method === 'DELETE') return true; return r.json().catch(function(){ return true; }); }).catch(function(){ return null; });
+    }).catch(function(){ return null; });
+  }
+  var myNameCache = null;
+  function myName(){
+    if(myNameCache) return Promise.resolve(myNameCache);
+    var uid = myUid(); if(!uid) return Promise.resolve('A tester');
+    return api('GET', '/users/' + encodeURIComponent(uid)).then(function(u){
+      var n = (u && (u.username || u.name)) ? String(u.username || u.name) : 'A tester';
+      myNameCache = n; return n;
+    });
+  }
+  function timeShort(ts){
+    try { var d = new Date(ts); if(isNaN(d)) return ''; return d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' }); } catch(e){ return ''; }
+  }
+  function isMutualFriend(uid){
+    try { var cf = (window.holoFriends && window.holoFriends.cloudFriends) ? window.holoFriends.cloudFriends() : {}; return !!cf[uid]; } catch(e){ return false; }
+  }
+  function friendName(uid){
+    try { var cf = (window.holoFriends && window.holoFriends.cloudFriends) ? window.holoFriends.cloudFriends() : {}; if(cf[uid] && cf[uid].name) return cf[uid].name; } catch(e){}
+    return 'Tester';
+  }
+  function sendNotice(toUid, notice){
+    try {
+      if(window.holoInbox && window.holoInbox.sendNotice) return window.holoInbox.sendNotice(toUid, notice);
+    } catch(e){}
+    if(!toUid || !notice) return Promise.resolve(null);
+    var body = { type: String(notice.type || 'system').slice(0, 40), title: String(notice.title || '').slice(0, 120), body: String(notice.body || '').slice(0, 600), createdAt: Date.now(), read: false };
+    if(notice.link) body.link = String(notice.link).slice(0, 120);
+    if(notice.fromName) body.fromName = String(notice.fromName).slice(0, 60);
+    if(notice.fromUid) body.fromUid = String(notice.fromUid).slice(0, 80);
+    return api('POST', '/users/' + encodeURIComponent(toUid) + '/notifications', body);
+  }
+  function gameTitle(slug){
+    if(slug === '8-ball-pool') return '8-Ball Pool';
+    if(slug === 'rock-paper-scissors') return 'Rock Paper Scissors';
+    return 'Tic Tac Toe';
+  }
+  function matchesCache(){
+    try { return (window.holoTurn && window.holoTurn.matches) ? window.holoTurn.matches() : {}; } catch(e){ return {}; }
+  }
+  function pairParts(a, b){ return [String(a), String(b)].sort(); }
+  function isBlockedWith(uid){
+    var me = myUid(); if(!me || !uid || me === uid) return Promise.resolve(false);
+    var p = pairParts(me, uid);
+    return api('GET', '/dmThreads/' + encodeURIComponent(p[0]) + '/' + encodeURIComponent(p[1]) + '/blockedBy').then(function(bl){
+      if(!bl || typeof bl !== 'object') return false;
+      return !!(bl[me] || bl[uid]);
+    });
+  }
+  var sentTimes = [];
+  function rateOk(){
+    var now = Date.now();
+    sentTimes = sentTimes.filter(function(t){ return now - t < RATE_WINDOW; });
+    if(sentTimes.length >= RATE_MAX) return false;
+    sentTimes.push(now); return true;
+  }
+
+  /* ---------- local room registry ----------
+     /challengeRooms has no per-user index (reads are by code only),
+     so this device remembers the rooms it created or joined. The
+     guest learns a room from the turn-invite notice / share link and
+     registers it on first open (joinRoom). */
+  var registry = {};
+  try { registry = JSON.parse(localStorage.getItem(ROOMS_KEY) || '{}') || {}; } catch(e){ registry = {}; }
+  function saveRegistry(){ try { localStorage.setItem(ROOMS_KEY, JSON.stringify(registry)); } catch(e){} }
+  function registerRoom(code, room, role){
+    registry[code] = { game:room.game || '8-ball-pool', hostUid:room.hostUid, hostName:room.hostName || '', guestUid:room.guestUid || '', guestName:room.guestName || '', createdAt:room.createdAt || Date.now(), pendingFriend:!!room.pendingFriend, matchId:room.matchId || null, role:role || 'host', withdrawn:false, closed:false, ended:false };
+    saveRegistry();
+  }
+  function roomExpired(entry){
+    return !entry.matchId && entry.createdAt && (Date.now() - entry.createdAt) > DAY_MS;
+  }
+  function matchEnded(m){ return !!m && (m.status === 'won' || m.status === 'draw' || m.status === 'left'); }
+  function activeRoomTo(uid){
+    var ms = matchesCache();
+    var codes = Object.keys(registry);
+    for(var i = 0; i < codes.length; i++){
+      var e = registry[codes[i]];
+      if(!e || e.withdrawn || e.closed || e.ended) continue;
+      if(e.game !== '8-ball-pool') continue;
+      if(e.guestUid !== uid && e.hostUid !== uid) continue;
+      if(e.matchId && ms[e.matchId] && matchEnded(ms[e.matchId])) continue;
+      if(roomExpired(e)) continue;
+      return codes[i];
+    }
+    return null;
+  }
+  function roomPendingFriend(code){
+    var e = registry[code];
+    return !!(e && e.pendingFriend);
+  }
+
+  /* ---------- room codes ---------- */
+  function makeCode(){
+    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    function one(){ var s = ''; for(var i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)]; return s; }
+    function attempt(n){
+      if(n <= 0) return Promise.resolve(null);
+      var code = one();
+      return api('GET', '/challengeRooms/' + encodeURIComponent(code)).then(function(ex){
+        if(ex) return attempt(n - 1);
+        return code;
+      });
+    }
+    return attempt(3);
+  }
+
+  /* ---------- challenge: room + match ---------- */
+  function challengePool(uid, name, reuseCode){
+    var me = myUid();
+    if(!me){ toast('Sign in first to challenge a friend.'); return; }
+    if(!uid || uid === me) return;
+    if(!rateOk()){ toast('Slow down a little — too many challenges at once.'); return; }
+    /* One invite per friend: an active pool room to this guest blocks
+       a second one. The request SITS IN ROOMS holding the space,
+       displayed as "Requested, waiting". */
+    if(!reuseCode && activeRoomTo(uid)){ toast('You already have a pool invite out to ' + (name || friendName(uid)) + ' — check Rooms.'); openRoomsView(); return; }
+    isBlockedWith(uid).then(function(blocked){
+      if(blocked){ toast('You cannot challenge this tester right now.'); return; }
+      myName().then(function(myN){
+        makeCode().then(function(code){
+          if(!code){ toast('Could not make a room — try again in a moment.'); return; }
+          var now = Date.now();
+          var pendingFriend = !isMutualFriend(uid);
+          var room = { game:'8-ball-pool', hostUid:me, hostName:myN, guestUid:uid, guestName:String(name || friendName(uid)), status:'waiting', createdAt:now };
+          if(pendingFriend) room.pendingFriend = true;
+          api('PUT', '/challengeRooms/' + encodeURIComponent(code), room).then(function(r){
+            if(r === null){ toast('Room did not save — try again in a moment.'); return; }
+            if(reuseCode && registry[reuseCode]){ delete registry[reuseCode]; }
+            registerRoom(code, room, 'host');
+            /* Create the match NOW (hub-side) so cancel works and the
+               guest's first entry adopts it instead of making a second
+               match (see the pool file). The room create above satisfies
+               the match-create rule's room branch: room exists, no
+               matchId yet, host/guest match. The match carries no table
+               state — the host breaks first and the first shot syncs
+               the table (the pool file tolerates a missing state). */
+            var match = { game:'8-ball-pool', aUid:me, bUid:uid, aName:myN, bName:String(name || friendName(uid)), xUid:me, oUid:uid, board:[], turn:me, status:'waiting', winner:null, roomCode:code, lastMoveAt:0, lastMoveBy:'', lastMoveCell:-1, history:[], moves:0, createdAt:now, updatedAt:now };
+            api('POST', '/turnMatches', match).then(function(mr){
+              if(!mr || !mr.name){ toast('Pool match did not save — the new rules publish is still pending.'); renderRooms(); return; }
+              var mid = mr.name;
+              api('PUT', '/users/' + encodeURIComponent(me) + '/turnMatches/' + encodeURIComponent(mid), true);
+              api('PUT', '/users/' + encodeURIComponent(uid) + '/turnMatches/' + encodeURIComponent(mid), true);
+              if(registry[code]){ registry[code].matchId = mid; saveRegistry(); }
+              if(pendingFriend){
+                /* Game + friend request TOGETHER (one action): the friend
+                   request carries the game invite; it stays PENDING until
+                   the request is accepted (acceptRequest activates it —
+                   the invitee sees the friend request first). */
+                if(window.holoFriends && window.holoFriends.sendRequest){
+                  window.holoFriends.sendRequest(uid, name, { gameInvite:{ game:'8-ball-pool', roomCode:code } }).then(function(ok){
+                    toast(ok ? ('Friend request + pool invite sent to ' + (name || friendName(uid)) + ' — the game opens once they accept.') : 'Room saved, but the friend request did not send — try again from Friends.');
+                    if(window.holoTurn) window.holoTurn.refresh();
+                    renderRooms();
+                  });
+                } else { toast('Room saved — send the friend request from Friends to activate it.'); renderRooms(); }
+              } else {
+                sendNotice(uid, { type:'turn-invite', title:'8-Ball Pool challenge!', body:myN + ' challenged you to 8-Ball Pool. Tap to open the room.', link:'game:8-ball-pool?room=' + code, fromName:myN, fromUid:me });
+                toast('Challenge sent to ' + (name || friendName(uid)) + '!');
+                if(window.holoTurn) window.holoTurn.refresh();
+                renderRooms();
+              }
+            });
+          });
+        });
+      });
+    });
+  }
+
+  /* ---------- share link: host only, only when Holo asks ----------
+     POOL-LINK-SELFDESTRUCT-2026-11-24: the link is created ONLY when
+     Holo asks for it (she taps "Share link" — never auto-created) and
+     ONLY she (the room host) can create/share it; the guest gets NO
+     share action and cannot re-share it. The link itself is the plain
+     pool URL with ?room=<CODE> — short, textable, copyable. */
+  var shareOpen = {};
+  function roomLink(code){ return POOL_URL + '?room=' + code; }
+  function copyText(t, okMsg){
+    function fallback(){
+      try {
+        var ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        var ok = false; try { ok = document.execCommand('copy'); } catch(e){}
+        document.body.removeChild(ta);
+        toast(ok ? okMsg : 'Copy did not work — long-press the link to copy it.');
+      } catch(e){ toast('Copy did not work — long-press the link to copy it.'); }
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(t).then(function(){ toast(okMsg); }, fallback);
+    } else fallback();
+  }
+  function shareLink(code){
+    var link = roomLink(code);
+    if(navigator.share){
+      navigator.share({ title:'8-Ball Pool — Holo\u2019s Arcade', text:'Play 8-Ball Pool with me!', url:link }).catch(function(){});
+    } else {
+      copyText(link, 'Link copied — paste it into a text.');
+    }
+  }
+
+  /* ---------- cancel a pending game request ---------- */
+  function cancelRoom(code){
+    var me = myUid(); var entry = registry[code];
+    if(!me || !entry || entry.hostUid !== me) return;
+    var mid = entry.matchId;
+    function done(){
+      entry.withdrawn = true; saveRegistry();
+      myName().then(function(myN){
+        sendNotice(entry.guestUid, { type:'turn', title:'8-Ball Pool challenge withdrawn', body:myN + ' withdrew the 8-Ball Pool challenge.', link:'friends', fromName:myN, fromUid:me });
+      });
+      toast('Invite cancelled — the space is free again.');
+      if(window.holoTurn) window.holoTurn.refresh();
+      renderRooms();
+    }
+    /* The match (if it exists) is declined, so the room link is dead
+       too: the pool file refuses entry to a declined match ("This
+       invite was cancelled"). */
+    if(mid){
+      api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'declined', updatedAt:Date.now() }).then(function(){ done(); });
+    } else { done(); }
+  }
+
+  /* ---------- accept / decline a pool match (hub side) ---------- */
+  function acceptMatch(mid){
+    var m = matchesCache()[mid]; var me = myUid();
+    if(!m || !me || m.status !== 'waiting' || m.bUid !== me) return;
+    function go(){
+      api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'playing', updatedAt:Date.now() }).then(function(r){
+        if(r === null){ toast('That did not save — the new rules publish is still pending.'); return; }
+        myName().then(function(myN){
+          sendNotice(m.aUid, { type:'turn', title:'Your turn in ' + gameTitle(m.game), body:'Your turn in ' + gameTitle(m.game) + ' vs ' + myN + ' — ' + myN + ' accepted at ' + timeShort(Date.now()) + '.', link:'game:' + m.game + '?match=' + mid, fromName:myN, fromUid:me });
+        });
+        if(window.holoTurn) window.holoTurn.refresh();
+        renderRooms();
+      });
+    }
+    /* A pool invite riding on a friend request stays PENDING until the
+       two are friends — checked against the live room node, not just
+       this device's registry. */
+    if(m.roomCode){
+      api('GET', '/challengeRooms/' + encodeURIComponent(m.roomCode)).then(function(room){
+        if(room && room.pendingFriend && !isMutualFriend(m.aUid)){ toast('Accept the friend request first — your game opens once you are friends.'); return; }
+        go();
+      });
+    } else go();
+  }
+  function declineMatch(mid){
+    var m = matchesCache()[mid]; var me = myUid();
+    if(!m || !me || m.status !== 'waiting') return;
+    api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'declined', updatedAt:Date.now() }).then(function(r){
+      if(r === null){ toast('That did not save — the new rules publish is still pending.'); return; }
+      /* The room link dies with the match (the pool file refuses a
+         declined match), and the Rooms tile drops to Withdrawn. */
+      if(m.roomCode && registry[m.roomCode]){ registry[m.roomCode].withdrawn = true; saveRegistry(); }
+      if(window.holoTurn) window.holoTurn.refresh();
+      renderRooms();
+    });
+  }
+
+  /* ---------- MATCH-RESET-2026-11-24 ----------
+     Reset a stuck multiplayer match: either player, from the match
+     view or from Rooms. Ends it cleanly (status 'left'), frees both
+     players, notifies the other player. NEVER auto-deletes: the match
+     node stays as create-only history, and the reset only ever fires
+     on a tap. */
+  function resetMatch(mid){
+    var me = myUid(); if(!me) return;
+    var m = matchesCache()[mid];
+    if(!m){ toast('Match not loaded yet — try again in a moment.'); return; }
+    if(m.status !== 'waiting' && m.status !== 'playing'){ toast('That match already ended — nothing to reset.'); return; }
+    var opp = (m.aUid === me) ? { uid:m.bUid, name:m.bName } : { uid:m.aUid, name:m.aName };
+    api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'left', updatedAt:Date.now() }).then(function(r){
+      if(r === null){ toast('Reset did not save — try again in a moment.'); return; }
+      myName().then(function(myN){
+        sendNotice(opp.uid, { type:'turn', title:gameTitle(m.game) + ' match reset', body:myN + ' reset your ' + gameTitle(m.game) + ' match — it ended. Challenge again any time.', link:'game:' + m.game, fromName:myN, fromUid:me });
+      });
+      toast('Match reset — both players are free now.');
+      if(window.holoTurn) window.holoTurn.refresh();
+      renderRooms();
+    });
+  }
+  function isStuck(m){
+    if(!m) return false;
+    if(m.status !== 'waiting' && m.status !== 'playing') return false;
+    /* Created before the Nov 24 20:15 board-fix publish: the old
+       /turnMatches validate rejected every new match (the 'board'
+       bug), so those matches may never have worked. */
+    if(m.createdAt && m.createdAt < BOARD_FIX_TS) return true;
+    /* No moves + 24h old. */
+    if((m.moves || 0) === 0 && m.createdAt && (Date.now() - m.createdAt) > DAY_MS) return true;
+    return false;
+  }
+
+  /* ---------- opening a game room ---------- */
+  function handIntoPool(opts){
+    /* The hub opens games in an iframe, so ?room= would be lost from
+       the hash — hand the room in by postMessage once the pool frame
+       loads (the pool file listens for 'holo-room-join' /
+       'holo-pool-match'). Posted once: the load event or the 2s
+       fallback, whichever lands first. */
+    try { location.hash = '#game/8-ball-pool'; } catch(e){}
+    var sent = false;
+    function send(){
+      if(sent) return;
+      var fr = document.getElementById('8-ball-poolFrame');
+      if(!fr || !fr.contentWindow) return;
+      sent = true;
+      try {
+        if(opts.room) fr.contentWindow.postMessage({ type:'holo-room-join', room:opts.room, game:'8-ball-pool' }, '*');
+        else if(opts.mid) fr.contentWindow.postMessage({ type:'holo-pool-match', mid:opts.mid }, '*');
+      } catch(e){}
+    }
+    function arm(){
+      var fr = document.getElementById('8-ball-poolFrame');
+      if(fr){
+        try { fr.addEventListener('load', send, { once:true }); } catch(e){ fr.addEventListener('load', send); }
+        setTimeout(send, 2000);
+        return true;
+      }
+      return false;
+    }
+    if(!arm()){
+      var iv = setInterval(function(){ if(arm()) clearInterval(iv); }, 400);
+      setTimeout(function(){ clearInterval(iv); }, 10000);
+    }
+  }
+  function openMatch(mid){
+    var m = matchesCache()[mid]; if(!m) return;
+    if(m.game === '8-ball-pool'){
+      if(m.roomCode) handIntoPool({ room:m.roomCode });
+      else handIntoPool({ mid:mid });
+      return;
+    }
+    if(window.holoTurn && window.holoTurn.open) window.holoTurn.open(mid);
+    try { location.hash = '#game/' + m.game; } catch(e){}
+  }
+  function joinRoom(code){
+    code = String(code || '').trim().toUpperCase();
+    if(!code) return;
+    var me = myUid();
+    if(!me){ toast('Sign in to join a room — rooms need your Arcade account.'); return; }
+    api('GET', '/challengeRooms/' + encodeURIComponent(code)).then(function(room){
+      if(!room || room.game !== '8-ball-pool'){ toast('That room link didn’t work — ask the host to share it again.'); return; }
+      registerRoom(code, room, me === room.hostUid ? 'host' : 'guest');
+      handIntoPool({ room:code });
+      renderRooms();
+    });
+  }
+  function openRoomsView(){
+    try { if(window.holoShowView) window.holoShowView('friends'); else document.body.setAttribute('data-view', 'friends'); } catch(e){}
+  }
+
+  /* ---------- MULTIPLAYER-ENDGAME-2026-11-24 ----------
+     The pool match view (turnPlay branch): result, last move, and the
+     endgame row — Rematch, Play a different game, Reset match. The
+     room survives an endgame choice (Replay / different game); if
+     neither is picked, the room dies via Close room. */
+  function poolStatusLine(m, me){
+    if(m.status === 'waiting') return (m.bUid === me) ? 'Challenge from ' + m.aName + ' — accept?' : 'Waiting for ' + m.bName + ' to accept';
+    if(m.status === 'declined') return 'Declined';
+    if(m.status === 'draw') return 'Draw';
+    if(m.status === 'left') return ((m.aUid === me) ? m.bName : m.aName) + ' left the match';
+    if(m.status === 'won'){
+      var w = m.winner === me ? 'You' : (m.winner === m.aUid ? m.aName : m.bName);
+      return w + ' won';
+    }
+    if(m.turn === me) return 'Your turn — shoot!';
+    return 'Waiting for ' + (m.turn === m.aUid ? m.aName : m.bName) + '…';
+  }
+  function poolMatchHtml(mid, m, me){
+    var h = '<div class="turn-board-wrap">';
+    h += '<p class="turn-summary">' + esc(m.aName) + ' vs ' + esc(m.bName) + ' — 8-Ball Pool<br><span class="turn-you">' + esc(poolStatusLine(m, me)) + '</span></p>';
+    if(m.lastMoveAt) h += '<p class="turn-lastmove">Last move at ' + timeShort(m.lastMoveAt) + (m.moves ? ' · ' + m.moves + ' shot' + (m.moves === 1 ? '' : 's') : '') + '</p>';
+    if(isStuck(m)) h += '<p class="turn-lastmove">Looks stuck — Reset?</p>';
+    h += '<div class="turn-actions">';
+    if(m.status === 'waiting' && m.bUid === me){
+      h += '<button type="button" class="btn btn-light" data-room-accept="' + esc(mid) + '">Accept challenge</button><button type="button" class="btn btn-dark" data-room-decline="' + esc(mid) + '">Decline</button>';
+    }
+    if(m.status === 'waiting' && m.aUid === me){
+      h += '<button type="button" class="btn btn-dark" data-room-decline="' + esc(mid) + '">Cancel challenge</button>';
+    }
+    if(m.status === 'playing'){
+      h += '<button type="button" class="btn btn-light" data-room-open="' + esc(mid) + '">Open in 8-Ball Pool</button>';
+    }
+    if(m.status === 'won' || m.status === 'draw' || m.status === 'left'){
+      h += '<button type="button" class="btn btn-light" data-room-rematch="' + esc(mid) + '">Rematch</button>';
+      h += '<button type="button" class="btn btn-dark" data-room-diffgame="' + esc(mid) + '">Play a different game</button>';
+    }
+    if(m.status === 'waiting' || m.status === 'playing'){
+      h += '<button type="button" class="btn btn-dark" data-room-reset="' + esc(mid) + '">Reset match</button>';
+    }
+    h += '<button type="button" class="btn btn-dark" data-room-report="' + esc(mid) + '">Report</button>';
+    h += '</div></div>';
+    return h;
+  }
+
+  /* ---------- Rooms section (Friends page) ---------- */
+  function ensureSection(){
+    var sec = document.getElementById('roomsSection');
+    if(sec) return sec;
+    var friends = document.getElementById('friends');
+    if(!friends) return null;
+    sec = document.createElement('div');
+    sec.id = 'roomsSection';
+    sec.setAttribute('aria-label', 'Game rooms');
+    var msg = document.getElementById('friendMsg');
+    if(msg && msg.parentNode) msg.parentNode.insertBefore(sec, msg.nextSibling);
+    else friends.appendChild(sec);
+    return sec;
+  }
+  /* NEXT-MOVE-TILES-2026-11-24: "your turn — next move" entries as
+     tiles side by side in a horizontal row, Recently Played tile
+     style; tapping a tile opens that game room. */
+  function nextMoveTiles(ms, me){
+    var mids = Object.keys(ms).sort(function(a, b){ return (ms[b].updatedAt || 0) - (ms[a].updatedAt || 0); });
+    var mine = mids.filter(function(mid){
+      var m = ms[mid];
+      return m && m.status === 'playing' && m.turn === me;
+    });
+    if(!mine.length) return '';
+    var h = '<div class="nextmove-row" role="list" aria-label="Your turn — next move">';
+    mine.forEach(function(mid){
+      var m = ms[mid];
+      var opp = (m.aUid === me) ? m.bName : m.aName;
+      h += '<button type="button" class="nextmove-tile" role="listitem" data-room-open="' + esc(mid) + '"><b>' + esc(gameTitle(m.game)) + '</b><span>vs ' + esc(opp) + ' · Your turn — next move</span><span class="nextmove-play">▶ Open room</span></button>';
+    });
+    return h + '</div>';
+  }
+  function roomCardHtml(code, entry, ms, me){
+    var m = entry.matchId ? ms[entry.matchId] : null;
+    if(m && matchEnded(m) && !entry.ended){ entry.ended = true; saveRegistry(); }
+    var oppName = (entry.role === 'host') ? (entry.guestName || friendName(entry.guestUid)) : (entry.hostName || friendName(entry.hostUid));
+    var isHost = entry.hostUid === me;
+    var cls = 'room-card';
+    var status = '', statusCls = '';
+    var acts = '';
+    if(entry.withdrawn){
+      status = 'Withdrawn'; statusCls = ' wait';
+      acts += '<button type="button" class="btn btn-dark dm-mini" data-room-close="' + esc(code) + '">Dismiss</button>';
+    } else if(entry.closed){
+      return '';
+    } else if(m && matchEnded(m)){
+      cls += '';
+      if(m.status === 'won'){ var w = m.winner === me ? 'You' : (m.winner === m.aUid ? m.aName : m.bName); status = 'Game over — ' + w + ' won'; }
+      else if(m.status === 'draw') status = 'Game over — draw';
+      else status = 'Game over — match ended';
+      acts += '<button type="button" class="btn btn-light dm-mini" data-room-rematch="' + esc(entry.matchId) + '">Rematch</button>';
+      acts += '<button type="button" class="btn btn-dark dm-mini" data-room-diffgame="' + esc(entry.matchId) + '">Play a different game</button>';
+      acts += '<button type="button" class="btn btn-dark dm-mini" data-room-close="' + esc(code) + '">Close room</button>';
+    } else if(m && m.status === 'waiting'){
+      if(m.bUid === me){ status = 'Challenge from ' + m.aName + ' — accept?'; statusCls = ' wait';
+        acts += '<button type="button" class="btn btn-light dm-mini" data-room-accept="' + esc(entry.matchId) + '">Accept challenge</button>';
+        acts += '<button type="button" class="btn btn-dark dm-mini" data-room-decline="' + esc(entry.matchId) + '">Decline</button>';
+      } else { status = 'Waiting for ' + m.bName + ' to accept'; statusCls = ' wait';
+        acts += '<button type="button" class="btn btn-dark dm-mini" data-room-decline="' + esc(entry.matchId) + '">Cancel challenge</button>';
+      }
+      acts += '<button type="button" class="btn btn-dark dm-mini" data-room-open="' + esc(entry.matchId) + '">Open room</button>';
+    } else if(m && m.status === 'playing'){
+      if(m.turn === me){ cls += ' your-turn'; status = 'Your turn — shoot!'; }
+      else { status = 'Waiting for ' + (m.turn === m.aUid ? m.aName : m.bName) + '…'; statusCls = ' wait'; }
+      acts += '<button type="button" class="btn btn-light dm-mini" data-room-open="' + esc(entry.matchId) + '">Open room</button>';
+      acts += '<button type="button" class="btn btn-dark dm-mini" data-room-reset="' + esc(entry.matchId) + '">Reset match</button>';
+    } else if(roomExpired(entry)){
+      status = 'Invite expired (24h) — unjoined rooms only last a day'; statusCls = ' wait';
+      acts += '<button type="button" class="btn btn-light dm-mini" data-room-rechallenge="' + esc(code) + '">Challenge again</button>';
+      acts += '<button type="button" class="btn btn-dark dm-mini" data-room-close="' + esc(code) + '">Dismiss</button>';
+    } else if(entry.pendingFriend && !isMutualFriend(entry.guestUid)){
+      status = 'Requested, waiting — ' + (entry.guestName || 'your friend') + ' must accept your friend request first'; statusCls = ' wait';
+      acts += '<button type="button" class="btn btn-dark dm-mini" data-room-cancel="' + esc(code) + '">Cancel request</button>';
+    } else if(entry.matchId){
+      status = 'Room open'; statusCls = ' wait';
+      acts += '<button type="button" class="btn btn-light dm-mini" data-room-open="' + esc(entry.matchId) + '">Open room</button>';
+    } else {
+      status = 'Waiting for ' + (entry.guestName || 'your friend') + ' to join the room'; statusCls = ' wait';
+      if(isHost) acts += '<button type="button" class="btn btn-dark dm-mini" data-room-cancel="' + esc(code) + '">Cancel request</button>';
+    }
+    if(m && isStuck(m) && (m.status === 'waiting' || m.status === 'playing')){
+      status += ' · Looks stuck — Reset?';
+      if(acts.indexOf('data-room-reset') === -1) acts += '<button type="button" class="btn btn-dark dm-mini" data-room-reset="' + esc(entry.matchId) + '">Reset match</button>';
+    }
+    /* Share link — host only, only when Holo asks (she taps it; links
+       are never auto-created). The guest gets NO share action. */
+    var shareBtn = '', sharePanel = '';
+    if(isHost && !entry.withdrawn && !roomExpired(entry)){
+      shareBtn = '<button type="button" class="btn btn-dark dm-mini" data-room-share="' + esc(code) + '">Share link</button>';
+      if(shareOpen[code]){
+        sharePanel = '<div class="room-share"><input type="text" readonly value="' + esc(roomLink(code)) + '" aria-label="Room link" onclick="this.select()" />' +
+          '<div class="room-actions" style="margin-top:0"><button type="button" class="btn btn-light dm-mini" data-room-copy="' + esc(code) + '">Copy</button>' +
+          '<button type="button" class="btn btn-dark dm-mini" data-room-share-send="' + esc(code) + '">Share</button></div>' +
+          '<p class="room-note">Only you can share this link — your friend can\u2019t re-share it. They\u2019ll need to sign in first (register with an invite code). The link stays good through the game, then it\u2019s used up.</p></div>';
+      }
+    }
+    var h = '<div class="' + cls + '" data-room-code="' + esc(code) + '">';
+    h += '<div class="room-row"><b>🎱 8-Ball Pool</b><span class="room-status' + statusCls + '">' + esc(status) + '</span></div>';
+    h += '<p class="room-note">vs ' + esc(oppName) + ' · Room ' + esc(code) + (entry.createdAt ? ' · ' + timeShort(entry.createdAt) : '') + '</p>';
+    h += '<div class="room-actions">' + shareBtn + acts + '</div>';
+    h += sharePanel;
+    return h + '</div>';
+  }
+  function renderRooms(){
+    var sec = ensureSection();
+    if(!sec) return;
+    var me = myUid();
+    if(!me){
+      sec.innerHTML = '<h3 class="rooms-head">Rooms — play with a friend</h3><p class="rooms-sub">Sign in to see your game rooms.</p>';
+      return;
+    }
+    var ms = matchesCache();
+    var codes = Object.keys(registry).sort(function(a, b){ return (registry[b].createdAt || 0) - (registry[a].createdAt || 0); });
+    var h = '<h3 class="rooms-head">Rooms — play with a friend</h3>';
+    h += '<p class="rooms-sub">Your game rooms stay open until the game completes. Tap a tile when it\u2019s your turn.</p>';
+    h += nextMoveTiles(ms, me);
+    var cards = '';
+    codes.forEach(function(code){
+      var e = registry[code];
+      if(!e || e.closed) return;
+      cards += roomCardHtml(code, e, ms, me);
+    });
+    if(cards){
+      h += '<div class="room-list">' + cards + '</div>';
+    } else {
+      h += '<p class="rooms-sub">No rooms yet — challenge a friend from their card (Play) or from inside 8-Ball Pool.</p>';
+    }
+    sec.innerHTML = h;
+  }
+
+  /* ---------- pending-friend withdrawal watch ----------
+     A game invite riding on a friend request is withdrawn when the
+     request goes away without a friendship forming (decline or
+     cancel). The pool file enforces it on entry (pendingFriend rooms
+     refuse non-friends), and this sweep drops the Rooms tile so no
+     orphan invite lingers. */
+  var withdrawCheckedAt = 0;
+  function checkPendingFriendWithdrawals(){
+    var me = myUid(); if(!me) return;
+    var now = Date.now();
+    if(now - withdrawCheckedAt < 30000) return;
+    withdrawCheckedAt = now;
+    Object.keys(registry).forEach(function(code){
+      var e = registry[code];
+      if(!e || !e.pendingFriend || e.withdrawn || e.closed) return;
+      if(e.role !== 'host') return;
+      if(isMutualFriend(e.guestUid)){ e.pendingFriend = false; saveRegistry(); renderRooms(); return; }
+      api('GET', '/friendRequests/' + encodeURIComponent(e.guestUid) + '/' + encodeURIComponent(me)).then(function(row){
+        if(!row && !isMutualFriend(e.guestUid)){
+          var cur = registry[code];
+          if(cur && cur.pendingFriend && !cur.withdrawn){ cur.withdrawn = true; saveRegistry(); renderRooms(); }
+        }
+      });
+    });
+  }
+
+  function refreshRooms(){
+    var p = null;
+    try { if(window.holoTurn && window.holoTurn.refresh) p = window.holoTurn.refresh(); } catch(e){}
+    if(p && p.then) p.then(function(){ renderRooms(); checkPendingFriendWithdrawals(); });
+    else { renderRooms(); checkPendingFriendWithdrawals(); }
+  }
+
+  /* ---------- click delegation (survives re-renders) ---------- */
+  document.addEventListener('click', function(ev){
+    var t = ev.target && ev.target.closest ? ev.target.closest('[data-room-accept],[data-room-decline],[data-room-open],[data-room-rematch],[data-room-diffgame],[data-room-reset],[data-room-report],[data-room-cancel],[data-room-close],[data-room-share],[data-room-copy],[data-room-share-send],[data-room-rechallenge],[data-room-pickgame]') : null;
+    if(!t) return;
+    var mid, code, m, me;
+    if(t.hasAttribute('data-room-accept')){ acceptMatch(t.getAttribute('data-room-accept')); return; }
+    if(t.hasAttribute('data-room-decline')){ declineMatch(t.getAttribute('data-room-decline')); return; }
+    if(t.hasAttribute('data-room-open')){ openMatch(t.getAttribute('data-room-open')); return; }
+    if(t.hasAttribute('data-room-reset')){ resetMatch(t.getAttribute('data-room-reset')); return; }
+    if(t.hasAttribute('data-room-report')){
+      if(typeof fbOpen === 'function'){ try { fbOpen('8-ball-pool'); } catch(e){ toast('Report is in the game view — open 8-Ball Pool first.'); } }
+      else toast('Report is in the game view — open 8-Ball Pool first.');
+      return;
+    }
+    if(t.hasAttribute('data-room-cancel')){ cancelRoom(t.getAttribute('data-room-cancel')); return; }
+    if(t.hasAttribute('data-room-close')){
+      code = t.getAttribute('data-room-close');
+      if(registry[code]){ registry[code].closed = true; saveRegistry(); }
+      renderRooms(); return;
+    }
+    if(t.hasAttribute('data-room-share')){
+      code = t.getAttribute('data-room-share');
+      shareOpen[code] = !shareOpen[code];
+      renderRooms(); return;
+    }
+    if(t.hasAttribute('data-room-copy')){ copyText(roomLink(t.getAttribute('data-room-copy')), 'Link copied — paste it into a text.'); return; }
+    if(t.hasAttribute('data-room-share-send')){ shareLink(t.getAttribute('data-room-share-send')); return; }
+    if(t.hasAttribute('data-room-rechallenge')){
+      code = t.getAttribute('data-room-rechallenge');
+      var e = registry[code];
+      if(e){ var gUid = e.guestUid, gName = e.guestName; e.closed = true; saveRegistry(); challengePool(gUid, gName); }
+      return;
+    }
+    if(t.hasAttribute('data-room-rematch')){
+      mid = t.getAttribute('data-room-rematch');
+      m = matchesCache()[mid]; me = myUid();
+      if(!m || !me) return;
+      var opp = (m.aUid === me) ? { uid:m.bUid, name:m.bName } : { uid:m.aUid, name:m.aName };
+      /* Rematch in the same room: the old card closes and the new
+         challenge carries the room on (same friend, same game). The
+         old share link stays dead — the new match gets a fresh one. */
+      if(m.roomCode && registry[m.roomCode]){ registry[m.roomCode].closed = true; saveRegistry(); }
+      challengePool(opp.uid, opp.name);
+      return;
+    }
+    if(t.hasAttribute('data-room-diffgame')){
+      mid = t.getAttribute('data-room-diffgame');
+      m = matchesCache()[mid]; me = myUid();
+      if(!m || !me) return;
+      var opp2 = (m.aUid === me) ? { uid:m.bUid, name:m.bName } : { uid:m.aUid, name:m.aName };
+      var card = t.closest('.room-card') || t.closest('.turn-board-wrap');
+      if(!card) return;
+      var existing = card.querySelector('.turn-play-menu');
+      if(existing){ existing.remove(); return; }
+      var games = [];
+      try { games = (window.holoTurn && window.holoTurn.turnGames) ? window.holoTurn.turnGames() : []; } catch(e){}
+      if(!games.length) games = [{ slug:'tic-tac-toe', name:'Tic Tac Toe', icon:'❌' }];
+      var menu = document.createElement('div');
+      menu.className = 'turn-play-menu';
+      menu.setAttribute('role', 'menu');
+      menu.innerHTML = '<h4>Play with ' + esc(opp2.name) + ' — pick a game</h4>' + games.map(function(g, i){
+        return '<button type="button" class="turn-play-game" data-room-pickgame="' + esc(g.slug) + '" data-room-pickuid="' + esc(opp2.uid) + '" data-room-pickname="' + esc(opp2.name) + '" role="menuitem">' + esc(g.icon || '🎮') + ' ' + esc(g.name) + '</button>';
+      }).join('') + '<p class="turn-play-note">Turn-based — take turns whenever you like.</p>';
+      card.appendChild(menu);
+      return;
+    }
+    if(t.hasAttribute('data-room-pickgame')){
+      var slug = t.getAttribute('data-room-pickgame');
+      var puid = t.getAttribute('data-room-pickuid');
+      var pname = t.getAttribute('data-room-pickname');
+      var menuEl = t.closest('.turn-play-menu');
+      if(menuEl) menuEl.remove();
+      if(slug === '8-ball-pool') challengePool(puid, pname);
+      else if(window.holoTurn && window.holoTurn.challenge) window.holoTurn.challenge(puid, pname, slug);
+      return;
+    }
+  });
+  document.addEventListener('click', function(ev){
+    if(ev.target && ev.target.closest && ev.target.closest('.turn-play-menu')) return;
+    document.querySelectorAll('#roomsSection .turn-play-menu, #turnPlay .turn-play-menu').forEach(function(m){ m.remove(); });
+  });
+
+  /* ---------- boot ---------- */
+  try {
+    new MutationObserver(function(){ if(document.body.getAttribute('data-view') === 'friends') renderRooms(); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] });
+  } catch(e){}
+  setInterval(function(){ if(myUid()) refreshRooms(); }, 20000);
+  setTimeout(function(){ renderRooms(); refreshRooms(); }, 2500);
+
+  window.holoRooms = {
+    challengePool:challengePool, joinRoom:joinRoom, openMatch:openMatch, resetMatch:resetMatch,
+    acceptMatch:acceptMatch, declineMatch:declineMatch, cancelRoom:cancelRoom,
+    poolMatchHtml:poolMatchHtml, isStuck:isStuck, roomPendingFriend:roomPendingFriend,
+    renderRooms:renderRooms, refresh:refreshRooms, roomLink:roomLink,
+    rooms:function(){ return JSON.parse(JSON.stringify(registry)); }
+  };
+})();
+</script>
+
 
 
 <!-- END-BAR-2026-11-22 (Holo 23:03): after a game finishes, show
