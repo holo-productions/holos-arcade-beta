@@ -20015,7 +20015,7 @@ function renderTesterAuth(){
     { title:'Back works everywhere',
       text:'Your browser\u2019s Back button works all over the Arcade now \u2014 every game and page has its own place in history. Inside a game, the Back button up top takes you back to the Library.',
       prepare:function(){ showMain(); closeNavPanel(); if(window.holoShowView) window.holoShowView('library', { keepScroll:true }); },
-      target:function(){ return firstShown(['#libraryNavLink']); } },
+      target:function(){ return firstShown(['#libraryNavLink', '#playDropBtn']); } },
     { title:'Tap the envelope',
       text:'See the envelope up top? Tap it to open your Inbox \u2014 that\u2019s where replies, friend requests, drafts and news land.',
       prepare:function(){ showMain(); if(window.holoShowView) window.holoShowView('main', { keepScroll:true, skipHash:true }); openNavPanelFor('#inboxBellBtn'); },
@@ -27847,6 +27847,118 @@ body.in-game .rff-frame{height:calc(100dvh - 150px)}
   body[data-view="inbox"]:not(.auth-locked) .topbar-inner .logo-full{height:26px;max-height:26px}
 }
 </style>
+
+<style>
+/* PLAY-DROPDOWN-2026-11-25 (Holo 00:24 photo: top-nav buttons overlapped — Friends clipped to "Frien" by the Fullscreen pill). One Play dropdown holds Favourites, Rooms, Categories, Library so the bar fits. The three links stay in #subNav for the phone panel; on desktop (>=1024px, bar context) they hide and the Play button shows. The menu portals to body (position:fixed) so #subNav's overflow-x:auto never clips it. Menu items reuse the links' own click handlers (same destinations); Rooms opens Friends + scrolls to #roomsSection. */
+#playDropBtn{display:none}
+#playDropMenu{position:fixed;z-index:90;min-width:200px;max-width:calc(100vw - 16px);background:#0a0620;border:2px solid var(--violet);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.55)}
+#playDropMenu[hidden]{display:none}
+#playDropMenu button{display:flex;align-items:center;width:100%;min-height:44px;padding:10px 14px;background:transparent;color:#e9e4ff;border:2px solid transparent;border-radius:10px;font-family:var(--pixel);font-size:11px;line-height:1.6;text-align:left;cursor:pointer;white-space:nowrap}
+#playDropMenu button:hover{border-color:var(--pink);color:#fff}
+#playDropMenu button.active{border-color:var(--pink);color:#fff}
+@media (min-width:1024px){
+  .topbar-inner #subNav #playDropBtn{display:inline-flex;align-items:center;flex:0 0 auto;color:#e9e4ff;text-decoration:none;font-family:var(--pixel);font-size:10px;line-height:1.6;padding:8px 12px;border:2px solid transparent;border-radius:999px;white-space:nowrap;background:transparent;cursor:pointer}
+  .topbar-inner #subNav #playDropBtn:hover{border-color:var(--pink);color:#fff}
+  .topbar-inner #subNav #playDropBtn.active{background:transparent;color:#fff;border-color:var(--pink)}
+  .topbar-inner #subNav a#libraryNavLink,.topbar-inner #subNav a#categoriesNavLink,.topbar-inner #subNav a#favoritesNavLink{display:none}
+  body.in-game .topbar-inner #subNav #playDropBtn{padding:4px 9px;font-size:9px}
+}
+@media (min-width:1024px) and (max-width:1280px){
+  .topbar-inner #subNav #playDropBtn{padding:4px 5px;font-size:8.5px}
+}
+</style>
+
+<script>
+/* PLAY-DROPDOWN-2026-11-25 (Holo 00:24 photo: nav buttons overlapped). One Play dropdown in #subNav: Favourites, Rooms, Categories, Library. */
+(function(){
+  "use strict";
+  var sn = document.getElementById('subNav');
+  if(!sn || document.getElementById('playDropBtn')) return;
+  var btn = document.createElement('button');
+  btn.type = 'button'; btn.id = 'playDropBtn';
+  btn.setAttribute('aria-haspopup', 'true');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.setAttribute('aria-label', 'Play — Favourites, Rooms, Categories, Library');
+  btn.textContent = '▶ Play';
+  sn.insertBefore(btn, sn.firstChild);
+  var menu = document.createElement('div');
+  menu.id = 'playDropMenu'; menu.setAttribute('role', 'menu'); menu.hidden = true;
+  var ITEMS = [
+    { label:'Favourites', link:'favoritesNavLink' },
+    { label:'Rooms', rooms:true },
+    { label:'Categories', link:'categoriesNavLink' },
+    { label:'Library', link:'libraryNavLink' }
+  ];
+  var itemBtns = {};
+  ITEMS.forEach(function(it){
+    var b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('role', 'menuitem'); b.textContent = it.label;
+    b.addEventListener('click', function(){
+      closeMenu();
+      if(it.rooms){
+        try { if(window.holoShowView) window.holoShowView('friends'); else location.hash = '#friends'; }
+        catch(e){ location.hash = '#friends'; }
+        setTimeout(function(){
+          var r = document.getElementById('roomsSection');
+          if(r){ try { r.scrollIntoView({ behavior:'smooth', block:'start' }); } catch(e){} }
+        }, 250);
+        return;
+      }
+      var a = document.getElementById(it.link);
+      if(a) a.click();
+    });
+    menu.appendChild(b);
+    itemBtns[it.label] = b;
+  });
+  document.body.appendChild(menu);
+  function placeMenu(){
+    var r = btn.getBoundingClientRect();
+    var w = menu.offsetWidth || 200;
+    menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    menu.style.top = (r.bottom + 6) + 'px';
+  }
+  function openMenu(){
+    menu.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    placeMenu();
+  }
+  function closeMenu(){
+    if(menu.hidden) return;
+    menu.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  }
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    if(menu.hidden) openMenu(); else closeMenu();
+  });
+  document.addEventListener('click', function(e){
+    if(!menu.hidden && e.target !== menu && !menu.contains(e.target) && e.target !== btn) closeMenu();
+  }, true);
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeMenu(); });
+  window.addEventListener('resize', closeMenu);
+  window.addEventListener('scroll', closeMenu, true);
+  /* Mirror the active view onto the Play button + its menu item:
+     syncSubNav only touches <a> links, so watch the three links'
+     .active class and reflect it here. */
+  var LINK_FOR = { libraryNavLink:'Library', categoriesNavLink:'Categories', favoritesNavLink:'Favourites' };
+  function mirror(){
+    var active = null;
+    Object.keys(LINK_FOR).forEach(function(id){
+      var a = document.getElementById(id);
+      if(a && a.classList.contains('active')) active = LINK_FOR[id];
+    });
+    btn.classList.toggle('active', !!active);
+    Object.keys(itemBtns).forEach(function(label){
+      itemBtns[label].classList.toggle('active', label === active);
+    });
+  }
+  try {
+    var mo = new MutationObserver(function(){ mirror(); });
+    mo.observe(sn, { attributes:true, attributeFilter:['class'], subtree:true });
+  } catch(e){}
+  mirror();
+})();
+</script>
 
 <script>
 /* NAV-ONEBAR-2026-11-22 (Holo 23:25): rearrange the header into
