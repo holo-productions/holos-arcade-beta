@@ -26015,6 +26015,55 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       return api('GET', '/users/' + encodeURIComponent(uid) + '/dmArchived');
     }).then(function(av){
       archived = (av && typeof av === 'object') ? av : {};
+      /* DM-THREAD-DISCOVERY-2026-11-25 (Holo 2026-11-25 16:53 "Fix"): a
+         brand-new thread was invisible to the PARTNER — the thread list
+         is built from your own /users/$uid/dmInbox only, and the sender's
+         bumpPartnerInbox cross-user write into the partner's dmInbox is
+         denied under the current published rules (known since 12:44; the
+         pending publish restores it). The message itself always landed:
+         the hub's ensureThread PUT (participants as a MAP) returns 200
+         under the current rules — the 16:46 "401" was the probe's own
+         ARRAY shape, which the rules reject. So on every refresh, probe
+         each mutual friend's pair thread directly (either participant may
+         read it) and surface threads that have messages but no dmInbox
+         entry yet. The entry is persisted to your OWN dmInbox (own write
+         — allowed), so markRead/archive keep working. Later messages
+         still can't bump unread until the rules publish, but the thread,
+         its latest preview and its badge are live from the first message. */
+      var cf = {};
+      try { cf = (window.holoFriends && window.holoFriends.cloudFriends) ? window.holoFriends.cloudFriends() : {}; } catch(e){}
+      var jobs = Object.keys(cf).map(function(fuid){
+        if(fuid === uid) return Promise.resolve(null);
+        if(window.holoBlockReport && window.holoBlockReport.isBlocked(fuid)) return Promise.resolve(null);
+        var p = pairParts(uid, fuid);
+        var tid = pairKey(uid, fuid);
+        /* push keys sort chronologically, so limitToLast needs no index */
+        return api('GET', '/dmThreads/' + encodeURIComponent(p[0]) + '/' + encodeURIComponent(p[1]) + '/messages?limitToLast=50').then(function(msgs){
+          if(!msgs || typeof msgs !== 'object') return null;
+          var list = Object.keys(msgs).map(function(k){ return msgs[k]; }).filter(function(m){ return m && typeof m === 'object' && m.fromUid; });
+          if(!list.length) return null;
+          list.sort(function(x, y){ return (x.createdAt || 0) - (y.createdAt || 0); });
+          var last = list[list.length - 1];
+          var unread = 0;
+          list.forEach(function(m){ if(m.fromUid !== uid) unread++; });
+          var preview = (last.kind === 'sticker') ? ('[sticker:' + (last.sticker || '') + ']') : String(last.text || '');
+          var entry = threads[tid];
+          if(!entry){
+            entry = { withUid: fuid, withName: friendName(fuid), lastMessageAt: last.createdAt || Date.now(), lastPreview: preview, lastKind: last.kind || 'text', unread: unread };
+            if(last.sticker) entry.lastSticker = last.sticker;
+            threads[tid] = entry;
+            api('PUT', '/users/' + encodeURIComponent(uid) + '/dmInbox/' + encodeURIComponent(tid), entry);
+          } else {
+            /* listed thread: refresh preview/time from live messages; unread stays as stored — markRead owns it */
+            entry.lastMessageAt = last.createdAt || entry.lastMessageAt;
+            entry.lastPreview = preview;
+            entry.lastKind = last.kind || 'text';
+            if(last.sticker) entry.lastSticker = last.sticker; else delete entry.lastSticker;
+          }
+          return true;
+        }).catch(function(){ return null; });
+      });
+      return Promise.all(jobs).then(function(){
       /* DM-UNARCHIVE-REPLY-2026-11-24 (Holo 2026-11-24 16:17): a reply to a message you already archived lands back in your Inbox. The sender bumps lastMessageAt + unread on every message, so a reply after the archive time unarchives the thread — it returns to Messages with its unread badge. A thread with no reply after archiving stays archived. */
       Object.keys(threads).forEach(function(tid){
         if(!archived[tid]) return;
@@ -26027,6 +26076,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       /* NOTIFY-POPUP-2026-11-25: new-thread hook for the bottom-right pop-up — the pop-up module diffs thread unread counts for fresh DMs. Detection only; never edits threads. */
       try { if(window.holoNotifyPopups && typeof window.holoNotifyPopups.onDmThreads === 'function') window.holoNotifyPopups.onDmThreads(threads, muted, openTid); } catch(e){}
       return true;
+      });
     });
   }
 
