@@ -30611,10 +30611,12 @@ body.wt-shell .wt-rail #recentShelf h2{font-size:20px;white-space:nowrap;}
      width and forced 3-line names, pushing the shelf 54px over. */
   #recentShelf .recent-tile .fav-duck-extra{display:none;}
   #recentShelf .recent-tile>b{padding-right:0;}
-  #recentShelf .recent-note{display:none;}
-  /* Phone shelf: intro hidden too (already hidden in the rail dock)
-     — the step title + Play buttons say it all. */
-  #recentShelf>p{display:none;}
+  body.wt-shell .wt-step-body #recentShelf .recent-note{display:none;}
+  /* Phone shelf: intro hidden too inside a walk step (already hidden
+     in the rail dock) — the step title + Play buttons say it all.
+     MAIN-REVERT-2026-11-25: on the reverted main page the intro and
+     note show again, as they did before the walk-through. */
+  body.wt-shell .wt-step-body #recentShelf>p{display:none;}
 }
 /* Compact hero inside a walk step: the wordmark panel is the tall bit
    (685px desktop). It used to be hidden on desktop because the logo
@@ -30801,6 +30803,23 @@ body.wt-on #loginView.wt-gate-steps .login-card .gate-form-title{margin:0 0 6px;
 .player-coin{font-family:var(--pixel);font-size:8px;line-height:1.6;letter-spacing:1px;color:var(--gold);border:1.5px solid var(--gold);border-radius:999px;padding:5px 8px;white-space:nowrap;pointer-events:none;flex:0 0 auto;text-shadow:0 0 8px rgba(255,176,32,.6);box-shadow:0 0 10px rgba(255,176,32,.35)}
 #player:has(#endBar:not([hidden])) .player-coin{display:none}
 @media (max-width:560px){.player-coin{font-size:7px;padding:4px 6px;letter-spacing:.5px}}
+
+/* ============ MAIN-REVERT-2026-11-25 (Holo 2026-11-25 15:45) ============
+   "Put the MAIN page back to what it was before the side nav change"
+   — hero banner, the normal game grid, Recently Played as a regular
+   in-flow section, no walk-through steps/panes on the main page.
+   The main stage is not built (see the script below); the hero,
+   banners, featured game and #recentShelf stay in their original
+   places in main.wrap and the page scrolls like it did before
+   commit 6ee1d0a6. The single-window shell (100dvh flex column)
+   must not constrain main, so on the main view only the shell
+   becomes a plain scrolling block. Every other view keeps the
+   shell and its walk stage. No stage ever shows on main. */
+body[data-view="main"].wt-shell{display:block;height:auto;min-height:100dvh;}
+body[data-view="main"].wt-shell>header.topbar{flex:none;}
+body[data-view="main"].wt-shell main.wrap{display:block;flex:none;min-height:0;}
+body[data-view="main"].wt-shell>footer{flex:none;}
+body[data-view="main"] .wt-stage{display:none!important;}
 </style>
 
 <script>
@@ -30894,7 +30913,7 @@ function makeStage(view,build){
   var next=document.createElement('button');next.type='button';next.className='btn btn-primary wt-next';next.textContent='Next →';
   S.nav.appendChild(back);S.nav.appendChild(dots);S.nav.appendChild(kick);S.nav.appendChild(next);
   on(back,'click',function(){showStep(S,S.idx-1);});
-  on(next,'click',function(){var vis=visibleSteps(S);if(S.idx>=vis.length-1){activate('main');}else showStep(S,S.idx+1);});
+  on(next,'click',function(){var vis=visibleSteps(S);if(S.idx>=vis.length-1){/* MAIN-REVERT-2026-11-25: no main stage any more — the last step of a walk goes home through the hub's own view switcher (activate('main') is a no-op now). */if(window.holoShowView)window.holoShowView('main');else activate('main');}else showStep(S,S.idx+1);});
   S.col.appendChild(S.stepsEl);S.col.appendChild(S.nav);
   S.el.appendChild(S.col);
   S.addStep=function(title,fill,opts){
@@ -30957,7 +30976,11 @@ function makeStage(view,build){
   stages[view]=S;return S;
 }
 function activate(view){
-  var S=stages[view];if(!S)return;
+  var S=stages[view];
+  /* MAIN-REVERT-2026-11-25: a view with no stage (main) still drops
+     every stage's active class, or the last walk's nav/kicker lingers
+     in the DOM behind the reverted page. */
+  if(!S){Object.keys(stages).forEach(function(v){stages[v].el.classList.remove('active');});return;}
   if(!S.built){
     if(S.build)S.build(S);
     S.built=true;
@@ -30979,9 +31002,11 @@ function watchViews(){
       var v=viewOf();if(v===lastView)return;
       var prev=stages[lastView];if(prev&&prev.onHide)prev.onHide();
       lastView=v;activate(v);
+      /* MAIN-REVERT-2026-11-25: no main stage — put the shelf home. */
+      if(v==='main')restoreMain();
     });
   }).observe(document.body,{attributes:true,attributeFilter:['data-view']});
-  setTimeout(function(){activate(viewOf());},50);
+  setTimeout(function(){activate(viewOf());if(viewOf()==='main')restoreMain();},50);
 }
 on(window,'resize',function(){var S=stages[viewOf()];if(S)guardOverflow(S);});
 
@@ -31042,38 +31067,29 @@ function tilePager(tiles){
    banner (764px) + Recently played (~250px) can never fit a
    ~550px laptop-height rail without cutting copy, so the banner
    left the rail; Recently played still docks right on desktop. */
-makeStage('main',function(S){
-  var hero=$('.hero'),featured=$('.featured'),
-      cont=$('#continueBanner'),club=$('#clubBanner'),
-      recent=$('#recentShelf'),dash=$('#ownerDashMount');
-  S.addStep('Welcome',function(b){if(cont)b.appendChild(cont);if(hero)b.appendChild(hero);});
-  S.addStep('Featured',function(b){if(featured)b.appendChild(featured);});
-  var s3=S.addStep('Glitch Squad',function(b){if(club)b.appendChild(club);});
-  S.addStep('Categories',function(b){
-    var src=$('#catGrid');if(src){b.appendChild(tilePager(cloneTiles(src)));}
-  });
-  var s5=S.addStep('Recently played',function(b){if(recent)b.appendChild(recent);});
-  /* Recently played docks right of the stage on desktop (>=1280px)
-     and is a step again on narrow screens. Glitch Squad stays a
-     step at all widths (see the banner-fit note in the CSS). */
-  S.railFor([{node:recent,step:s5}]);
-  S.onShow=function(){
-    /* The Owner Dash step is gone, so the unclaimed #ownerDashMount
-       (buildDash unhides it for the owner) must stay hidden while
-       this stage is active, or it renders as a stray block above
-       the stage. The crown button still opens the Tester Live View. */
-    hideSrc(dash);
-    /* CATEGORIES-SHELF-FIX-2026-11-25: re-rail the shelf on every
-       return to Main — a visit elsewhere parks it in another stage
-       (or the rail apply never re-runs), leaving the home rail empty. */
-    if(S.__railApply)S.__railApply();
-    /* The hero's "Browse the Library" links land on the games step. */
-    $$('a[href="#all-games"]').forEach(function(a){
-      if(!a.__wtBound){a.__wtBound=true;on(a,'click',function(){pendingStep.library=1;},true);}
-    });
-  };
-  S.onHide=function(){showSrc(dash);};
-});
+/* ---------- MAIN: REVERTED to the pre-walk-through layout ----------
+   MAIN-REVERT-2026-11-25 (Holo 2026-11-25 15:45): "put the MAIN page
+   back to what it was before the side nav change" — hero banner, the
+   normal game grid, Recently Played as a regular in-flow section, no
+   walk-through steps/panes on the main page. The main stage is NOT
+   built: the hero, banners, featured game and #recentShelf stay in
+   their original places in main.wrap and the page scrolls like it did
+   before commit 6ee1d0a6. Every other view keeps its walk stage.
+   Two leftovers from the old main stage still need a home on main:
+   (1) #recentShelf — the Library stage moves it into its Recently
+   played step on visit; restoreMain() puts it back in flow whenever
+   the main view shows again (home captured here at load, before any
+   stage runs). (2) The hero's "Browse all games" links — they already
+   bind to the Library Games step in the mount section below
+   ("Library link from the hero + nav"), not here. The Owner Dash
+   mount needs nothing: buildDash unhides it for the owner, exactly
+   as it did before the walk-through (a section on the main page). */
+var __mainShelfHome=(function(){var rs=document.getElementById('recentShelf');return rs?{parent:rs.parentNode,next:rs.nextSibling}:null;})();
+function restoreMain(){
+  var rs=document.getElementById('recentShelf');if(!rs||!__mainShelfHome)return;
+  var h=__mainShelfHome;
+  if(rs.parentNode!==h.parent||rs.nextSibling!==h.next)h.parent.insertBefore(rs,h.next);
+}
 
 /* ---------- LIBRARY: Pick a shelf / Games (paged) ---------- */
 var libPager={page:0,per:8,list:[]};
