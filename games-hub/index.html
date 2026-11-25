@@ -1078,8 +1078,8 @@ body.login-faq-open .login-faq-nav-title{display:block;position:absolute;left:50
 .br-btn{flex:0 0 auto;padding:8px 12px;border-radius:10px;border:1.5px solid var(--line);background:var(--card);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer;min-height:40px}
 .br-btn:hover{border-color:var(--pink);color:var(--pink)}
 .br-btn.br-block:hover{border-color:var(--bad);color:var(--bad)}
-#brBlockedSection{margin-top:16px}
-#brBlockedSection h3{margin:0 0 4px;font-family:"Bricolage Grotesque",sans-serif;font-size:17px}
+#brBlockedSection,.br-blocked-host{margin-top:16px}
+#brBlockedSection h3,.br-blocked-host h3{margin:0 0 4px;font-family:"Bricolage Grotesque",sans-serif;font-size:17px} /* UNBLOCK-SETTINGS-2026-11-25 */
 .br-blocked-row{display:flex;gap:12px;align-items:center;background:var(--bg2);border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;margin-top:8px}
 .br-blocked-row b{flex:1;min-width:0;overflow-wrap:anywhere}
 #brReportOverlay{position:fixed;inset:0;z-index:135;background:rgba(6,3,20,.72);display:flex;align-items:center;justify-content:center;padding:18px}
@@ -3369,6 +3369,14 @@ setTimeout(function(){
           <button class="tgl" id="friendReqToggle" type="button" aria-pressed="true">On</button>
         </div>
         <p id="friendReqSettingMsg" class="acct-set-msg" role="status" hidden></p>
+      </div>
+      </details>
+      <!-- UNBLOCK-SETTINGS-2026-11-25: Blocked testers in Settings — same list as Friends; unblocking here is a settings change, so it goes through the parent PIN gate. -->
+      <details class="acct-fold" id="fold-unblock">
+        <summary>Blocked testers</summary>
+      <div class="blocked-setting" id="blockedSettingBox">
+        <p class="contact-note">Testers you blocked can't message you or send friend requests. They are not told. Unblock someone here to let them reach you again.</p>
+        <div class="br-blocked-host" id="brBlockedSectionSettings" data-show-empty="1" hidden></div>
       </div>
       </details>
       <details class="acct-fold" id="fold-download">
@@ -8416,6 +8424,7 @@ setTimeout(function(){
   function gateSettingsChange(label, fn){
     requireParentPin('Enter the parent PIN to change ' + label + '.', function(ok){ if(ok) fn(); });
   }
+  window.holoGateSettingsChange = gateSettingsChange; /* UNBLOCK-SETTINGS-2026-11-25: the Settings blocked list (BLOCK-REPORT script) gates unblocks through this. */
 
   /* ---------- One modal, reused by every 18+ step ---------- */
   var overlay = null, titleEl = null, bodyEl = null;
@@ -25457,25 +25466,53 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 
   /* ---------- Blocked section in Friends ---------- */
   function renderBlockedList(){
-    var host = document.getElementById('brBlockedSection');
-    if(!host){
+    /* UNBLOCK-SETTINGS-2026-11-25: the Blocked list renders in TWO places — Friends (#brBlockedSection, created after the friend grid if missing, as before) and Settings (#brBlockedSectionSettings, static host in the fold-unblock fold). Unblocking from Settings is a settings change, so it goes through the parent PIN gate (window.holoGateSettingsChange, exposed by the AGE18 script); the Friends list stays ungated. Rows use the runner-duck SVG, not the duck emoji. */
+    var hosts = [];
+    var fh = document.getElementById('brBlockedSection');
+    if(!fh){
       var grid = document.getElementById('cloudFriendGrid') || document.getElementById('friendGrid');
-      if(!grid || !grid.parentNode) return;
-      host = document.createElement('div');
-      host.id = 'brBlockedSection';
-      grid.parentNode.insertBefore(host, grid.nextSibling);
+      if(grid && grid.parentNode){
+        fh = document.createElement('div');
+        fh.id = 'brBlockedSection';
+        fh.className = 'br-blocked-host';
+        grid.parentNode.insertBefore(fh, grid.nextSibling);
+      }
     }
+    if(fh) hosts.push(fh);
+    var sh = document.getElementById('brBlockedSectionSettings');
+    if(sh) hosts.push(sh);
+    if(!hosts.length) return;
     var list = blockedList();
-    if(!list.length){ host.innerHTML = ''; host.hidden = true; return; }
-    host.hidden = false;
-    host.innerHTML = '<h3>Blocked testers</h3>' +
-      '<p style="margin:0;color:var(--muted);font-size:13.5px">They can\'t message you or send friend requests. They are not told.</p>' +
-      list.map(function(b){
-        return '<div class="br-blocked-row"><span class="friend-avatar" aria-hidden="true">🦆</span><b>' + esc(b.name) + '</b>' +
-          '<button type="button" class="btn btn-light" data-br-unblock="' + esc(b.uid) + '" data-br-name="' + esc(b.name) + '">Unblock</button></div>';
-      }).join('');
-    host.querySelectorAll('[data-br-unblock]').forEach(function(btn){
-      btn.addEventListener('click', function(){ unblockUser(btn.getAttribute('data-br-unblock'), btn.getAttribute('data-br-name') || 'Tester'); });
+    hosts.forEach(function(host){
+      var showEmpty = host.getAttribute('data-show-empty') === '1';
+      if(!list.length){
+        if(showEmpty){
+          host.hidden = false;
+          host.innerHTML = '<h3>Blocked testers</h3><p style="margin:0;color:var(--muted);font-size:13.5px">Nobody blocked yet — anyone you block will show up here.</p>';
+        } else {
+          host.innerHTML = '';
+          host.hidden = true;
+        }
+        return;
+      }
+      host.hidden = false;
+      host.innerHTML = '<h3>Blocked testers</h3>' +
+        '<p style="margin:0;color:var(--muted);font-size:13.5px">They can\'t message you or send friend requests. They are not told.</p>' +
+        list.map(function(b){
+          return '<div class="br-blocked-row"><span class="friend-avatar" aria-hidden="true"><svg class="runner-duck runner-duck-sm" aria-hidden="true"><use href="#runnerDuck"></use></svg></span><b>' + esc(b.name) + '</b>' +
+            '<button type="button" class="btn btn-light" data-br-unblock="' + esc(b.uid) + '" data-br-name="' + esc(b.name) + '">Unblock</button></div>';
+        }).join('');
+      host.querySelectorAll('[data-br-unblock]').forEach(function(btn){
+        btn.addEventListener('click', function(){
+          var uid = btn.getAttribute('data-br-unblock');
+          var nm = btn.getAttribute('data-br-name') || 'Tester';
+          if(host.id === 'brBlockedSectionSettings' && typeof window.holoGateSettingsChange === 'function'){
+            window.holoGateSettingsChange('blocked testers', function(){ unblockUser(uid, nm); });
+          } else {
+            unblockUser(uid, nm);
+          }
+        });
+      });
     });
   }
 
