@@ -2001,6 +2001,8 @@ body[data-view="about"] .view-main,body[data-view="about"] .view-library,body[da
 /* SETTINGS-SPLIT-2026-11-23: standalone Settings view + Your account stats panel. */
 body[data-view="settings"] .view-main,body[data-view="settings"] .view-library,body[data-view="settings"] .view-daily,body[data-view="settings"] .view-favourites,body[data-view="settings"] #friends,body[data-view="settings"] #categories,body[data-view="settings"] #about,body[data-view="settings"] #yourArcadePanel{display:none!important}
 body:not([data-view="settings"]) #settingsPanel{display:none!important}
+/* ROOMS-BUBBLE-2026-11-25: Rooms is its own bubble on the Friends page — it only shows in the friends view, like #friends itself. */
+body:not([data-view="friends"]) #rooms{display:none!important}
 /* TOURNAMENT-HIDE-2026-11-25 (Holo 2026-11-25 00:02 + 09:21): the site-wide
    weekly tournament panel is HIDDEN in beta — it returns at launch. The
    panel is hidden by default; the body.tournaments-live class (set from the
@@ -3161,11 +3163,18 @@ setTimeout(function(){
     </form>
     <div class="friend-results" id="friendResults" aria-live="polite"></div>
     <p class="friend-msg" id="friendMsg" role="status"></p>
-    <!-- CHALLENGE-ROOM-2026-11-24: Rooms live here on the Friends page — next-move tiles + the room list. Filled by the Rooms module (window.holoRooms); empty until it renders. -->
-    <div id="roomsSection" aria-label="Game rooms"></div>
     <p id="friendEmpty" style="margin:14px 0 0;font-weight:700">No friends yet — search for a tester by Code Name above and they’ll show up here.</p>
     <div class="friend-grid" id="friendGrid"></div>
     <p style="margin:16px 0 0;color:var(--muted);font-size:13.5px">Friend requests work across devices — accept in your Inbox or right here.</p>
+  </section>
+
+  <!-- ================= ROOMS (game rooms) ================= -->
+  <!-- ROOMS-BUBBLE-2026-11-25 (Holo 2026-11-25 12:23): Rooms is its OWN bubble now, separate from Friends — one tile per active game. Filled by the Rooms module (window.holoRooms); empty until it renders. Hidden in every view except friends (see the #rooms rule in the view CSS). -->
+  <section class="hub-panel" id="rooms" aria-label="Game rooms">
+    <span class="kicker personal">Your Arcade</span>
+    <h2>Rooms</h2>
+    <p style="margin:0;color:var(--muted);max-width:640px">Your game rooms with friends — one tile per game, tap a tile to open it.</p>
+    <div id="roomsSection" aria-label="Game rooms"></div>
   </section>
 
   <section class="hub-panel" id="about" aria-label="About Holo's Arcade">
@@ -25739,6 +25748,14 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
        the check above usually stops this — this is the clearer message
        if a stale link is tapped anyway. */
     if(window.holoBlockReport && window.holoBlockReport.isBlocked(withUid)){ toast('You blocked this tester — unblock them in Friends to chat again.'); return; }
+    /* MESSAGE-BUTTON-FIX-2026-11-25 (Holo 2026-11-25 12:23): tapping
+       Message on a friend card did nothing visible — openThread unhid
+       #dmThread inside #inbox, but #inbox is display:none unless
+       body[data-view="inbox"], and this never switched the view, so
+       the thread opened inside a hidden section. Switch to the Inbox
+       view FIRST (holoShowView is the hub's own view switcher), then
+       open the thread. */
+    try { if(window.holoShowView) window.holoShowView('inbox'); else document.body.setAttribute('data-view', 'inbox'); } catch(e){}
     var parts = pairParts(uid, withUid);
     openA = parts[0]; openB = parts[1];
     openTid = pairKey(uid, withUid);
@@ -26344,6 +26361,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 .room-row b{color:#fff}
 .room-status{color:#b8f4ff;font-weight:700;font-size:13px}
 .room-status.wait{color:#cfc8ff}
+/* ROOMS-TILES-2026-11-25: "Your turn" tiles get the same gold highlight as a your-turn room card; the status line is gold for "Your turn", muted for "Waiting on other player". */
+.nextmove-tile.your-turn{border-color:#ffd43b;box-shadow:0 0 10px rgba(255,212,59,.35)}
+.nextmove-status{font-size:12.5px;color:var(--muted);line-height:1.4;font-weight:700}
+.nextmove-status.mine{color:#ffd43b}
 .room-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
 .room-share{margin:10px 0 0;padding:10px 12px;border:2px dashed #2a1b5e;border-radius:12px;background:#171040}
 .room-share input{width:100%;box-sizing:border-box;background:#0a0620;color:#e9e4ff;border:1.5px solid #2a1b5e;border-radius:8px;padding:8px 10px;font-size:13px;margin:0 0 8px}
@@ -26959,7 +26980,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
          button, same spot, same menu; only the label changed. Game tiles'
          own Play buttons, the top-nav Play dropdown, the game-menu Start
          button and the "Your turn" button are untouched. */
-      btn.type = 'button'; btn.className = 'btn btn-dark dm-mini turn-challenge-btn turn-play-btn'; btn.textContent = '▶ Duel';
+      btn.type = 'button'; btn.className = 'btn btn-dark dm-mini turn-challenge-btn turn-play-btn'; btn.textContent = 'Duel';
       btn.setAttribute('aria-haspopup', 'true');
       btn.addEventListener('click', function(ev){ ev.stopPropagation(); openPlayMenu(card, uid, name, btn); });
       /* FRIEND-ROW-2026-11-24: the old "Tic Tac Toe" pill is a Play button now — it opens a menu of the games with turn-based match support (TURN_GAMES; Tic Tac Toe only today), and lives top-right in .friend-top-actions, beside Message. */
@@ -26983,7 +27004,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     html += TURN_GAMES.map(function(g, i){
       return '<button type="button" class="turn-play-game" data-turn-play-game="' + i + '" role="menuitem">' + esc(g.icon || '🎮') + ' ' + esc(g.name) + '</button>';
     }).join('');
-    html += '<p class="turn-play-note">Turn-based — take turns whenever you like. More games join as multiplayer grows.</p>';
+    html += '<p class="turn-play-note">Challenge friends to a duel to play with them. Turn-based — take turns whenever you like. More games join as multiplayer grows.</p>';
     menu.innerHTML = html;
     menu.querySelectorAll('[data-turn-play-game]').forEach(function(b){
       b.addEventListener('click', function(){
@@ -27499,10 +27520,15 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     return h;
   }
 
-  /* ---------- Rooms section (Friends page) ---------- */
+  /* ---------- Rooms section (own bubble on the Friends page) ---------- */
   function ensureSection(){
     var sec = document.getElementById('roomsSection');
     if(sec) return sec;
+    /* ROOMS-BUBBLE-2026-11-25: the section lives in the Rooms bubble
+       now (its own <section id="rooms">); only fall back to Friends
+       if that bubble is somehow missing. */
+    var rooms = document.getElementById('rooms');
+    if(rooms){ sec = document.createElement('div'); sec.id = 'roomsSection'; sec.setAttribute('aria-label', 'Game rooms'); rooms.appendChild(sec); return sec; }
     var friends = document.getElementById('friends');
     if(!friends) return null;
     sec = document.createElement('div');
@@ -27513,21 +27539,33 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     else friends.appendChild(sec);
     return sec;
   }
-  /* NEXT-MOVE-TILES-2026-11-24: "your turn — next move" entries as
-     tiles side by side in a horizontal row, Recently Played tile
-     style; tapping a tile opens that game room. */
-  function nextMoveTiles(ms, me){
+  /* ROOMS-TILES-2026-11-25 (Holo 2026-11-25 12:23 + add-on): Rooms shows
+     ONE TILE per active game — every live turn match (playing or
+     waiting), not just the ones where it is my turn. Tile title = game
+     vs opponent ("Tic Tac Toe vs MamaBear"); turn status is re-read
+     from the live match state at render — refreshRooms() re-reads
+     /turnMatches from Firebase before renderRooms() runs, so a tile
+     never shows a stale turn. "Your turn" (gold highlight) when
+     m.turn === me (or when a waiting challenge needs my accept);
+     "Waiting on other player" when it is not my move. Tapping a tile
+     opens that game room. Replaces NEXT-MOVE-TILES-2026-11-24, which
+     only tiled my-turn matches. */
+  function activeGameTiles(ms, me){
     var mids = Object.keys(ms).sort(function(a, b){ return (ms[b].updatedAt || 0) - (ms[a].updatedAt || 0); });
-    var mine = mids.filter(function(mid){
+    var active = mids.filter(function(mid){
       var m = ms[mid];
-      return m && m.status === 'playing' && m.turn === me;
+      return m && (m.status === 'playing' || m.status === 'waiting');
     });
-    if(!mine.length) return '';
-    var h = '<div class="nextmove-row" role="list" aria-label="Your turn — next move">';
-    mine.forEach(function(mid){
+    if(!active.length) return '';
+    var h = '<div class="nextmove-row" role="list" aria-label="Your games — one tile per game">';
+    active.forEach(function(mid){
       var m = ms[mid];
-      var opp = (m.aUid === me) ? m.bName : m.aName;
-      h += '<button type="button" class="nextmove-tile" role="listitem" data-room-open="' + esc(mid) + '"><b>' + esc(gameTitle(m.game)) + '</b><span>vs ' + esc(opp) + ' · Your turn — next move</span><span class="nextmove-play">▶ Open room</span></button>';
+      var oppUid = (m.aUid === me) ? m.bUid : m.aUid;
+      var opp = friendName(oppUid);
+      if(!opp || opp === 'Tester') opp = (m.aUid === me) ? m.bName : m.aName;
+      var mine = (m.status === 'playing' && m.turn === me) || (m.status === 'waiting' && m.bUid === me);
+      var status = mine ? 'Your turn' : 'Waiting on other player';
+      h += '<button type="button" class="nextmove-tile' + (mine ? ' your-turn' : '') + '" role="listitem" data-room-open="' + esc(mid) + '"><b>' + esc(gameTitle(m.game)) + ' vs ' + esc(opp) + '</b><span class="nextmove-status' + (mine ? ' mine' : '') + '">' + status + '</span><span class="nextmove-play">▶ Open room</span></button>';
     });
     return h + '</div>';
   }
@@ -27607,14 +27645,13 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(!sec) return;
     var me = myUid();
     if(!me){
-      sec.innerHTML = '<h3 class="rooms-head">Rooms — play with a friend</h3><p class="rooms-sub">Sign in to see your game rooms.</p>';
+      sec.innerHTML = '<p class="rooms-sub">Sign in to see your game rooms.</p>';
       return;
     }
     var ms = matchesCache();
     var codes = Object.keys(registry).sort(function(a, b){ return (registry[b].createdAt || 0) - (registry[a].createdAt || 0); });
-    var h = '<h3 class="rooms-head">Rooms — play with a friend</h3>';
-    h += '<p class="rooms-sub">Your game rooms stay open until the game completes. Tap a tile when it\u2019s your turn.</p>';
-    h += nextMoveTiles(ms, me);
+    var h = '<p class="rooms-sub">One tile per active game — tap a tile to open it. Your game rooms stay open until the game completes.</p>';
+    h += activeGameTiles(ms, me);
     var cards = '';
     codes.forEach(function(code){
       var e = registry[code];
@@ -27624,7 +27661,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(cards){
       h += '<div class="room-list">' + cards + '</div>';
     } else {
-      h += '<p class="rooms-sub">No rooms yet — challenge a friend from their card (Play) or from inside 8-Ball Pool.</p>';
+      h += '<p class="rooms-sub">No rooms yet — challenge a friend from their card (Duel) or from inside 8-Ball Pool.</p>';
     }
     sec.innerHTML = h;
   }
@@ -27724,7 +27761,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       menu.setAttribute('role', 'menu');
       menu.innerHTML = '<h4>Play with ' + esc(opp2.name) + ' — pick a game</h4>' + games.map(function(g, i){
         return '<button type="button" class="turn-play-game" data-room-pickgame="' + esc(g.slug) + '" data-room-pickuid="' + esc(opp2.uid) + '" data-room-pickname="' + esc(opp2.name) + '" role="menuitem">' + esc(g.icon || '🎮') + ' ' + esc(g.name) + '</button>';
-      }).join('') + '<p class="turn-play-note">Turn-based — take turns whenever you like.</p>';
+      }).join('') + '<p class="turn-play-note">Challenge friends to a duel to play with them. Turn-based — take turns whenever you like.</p>';
       card.appendChild(menu);
       return;
     }
