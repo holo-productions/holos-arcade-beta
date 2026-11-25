@@ -24051,6 +24051,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       }
       sweepStaleFriendRequests(a.uid);
       renderBadge(); renderList();
+      /* NOTIFY-POPUP-2026-11-25: new-item hook for the bottom-right pop-up — the pop-up module diffs these items for fresh duel invites + HQ notices. Never edits or marks anything; detection only. */
+      try { if(window.holoNotifyPopups && typeof window.holoNotifyPopups.onInboxItems === 'function') window.holoNotifyPopups.onInboxItems(items.slice()); } catch(e){}
       return items;
     });
   }
@@ -25889,6 +25891,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         if(at === true || (typeof at === 'number' && (t.lastMessageAt || 0) > at)) toggleArchive(tid, false);
       });
       buildUI(); renderList(); syncBadge(); syncDmVisibility();
+      /* NOTIFY-POPUP-2026-11-25: new-thread hook for the bottom-right pop-up — the pop-up module diffs thread unread counts for fresh DMs. Detection only; never edits threads. */
+      try { if(window.holoNotifyPopups && typeof window.holoNotifyPopups.onDmThreads === 'function') window.holoNotifyPopups.onDmThreads(threads, muted, openTid); } catch(e){}
       return true;
     });
   }
@@ -26164,7 +26168,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   setInterval(function(){ ensureBadge(); if(myUid()) refresh(); }, 30000);
   setInterval(function(){ injectMessageButtons(); }, 5000);
   setTimeout(function(){ buildUI(); refresh(); injectMessageButtons(); }, 2500);
-  window.holoDMs = { open: openThread, close: closeThread, refresh: refresh, unreadCount: unreadCount, stickers: STICKERS, emojis: EMOJIS, keyboard: toggleKeyboard };
+  window.holoDMs = { open: openThread, close: closeThread, refresh: refresh, unreadCount: unreadCount, stickers: STICKERS, emojis: EMOJIS, keyboard: toggleKeyboard, openThreadId:function(){ return openTid; } };
 })();
 </script>
 <script>
@@ -26754,7 +26758,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           var mid = r.name;
           api('PUT', '/users/' + encodeURIComponent(me) + '/turnMatches/' + encodeURIComponent(mid), true);
           api('PUT', '/users/' + encodeURIComponent(uid) + '/turnMatches/' + encodeURIComponent(mid), true);
-          sendNotice(uid, { type:'turn-invite', title: gName + ' challenge!', body: myN + ' challenged you to ' + gName + '.', link:'game:' + gSlug + '?match=' + mid });
+          sendNotice(uid, { type:'turn-invite', title: gName + ' challenge!', body: myN + ' challenged you to ' + gName + '.', link:'game:' + gSlug + '?match=' + mid, fromName:myN, fromUid:me }); /* NOTIFY-POPUP-2026-11-25: sender rides on the notice (pool challenges already did this) so the duel pop-up + Inbox sender header name the challenger instead of "Holo's Arcade". */
           matches[mid] = match; openMid = mid; render();
           toast('Challenge sent to ' + (name || friendName(uid)) + '!');
           try { location.hash = '#game/' + gSlug; } catch(e){}
@@ -27213,7 +27217,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   setInterval(function(){ injectFriendCardButtons(); }, 5000);
   setTimeout(function(){ buildUI(); loadMatches(); injectFriendCardButtons(); }, 2500);
   window.addEventListener('hashchange', function(){ try { if((location.hash || '').indexOf('#game/tic-tac-toe') !== -1){ var pm = pendingMatchFromHash(); if(pm) pendingOpenMid = pm; loadMatches(); } } catch(e){} });
-  window.holoTurn = { challenge:challenge, refresh:loadMatches, matches:function(){ return matches; }, turnGames:function(){ return TURN_GAMES.slice(); }, myTurnCount:myTurnCount, open:function(mid){ openMid = mid; render(); }, openSoon:function(mid){ pendingOpenMid = mid; if(matches[mid] && !muted[mid]){ openMid = mid; render(); } } };
+  window.holoTurn = { challenge:challenge, refresh:loadMatches, matches:function(){ return matches; }, turnGames:function(){ return TURN_GAMES.slice(); }, myTurnCount:myTurnCount, open:function(mid){ openMid = mid; render(); }, openSoon:function(mid){ pendingOpenMid = mid; if(matches[mid] && !muted[mid]){ openMid = mid; render(); } }, accept:accept, openMatch:function(){ return openMid; } };
 })();
 </script>
 
@@ -27975,6 +27979,297 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 })();
 </script>
 
+<style>
+/* NOTIFY-POPUP-2026-11-25 (Holo 2026-11-25 12:42): bottom-right pop-up notifications — "Make it fun and match our theme." Dark navy card, violet border, neon pink/cyan glow, Press Start 2P title, pixel duck. One card at a time, bottom-right, pointer-events only on the card itself so taps pass through everywhere else. */
+#notifyPopups{position:fixed;right:16px;bottom:16px;z-index:12000;width:min(340px,calc(100vw - 32px));pointer-events:none}
+#notifyPopups .np-card{pointer-events:auto;background:linear-gradient(160deg,#131a4a,#080b26 70%);border:2px solid #8f7bff;border-radius:14px;box-shadow:0 0 0 2px #05061a,0 8px 30px rgba(0,0,0,.55),0 0 18px rgba(255,45,149,.35);color:#fff;padding:12px 14px 10px;margin-top:10px;animation:npSlideIn .28s ease-out}
+#notifyPopups .np-card.np-hq{border-color:#ffb020;box-shadow:0 0 0 2px #05061a,0 8px 30px rgba(0,0,0,.55),0 0 18px rgba(255,176,32,.4)}
+#notifyPopups .np-head{display:flex;align-items:flex-start;gap:8px}
+#notifyPopups .np-duck{flex:0 0 auto;width:26px;height:22px;margin-top:2px;filter:drop-shadow(0 0 6px rgba(255,217,59,.7))}
+#notifyPopups .np-duck svg{width:26px;height:22px}
+#notifyPopups .np-title{font-family:'Press Start 2P',monospace;font-size:11px;line-height:1.7;color:#ffe93d;letter-spacing:.5px;flex:1;animation:npFlicker 2.4s steps(2) infinite}
+#notifyPopups .np-hq .np-title{color:#ffb020}
+#notifyPopups .np-x{flex:0 0 auto;background:none;border:none;color:#b9b3ff;font-size:18px;line-height:1;cursor:pointer;padding:2px 4px}
+#notifyPopups .np-x:hover{color:#fff}
+#notifyPopups .np-sub{margin:6px 0 0;font-size:13px;line-height:1.45;color:#d9d4ff}
+#notifyPopups .np-btns{display:flex;gap:8px;margin-top:10px}
+#notifyPopups .np-btns .g-btn{flex:1;justify-content:center;text-align:center}
+#notifyPopups .np-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:9px}
+#notifyPopups .np-note{font-size:11px;color:#8f8ac9}
+#notifyPopups .np-sound{background:none;border:1px solid #3a3480;border-radius:8px;color:#d9d4ff;font-size:11px;padding:3px 7px;cursor:pointer}
+#notifyPopups .np-sound:hover{border-color:#8f7bff;color:#fff}
+@keyframes npSlideIn{from{transform:translateX(110%) rotate(1.5deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes npFlicker{0%,92%,100%{text-shadow:0 0 8px rgba(255,45,149,.8),2px 0 0 rgba(0,229,255,.55)}94%{text-shadow:-2px 0 0 rgba(0,229,255,.8),2px 0 0 rgba(255,45,149,.8)}96%{text-shadow:0 0 8px rgba(255,45,149,.8)}}
+@media (max-width:480px){#notifyPopups{right:12px;bottom:12px}}
+</style>
+<script>
+/* NOTIFY-POPUP-2026-11-25 (Holo 2026-11-25 12:42 + 12:44): bottom-right pop-up notifications for signed-in users only.
+   TRIGGERS (only these three, only while signed in, only this account's own):
+     1. DM received — "Message received from [Code Name]" — Accept opens the DM thread; Dismiss closes the pop-up only.
+     2. Duel request — "Duel request from [Code Name]" — Accept accepts the challenge + goes to the game/room; Dismiss closes the pop-up only.
+     3. HQ calling — "HQ calling" for notices FROM HQ (thank-yous, announcements, support replies, other system notices). Two answer buttons (PLACEHOLDER labels — Holo asked if "On important mission" / "call back later" can be shortened; do NOT finalize until she picks): first = busy-on-a-mission acknowledgement that dismisses; second = "call back later" snooze that re-shows the pop-up after 10 minutes if the Inbox notice is still unread.
+   DISMISS NEVER TOUCHES THE INBOX: dismissing, auto-dismissing, or answering never marks read, deletes, or archives the Inbox notification — it stays live there.
+   DETECTION reuses the existing polls (Inbox refresh every 60s, DM refresh every 30s) via the onInboxItems / onDmThreads hooks — no new channel, no extra network. First poll after sign-in seeds the baseline (no flood for pre-existing unread); only genuinely new arrivals pop.
+   SUPPRESSION: never pops for the exact DM thread / turn match the user is already looking at; muted DM threads never pop; one pop-up at a time, the rest queue.
+   SOUND (Holo 12:44): short Web Audio alert when a pop-up appears. SOUND PICK ON HOLD — Holo tapped "Arcade chime" by accident and wants to HEAR the samples first. The engine + all three tone recipes (chime / quack / beep) are built, but the stored kind defaults to null = SILENT until she picks; nothing plays until then. Mute toggle lives in the pop-up footer (persists per device). */
+(function(){
+  var AUTO_DISMISS_MS = 10000; /* ~10 seconds, then the pop-up hides itself. The Inbox copy always stays. */
+  var SNOOZE_MS = 10 * 60 * 1000; /* "Call back later" re-shows the HQ pop-up after 10 minutes (only if still signed in and the notice is still unread). */
+  var SOUND_KEY = 'holos-arcade-popup-sound-v1'; /* {kind:'chime'|'quack'|'beep'|null, muted:false}. kind null = no sound picked yet — silent until Holo picks after hearing the samples. */
+  var HQ_BTN_A = 'On important mission'; /* PLACEHOLDER label — Holo asked if these can be shortened; do NOT finalize until she picks the shortened wording. */
+  var HQ_BTN_B = 'Call back later'; /* PLACEHOLDER label — see above. */
+  var queue = []; /* pending pops, one shown at a time */
+  var shownKeys = {}; /* session dedup — a notification pops at most once per session */
+  var current = null, currentTimer = null;
+  var seenNotifIds = null; /* baseline of Inbox item ids at first poll — pre-existing unread never pops */
+  var seenDm = null; /* baseline map tid -> {unread, lastMessageAt} */
+  var seenUid = null;
+
+  function signedIn(){ try { var chip = document.getElementById('testerChip'); return !!(chip && !chip.hidden); } catch(e){ return false; } }
+  function myUid(){ try { var v = JSON.parse(localStorage.getItem('holos-firebase-auth') || 'null'); return (v && v.uid) ? String(v.uid) : null; } catch(e){ return null; } }
+  function esc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function resetIfAccountChanged(){
+    var uid = myUid();
+    if(uid !== seenUid){ seenUid = uid; seenNotifIds = null; seenDm = null; queue = []; shownKeys = {}; dismissCurrent(); }
+  }
+  function liveNameForUid(uid, fallback){
+    try { var cf = (window.holoFriends && window.holoFriends.cloudFriends) ? window.holoFriends.cloudFriends() : {}; var f = cf && cf[String(uid)]; if(f && f.name) return String(f.name); } catch(e){}
+    return fallback || 'Tester';
+  }
+  function duelSenderOf(n){
+    if(n.fromName) return String(n.fromName);
+    if(n.fromUid){ var nm = liveNameForUid(n.fromUid, ''); if(nm) return nm; }
+    var m = String(n.body || '').match(/^(\S+) challenged you to /); if(m) return m[1];
+    return 'a friend';
+  }
+  function matchIdOf(link){ var m = String(link || '').match(/match=([A-Za-z0-9_-]+)/); return m ? m[1] : ''; }
+  function isViewingMatch(mid){
+    if(!mid) return false;
+    try { return !!(window.holoTurn && window.holoTurn.openMatch && window.holoTurn.openMatch() === mid); } catch(e){ return false; }
+  }
+  function isViewingInboxMessage(n){
+    try { var rd = document.getElementById('inboxRead'); if(!rd || rd.hidden) return false; var s = rd.querySelector('.read-subj'); return !!(s && s.textContent === (n.title || '')); } catch(e){ return false; }
+  }
+  function isHqType(n){
+    if(n.type === 'announcement' || n.type === 'review-fixed' || n.type === 'support-reply') return true;
+    if(n.type === 'system'){
+      if(n.reportId === 'device-questionnaire-v1') return false; /* questionnaire chips live in the Inbox reading view, not a pop-up */
+      if(n.reportId === 'mission-briefing-v1') return false; /* one-time onboarding letter, already its own flow */
+      if(String(n.title || '') === 'Report received') return false; /* self-ack for a report the user just filed */
+      return true;
+    }
+    return false;
+  }
+  function findInboxItem(id){
+    try { var items = (window.holoInbox && window.holoInbox.items) ? window.holoInbox.items() : []; for(var i = 0; i < items.length; i++){ if(items[i].id === id) return items[i]; } } catch(e){}
+    return null;
+  }
+  /* followLink: same routing as the Inbox "Open" button (openGameLink) — ?match= opens the turn match, ?room= joins the pool room, anything else switches view. */
+  function followLink(link){
+    if(!link) return;
+    if(link.indexOf('game:') === 0){
+      var rest = link.slice(5); var qi = rest.indexOf('?'); var slug = qi === -1 ? rest : rest.slice(0, qi);
+      var mm = rest.match(/match=([A-Za-z0-9_-]+)/);
+      if(mm && mm[1] && window.holoTurn && window.holoTurn.openSoon){ try { window.holoTurn.openSoon(mm[1]); } catch(e){} }
+      try { location.hash = '#game/' + slug; } catch(e){}
+      var rm = rest.match(/room=([A-Za-z0-9_-]+)/);
+      if(rm && rm[1] && window.holoRooms && window.holoRooms.joinRoom){ try { window.holoRooms.joinRoom(rm[1]); } catch(e){} }
+    } else if(window.holoShowView){ try { window.holoShowView(link); } catch(e){} }
+  }
+  function acceptDuel(mid, link){
+    var went = false;
+    function goOnce(){ if(went) return; went = true; try { followLink(link); } catch(e){} }
+    try {
+      if(mid && window.holoTurn && typeof window.holoTurn.refresh === 'function'){
+        window.holoTurn.refresh().then(function(){
+          try { if(window.holoTurn.accept) window.holoTurn.accept(mid); } catch(e){}
+          goOnce();
+        }).catch(function(){ goOnce(); });
+        setTimeout(goOnce, 3000); /* never strand the user if the match list hangs */
+      } else goOnce();
+    } catch(e){ goOnce(); }
+  }
+
+  /* ---- sound (Web Audio, no file; ~1s or less; recipes ready, none selected until Holo picks after hearing the samples) ---- */
+  function soundPrefs(){ try { var v = JSON.parse(localStorage.getItem(SOUND_KEY) || 'null'); if(v && typeof v === 'object') return v; } catch(e){} return { kind:null, muted:false }; }
+  function saveSoundPrefs(p){ try { localStorage.setItem(SOUND_KEY, JSON.stringify(p)); } catch(e){} }
+  var audioCtx = null;
+  function getCtx(){
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext; if(!AC) return null;
+      if(!audioCtx) audioCtx = new AC();
+      if(audioCtx.state === 'suspended'){ try { audioCtx.resume(); } catch(e){} }
+      return audioCtx;
+    } catch(e){ return null; }
+  }
+  function tone(ctx, freq, t0, dur, type, vol, slideTo){
+    var o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t0);
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol || 0.15, t0 + 0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  function playAlertSound(){
+    try {
+      var p = soundPrefs();
+      if(p.muted || !p.kind) return; /* muted, or no sound picked yet (Holo listens first) — silent */
+      var ctx = getCtx(); if(!ctx) return; /* no Web Audio (jsdom / old browser) — silent, never throws */
+      var t = ctx.currentTime + 0.02;
+      if(p.kind === 'chime'){ tone(ctx, 1318.5, t, 0.22, 'sine', 0.16); tone(ctx, 1760, t + 0.12, 0.3, 'sine', 0.16); tone(ctx, 2637, t + 0.12, 0.18, 'triangle', 0.05); }
+      else if(p.kind === 'quack'){ tone(ctx, 320, t, 0.18, 'sawtooth', 0.12, 140); tone(ctx, 300, t + 0.24, 0.18, 'sawtooth', 0.12, 130); }
+      else if(p.kind === 'beep'){ tone(ctx, 880, t, 0.09, 'square', 0.07); tone(ctx, 1174.7, t + 0.1, 0.09, 'square', 0.07); tone(ctx, 1568, t + 0.2, 0.14, 'square', 0.07); }
+    } catch(e){}
+  }
+
+  /* ---- queue: one pop-up at a time, rest wait their turn ---- */
+  function enqueue(pop){
+    if(!pop || !pop.key) return;
+    if(shownKeys[pop.key]) return; /* never pop the same notification twice in a session */
+    shownKeys[pop.key] = true;
+    pop.notBefore = pop.notBefore || 0;
+    queue.push(pop);
+    pump();
+  }
+  function pump(){
+    if(current) return;
+    var now = Date.now(), idx = -1;
+    for(var i = 0; i < queue.length; i++){ if(queue[i].notBefore <= now){ idx = i; break; } }
+    if(idx === -1){
+      if(queue.length){
+        var wait = queue[0].notBefore - now;
+        for(var j = 1; j < queue.length; j++){ wait = Math.min(wait, queue[j].notBefore - now); }
+        setTimeout(pump, Math.max(1000, Math.min(wait, 60000)));
+      }
+      return;
+    }
+    showPop(queue.splice(idx, 1)[0]);
+  }
+  function dismissCurrent(){
+    if(currentTimer){ clearTimeout(currentTimer); currentTimer = null; }
+    current = null;
+    try { var wrap = document.getElementById('notifyPopups'); if(wrap) wrap.innerHTML = ''; } catch(e){}
+    pump();
+  }
+  function showPop(pop){
+    if(!signedIn()){ current = null; pump(); return; }
+    /* HQ snooze re-check (snoozed re-shows ONLY): if the Inbox notice was read / archived / deleted meanwhile, drop the pop-up instead of re-showing it. Fresh HQ pops skip this — the notice was just detected as new + unread, and the local items list can lag a refresh. */
+    if(pop.kind === 'hq' && pop.snoozed && pop.noticeId){
+      var it = findInboxItem(pop.noticeId);
+      if(!it || it.read || it.archived){ current = null; pump(); return; }
+    }
+    current = pop;
+    var wrap = document.getElementById('notifyPopups');
+    if(!wrap){ wrap = document.createElement('div'); wrap.id = 'notifyPopups'; wrap.setAttribute('aria-live', 'polite'); document.body.appendChild(wrap); }
+    wrap.innerHTML = '';
+    var card = document.createElement('div');
+    card.className = 'np-card' + (pop.kind === 'hq' ? ' np-hq' : '');
+    card.setAttribute('role', 'alertdialog');
+    card.setAttribute('aria-label', pop.title);
+    var html = '<div class="np-head"><span class="np-duck" aria-hidden="true"><svg viewBox="0 0 16 13"><use href="#eggDuck"/></svg></span>' +
+      '<span class="np-title">' + esc(pop.title) + '</span>' +
+      '<button type="button" class="np-x" aria-label="Dismiss">\u00d7</button></div>';
+    if(pop.sub) html += '<p class="np-sub">' + esc(pop.sub) + '</p>';
+    html += '<div class="np-btns"></div><div class="np-foot"><span class="np-note">Stays in your Inbox</span><button type="button" class="np-sound"></button></div>';
+    card.innerHTML = html;
+    wrap.appendChild(card);
+    var btns = card.querySelector('.np-btns');
+    function mkBtn(label, primary, fn){
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'g-btn' + (primary ? ' primary' : ''); b.textContent = label;
+      b.addEventListener('click', function(){ try { fn(); } catch(e){} dismissCurrent(); });
+      btns.appendChild(b); return b;
+    }
+    if(pop.kind === 'hq'){
+      mkBtn(HQ_BTN_A, true, function(){ try { if(typeof showBadgeToast === 'function') showBadgeToast('On it, HQ \u2014 mission first!'); } catch(e){} });
+      mkBtn(HQ_BTN_B, false, function(){
+        /* "Call back later": snooze — same pop-up again in 10 minutes, only if the Inbox notice is still unread then. Inbox untouched either way. */
+        var again = { key:pop.key + ':snooze:' + Date.now(), kind:'hq', title:pop.title, sub:pop.sub, noticeId:pop.noticeId, snoozed:true, notBefore:Date.now() + SNOOZE_MS };
+        queue.push(again); setTimeout(pump, SNOOZE_MS);
+      });
+    } else if(pop.kind === 'dm'){
+      mkBtn('Accept', true, function(){ try { if(window.holoDMs && window.holoDMs.open) window.holoDMs.open(pop.withUid, pop.name); } catch(e){} });
+      mkBtn('Dismiss', false, function(){});
+    } else { /* duel */
+      mkBtn('Accept', true, function(){ acceptDuel(pop.mid, pop.link); });
+      mkBtn('Dismiss', false, function(){});
+    }
+    card.querySelector('.np-x').addEventListener('click', function(){ dismissCurrent(); });
+    var snd = card.querySelector('.np-sound');
+    function syncSoundBtn(){ var p = soundPrefs(); snd.textContent = p.muted ? '\uD83D\uDD15 Sound off' : '\uD83D\uDD14 Sound on'; }
+    syncSoundBtn();
+    snd.addEventListener('click', function(){
+      var p = soundPrefs(); p.muted = !p.muted; saveSoundPrefs(p); syncSoundBtn();
+      if(!p.muted){ if(p.kind) playAlertSound(); else { try { if(typeof showBadgeToast === 'function') showBadgeToast('Sound on \u2014 pick your chime once you have heard the samples!'); } catch(e){} } }
+    });
+    playAlertSound();
+    currentTimer = setTimeout(function(){ dismissCurrent(); }, AUTO_DISMISS_MS);
+  }
+  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape' && current) dismissCurrent(); });
+
+  /* ---- detection: called from the existing Inbox + DM refresh hooks (no new channel, no extra polling) ---- */
+  function onInboxItems(items){
+    try {
+      resetIfAccountChanged();
+      if(!signedIn()) return;
+      if(!seenNotifIds){ seenNotifIds = {}; (items || []).forEach(function(n){ if(n && n.id) seenNotifIds[n.id] = true; }); return; }
+      (items || []).forEach(function(n){
+        if(!n || !n.id || seenNotifIds[n.id]) return;
+        seenNotifIds[n.id] = true;
+        if(n.read || n.archived) return;
+        if(n.type === 'turn-invite'){
+          var mid = matchIdOf(n.link);
+          if(isViewingMatch(mid)) return; /* already looking at that exact match */
+          var name = duelSenderOf(n);
+          enqueue({ key:'duel:' + n.id, kind:'duel', title:'Duel request from ' + name, name:name, mid:mid, link:n.link || '' });
+        } else if(isHqType(n)){
+          if(isViewingInboxMessage(n)) return; /* already reading that exact HQ message */
+          var sub = String(n.title || '');
+          var firstLine = String(n.body || '').split('\n')[0].trim();
+          if(firstLine && firstLine !== sub) sub += ' \u2014 ' + firstLine.slice(0, 90);
+          enqueue({ key:'hq:' + n.id, kind:'hq', title:'HQ calling', sub:sub, noticeId:n.id });
+        }
+      });
+    } catch(e){}
+  }
+  function onDmThreads(threads, muted, openTid){
+    try {
+      resetIfAccountChanged();
+      if(!signedIn()) return;
+      threads = threads || {};
+      if(!seenDm){
+        seenDm = {};
+        Object.keys(threads).forEach(function(tid){ var t = threads[tid] || {}; seenDm[tid] = { unread:(t.unread || 0), lastMessageAt:(t.lastMessageAt || 0) }; });
+        return;
+      }
+      Object.keys(threads).forEach(function(tid){
+        var t = threads[tid] || {};
+        var prev = seenDm[tid] || { unread:0, lastMessageAt:0 };
+        seenDm[tid] = { unread:(t.unread || 0), lastMessageAt:(t.lastMessageAt || 0) };
+        if(muted && muted[tid]) return; /* muted thread never pops */
+        if(openTid && openTid === tid) return; /* already looking at that exact thread */
+        if((t.unread || 0) <= (prev.unread || 0)) return; /* no new unread — a re-sync, not a new message */
+        if(!t.withUid) return;
+        var name = liveNameForUid(t.withUid, t.withName);
+        enqueue({ key:'dm:' + tid + ':' + (t.lastMessageAt || 0), kind:'dm', title:'Message received from ' + name, name:name, withUid:t.withUid });
+      });
+      Object.keys(seenDm).forEach(function(tid){ if(!threads[tid]) delete seenDm[tid]; });
+    } catch(e){}
+  }
+
+  window.holoNotifyPopups = {
+    onInboxItems:onInboxItems, onDmThreads:onDmThreads,
+    queue:function(){ return queue.slice(); }, current:function(){ return current; },
+    show:function(pop){ enqueue(pop); }, dismiss:dismissCurrent,
+    setSound:function(kind){ var p = soundPrefs(); p.kind = kind || null; saveSoundPrefs(p); },
+    setMuted:function(m){ var p = soundPrefs(); p.muted = !!m; saveSoundPrefs(p); },
+    sound:function(){ return soundPrefs(); },
+    playSound:playAlertSound,
+    AUTO_DISMISS_MS:AUTO_DISMISS_MS, SNOOZE_MS:SNOOZE_MS
+  };
+})();
+</script>
 
 
 <!-- END-BAR-2026-11-22 (Holo 23:03): after a game finishes, show
