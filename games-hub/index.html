@@ -17193,6 +17193,11 @@ function renderTesterAuth(){
       e.preventDefault();
       var err = document.getElementById('createError');
       function fail(msg){ if(err){ err.textContent = msg; err.hidden = false; } }
+      /* REG-CODE-BOX-2026-11-26: a failure on a regA field (Code
+         Name, email, birthday, invite code) routes the reader back
+         to regA first, or the error would point at a field hidden
+         on regB. regB fields (passwords, terms) need no routing. */
+      function backToRegA(){ if(typeof window.holoGateShow === 'function'){ try { window.holoGateShow('regA'); } catch(e){} } }
       var nm = (document.getElementById('createName') || document.getElementById('createNameOwner')).value;
       var em = document.getElementById('createEmail').value;
       var pw = document.getElementById('createPw').value;
@@ -17215,16 +17220,16 @@ function renderTesterAuth(){
          before any Firebase account is created. */
       nm = String(nm || '').trim();
       var vNm = (typeof window.holoValidateCodeName === 'function') ? window.holoValidateCodeName(nm) : null;
-      if(!nm){ markFieldInvalid(nameEl, '⚠️ This field needs filling in, agent!'); fail('Pop your username in first, agent.'); if(nameEl) nameEl.focus(); return; }
-      if(vNm && !vNm.ok){ markFieldInvalid(nameEl, vNm.error || '⚠️ That Code Name doesn\'t work — try another one.'); fail(vNm.error || 'That Code Name doesn\'t work — try another one.'); if(nameEl) nameEl.focus(); return; }
-      if(!validAccountEmail(em)){ markFieldInvalid(emailEl2, String(em || '').trim() ? '⚠️ That email looks off, agent.' : '⚠️ This field needs filling in, agent!'); fail('Pop a valid email in, agent. Your verification link goes there.'); if(emailEl2) emailEl2.focus(); return; }
+      if(!nm){ markFieldInvalid(nameEl, '⚠️ This field needs filling in, agent!'); fail('Pop your username in first, agent.'); backToRegA(); if(nameEl) nameEl.focus(); return; }
+      if(vNm && !vNm.ok){ markFieldInvalid(nameEl, vNm.error || '⚠️ That Code Name doesn\'t work — try another one.'); fail(vNm.error || 'That Code Name doesn\'t work — try another one.'); backToRegA(); if(nameEl) nameEl.focus(); return; }
+      if(!validAccountEmail(em)){ markFieldInvalid(emailEl2, String(em || '').trim() ? '⚠️ That email looks off, agent.' : '⚠️ This field needs filling in, agent!'); fail('Pop a valid email in, agent. Your verification link goes there.'); backToRegA(); if(emailEl2) emailEl2.focus(); return; }
       var dobEl = document.getElementById('createDob');
       var dobErr = (window.holoAge18 && window.holoAge18.validateDob) ? window.holoAge18.validateDob(dob) : null;
-      if(dobErr){ markFieldInvalid(dobEl, '⚠️ ' + dobErr); fail(dobErr); if(dobEl) dobEl.focus(); return; }
+      if(dobErr){ markFieldInvalid(dobEl, '⚠️ ' + dobErr); fail(dobErr); backToRegA(); if(dobEl) dobEl.focus(); return; }
       if(!pw || String(pw).length < 6){ markFieldInvalid(pwEl2, !pw ? '⚠️ This field needs filling in, agent!' : '⚠️ Needs 6+ characters, agent.'); fail('Your password needs at least 6 characters, agent.'); if(pwEl2) pwEl2.focus(); return; }
       if(String(pw) !== String(pw2 || '')){ markFieldInvalid(pw2El, '⚠️ Passwords do not match, agent.'); fail('Those passwords do not match, agent. Have another try.'); if(pw2El) pw2El.focus(); return; }
       /* PUBLIC-PREVIEW-2026-11-26: in the live-view preview, registration needs no invite code (as at go-live). Everywhere else the code stays required. */
-      if(!String(inv || '').trim() && window.holoPublicPreview !== 'live'){ markFieldInvalid(invEl, '⚠️ This field needs filling in, agent!'); fail('Your invite code is required, agent. It comes with your invite link. No code? Ask Holo for one.'); if(invEl) invEl.focus(); return; }
+      if(!String(inv || '').trim() && window.holoPublicPreview !== 'live'){ markFieldInvalid(invEl, '⚠️ This field needs filling in, agent!'); fail('Your invite code is required, agent. It comes with your invite link. No code? Ask Holo for one.'); backToRegA(); if(invEl) invEl.focus(); return; }
       if(!trm){ markFieldInvalid(trmEl, '⚠️ Tick this box first, agent!'); fail('Please tick the box to agree to the Terms & Policies first.'); return; }
       createAccount(nm, em, pw, pw2, inv, trm, false, dob, false).then(function(res){
         if(res.taken){
@@ -23121,6 +23126,19 @@ function renderTesterAuth(){
     var gate = byId('verifyGatePane');
     if(gate && !gate.hidden){
       if(lv && lv.scrollIntoView) lv.scrollIntoView({ block:'start' });
+      return;
+    }
+    /* NAV-ROUTE-2026-11-26 (Holo 2026-11-26 14:37): the gate hides
+       panes with the wt-gate-hide CLASS, not the hidden attribute —
+       the hidden checks below never fire on the gate page, so
+       "Sign in" from register and "Register" from login did nothing
+       and the reader stayed put (Mom landed on register when she
+       needed sign-in). Drive the gate step directly. Not in the
+       public preview — the preview owns its step. */
+    if(!window.holoPublicPreview && typeof window.holoGateShow === 'function' && document.body.classList.contains('auth-locked')){
+      window.holoGateShow(register ? 'regA' : 'login');
+      var f0 = byId(register ? 'createName' : 'loginName');
+      if(f0) f0.focus();
       return;
     }
     if(register){
@@ -32629,23 +32647,46 @@ function gateSetup(){
   var regNext=document.createElement('button');
   regNext.type='button';regNext.className='btn btn-primary';regNext.textContent='Continue →';
   regNext.style.marginTop='10px';
-  on(regNext,'click',function(){showGate('regB');});
+  on(regNext,'click',function(){
+    /* REG-CODE-BOX-2026-11-26: the code box lives on regA now, so
+       the code is checked here before the tester reaches regB — an
+       empty code stops on regA with the same plain error the submit
+       shows. The live preview (go-live view) needs no code, same as
+       the submit. Typing in the box clears the mark (markFieldInvalid
+       binds input/change). */
+    if(window.holoPublicPreview !== 'live'){
+      var invEl = document.getElementById('createInvite');
+      var invVal = invEl ? String(invEl.value || '').trim() : '';
+      if(!invVal){
+        if(typeof markFieldInvalid === 'function') markFieldInvalid(invEl, '⚠️ This field needs filling in, agent!');
+        var cErr = document.getElementById('createError');
+        if(cErr){ cErr.textContent = 'Your invite code is required, agent. It comes with your invite link. No code? Ask Holo for one.'; cErr.hidden = false; }
+        if(invEl) invEl.focus();
+        return;
+      }
+    }
+    showGate('regB');
+  });
   function splitRegister(){
     var f=$('#createForm');if(!f||f.__wtSplit)return;
     f.__wtSplit=true;
-    /* regA: Code Name, email, DOB. regB: passwords, invite code,
-       terms, submit. The form still submits as one form. */
+    /* REG-CODE-BOX-2026-11-26 (Holo 2026-11-26 14:34): regA is Code
+       Name, email, DOB and the invite code — the code box must be
+       visible on the register form a new tester sees, not hidden
+       on step 2. regB is passwords, terms, submit. The form still
+       submits as one form. */
     $$('.login-field',f).forEach(function(r){
       var lbl=(r.querySelector('label')||{}).textContent||'';
-      if(/password|invite|terms/i.test(lbl))r.classList.add('wt-regB');
+      if(/password|terms/i.test(lbl))r.classList.add('wt-regB');
       else r.classList.add('wt-regA');
     });
-    /* Terms row, submit button and error line are not .login-field
-       rows — they belong to regB too (the submit is a direct child
-       of the form, so classify the button itself, not its parent). */
+    /* Terms row and submit button are not .login-field rows — they
+       belong to regB too (the submit is a direct child of the form,
+       so classify the button itself, not its parent). The error line
+       stays unclassified: it must show on BOTH steps (the Continue
+       gate and the submit both report through it). */
     var terms=f.querySelector('.login-terms');if(terms)terms.classList.add('wt-regB');
     var submit=$('#createSubmit',f);if(submit)submit.classList.add('wt-regB');
-    var err=f.querySelector('.login-error');if(err)err.classList.add('wt-regB');
     var trouble=f.querySelector('.login-trouble');if(trouble)trouble.classList.add('wt-regB');
     /* Continue button at the end of regA. */
     var aRows=$$('.wt-regA',f);
