@@ -83,6 +83,8 @@
     if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
   } catch (e) {}
   try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+
+
 })();
 </script>
 <script>
@@ -512,7 +514,21 @@ body.playing .wrap{max-width:1180px}
 }
 .end-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .end-grid .btn{width:100%}
+.end-grid .btn-full{grid-column:1 / -1}
 .invite-msg{text-align:center;font-weight:800;color:var(--teal);margin:10px 0 0}
+/* MM-DUEL-2026-11-26: Duel banner + friend/mode picker styles */
+.duel-banner{display:none;text-align:center;background:#2A1450;border:1.5px solid #FFC93C;color:#FFE93D;font-weight:900;border-radius:999px;padding:8px 12px;font-size:13px;margin-top:10px}
+.duel-banner.show{display:block}
+.duel-friend{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface2);border:1.5px solid var(--line);border-radius:14px;padding:10px 12px;margin:8px 0}
+.duel-friend b{font-family:"Fredoka";font-size:16px}
+.duel-friend.sel{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal)}
+.duel-mode{display:block;width:100%;text-align:left;background:var(--surface2);border:1.5px solid var(--line);border-radius:14px;padding:12px;margin:8px 0;cursor:pointer;color:var(--ink)}
+.duel-mode b{font-family:"Fredoka";font-size:16px;display:block}
+.duel-mode span{color:var(--muted);font-weight:700;font-size:13px;line-height:1.4;display:block;margin-top:2px}
+.duel-mode.sel{border-color:var(--teal);box-shadow:0 0 0 2px var(--teal)}
+.duel-mode.off{opacity:.45;cursor:not-allowed}
+.duel-badge{display:inline-block;background:var(--teal);color:#06281f;font-size:11px;font-weight:900;letter-spacing:.08em;border-radius:999px;padding:2px 8px;margin-left:6px;vertical-align:middle}
+.duel-head{font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:900;color:var(--muted);margin:14px 0 4px}
 
 /* ===== MONSTER-MATCH-THEME-2026-11-25 =====
    Holo 2026-11-25: Neon Arcade LIVE for now. The four art
@@ -639,6 +655,7 @@ footer a{color:#BFE3FF;border-bottom-color:var(--neon-yellow,#ffe93d)}
   <div class="progress" aria-hidden="true"><i id="progressBar"></i></div>
   <div class="best-line" id="bestLine"></div>
   <div class="practice-banner" id="practiceBanner">Practice mode — take your time, use hints as much as you like!</div>
+  <div class="duel-banner" id="duelBanner" role="status"></div>
       <div class="game-side-foot">
         <p>More games at <a href="../games-hub/">Holo's Arcade</a></p>
         <p class="credit">Monster Match • A friendly memory game for all ages • Best scores &amp; settings saved on this device</p>
@@ -726,10 +743,26 @@ footer a{color:#BFE3FF;border-bottom-color:var(--neon-yellow,#ffe93d)}
     <div class="end-grid">
       <button class="btn btn-tier1" id="winAgain" type="button">Replay</button>
       <button class="btn btn-tier2" id="winStartOver" type="button">Start Over</button>
-      <button class="btn btn-tier2" id="winInvite" type="button">Invite Friend</button>
-      <button class="btn btn-tier2" id="winExit" type="button">Exit</button>
+      <button class="btn btn-tier2" id="winInvite" type="button">Coming soon</button>
+      <button class="btn btn-tier2" id="winDuel" type="button">Duel</button>
+      <button class="btn btn-tier2 btn-full" id="winExit" type="button">Exit</button>
     </div>
     <p class="invite-msg" id="winInviteMsg" hidden></p>
+  </div>
+</div>
+
+<!-- MM-DUEL-2026-11-26: Duel a friend — friend picker, mode picker, match list -->
+<div class="overlay" id="duelOverlay" role="dialog" aria-modal="true" aria-labelledby="duelTitle">
+  <div class="sheet" style="text-align:left">
+    <div class="close-row"><h2 id="duelTitle">Duel a friend</h2><button class="icon-btn" data-close="duelOverlay" aria-label="Close duel">✕</button></div>
+    <p id="duelStatus" style="font-weight:800"></p>
+    <div id="duelFriends"></div>
+    <div id="duelModes"></div>
+    <p id="duelConfirm" style="font-weight:800;text-align:center;margin:12px 0 0"></p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+      <button class="btn btn-primary" id="duelSend" type="button" style="flex:1">Send challenge</button>
+      <button class="btn btn-ghost" id="duelCancel" type="button">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -858,11 +891,17 @@ function updateBestLine(){
 }
 function setMessage(t){ document.getElementById('message').textContent = t; }
 
-function newGame(){
+function monsterById(id){ for(var i=0;i<MONSTERS.length;i++){ if(MONSTERS[i].id===id) return MONSTERS[i]; } return MONSTERS[0]; }
+
+function newGame(forcedDeck){
+  /* MM-DUEL-2026-11-26: mmDuelStarting is set while a Duel round is being dealt — clearing then would wipe the match just opened. */
+  if(!mmDuelStarting){ try{ mmDuelClear(); }catch(e){} }
+  mmSuppressWinOverlay = false;
   clearInterval(timer); timer=null; started=false; seconds=0; moves=0; score=0; matched=0; firstCard=null; lock=false; peekUsed=false;
   var cfg = DIFFS[difficulty];
   var chosen = shuffle(MONSTERS.slice()).slice(0, cfg.pairs);
-  deck = shuffle(chosen.concat(chosen));
+  /* MM-DUEL-2026-11-26: a Duel game plays a stored deck (monster id order) instead of a fresh shuffle. */
+  deck = forcedDeck ? forcedDeck.map(function(id){ return monsterById(id); }) : shuffle(chosen.concat(chosen));
   boardEl.className = 'board cols-'+cfg.cols;
   boardEl.innerHTML = '';
   deck.forEach(function(m, idx){
@@ -891,6 +930,8 @@ function startTimer(){
 
 function flip(btn, m){
   if(lock || btn.classList.contains('flipped') || btn.classList.contains('matched')) return;
+  /* MM-DUEL-2026-11-26: in Take turns you can only flip on your own turn. */
+  if(typeof mmDuelTakeTurnsActive === 'function' && mmDuelTakeTurnsActive() && !mmDuelMyTurn()){ setMessage('Waiting on ' + mmOppName() + '. It is their turn.'); return; }
   if(!started){ started=true; startTimer(); }
   sndFlip();
   btn.classList.add('flipped');
@@ -903,7 +944,8 @@ function flip(btn, m){
       first.btn.classList.add('matched'); btn.classList.add('matched');
       first.btn.setAttribute('aria-label', m.name+' — matched');
       btn.setAttribute('aria-label', m.name+' — matched');
-      matched++; if(!practice) score += 100;
+      matched++; try{ mmDuelPairResolved(first, btn); }catch(e){}
+      if(!practice) score += 100;
       sndMatch(); updateStats();
       if(matched === DIFFS[difficulty].pairs){ win(); }
       else setMessage('Match! That\'s '+m.name+' — '+matched+' of '+DIFFS[difficulty].pairs+' pairs found!');
@@ -917,6 +959,7 @@ function flip(btn, m){
         first.btn.setAttribute('aria-label','Hidden card '+(+first.btn.dataset.idx+1)+'. Tap/click to flip.');
         btn.setAttribute('aria-label','Hidden card '+(+btn.dataset.idx+1)+'. Tap/click to flip.');
         lock=false;
+        try{ mmDuelPairMissed(first, btn); }catch(e){}
       }, 380);
     }, 520);
     setMessage('Not quite — remember where '+first.m.name+' and '+m.name+' are hiding!');
@@ -924,6 +967,8 @@ function flip(btn, m){
 }
 
 function win(){
+  /* MM-DUEL-2026-11-26: in Take turns the board clearing ends the Duel, not a solo win — no bonus, no best save, no win overlay here; the Duel block shows the result. */
+  if(typeof mmDuelTakeTurnsActive === 'function' && mmDuelTakeTurnsActive()){ mmDuelTakeTurnsCleared(); return; }
   clearInterval(timer); timer=null; sndWin();
   var total = DIFFS[difficulty].pairs;
   var stars = 1, bonus = 0;
@@ -943,7 +988,7 @@ function win(){
     ? 'Lovely practising! Ready to try Play & Score when you are.'
     : (bonus>0 ? 'Includes a +'+bonus+' speed & memory bonus. Brilliant!' : 'Every monster found its twin. Brilliant memory!');
   var bestEl = document.getElementById('winBest');
-  if(practice){ bestEl.textContent=''; }
+  if(practice || mmDuelActive()){ bestEl.textContent=''; }
   else {
     var raw = lsGet('mm_best_'+difficulty, null), isBest=false;
     if(raw){ try{ var b=JSON.parse(raw); if(score>b.score) isBest=true; }catch(e){ isBest=true; } } else isBest=true;
@@ -951,9 +996,13 @@ function win(){
     else bestEl.textContent='';
     updateBestLine();
   }
+  /* MM-DUEL-2026-11-26: remember the board just played (for Beat my score challenges and rematches), then hand the win to the Duel block, which submits a Duel score or auto-sends a rematch challenge. */
+  if(!practice){ mmLastWin = { deck: mmDeckIds(), difficulty: difficulty, score: score, moves: moves, time: seconds }; }
+  var wd = document.getElementById('winDuel'); if(wd) wd.textContent = 'Duel'; mmRematchReady = false;
+  try{ mmDuelOnWin(); }catch(e){}
   var played = parseInt(lsGet('mm_games','0'),10)||0; lsSet('mm_games', String(played+1));
   confettiBurst();
-  setTimeout(function(){ openOverlay('winOverlay'); }, 650);
+  setTimeout(function(){ if(!mmSuppressWinOverlay) openOverlay('winOverlay'); }, 650);
 }
 
 function confettiBurst(){
@@ -974,6 +1023,8 @@ function confettiBurst(){
 
 // Hint & Peek
 document.getElementById('hintBtn').addEventListener('click', function(){
+  /* MM-DUEL-2026-11-26: no hints in Take turns — pure memory, or the opponent gets free information. */
+  if(typeof mmDuelTakeTurnsActive === 'function' && mmDuelTakeTurnsActive()){ setMessage('No hints in Take turns. Pure memory!'); return; }
   var cards = Array.prototype.slice.call(boardEl.querySelectorAll('.card:not(.matched):not(.flipped)'));
   // find a pair among hidden cards
   var byId = {};
@@ -996,6 +1047,8 @@ document.getElementById('hintBtn').addEventListener('click', function(){
 });
 document.getElementById('peekBtn').addEventListener('click', function(){
   if(lock) return;
+  /* MM-DUEL-2026-11-26: no peeking in Take turns — pure memory. */
+  if(typeof mmDuelTakeTurnsActive === 'function' && mmDuelTakeTurnsActive()){ setMessage('No peeking in Take turns. Pure memory!'); return; }
   if(!practice){ score = Math.max(0, score-50); updateStats(); }
   beep(880,.1,'sine');
   var hidden = boardEl.querySelectorAll('.card:not(.matched)');
@@ -1046,7 +1099,20 @@ document.getElementById('startFeedback').addEventListener('click', function(){ o
 document.getElementById('winAgain').addEventListener('click', function(){ closeOverlay('winOverlay'); newGame(); });
 document.getElementById('winStartOver').addEventListener('click', function(){ closeOverlay('winOverlay'); showMenu(1); });
 document.getElementById('winExit').addEventListener('click', function(){ closeOverlay('winOverlay'); showMenu(3); });
+/* MM-DUEL-2026-11-26: Invite friends is greyed out until launch (Holo 2026-11-26 10:36/10:39).
+   INVITE_LIVE flips to true at go-live: the label becomes "Invite friends" and the share
+   handler below goes live. While false the button reads only "Coming soon", is disabled,
+   and tapping it does nothing. The handler itself is unchanged. */
+var INVITE_LIVE = false;
+function paintInvite(){
+  var b = document.getElementById('winInvite');
+  if(!b) return;
+  if(INVITE_LIVE){ b.disabled = false; b.textContent = 'Invite friends'; }
+  else { b.disabled = true; b.textContent = 'Coming soon'; }
+}
+paintInvite();
 document.getElementById('winInvite').addEventListener('click', function(){
+  if(!INVITE_LIVE) return;
   var url = location.href.split('?')[0].split('#')[0];
   var msg = document.getElementById('winInviteMsg');
   function done(){ if(msg){ msg.hidden = false; msg.textContent = 'Link copied \u2014 send it to a friend!'; } }
@@ -1057,6 +1123,10 @@ document.getElementById('winInvite').addEventListener('click', function(){
     try{ document.execCommand('copy'); }catch(e){}
     document.body.removeChild(ta); done();
   } catch(e){ done(); }
+});
+document.getElementById('winDuel').addEventListener('click', function(){
+  if(mmRematchReady){ mmRematchReady = false; mmRematch(); return; }
+  mmEnterDuel();
 });
 
 // Tutorial — the walkthrough IS the How to Play (Holo 2026-11-25 00:13):
@@ -1120,6 +1190,7 @@ function showStep(n){
   try { document.documentElement.scrollTop = 0; document.body.scrollTop = 0; } catch(e){}
 }
 function showMenu(step){
+  try{ mmDuelClear(); }catch(e){}
   document.getElementById('gameView').hidden = true;
   document.getElementById('menuView').hidden = false;
   document.body.classList.remove('playing');document.documentElement.classList.remove('playing'); /* MONSTER-NOSCROLL-2026-11-25: unlock page scroll back in the menu */
@@ -1158,6 +1229,771 @@ else { showMenu(1); }
 window.addEventListener('holo-practice-on', function(){
   if (document.getElementById('gameView').hidden) { practice = true; startGame(); }
 });
+/* ============================================================================
+   MM-DUEL-2026-11-26 — Duel a friend (turn-based)
+   Three modes on the turn engine: beat-score (async, default), same-board,
+   take-turns. The live race mode is NOT built here — its card in the mode
+   picker reads only "Coming soon". Hub owns match creation when the game is
+   played inside the hub; standalone play uses this in-game REST block, the
+   same pattern as the Christmas Trivia Duel (auth from localStorage
+   holos-firebase-auth, token refresh via securetoken.googleapis.com).
+   ============================================================================ */
+
+/* --- shared helpers --- */
+var mmDuelGame = null;      /* the live turnMatches row this window is playing */
+var mmLastWin = null;       /* {deck, difficulty, score, moves, time} of the last scored win */
+var mmRematchReady = false; /* win overlay Duel button becomes Rematch */
+var mmRematchPending = null;/* {uid, name, mode} — auto-send a challenge on the next scored win */
+var mmPoll = null;
+var mmFriendList = [];
+var mmPick = { friend: null, mode: 'beat-score' };
+var mmAuth = null;
+var mmDuelStarting = false; /* true while a Duel round is being dealt — newGame must not clear the match */
+var mmSuppressWinOverlay = false; /* same-board entry run: the board is done but the Duel is not — no win overlay, the banner explains */
+var mmTTStartedMid = null;  /* mid of the take-turns board currently on screen — stops the poll re-dealing it */
+var mmMyTimeBase = 0;       /* my stored take-turns time when the board opened — seconds adds this session on top */
+
+function mmDuelActive(){ return !!mmDuelGame; }
+function mmIsA(){ return mmDuelGame && mmAuth && mmDuelGame.aUid === mmAuth.uid; }
+function mmMyName(){ return (mmDuelGame && mmAuth && mmDuelGame.aUid === mmAuth.uid) ? mmDuelGame.aName : (mmDuelGame ? mmDuelGame.bName : ''); }
+function mmOppName(){ return (mmDuelGame && mmAuth && mmDuelGame.aUid === mmAuth.uid) ? mmDuelGame.bName : (mmDuelGame ? mmDuelGame.aName : ''); }
+function mmDeckIds(){ return deck.map(function(m){ return m.id; }); }
+function mmShuffleArr(a){ for(var i=a.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=a[i]; a[i]=a[j]; a[j]=t; } return a; }
+
+function mmTakeTurnsActive(){ return !!(mmDuelGame && mmDuelGame.state && mmDuelGame.state.mode === 'take-turns' && mmDuelGame.status === 'playing'); }
+function mmDuelTakeTurnsActive(){ return mmTakeTurnsActive(); }
+function mmDuelMyTurn(){ return mmTakeTurnsActive() && mmDuelGame.turn === mmAuth.uid; }
+
+function mmBanner(text){
+  var b = document.getElementById('duelBanner');
+  if(!b) return;
+  if(!text){ b.textContent = ''; b.classList.remove('show'); return; }
+  b.textContent = text; b.classList.add('show');
+}
+function mmDuelClear(){
+  mmDuelGame = null; mmRematchReady = false; mmRematchPending = null; mmTTStartedMid = null; mmMyTimeBase = 0;
+  if(mmPoll){ clearInterval(mmPoll); mmPoll = null; }
+  mmBanner('');
+  var wd = document.getElementById('winDuel'); if(wd) wd.textContent = 'Duel';
+}
+function mmDuelEndText(){
+  if(!mmDuelGame) return '';
+  var s = mmDuelGame.state || {};
+  var meA = mmIsA();
+  var myScore = meA ? (s.aScore||0) : (s.bScore||0);
+  var opScore = meA ? (s.bScore||0) : (s.aScore||0);
+  var myMoves = meA ? (s.aMoves||0) : (s.bMoves||0);
+  var opMoves = meA ? (s.bMoves||0) : (s.aMoves||0);
+  var opp = mmOppName();
+  if(s.mode === 'take-turns'){
+    var myPairs = meA ? (s.aPairs||0) : (s.bPairs||0);
+    var opPairs = meA ? (s.bPairs||0) : (s.aPairs||0);
+    return 'Duel vs ' + opp + ': ' + myPairs + ' pairs to ' + opPairs + '.';
+  }
+  return 'Duel vs ' + opp + ': you scored ' + myScore + ' in ' + myMoves + ' moves, ' + opp + ' scored ' + opScore + ' in ' + opMoves + ' moves.';
+}
+function mmShowDuelEnd(text){
+  openOverlay('winOverlay');
+  document.getElementById('winTitle').textContent = text;
+  document.getElementById('winSub').textContent = mmDuelEndText();
+  document.getElementById('winBest').textContent = '';
+  var wd = document.getElementById('winDuel');
+  if(wd){ wd.textContent = 'Rematch'; mmRematchReady = true; }
+  confettiGo();
+}
+
+/* --- auth + REST --- */
+function mmAuthLoad(){
+  try{
+    var raw = localStorage.getItem('holos-firebase-auth');
+    if(raw){ mmAuth = JSON.parse(raw); return; }
+  }catch(e){}
+  mmAuth = null;
+}
+function mmApiKey(){ return window.firebaseConfig && window.firebaseConfig.apiKey ? window.firebaseConfig.apiKey : ''; }
+function mmRtdb(){ return 'https://holos-arcade-default-rtdb.firebaseio.com'; }
+function mmApi(path, method, body){
+  if(!mmAuth || !mmAuth.idToken) return Promise.reject(new Error('no auth'));
+  var url = mmRtdb() + path + '.json?auth=' + encodeURIComponent(mmAuth.idToken);
+  return fetch(url, { method: method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+    .then(function(r){
+      if(r.status === 401 && mmAuth.refreshToken){
+        return fetch('https://securetoken.googleapis.com/v1/token?key=' + mmApiKey(), {
+          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(mmAuth.refreshToken)
+        }).then(function(rr){ return rr.json(); }).then(function(j){
+          if(!j.id_token) throw new Error('refresh failed');
+          mmAuth.idToken = j.id_token; mmAuth.refreshToken = j.refresh_token || mmAuth.refreshToken;
+          try{ localStorage.setItem('holos-firebase-auth', JSON.stringify(mmAuth)); }catch(e){}
+          return fetch(mmRtdb() + path + '.json?auth=' + encodeURIComponent(mmAuth.idToken),
+            { method: method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+        });
+      }
+      return r;
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(j){
+      /* RTDB answers a denied write (rules not published yet) with {error: ...} — treat it as a failure so the caller shows the "one more Arcade update" toast instead of claiming success. */
+      if(j && j.error) throw new Error(typeof j.error === 'string' ? j.error : 'RTDB error');
+      return j;
+    });
+}
+function mmSendNotice(uid, notice){
+  /* Notices ride the hub's notification channel (/users/<uid>/notifications,
+     {type, title, body, link, fromName, fromUid}) — the same shape the hub's
+     sendNotice and the Christmas Trivia Duel use. That is what the Inbox
+     list renders and what the Duel pop-up watches for (type turn-invite
+     + a game: link). Posting anywhere else would never surface. */
+  var isInvite = notice.kind === 'turn-invite';
+  var body = {
+    type: isInvite ? 'turn-invite' : 'turn',
+    title: isInvite ? 'Monster Match challenge!' : (notice.kind === 'turn-result' ? 'Monster Match Duel finished' : 'Your turn in Monster Match'),
+    body: String(notice.text || '').slice(0, 600),
+    link: 'game:monster-match?match=' + notice.matchId,
+    fromName: notice.fromName, fromUid: notice.fromUid,
+    createdAt: Date.now(), read: false
+  };
+  return mmApi('/users/' + uid + '/notifications', 'POST', body);
+}
+function mmLoadFriends(){
+  mmAuthLoad();
+  if(!mmAuth || !mmAuth.uid) return Promise.resolve([]);
+  return mmApi('/friends/' + mmAuth.uid, 'GET').then(function(list){
+    var out = [];
+    if(list){
+      Object.keys(list).forEach(function(k){
+        var f = list[k];
+        if(f && f.status === 'accepted' && f.friendName){ out.push({ uid: k, name: f.friendName }); }
+      });
+    }
+    mmFriendList = out;
+    return out;
+  }).catch(function(){ mmFriendList = []; return []; });
+}
+
+/* --- mode definitions --- */
+var MM_MODES = [
+  { id: 'beat-score', title: 'Beat my score', tag: 'Turn based', desc: 'Your friend plays the same board you just played. Higher score wins.', live: true },
+  { id: 'same-board', title: 'Same board, both play', tag: 'Turn based', desc: 'A fresh board neither of you has seen. You play first, then your friend plays the same board.', live: true },
+  { id: 'take-turns', title: 'Take turns', tag: 'Turn based', desc: 'One shared board. Match a pair and go again. Miss and the turn passes. Most pairs wins. No hints, no peeking.', live: true },
+  { id: 'race', title: 'Race', tag: 'Coming soon', desc: 'Coming soon', live: false }
+];
+function mmModeById(id){ for(var i=0;i<MM_MODES.length;i++){ if(MM_MODES[i].id === id) return MM_MODES[i]; } return MM_MODES[0]; }
+function mmModeNotice(mode, meName, oppName, extra){
+  if(mode === 'beat-score') return meName + ' challenged you to Monster Match. Beat ' + extra.score + ' on ' + extra.diff + ' to win.';
+  if(mode === 'same-board') return meName + ' challenged you to Monster Match. Play the same board and beat their score.';
+  if(mode === 'take-turns') return meName + ' challenged you to Monster Match. Take turns on one shared board, most pairs wins.';
+  return meName + ' challenged you to Monster Match.';
+}
+function mmResultNotice(mode, winnerName, loserName, extra){
+  if(mode === 'take-turns') return 'Monster Match Duel finished: ' + winnerName + ' won ' + extra.w + ' pairs to ' + extra.l + ' against ' + loserName + '.';
+  return 'Monster Match Duel finished: ' + winnerName + ' beat ' + loserName + ' ' + extra.w + ' to ' + extra.l + '.';
+}
+
+/* --- picker --- */
+function mmEnterDuel(){
+  mmAuthLoad();
+  var status = document.getElementById('duelStatus');
+  var friendsEl = document.getElementById('duelFriends');
+  var modesEl = document.getElementById('duelModes');
+  var confirmEl = document.getElementById('duelConfirm');
+  var sendBtn = document.getElementById('duelSend');
+  mmPick = { friend: null, mode: 'beat-score' };
+  friendsEl.innerHTML = ''; modesEl.innerHTML = ''; confirmEl.textContent = '';
+  sendBtn.disabled = true;
+  if(!mmAuth || !mmAuth.uid){ status.textContent = 'Sign in to duel a friend.'; openOverlay('duelOverlay'); return; }
+  if(practice){ status.textContent = 'Duels need a scored game, play a normal round first.'; openOverlay('duelOverlay'); return; }
+  status.textContent = 'Loading friends...';
+  openOverlay('duelOverlay');
+  mmLoadFriends().then(function(list){
+    if(!list.length){
+      status.textContent = 'No friends yet, add friends first, then challenge one from here.';
+      friendsEl.innerHTML = ''; modesEl.innerHTML = ''; confirmEl.textContent = '';
+      return;
+    }
+    status.textContent = 'Pick a friend, then pick how to play.';
+    friendsEl.innerHTML = list.map(function(f){
+      return '<button type="button" class="duel-friend" data-uid="' + f.uid + '" data-name="' + f.name + '">' + f.name + '</button>';
+    }).join('');
+    modesEl.innerHTML = MM_MODES.map(function(m){
+      var cls = 'duel-mode' + (m.live ? '' : ' duel-mode-soon') + (m.id === mmPick.mode ? ' selected' : '');
+      return '<button type="button" class="' + cls + '" data-mode="' + m.id + '" ' + (m.live ? '' : 'disabled aria-disabled="true"') + '>'
+        + '<span class="duel-mode-title">' + m.title + '</span>'
+        + '<span class="duel-mode-tag">' + m.tag + '</span>'
+        + '<span class="duel-mode-desc">' + m.desc + '</span></button>';
+    }).join('');
+    mmPaintConfirm();
+  });
+}
+function mmPaintConfirm(){
+  var sendBtn = document.getElementById('duelSend');
+  var confirmEl = document.getElementById('duelConfirm');
+  if(mmPick.friend && mmPick.mode){
+    confirmEl.textContent = 'Send ' + mmModeById(mmPick.mode).title + ' challenge to ' + mmPick.friend.name + '?';
+    sendBtn.disabled = false;
+  } else {
+    confirmEl.textContent = '';
+    sendBtn.disabled = true;
+  }
+}
+document.getElementById('duelFriends').addEventListener('click', function(ev){
+  var b = ev.target.closest ? ev.target.closest('.duel-friend') : null;
+  if(!b) return;
+  mmPick.friend = { uid: b.getAttribute('data-uid'), name: b.getAttribute('data-name') };
+  var btns = document.querySelectorAll('.duel-friend');
+  for(var i=0;i<btns.length;i++){ btns[i].classList.toggle('selected', btns[i] === b); }
+  mmPaintConfirm();
+});
+document.getElementById('duelModes').addEventListener('click', function(ev){
+  var b = ev.target.closest ? ev.target.closest('.duel-mode') : null;
+  if(!b || b.disabled) return;
+  mmPick.mode = b.getAttribute('data-mode');
+  var btns = document.querySelectorAll('.duel-mode');
+  for(var i=0;i<btns.length;i++){ btns[i].classList.toggle('selected', btns[i] === b); }
+  mmPaintConfirm();
+});
+document.getElementById('duelSend').addEventListener('click', function(){
+  if(!mmPick.friend || !mmPick.mode) return;
+  var mode = mmPick.mode;
+  if(mode === 'beat-score' && !mmLastWin){ setMessage('Play a scored round first, then challenge your friend to beat it.'); closeOverlay('duelOverlay'); return; }
+  closeOverlay('duelOverlay');
+  mmCreateChallenge(mmPick.friend, mode);
+});
+document.getElementById('duelCancel').addEventListener('click', function(){ closeOverlay('duelOverlay'); });
+
+/* --- challenge creation --- */
+/* Code Name for the row: the hub hands it over as firebaseAuthUser when the
+   game runs inside the hub; standalone, read the account's own record (the
+   Christmas Trivia Duel does the same). Cached per page load. */
+var mmNameCache = null;
+function mmMyCodeName(){
+  if(mmNameCache) return Promise.resolve(mmNameCache);
+  if(window.firebaseAuthUser && window.firebaseAuthUser.displayName){ mmNameCache = window.firebaseAuthUser.displayName; return Promise.resolve(mmNameCache); }
+  if(!mmAuth || !mmAuth.uid) return Promise.resolve('A friend');
+  return mmApi('/users/' + mmAuth.uid, 'GET').then(function(u){
+    var n = (u && (u.username || u.name)) ? String(u.username || u.name) : 'A friend';
+    mmNameCache = n;
+    return n;
+  }).catch(function(){ return 'A friend'; });
+}
+function mmCreateChallenge(friend, mode){
+  mmAuthLoad();
+  if(!mmAuth || !mmAuth.uid) return Promise.resolve();
+  return mmMyCodeName().then(function(meName){ return mmCreateChallengeNamed(friend, mode, meName); });
+}
+function mmCreateChallengeNamed(friend, mode, meName){
+  var now = Date.now();
+  var mid = 'mm-' + now.toString(36) + Math.random().toString(36).slice(2, 8);
+  var state = { mode: mode, difficulty: difficulty };
+  var deckIds = null;
+  if(mode === 'beat-score' && mmLastWin){
+    state.difficulty = mmLastWin.difficulty;
+    state.deck = mmLastWin.deck.slice();
+    state.aScore = mmLastWin.score; state.aMoves = mmLastWin.moves; state.aTime = mmLastWin.time;
+    deckIds = mmLastWin.deck.slice();
+  } else if(mode === 'same-board'){
+    var ids = MONSTERS.map(function(m){ return m.id; });
+    mmShuffleArr(ids);
+    var picked = ids.slice(0, DIFFS[state.difficulty].pairs);
+    deckIds = mmShuffleArr(picked.concat(picked));
+    state.deck = deckIds.slice();
+    state.aScore = 0; state.aMoves = 0; state.aTime = 0;
+  } else if(mode === 'take-turns'){
+    var tIds = MONSTERS.map(function(m){ return m.id; });
+    mmShuffleArr(tIds);
+    var tPicked = tIds.slice(0, DIFFS[state.difficulty].pairs);
+    deckIds = mmShuffleArr(tPicked.concat(tPicked));
+    state.deck = deckIds.slice();
+    state.pairs = []; state.aPairs = 0; state.bPairs = 0; state.aMiss = 0; state.bMiss = 0; state.aTime = 0; state.bTime = 0;
+  }
+  var row = {
+    game: 'monster-match', aUid: mmAuth.uid, bUid: friend.uid,
+    aName: meName, bName: friend.name,
+    xUid: mmAuth.uid, oUid: friend.uid,
+    board: deckIds || [], turn: mmAuth.uid, status: 'waiting', winner: null, moves: 0,
+    state: state, createdAt: now, updatedAt: now
+  };
+  var notice = {
+    kind: 'turn-invite', game: 'monster-match', matchId: mid,
+    text: mmModeNotice(mode, meName, friend.name, { score: state.aScore || 0, diff: state.difficulty }),
+    fromName: meName, fromUid: mmAuth.uid, ts: now, read: false
+  };
+  mmApi('/turnMatches/' + mid, 'PUT', row).then(function(){
+    return Promise.all([
+      mmApi('/users/' + mmAuth.uid + '/turnMatches/' + mid, 'PUT', true),
+      mmApi('/users/' + friend.uid + '/turnMatches/' + mid, 'PUT', true),
+      mmSendNotice(friend.uid, notice)
+    ]);
+  }).then(function(){
+    setMessage('Challenge sent to ' + friend.name + '!');
+  }).catch(function(){
+    setMessage('Challenge needs one more Arcade update. Try again after the next update.');
+  });
+}
+
+/* --- accept / decline / open --- */
+function mmAcceptMatch(mid){
+  mmAuthLoad();
+  if(!mmAuth || !mmAuth.uid) return;
+  mmApi('/turnMatches/' + mid, 'GET').then(function(m){
+    if(!m || m.status !== 'waiting') return;
+    var now = Date.now();
+    var patch = { status: 'playing', turn: m.aUid, updatedAt: now };
+    if(m.state && m.state.mode === 'beat-score'){
+      /* Beat my score: the challenger already played, so the turn belongs to me (the accepter). */
+      patch.turn = mmAuth.uid;
+    }
+    return mmApi('/turnMatches/' + mid, 'PATCH', patch).then(function(){
+      /* Hand the FRESH row on (status playing, turn set) — the stale copy still says waiting. */
+      m.status = 'playing'; m.turn = patch.turn; m.updatedAt = now;
+      mmOpenMatch(mid, m);
+    });
+  }).catch(function(){});
+}
+function mmDeclineMatch(mid){
+  mmAuthLoad();
+  if(!mmAuth || !mmAuth.uid) return;
+  mmApi('/turnMatches/' + mid, 'PATCH', { status: 'declined', updatedAt: Date.now() }).then(function(){
+    setMessage('Challenge declined.');
+  }).catch(function(){});
+}
+function mmOpenMatch(mid, row){
+  mmAuthLoad();
+  if(!mmAuth || !mmAuth.uid) return;
+  var load = row ? Promise.resolve(row) : mmApi('/turnMatches/' + mid, 'GET');
+  load.then(function(m){
+    if(!m) return;
+    m.mid = mid;
+    mmDuelGame = m;
+    mmStartPolling(mid);
+    mmApplyMatch();
+  }).catch(function(){});
+}
+function mmApplyMatch(){
+  var m = mmDuelGame;
+  if(!m) return;
+  var s = m.state || {};
+  var opp = mmOppName();
+  /* Expiry is lazy: a match older than 7 days is expired the moment it renders. */
+  if((m.status === 'waiting' || m.status === 'playing') && m.createdAt && Date.now() - m.createdAt > 7*24*60*60*1000){
+    m.status = 'expired';
+    mmApi('/turnMatches/' + m.mid, 'PATCH', { status: 'expired', updatedAt: Date.now() }).catch(function(){});
+    mmBanner('This Duel expired after 7 days.');
+    return;
+  }
+  if(m.status === 'won' || m.status === 'draw'){
+    var w = m.winner ? (m.winner === mmAuth.uid ? 'You win the Duel!' : opp + ' wins the Duel!') : 'Duel drawn!';
+    mmShowDuelEnd(w);
+    return;
+  }
+  if(m.status === 'waiting'){
+    if(m.aUid === mmAuth.uid){ mmBanner('Challenge sent to ' + opp + '. Waiting for them to accept.'); }
+    else { mmBanner(opp + ' challenged you to Monster Match. Accept it from your Inbox to play.'); }
+    return;
+  }
+  /* playing */
+  if(s.mode === 'beat-score'){
+    if(m.aUid === mmAuth.uid){
+      mmBanner('Duel vs ' + opp + ': they need to beat ' + (s.aScore||0) + ' on ' + s.difficulty + '. Waiting on ' + opp + '.');
+      return;
+    }
+    mmStartDuelGame(m, s.deck, 'Duel vs ' + opp + ': beat ' + (s.aScore||0) + ' to win!');
+  } else if(s.mode === 'same-board'){
+    if(m.turn === mmAuth.uid && m.aUid === mmAuth.uid && !s.aScore && !s.aPlayed){
+      /* My entry run: I play the fresh board first. */
+      mmStartDuelGame(m, s.deck, 'Duel vs ' + opp + ': play this board first, then ' + opp + ' plays it too.');
+    } else if(m.turn === mmAuth.uid && m.bUid === mmAuth.uid && s.aPlayed){
+      mmStartDuelGame(m, s.deck, 'Duel vs ' + opp + ': play the same board. Higher score wins!');
+    } else {
+      mmBanner('Duel vs ' + opp + ': waiting on ' + opp + ' to play their round.');
+    }
+  } else if(s.mode === 'take-turns'){
+    mmStartTakeTurns(m);
+  }
+}
+function mmStartDuelGame(m, deckIds, bannerText){
+  try{ mmDuelClearKeep(); }catch(e){}
+  var diff = (m.state && m.state.difficulty) || difficulty;
+  difficulty = diff;
+  showGameWithDeck(diff, deckIds);
+  mmBanner(bannerText);
+}
+function mmDuelClearKeep(){
+  /* Same as mmDuelClear but keeps mmDuelGame and the poll (used when starting a Duel round). */
+  var wd = document.getElementById('winDuel'); if(wd) wd.textContent = 'Duel';
+  mmRematchReady = false;
+}
+function mmShowGameView(){
+  document.getElementById('menuView').hidden = true;
+  document.getElementById('gameView').hidden = false;
+  document.body.classList.add('playing'); document.documentElement.classList.add('playing');
+  /* This game shows overlays with the .open class (rules, feedback, win, duel) — close any that are up. */
+  ['rulesOverlay', 'feedbackOverlay', 'winOverlay', 'duelOverlay'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.classList.remove('open');
+  });
+}
+function showGameWithDeck(diff, deckIds){
+  mmDuelStarting = true;
+  difficulty = diff;
+  document.querySelectorAll('.diff-btn').forEach(function(x){ x.classList.toggle('active', x.dataset.diff === diff); });
+  mmShowGameView();
+  newGame(deckIds);
+  mmDuelStarting = false;
+}
+function mmStartSoloRound(){
+  /* A plain scored round (used for a Beat my score rematch): no stored deck, no Duel state. */
+  mmShowGameView();
+  newGame();
+}
+function mmStartTakeTurns(m){
+  var s = m.state;
+  var diff = s.difficulty || difficulty;
+  difficulty = diff;
+  if(mmTTStartedMid !== m.mid){
+    mmTTStartedMid = m.mid;
+    mmMyTimeBase = mmIsA() ? (s.aTime||0) : (s.bTime||0);
+    showGameWithDeck(diff, s.deck);
+  }
+  /* Restore found pairs on EVERY turn change, not just the first open —
+     otherwise the other player's pairs stay flippable and can be
+     "found" a second time. Dealing the board happens once (above). */
+  mmApplyTakeTurnsBoard(s);
+  /* The clock only runs on my turn, so waiting time never counts toward my Duel time. */
+  if(m.turn === mmAuth.uid){ if(started) startTimer(); }
+  else { clearInterval(timer); timer = null; }
+  mmBanner(m.turn === mmAuth.uid ? 'Your turn. Match a pair and go again!' : 'Waiting on ' + mmOppName() + '. It is their turn.');
+  setMessage(m.turn === mmAuth.uid ? 'Your turn' : 'Waiting on ' + mmOppName());
+}
+function mmApplyTakeTurnsBoard(s){
+  /* Pairs already found (by either player) show as matched, so the board
+     never offers a pair that is already gone. */
+  var pairs = s.pairs || [];
+  if(!pairs.length) return;
+  var cards = boardEl.querySelectorAll('.card');
+  var meA = mmIsA();
+  pairs.forEach(function(p){
+    [p.i1, p.i2].forEach(function(ix){
+      var c = cards[+ix];
+      if(c){ c.classList.add('matched'); c.classList.add('flipped'); c.setAttribute('aria-label', monsterById(p.monster).name + ' matched'); }
+    });
+  });
+  matched = pairs.length;
+  score = (meA ? (s.aPairs||0) : (s.bPairs||0)) * 100;
+  updateStats();
+}
+
+/* --- win handling: submit a Duel score, or auto-send a rematch challenge --- */
+function mmDuelOnWin(){
+  if(mmRematchPending){
+    var p = mmRematchPending; mmRematchPending = null;
+    if(mmLastWin) mmCreateChallenge(p, p.mode);
+    return;
+  }
+  if(!mmDuelGame) return;
+  var m = mmDuelGame;
+  var s = m.state || {};
+  if(m.status !== 'playing') return;
+  var meA = mmIsA();
+  var now = Date.now();
+  if(s.mode === 'beat-score'){
+    /* Only the accepter (bUid) can post a score; the challenger already posted theirs. */
+    if(meA) return;
+    var patch = { updatedAt: now };
+    patch['state/bScore'] = score; patch['state/bMoves'] = moves; patch['state/bTime'] = seconds;
+    var aScore = s.aScore || 0, bScore = score;
+    var winner = null;
+    if(bScore > aScore) winner = mmAuth.uid;
+    else if(aScore > bScore) winner = m.aUid;
+    else {
+      var aMoves = s.aMoves || 0, bMoves = moves;
+      if(bMoves < aMoves) winner = mmAuth.uid;
+      else if(aMoves < bMoves) winner = m.aUid;
+      else {
+        var aTime = s.aTime || 0, bTime = seconds;
+        if(bTime < aTime) winner = mmAuth.uid;
+        else if(aTime < bTime) winner = m.aUid;
+      }
+    }
+    if(winner){
+      patch.status = 'won'; patch.winner = winner;
+    } else {
+      patch.status = 'draw'; patch.winner = null;
+    }
+    mmApi('/turnMatches/' + m.mid, 'PATCH', patch).then(function(){
+      var wName = winner === mmAuth.uid ? mmMyName() : (winner === m.aUid ? m.aName : null);
+      var notice = {
+        kind: 'turn-result', game: 'monster-match', matchId: m.mid,
+        text: winner ? mmResultNotice('beat-score', wName, winner === mmAuth.uid ? m.aName : mmMyName(), { w: Math.max(aScore, bScore), l: Math.min(aScore, bScore) })
+                     : 'Monster Match Duel vs ' + mmOppName() + ' ended in a draw.',
+        fromName: mmMyName(), fromUid: mmAuth.uid, ts: now, read: false
+      };
+      mmSendNotice(m.aUid === mmAuth.uid ? m.bUid : m.aUid, notice);
+      var w = winner === mmAuth.uid ? 'You win the Duel!' : (winner ? mmOppName() + ' wins the Duel!' : 'Duel drawn!');
+      mmDuelGame.status = patch.status; mmDuelGame.winner = winner || null;
+      mmDuelGame.state.bScore = score; mmDuelGame.state.bMoves = moves; mmDuelGame.state.bTime = seconds;
+      mmShowDuelEnd(w);
+    }).catch(function(){ setMessage('Duel score needs one more Arcade update. Try again after the next update.'); });
+  } else if(s.mode === 'same-board'){
+    if(meA){
+      /* My entry run: store it, hand the turn to my friend, wait.
+         No win overlay for this round — the Duel is not over, the banner says so. */
+      mmSuppressWinOverlay = true;
+      var pA = { updatedAt: now, turn: m.bUid };
+      pA['state/aScore'] = score; pA['state/aMoves'] = moves; pA['state/aTime'] = seconds; pA['state/aPlayed'] = true;
+      mmApi('/turnMatches/' + m.mid, 'PATCH', pA).then(function(){
+        mmDuelGame.state.aScore = score; mmDuelGame.state.aMoves = moves; mmDuelGame.state.aTime = seconds; mmDuelGame.state.aPlayed = true;
+        mmDuelGame.turn = m.bUid;
+        mmSendNotice(m.bUid, { kind: 'turn-move', game: 'monster-match', matchId: m.mid,
+          text: mmMyName() + ' played their Monster Match round. Your turn. Play the same board and beat their score.',
+          fromName: mmMyName(), fromUid: mmAuth.uid, ts: now, read: false });
+        mmBanner('Duel vs ' + mmOppName() + ': you scored ' + score + '. Waiting on ' + mmOppName() + ' to play the same board.');
+        setMessage('Round played. Waiting on ' + mmOppName() + '.');
+      }).catch(function(){ setMessage('Duel score needs one more Arcade update. Try again after the next update.'); });
+    } else {
+      /* My reply run: higher score wins (fewer moves, then faster time). */
+      var aS = s.aScore || 0, bS = score;
+      var win2 = null;
+      if(bS > aS) win2 = mmAuth.uid;
+      else if(aS > bS) win2 = m.aUid;
+      else {
+        var aM = s.aMoves || 0, bM = moves;
+        if(bM < aM) win2 = mmAuth.uid;
+        else if(aM < bM) win2 = m.aUid;
+        else {
+          var aT = s.aTime || 0, bT = seconds;
+          if(bT < aT) win2 = mmAuth.uid;
+          else if(aT < bT) win2 = m.aUid;
+        }
+      }
+      var pB = { updatedAt: now };
+      pB['state/bScore'] = score; pB['state/bMoves'] = moves; pB['state/bTime'] = seconds;
+      if(win2){ pB.status = 'won'; pB.winner = win2; } else { pB.status = 'draw'; pB.winner = null; }
+      mmApi('/turnMatches/' + m.mid, 'PATCH', pB).then(function(){
+        var wName2 = win2 === mmAuth.uid ? mmMyName() : (win2 === m.aUid ? m.aName : null);
+        mmSendNotice(m.aUid, { kind: 'turn-result', game: 'monster-match', matchId: m.mid,
+          text: win2 ? mmResultNotice('same-board', wName2, win2 === mmAuth.uid ? m.aName : mmMyName(), { w: Math.max(aS, bS), l: Math.min(aS, bS) })
+                     : 'Monster Match Duel vs ' + mmOppName() + ' ended in a draw.',
+          fromName: mmMyName(), fromUid: mmAuth.uid, ts: now, read: false });
+        mmDuelGame.status = pB.status; mmDuelGame.winner = win2 || null;
+        mmDuelGame.state.bScore = score; mmDuelGame.state.bMoves = moves; mmDuelGame.state.bTime = seconds;
+        var w2 = win2 === mmAuth.uid ? 'You win the Duel!' : (win2 ? mmOppName() + ' wins the Duel!' : 'Duel drawn!');
+        mmShowDuelEnd(w2);
+      }).catch(function(){ setMessage('Duel score needs one more Arcade update. Try again after the next update.'); });
+    }
+  }
+  /* take-turns never reaches here — win() intercepts it first. */
+}
+
+/* --- take-turns: pair resolved / missed / board cleared --- */
+function mmDuelPairResolved(first, second){
+  if(!mmTakeTurnsActive()) return;
+  var m = mmDuelGame, s = m.state;
+  var meA = mmIsA();
+  var pair = { monster: first.m.id, i1: first.btn.dataset.idx, i2: second.dataset.idx, uid: mmAuth.uid };
+  s.pairs = s.pairs || [];
+  s.pairs.push(pair);
+  if(meA) s.aPairs = (s.aPairs||0) + 1; else s.bPairs = (s.bPairs||0) + 1;
+  var total = DIFFS[s.difficulty || difficulty].pairs;
+  var done = (s.aPairs||0) + (s.bPairs||0);
+  if(done >= total){
+    /* Board cleared — winner is most pairs, tiebreak fewer misses then faster time. */
+    var aP = s.aPairs||0, bP = s.bPairs||0;
+    var win3 = null;
+    if(aP > bP) win3 = m.aUid;
+    else if(bP > aP) win3 = m.bUid;
+    else {
+      var aMi = s.aMiss||0, bMi = s.bMiss||0;
+      if(aMi < bMi) win3 = m.aUid;
+      else if(bMi < aMi) win3 = m.bUid;
+      else {
+        var aTi = s.aTime||0, bTi = s.bTime||0;
+        if(aTi < bTi) win3 = m.aUid;
+        else if(bTi < aTi) win3 = m.bUid;
+      }
+    }
+    var patch = { updatedAt: Date.now(), turn: m.turn };
+    patch['state/pairs'] = s.pairs;
+    patch[meA ? 'state/aPairs' : 'state/bPairs'] = meA ? s.aPairs : s.bPairs;
+    if(meA) patch['state/aTime'] = mmMyTimeBase + seconds; else patch['state/bTime'] = mmMyTimeBase + seconds;
+    if(win3){ patch.status = 'won'; patch.winner = win3; } else { patch.status = 'draw'; patch.winner = null; }
+    mmApi('/turnMatches/' + m.mid, 'PATCH', patch).then(function(){
+      var wName3 = win3 === mmAuth.uid ? mmMyName() : (win3 === m.aUid ? m.aName : m.bName);
+      var oppUid = win3 === mmAuth.uid ? (m.aUid === mmAuth.uid ? m.bUid : m.aUid) : null;
+      if(win3){
+        mmSendNotice(m.aUid === mmAuth.uid ? m.bUid : m.aUid, { kind: 'turn-result', game: 'monster-match', matchId: m.mid,
+          text: mmResultNotice('take-turns', wName3, win3 === mmAuth.uid ? mmOppName() : mmMyName(), { w: Math.max(aP, bP), l: Math.min(aP, bP) }),
+          fromName: mmMyName(), fromUid: mmAuth.uid, ts: Date.now(), read: false });
+      }
+      mmDuelGame.status = patch.status; mmDuelGame.winner = win3 || null;
+      var w3 = win3 === mmAuth.uid ? 'You win the Duel!' : (win3 ? mmOppName() + ' wins the Duel!' : 'Duel drawn!');
+      mmShowDuelEnd(w3);
+    }).catch(function(){ setMessage('Duel score needs one more Arcade update. Try again after the next update.'); });
+    return;
+  }
+  /* Match and go again — same player keeps the turn. */
+  var p2 = { updatedAt: Date.now() };
+  p2['state/pairs'] = s.pairs;
+  p2[meA ? 'state/aPairs' : 'state/bPairs'] = meA ? s.aPairs : s.bPairs;
+  mmApi('/turnMatches/' + m.mid, 'PATCH', p2).catch(function(){});
+  setMessage('Matched! Go again.');
+}
+function mmDuelPairMissed(first, second){
+  if(!mmTakeTurnsActive()) return;
+  var m = mmDuelGame, s = m.state;
+  var meA = mmIsA();
+  if(meA) s.aMiss = (s.aMiss||0) + 1; else s.bMiss = (s.bMiss||0) + 1;
+  var nextUid = meA ? m.bUid : m.aUid;
+  /* Pass the turn locally right away — otherwise I could flip again before the write lands. */
+  m.turn = nextUid;
+  var patch = { updatedAt: Date.now(), turn: nextUid };
+  patch[meA ? 'state/aMiss' : 'state/bMiss'] = meA ? s.aMiss : s.bMiss;
+  if(meA) patch['state/aTime'] = mmMyTimeBase + seconds; else patch['state/bTime'] = mmMyTimeBase + seconds;
+  mmApi('/turnMatches/' + m.mid, 'PATCH', patch).then(function(){
+    mmDuelGame.turn = nextUid;
+    mmSendNotice(nextUid, { kind: 'turn-move', game: 'monster-match', matchId: m.mid,
+      text: mmMyName() + ' missed in your Monster Match Duel. Your turn!',
+      fromName: mmMyName(), fromUid: mmAuth.uid, ts: Date.now(), read: false });
+    mmBanner('Waiting on ' + mmOppName() + '. It is their turn.');
+    setMessage('No match. Turn passes to ' + mmOppName() + '.');
+  }).catch(function(){});
+}
+function mmDuelTakeTurnsCleared(){
+  /* Board cleared but the pair write may still be in flight — the winner is
+     decided in mmDuelPairResolved once the last pair is recorded. If the
+     write already landed, mmDuelPairResolved handled the result; this is
+     only a fallback for a missed write. */
+  if(mmDuelGame && (mmDuelGame.status === 'won' || mmDuelGame.status === 'draw')) return;
+  setMessage('Board cleared. Waiting for the Duel result.');
+  mmBanner('Board cleared. Waiting for the Duel result.');
+}
+
+/* --- rematch --- */
+function mmRematch(){
+  if(!mmDuelGame) return;
+  var m = mmDuelGame;
+  var oppUid = m.aUid === mmAuth.uid ? m.bUid : m.aUid;
+  var oppName = mmOppName();
+  var mode = (m.state && m.state.mode) || 'same-board';
+  var diff = (m.state && m.state.difficulty) || difficulty;
+  mmDuelClear();
+  if(mode === 'beat-score'){
+    /* Rematch starts with a fresh solo round; the challenge auto-sends on the win.
+       The pending challenge is set AFTER the round starts — showMenu/newGame
+       clear Duel state, and would wipe it if it were set first. */
+    setMessage('Play a round. Your Beat my score challenge to ' + oppName + ' sends when you win.');
+    mmStartSoloRound();
+    mmRematchPending = { uid: oppUid, name: oppName, mode: 'beat-score' };
+    return;
+  }
+  difficulty = diff;
+  mmCreateChallenge({ uid: oppUid, name: oppName }, mode);
+}
+
+/* --- polling + hub handoff --- */
+function mmPollTick(mid){
+  if(!mmDuelGame || mmDuelGame.mid !== mid) { if(mmPoll){ clearInterval(mmPoll); mmPoll = null; } return Promise.resolve(); }
+  return mmApi('/turnMatches/' + mid, 'GET').then(function(m){
+    if(!m) return;
+    m.mid = mid;
+    var wasTurn = mmDuelGame.turn, wasStatus = mmDuelGame.status;
+    mmDuelGame = m;
+    if(m.status !== wasStatus || m.turn !== wasTurn) mmApplyMatch();
+  }).catch(function(){});
+}
+function mmStartPolling(mid){
+  if(mmPoll) clearInterval(mmPoll);
+  mmPoll = setInterval(function(){ mmPollTick(mid); }, 4000);
+}
+function mmBootCheck(){
+  mmAuthLoad();
+  if(!mmAuth || !mmAuth.uid) return;
+  var q = new URLSearchParams(location.search);
+  var mid = q.get('match');
+  var chal = q.get('challenge');
+  var rem = q.get('rematch');
+  if(mid){ mmOpenMatch(mid); return; }
+  if(chal){ mmAcceptMatch(chal); return; }
+  if(rem){
+    mmApi('/turnMatches/' + rem, 'GET').then(function(m){
+      if(!m) return;
+      var oppUid = m.aUid === mmAuth.uid ? m.bUid : m.aUid;
+      var oppName = m.aUid === mmAuth.uid ? m.bName : m.aName;
+      var mode = (m.state && m.state.mode) || 'same-board';
+      if(mode !== 'beat-score'){ mmCreateChallenge({ uid: oppUid, name: oppName }, mode); return; }
+      setMessage('Play a round. Your Beat my score challenge to ' + oppName + ' sends when you win.');
+      mmStartSoloRound();
+      mmRematchPending = { uid: oppUid, name: oppName, mode: 'beat-score' };
+    }).catch(function(){});
+    return;
+  }
+  /* Auto-open only when a match waits on me — never while a game is open. */
+  mmApi('/users/' + mmAuth.uid + '/turnMatches', 'GET').then(function(idx){
+    if(!idx) return;
+    var ids = Object.keys(idx);
+    var check = function(i){
+      if(i >= ids.length) return;
+      mmApi('/turnMatches/' + ids[i], 'GET').then(function(m){
+        if(m && m.game === 'monster-match' && m.status === 'waiting' && m.bUid === mmAuth.uid){
+          mmOpenMatch(ids[i], m);
+          return;
+        }
+        check(i + 1);
+      }).catch(function(){ check(i + 1); });
+    };
+    check(0);
+  }).catch(function(){});
+}
+window.addEventListener('message', function(ev){
+  if(!ev.data || typeof ev.data !== 'object') return;
+  if(ev.data.type === 'holo-mm-match' && ev.data.mid){ mmOpenMatch(ev.data.mid); }
+  if(ev.data.type === 'holo-mm-rematch' && ev.data.mid){
+    mmApi('/turnMatches/' + ev.data.mid, 'GET').then(function(m){
+      if(!m) return;
+      var oppUid = m.aUid === mmAuth.uid ? m.bUid : m.aUid;
+      var oppName = m.aUid === mmAuth.uid ? m.bName : m.aName;
+      var mode = (m.state && m.state.mode) || 'same-board';
+      if(mode === 'beat-score'){
+        setMessage('Play a round. Your Beat my score challenge to ' + oppName + ' sends when you win.');
+        mmStartSoloRound();
+        mmRematchPending = { uid: oppUid, name: oppName, mode: 'beat-score' };
+        return;
+      }
+      mmCreateChallenge({ uid: oppUid, name: oppName }, mode);
+    }).catch(function(){});
+  }
+  if(ev.data.type === 'holo-challenge' && ev.data.game === 'monster-match' && ev.data.mode){
+    mmCreateChallenge({ uid: ev.data.uid, name: ev.data.name }, ev.data.mode);
+  }
+});
+
+/* --- test hooks --- */
+window.__mm = window.__mm || {};
+window.__mm.duel = {
+  get game(){ return mmDuelGame; },
+  get lastWin(){ return mmLastWin; },
+  get rematchPending(){ return mmRematchPending; },
+  setInviteLive: function(v){ INVITE_LIVE = !!v; paintInvite(); },
+  get inviteLive(){ return INVITE_LIVE; },
+  setAuth: function(a){ mmAuth = a; },
+  setLastWin: function(w){ mmLastWin = w; },
+  setFriends: function(f){ mmFriendList = f; },
+  openPicker: mmEnterDuel,
+  createChallenge: mmCreateChallenge,
+  accept: mmAcceptMatch,
+  decline: mmDeclineMatch,
+  open: mmOpenMatch,
+  onWin: mmDuelOnWin,
+  clear: mmDuelClear,
+  tick: mmPollTick,
+  modes: MM_MODES,
+  noticeFor: mmModeNotice,
+  resultNoticeFor: mmResultNotice
+};
+
+mmAuthLoad();
+mmBootCheck();
+
 })();
 </script>
 
