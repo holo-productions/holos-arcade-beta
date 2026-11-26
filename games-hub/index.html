@@ -6381,6 +6381,12 @@ setTimeout(function(){
       <button class="back-btn" id="playerReviewBtn" type="button"><svg class="egg-duck egg-duck-xs" aria-hidden="true"><use href="#eggDuck"></use></svg> Report back</button>
     </div>
   </div>
+  <!-- SIDE-PANELS-2026-11-25: #playerMid wraps the game window so the
+       side writing panels sit in the empty spaces beside it on desktop.
+       The row only exists at >=1280px in-game (see CSS); everywhere else
+       #playerMid is display:contents and the layout is exactly as before. -->
+  <div id="playerMid">
+    <aside class="side-panel" id="sidePanelL" aria-label="Scores and records" hidden></aside>
   <div class="player-body">
     <div id="practiceBanner" hidden role="status">
       <span class="pb-icon" aria-hidden="true">🎓</span>
@@ -8243,6 +8249,8 @@ setTimeout(function(){
     <iframe id="cops-and-robbersFrame" title="Cops and Robbers" data-src="../cops-and-robbers/" allow="autoplay; fullscreen" frameborder="0"></iframe>
   </section>
   </div>
+    <aside class="side-panel" id="sidePanelR" aria-label="How to play" hidden></aside>
+  </div>
 
 </div>
   <!-- ===== How-to-play tutorial overlay ===== -->
@@ -9389,11 +9397,92 @@ setTimeout(function(){
     // away; the walkthrough opens only from the game's ❓ How to play button.
     if(!practiceOpen) wantPractice[name] = false; /* HOLO-PRACTICE-2026-11-23: real opens clear practice intent */
     if(starters[name]) starters[name]();
+    renderSidePanels(name); /* SIDE-PANELS-2026-11-25: fill the side writing for this game */
     $('playerBack').focus();
   }
+
+  /* ============ Side writing panels (SIDE-PANELS-2026-11-25) ============
+     Holo 2026-11-25 23:27-23:33 (Ghost Hunt photo): the writing that used to
+     sit in the middle white box now lives in the EMPTY SPACES beside the
+     game window on desktop (>=1280px) - left panel: Scores & records,
+     right panel: How to play. The middle box keeps just the game. Desktop
+     only: the panels are display:none below 1280px, in fullscreen, and on
+     phones (the game fills the screen there, so there is no side space).
+     "We will add to it after" - the panels are built to grow:
+     TO ADD A SECTION: write one builder in SECTION_BUILDERS below and add
+     its id to the left/right list in SIDE_PANEL_SECTIONS - one section
+     block per topic, all in this one place; the layout never changes.
+     TO ADD A GAME: add one entry to SIDE_PANEL_GAMES (slug -> scores key
+     prefix + how-to content copied VERBATIM from that game's own
+     rules/tutorial - never rewritten). Games with no entry get no panels.
+     Scores are read live from the game's own localStorage keys (the game
+     and the hub share one origin) - never invented. Empty state when
+     nothing is saved yet. */
+  var SIDE_PANEL_GAMES = {
+    'ghost-hunt': {
+      scores: {
+        prefix: 'ghosthunt_best_',
+        rows: [['easy', '🟢 Easy'], ['medium', '🟡 Medium'], ['hard', '🔴 Hard']],
+        note: "Saved on this device. Practice games don't count."
+      },
+      howto: {
+        steps: [
+          ['Aim the Light', 'Move your mouse or drag your finger to sweep the flashlight around the dark house.'],
+          ['Reveal a Ghost', 'Ghosts light up in your beam. The golden one is worth 50 points!'],
+          ['Tap to Catch', 'Tap or click a lit-up ghost to catch it. Shy ghosts dash away — be sneaky!'],
+          ['Build Combos', 'Quick back-to-back catches build a combo multiplier up to ×5.']
+        ],
+        ghosts: 'Regular 10 · Sleepy 15 · Shy 20 · Golden 50 pts',
+        more: 'Full rules live in the game — tap 📜 Rules in the game.'
+      }
+    }
+  };
+  var SIDE_PANEL_SECTIONS = { left: ['scores'], right: ['howto'] };
+  function spScoresHTML(g){
+    var any = false, rows = '';
+    try {
+      any = g.scores.rows.some(function(r){ return localStorage.getItem(g.scores.prefix + r[0]) !== null; });
+      rows = g.scores.rows.map(function(r){
+        var n = parseInt(localStorage.getItem(g.scores.prefix + r[0]), 10);
+        return '<div class="sp-bestrow"><span>' + r[1] + '</span><span>' + (isNaN(n) ? '—' : n + ' pts') + '</span></div>';
+      }).join('');
+    } catch(e){}
+    return '<section class="sp-section" data-sp="scores"><h3>🏆 Scores &amp; records</h3>'
+      + (any ? rows : '<p class="sp-empty">No scores yet — play a round!</p>')
+      + '<p class="sp-note">' + g.scores.note + '</p></section>';
+  }
+  function spHowtoHTML(g){
+    var steps = g.howto.steps.map(function(s){ return '<li><b>' + s[0] + '</b> — ' + s[1] + '</li>'; }).join('');
+    return '<section class="sp-section" data-sp="howto"><h3>👻 How to play</h3>'
+      + '<ol class="sp-steps">' + steps + '</ol>'
+      + '<p class="sp-ghosts"><b>Ghosts:</b> ' + g.howto.ghosts + '</p>'
+      + '<p class="sp-note">' + g.howto.more + '</p></section>';
+  }
+  var SECTION_BUILDERS = { scores: spScoresHTML, howto: spHowtoHTML };
+  var sidePanelSlug = null; /* the game the panels are showing right now (null = hidden) */
+  function renderSidePanels(slug){
+    var L = $('sidePanelL'), R = $('sidePanelR');
+    if(!L || !R) return;
+    var g = slug && SIDE_PANEL_GAMES[slug];
+    sidePanelSlug = g ? slug : null;
+    if(!g){ L.hidden = true; R.hidden = true; return; }
+    L.innerHTML = SIDE_PANEL_SECTIONS.left.map(function(id){ return SECTION_BUILDERS[id](g); }).join('');
+    R.innerHTML = SIDE_PANEL_SECTIONS.right.map(function(id){ return SECTION_BUILDERS[id](g); }).join('');
+    L.hidden = false; R.hidden = false;
+  }
+  /* Scores refresh live: the game (in its iframe) writes its bests to the
+     same origin's localStorage, so the hub hears the storage event and
+     re-reads - no polling, no iframe access. */
+  window.addEventListener('storage', function(e){
+    if(!sidePanelSlug || !e || !e.key) return;
+    var g = SIDE_PANEL_GAMES[sidePanelSlug];
+    if(g && e.key.indexOf(g.scores.prefix) === 0) renderSidePanels(sidePanelSlug);
+  });
+  window.holoSidePanels = { render: renderSidePanels, games: SIDE_PANEL_GAMES, sections: SIDE_PANEL_SECTIONS }; /* test hook */
   function closePlayer(){
     if(currentGame && stoppers[currentGame]) stoppers[currentGame]();
     currentGame = null;
+    renderSidePanels(null); /* SIDE-PANELS-2026-11-25: clear the side writing */
     /* DAB-LOGO-2026-11-25: reset the player-bar logo to the Arcade mark. */
     var pbl = $('playerBarLogo'), pgl = $('playerGameLogo');
     if(pbl) pbl.hidden = false;
@@ -31404,6 +31493,37 @@ body.wt-on.in-game #player .player-body{flex:1 1 auto;min-height:0;overflow:hidd
 body.wt-on.in-game #player .player-body .game-pane{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
 body.wt-on.in-game #player .rff-frame{flex:1 1 auto;height:auto!important;min-height:0;}
 body.wt-on.in-game #player .player-bar{flex:0 0 auto;}
+
+/* ---------- 3b. Side writing panels (SIDE-PANELS-2026-11-25) ----------
+   Holo 2026-11-25 23:27-23:33 (Ghost Hunt photo): the writing that used to
+   sit in the middle white box now lives in the EMPTY SPACES beside the
+   game window on desktop - left: Scores & records, right: How to play.
+   The middle box keeps just the game. The panels only exist at >=1280px
+   while a game is open; below that (and on phones, where the game fills
+   the screen) they are display:none and the layout is exactly as before.
+   The game window is never resized or moved: .player-body keeps its
+   920px width, centred by justify-content when the panels are hidden. */
+#playerMid{display:contents}
+.side-panel{display:none}
+@media (min-width:1280px){
+  body.wt-on.in-game #playerMid{display:flex;flex-direction:row;flex:1 1 auto;min-height:0;justify-content:center}
+  body.wt-on.in-game #playerMid .player-body{flex:0 0 920px;max-width:920px;margin:0}
+  body.wt-on.in-game .side-panel:not([hidden]){display:block;flex:1 1 0;min-width:0;max-width:320px;overflow-y:auto;background:linear-gradient(180deg,var(--navy2),var(--navy));border:1px solid var(--line);border-radius:14px;box-shadow:0 0 24px rgba(139,92,255,.25);padding:20px 16px;color:var(--ink)}
+}
+#player:fullscreen #playerMid,#player:-webkit-full-screen #playerMid{display:contents}
+.side-panel .sp-section{margin:0 0 22px}
+.side-panel .sp-section:last-child{margin-bottom:0}
+.side-panel h3{font-family:var(--pixel);font-size:11px;line-height:1.7;letter-spacing:1px;color:var(--cyan);margin:0 0 12px;text-shadow:0 0 10px rgba(56,225,255,.45)}
+.side-panel .sp-bestrow{display:flex;justify-content:space-between;gap:8px;font-weight:800;font-size:14px;padding:7px 0;border-bottom:1px dashed var(--line)}
+.side-panel .sp-bestrow:last-of-type{border-bottom:none}
+.side-panel .sp-bestrow span:last-child{color:var(--gold);white-space:nowrap}
+.side-panel .sp-empty{font-weight:800;font-size:14px;margin:4px 0 10px}
+.side-panel .sp-note{color:var(--muted);font-size:12.5px;line-height:1.55;margin:10px 0 0}
+.side-panel .sp-steps{margin:0;padding-left:20px}
+.side-panel .sp-steps li{font-size:13.5px;line-height:1.5;margin:0 0 10px}
+.side-panel .sp-steps li b{color:#fff}
+.side-panel .sp-ghosts{font-size:13px;line-height:1.5;background:var(--chip);border-radius:10px;padding:10px 12px;margin:12px 0 0}
+.side-panel .sp-ghosts b{color:var(--gold)}
 
 /* ---------- 4. Gate: walk-through steps (hero -> one form at a time) ---------- */
 body.wt-on #loginView.wt-gate-steps .gate-hero{display:none;}
