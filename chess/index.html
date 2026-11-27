@@ -408,6 +408,17 @@ details.info summary{font-weight:800;font-size:15.5px;padding:12px 0;cursor:poin
 .tut-foot{padding:12px 22px 20px}
 .tut-go{appearance:none;border:0;width:100%;background:var(--sq-frame);color:#fff;font-weight:800;font-size:16px;padding:14px 18px;border-radius:12px;cursor:pointer;font-family:inherit;min-height:52px}
 .tut-go:hover{opacity:.9}
+/* Walk-through pop-up (batch 4, Dominoes wt template, inside #tutOverlay). */
+.wt-body{padding:18px 22px 20px}
+.wt-body .step-tag{font-size:.72rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#38e1ff}
+.wt-body h3{margin:4px 0 6px;font-size:1.12rem}
+.wt-body #wtText{margin:0 0 14px;color:var(--muted);font-weight:500;font-size:14.5px;line-height:1.5}
+.wt-actions{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.wt-dots{display:flex;gap:5px}
+.wt-dots i{width:8px;height:8px;border-radius:50%;background:var(--line);display:block}
+.wt-dots i.on{background:#38e1ff}
+.wt-highlight{outline:4px solid #ffb020 !important;outline-offset:3px;position:relative;z-index:45}
+
 .promo-card{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:20px;max-width:380px;width:100%;box-shadow:var(--shadow);padding:20px 22px;text-align:center}
 .promo-card h3{font-family:"Bricolage Grotesque",sans-serif;font-size:21px;margin:0 0 4px}
 .promo-card p{margin:0 0 14px;color:var(--muted);font-size:14px}
@@ -595,23 +606,18 @@ a{color:var(--ha-cyan)}
       </div>
       <button class="tut-x" id="tutX" type="button" aria-label="Close tutorial">✕</button>
     </div>
-    <ol class="tut-steps">
-      <li><span class="tut-num">1</span><div><b>You are White — you move first</b><span>Tap one of your pieces to see its legal moves (the dots), then tap a highlighted square to move. A ring means that move captures.</span></div></li>
-      <li><span class="tut-num">2</span><div><b>The goal is checkmate</b><span>Attack the enemy king so it has no escape — no legal move, block, or capture can save it. If your king is attacked, that's "check" and you must answer it.</span></div></li>
-      <li><span class="tut-num">3</span><div><b>Special moves are all in</b><span>Castling (king + rook swap for safety), en passant (a sneaky pawn capture), and promotion — a pawn reaching the last rank becomes a queen, rook, bishop, or knight. Pick your piece when it happens.</span></div></li>
-      <li><span class="tut-num">4</span><div><b>Pick your opponent</b><span>Pip (Easy) daydreams and blunders. Nova (Normal) plays a solid game. Vex (Hard) calculates three moves deep and shows no mercy. Changing level starts a fresh game.</span></div></li>
-      <li><span class="tut-num">5</span><div><b>Draws happen too</b><span>Stalemate, both sides down to bare kings, the same position three times, or 50 quiet moves — all end the game level. Undo takes back your last move (and the reply); Resign ends it now.</span></div></li>
-      <li><span class="tut-num">6</span><div><b>Want a no-pressure round? Try Practice</b><span>Tap Practice round at the top for a game that doesn't count toward your record. It's untimed, the Hint button suggests a strong move and highlights it on the board, and you can undo and try a different line anytime. Tap Practice again to go back to a scored game.</span></div></li>
-    </ol>
-    <div class="tut-ranks">
-      <h4>Quick tips</h4>
-      <ul class="piece-list">
-        <li><span class="glyph">✦</span><b>Develop first</b><span>Knights and bishops out early, castle your king to safety, then fight for the centre.</span></li>
-        <li><span class="glyph">✦</span><b>Check before you move</b><span>Ask: what did their last move threaten? Most games at this level are lost to pieces left hanging for free.</span></li>
-      </ul>
-    </div>
-    <div class="tut-foot">
-      <button class="tut-go" id="tutGo" type="button">Let's play</button>
+    <div class="wt-body">
+      <div class="step-tag" id="wtTag">Step 1 of 7</div>
+      <h3 id="wtTitle">You are White — you move first</h3>
+      <p id="wtText"></p>
+      <div class="wt-actions">
+        <span style="display:flex;gap:8px;">
+          <button type="button" class="btn" id="wtBack">← Back</button>
+          <button type="button" class="btn" id="wtSkip">Skip</button>
+        </span>
+        <div class="wt-dots" id="wtDots"></div>
+        <button type="button" class="btn" id="wtNext">Next</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1483,18 +1489,84 @@ function markTutSeen(){
   try { localStorage.setItem(LS_TUT, "1"); } catch(e){}
   hintBar.hidden = true;
 }
-function openTut(){ tutOverlay.hidden = false; markTutSeen(); }
-function closeTut(){ tutOverlay.hidden = true; }
-document.getElementById("howBtn").addEventListener("click", openTut);
-document.getElementById("tutX").addEventListener("click", closeTut);
-document.getElementById("tutGo").addEventListener("click", closeTut);
-tutOverlay.addEventListener("click", function(e){ if(e.target === tutOverlay) closeTut(); });
+/* HOWTO-B4-2026-11-26: one bubble at a time (Monster Match model) */
+/* How to Play is one pop-up walk-through (Dominoes wt template).
+   Steps reuse the old static How to Play text, cut to one idea per
+   bubble. Rules text itself is unchanged. */
+var WT_STEPS = [
+  { tag:"You move first", title:"You are White \u2014 you move first",
+    text:"Tap one of your pieces to see its legal moves (the dots), then tap a highlighted square to move. A ring means that move captures.",
+    target:"board" },
+  { tag:"The goal", title:"The goal is checkmate",
+    text:"Attack the enemy king so it has no escape \u2014 no legal move, block, or capture can save it. If your king is attacked, that's \"check\" and you must answer it.",
+    target:"board" },
+  { tag:"Special moves", title:"Special moves are all in",
+    text:"Castling (king + rook swap for safety), en passant (a sneaky pawn capture), and promotion \u2014 a pawn reaching the last rank becomes a queen, rook, bishop, or knight. Pick your piece when it happens.",
+    target:"board" },
+  { tag:"Pick your opponent", title:"Pick your opponent",
+    text:"Pip (Easy) daydreams and blunders. Nova (Normal) plays a solid game. Vex (Hard) calculates three moves deep and shows no mercy. Changing level starts a fresh game.",
+    target:"diffGroup" },
+  { tag:"Draws happen too", title:"Draws happen too",
+    text:"Stalemate, both sides down to bare kings, the same position three times, or 50 quiet moves \u2014 all end the game level. Undo takes back your last move (and the reply); Resign ends it now.",
+    target:"undoBtn" },
+  { tag:"Practice round", title:"Want a no-pressure round? Try Practice",
+    text:"Tap Practice round at the top for a game that doesn't count toward your record. It's untimed, the Hint button suggests a strong move and highlights it on the board, and you can undo and try a different line anytime. Tap Practice again to go back to a scored game.",
+    target:"practiceBtn" },
+  { tag:"Quick tips", title:"Quick tips",
+    text:"Develop first: knights and bishops out early, castle your king to safety, then fight for the centre. And check before you move \u2014 ask what their last move threatened. Most games at this level are lost to pieces left hanging for free.",
+    target:"board" }
+];
+var wtIndex = 0;
+function wtHighlight(id){
+  var prev = document.querySelectorAll(".wt-highlight");
+  for (var i = 0; i < prev.length; i++) prev[i].classList.remove("wt-highlight");
+  if (id){
+    var t = document.getElementById(id);
+    if (t){ t.classList.add("wt-highlight"); if (t.scrollIntoView) t.scrollIntoView({ behavior:"smooth", block:"center" }); }
+  }
+}
+function wtRender(){
+  var step = WT_STEPS[wtIndex];
+  document.getElementById("wtTag").textContent = "Step " + (wtIndex + 1) + " of " + WT_STEPS.length + " \u00b7 " + step.tag;
+  document.getElementById("wtTitle").textContent = step.title;
+  document.getElementById("wtText").textContent = step.text;
+  document.getElementById("wtNext").textContent = wtIndex === WT_STEPS.length - 1 ? "Let's play" : "Next";
+  document.getElementById("wtBack").style.visibility = wtIndex === 0 ? "hidden" : "visible";
+  var dots = document.getElementById("wtDots"); dots.innerHTML = "";
+  for (var i = 0; i < WT_STEPS.length; i++){
+    var dot = document.createElement("i");
+    if (i === wtIndex) dot.className = "on";
+    dots.appendChild(dot);
+  }
+  wtHighlight(step.target);
+}
+function wtOpen(){
+  wtIndex = 0;
+  tutOverlay.hidden = false;
+  markTutSeen();
+  wtRender();
+}
+function wtClose(){
+  tutOverlay.hidden = true;
+  wtHighlight(null);
+}
+document.getElementById("wtNext").addEventListener("click", function(){
+  if (wtIndex < WT_STEPS.length - 1){ wtIndex++; wtRender(); }
+  else wtClose();
+});
+document.getElementById("wtBack").addEventListener("click", function(){
+  if (wtIndex > 0){ wtIndex--; wtRender(); }
+});
+document.getElementById("wtSkip").addEventListener("click", wtClose);
+document.getElementById("tutX").addEventListener("click", wtClose);
+document.getElementById("howBtn").addEventListener("click", wtOpen);
+tutOverlay.addEventListener("click", function(e){ if(e.target === tutOverlay) wtClose(); });
 document.getElementById("rulesBtn").addEventListener("click", function(){ rulesOverlay.hidden = false; markTutSeen(); });
 document.getElementById("rulesX").addEventListener("click", function(){ rulesOverlay.hidden = true; });
 document.getElementById("rulesGo").addEventListener("click", function(){ rulesOverlay.hidden = true; });
 rulesOverlay.addEventListener("click", function(e){ if(e.target === rulesOverlay) rulesOverlay.hidden = true; });
 document.getElementById("hintX").addEventListener("click", markTutSeen);
-document.getElementById("hintHow").addEventListener("click", openTut);
+document.getElementById("hintHow").addEventListener("click", wtOpen);
 var tutSeen = false;
 try { tutSeen = !!localStorage.getItem(LS_TUT); } catch(e){}
 hintBar.hidden = tutSeen;
