@@ -2,8 +2,6 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<!-- GATE-GUARD-2026-11-24 -->
-<script src="../shared/gate-guard.js"></script>
 <script>
 /* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
    The hub stores the switches in localStorage (same origin) and
@@ -302,6 +300,31 @@
     font-weight:800; padding:11px 18px; border-radius:999px; z-index:80; transition:transform .25s ease; max-width:90vw; text-align:center;}
   .toast.show{transform:translateX(-50%) translateY(0);}
   .hidden{display:none !important;}
+/* CATMOUSE-NOSCROLL-2026-11-26 (Holo 22:46: the gameplay box scrolls
+   and it makes play difficult). Pool C4 model: during play
+   (body.playing) the menu chrome hides — header, settings panel,
+   footer, controller hint — and the in-play rows compact, so stats +
+   Start/Pause + board (+ D-pad on phone) fit the frame with no
+   scroll. Menu state is unchanged. Measured before: desktop in-play
+   1171px vs 676px frame (495px overflow); phone in-play 1307px vs
+   780px frame (527px overflow). */
+body.playing header,
+body.playing section.panel,
+body.playing footer,
+body.playing .dpad p{display:none;}
+body.playing .wrap{padding:6px 14px 10px;}
+body.playing .stats{margin-top:6px;}
+body.playing .stat{padding:3px 2px;}
+body.playing .stat .v{font-size:1.05rem;}
+body.playing .stage{margin-top:8px;padding:4px;}
+body.playing #startBtn{margin-top:8px;padding:10px;}
+/* CATMOUSE-NOSCROLL-2026-11-26 (short screens): on a 720p laptop the
+   frame is ~628px and even the compacted in-play stack (662–672px)
+   still scrolls 34–44px — narrow the wrap so the board scales down
+   and it fits. Height-based only (not playing-based) so fitCanvas
+   (resize/init) always sees the right width. Does not apply at the
+   676px frame, where the full 640px board fits. */
+@media (max-height:671px){ .wrap{max-width:560px;} }
   @media (min-width:760px){ .dpad{display:none;} }
 
 /* ================= GAME-THEME-2026-11-22 =================
@@ -431,11 +454,14 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
     <div class="stat"><div class="v" id="statTime">–</div><div class="k" id="statTimeLabel">Best score</div></div>
   </div>
 
+  <!-- CATMOUSE-NOSCROLL-2026-11-26: Start sits above the board so it is
+       reachable without scrolling in menu state (before, it sat below
+       the 533px stage, off the bottom of the frame). -->
+  <button class="big-btn" id="startBtn">Start the chase! 🐾</button>
+
   <div class="stage">
     <canvas id="game" width="600" height="520" aria-label="Cat and Mouse game board"></canvas>
   </div>
-
-  <button class="big-btn" id="startBtn">Start the chase! 🐾</button>
 
   <div class="dpad" aria-label="Direction buttons">
     <button class="up" data-dir="up" aria-label="Up">▲</button>
@@ -460,7 +486,7 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
     <p class="win-msg" id="winStats"></p>
     <div class="row-btns">
       <button id="winReplay" class="primary">Play again! 🐾</button>
-      <button id="winClose">Hang out here</button>
+      <button id="winClose">← Back</button>
     </div>
   </div>
 </div>
@@ -782,6 +808,7 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
   }
   function endTimed(){
     G.running = false;
+    document.body.classList.remove("playing"); /* CATMOUSE-NOSCROLL: game over = menu state again */
     $("startBtn").textContent = "Start the chase! 🐾";
     saveBest();
     var stars = G.catches >= 5 ? 3 : G.catches >= 3 ? 2 : G.catches >= 1 ? 1 : 0;
@@ -1022,6 +1049,7 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
     updateStatsMouse();
     if(MM.lives <= 0 && !settings.practice){
       MM.running = false;
+      document.body.classList.remove("playing"); /* CATMOUSE-NOSCROLL: game over = menu state again */
       $("startBtn").textContent = "Start the chase! 🐾";
       var stars = MM.level >= 5 ? 3 : MM.level >= 3 ? 2 : MM.level >= 2 ? 1 : 0;
       $("winTitle").textContent = "Caught! 🐱";
@@ -1045,6 +1073,7 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
 
   /* ---------------- start / pause ---------------- */
   function startGame(){
+    document.body.classList.add("playing"); /* CATMOUSE-NOSCROLL: hide menu chrome while playing */
     if(settings.side === "mouse"){
       if(MM.lives <= 0 && !settings.practice) mmSetupLevel(1, false);
       MM.running = true;
@@ -1067,7 +1096,25 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
   }
   $("startBtn").addEventListener("click", toggleStart);
   $("winReplay").addEventListener("click", function(){ $("winOverlay").classList.remove("open"); startGame(); });
-  $("winClose").addEventListener("click", function(){ $("winOverlay").classList.remove("open"); });
+  /* CATMOUSE-WINBACK-2026-11-26 (Holo 22:46: the win panel's "Hang out
+     here" button should be a Back button — it exits the game). Same
+     exit as Pool's pfExitOver: the hub exposes window.holoClosePlayer
+     (same-origin, hub line 9813); standalone fallback returns to the
+     menu state (settings visible again, fresh board). "Play again!"
+     is untouched. */
+  $("winClose").addEventListener("click", function(){
+    $("winOverlay").classList.remove("open");
+    G.running = false; MM.running = false;
+    document.body.classList.remove("playing");
+    $("startBtn").textContent = "Start the chase! 🐾";
+    try{
+      if(window.parent && window.parent !== window && typeof window.parent.holoClosePlayer === "function"){
+        window.parent.holoClosePlayer();
+        return;
+      }
+    }catch(e){}
+    if(settings.side === "mouse") mmSetupLevel(1, false); else resetRound(false);
+  });
   $("restartLevelBtn").addEventListener("click", function(){ mmSetupLevel(MM.level, true); toast("Level restarted — fresh crates!"); });
 
   /* ---------------- drawing ---------------- */
@@ -1329,22 +1376,30 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
   function switchSide(side){
     settings.side = side; saveSettings(); syncControls();
     G.running = false; MM.running = false;
+    document.body.classList.remove("playing"); /* CATMOUSE-NOSCROLL: settings change = menu state */
     $("startBtn").textContent = "Start the chase! 🐾";
-    fitCanvas();
+    /* CATMOUSE-FITCANVAS-2026-11-26: fit AFTER the round is rebuilt —
+       fitCanvas reads COLS/ROWS, and resetRound/mmSetupLevel set them.
+       (Before, it ran first, so switching to Wild/Cozy left the canvas
+       at the old aspect until a window resize.) */
     if(side === "mouse") mmSetupLevel(1, false); else resetRound(false);
+    fitCanvas();
   }
   document.querySelectorAll("[data-side]").forEach(function(b){
     b.addEventListener("click", function(){ switchSide(b.getAttribute("data-side")); });
   });
   document.querySelectorAll("[data-mode]").forEach(function(b){
-    b.addEventListener("click", function(){ settings.mode = b.getAttribute("data-mode"); saveSettings(); syncControls(); G.running = false; $("startBtn").textContent = "Start the chase! 🐾"; resetRound(false); });
+    b.addEventListener("click", function(){ settings.mode = b.getAttribute("data-mode"); saveSettings(); syncControls(); G.running = false; document.body.classList.remove("playing"); $("startBtn").textContent = "Start the chase! 🐾"; resetRound(false); });
   });
   document.querySelectorAll("[data-diff]").forEach(function(b){
     b.addEventListener("click", function(){
       settings.difficulty = b.getAttribute("data-diff"); saveSettings(); syncControls();
-      G.running = false; MM.running = false; $("startBtn").textContent = "Start the chase! 🐾";
-      fitCanvas();
+      G.running = false; MM.running = false; document.body.classList.remove("playing"); $("startBtn").textContent = "Start the chase! 🐾";
+      /* CATMOUSE-FITCANVAS-2026-11-26: fit AFTER the round is rebuilt
+         (see switchSide) — Wild is 17x15, Cozy 13x11, and the canvas
+         aspect must follow the new grid, not the old one. */
       if(settings.side === "mouse") mmSetupLevel(MM.level, true); else resetRound(false);
+      fitCanvas();
     });
   });
   $("practiceBtn").addEventListener("click", function(){
