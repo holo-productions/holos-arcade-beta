@@ -433,6 +433,9 @@
   .tour-card h3{margin:0 0 6px;font-family:"Barlow Condensed",Barlow,sans-serif;font-size:1.25rem;letter-spacing:.03em}
   .tour-card p{margin:0 0 12px;line-height:1.5;font-size:.95rem}
   .tour-card .row-btns{display:flex;gap:8px;justify-content:space-between;align-items:center}
+  .tour-dots{text-align:center;margin:10px 0 0}
+  .tour-dots i{display:inline-block;width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,.25);margin:0 3px}
+  .tour-dots i.on{background:var(--brass,#ffb020)}
   .tour-count{font-size:.82rem;color:var(--muted);font-weight:700}
 
   footer{margin-top:22px;text-align:center;color:var(--muted);font-size:.88rem;line-height:1.6}
@@ -759,7 +762,6 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
       <div class="btn-row opt-links">
         <button class="ghost-btn" id="howBtn" type="button">How to</button>
         <button class="ghost-btn" id="rulesBtn" type="button">Rules</button>
-        <button class="ghost-btn" id="tourBtn" type="button">Tour</button>
         <button class="ghost-btn" id="feedbackBtn" type="button">Feedback</button>
       </div>
       <button class="btn sonar opt-start" id="optStartBtn" type="button">▶ Place your ships</button>
@@ -773,7 +775,7 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
   </section>
 
   <div class="hintbar" id="hintBar" hidden>
-    <p>👋 <strong>New here?</strong> Tap <strong>How to play</strong> for a quick tutorial, <strong>Take the tour</strong> for a guided walkthrough, or <strong>Rules</strong> for the full rulebook — only if you want them. Otherwise, just start placing ships.</p>
+    <p>👋 <strong>New here?</strong> Tap <strong>How to play</strong> for a quick walkthrough — how to play, the buttons and the rules in one place — or <strong>Rules</strong> for the full rulebook — only if you want them. Otherwise, just start placing ships.</p>
     <button class="hint-x" id="hintClose" type="button" aria-label="Dismiss hint">✕</button>
   </div>
 
@@ -951,7 +953,6 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
     <div class="sheet-foot">
       <div class="row-btns">
         <button class="btn brass" id="howClose" type="button">Got it — let's play</button>
-        <button class="btn" id="howTour" type="button">Start the walkthrough</button>
         <button class="btn" id="howRules" type="button">Read the full Rules</button>
       </div>
     </div>
@@ -1081,12 +1082,14 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
   <h3 id="tourTitle"></h3>
   <p id="tourText"></p>
   <div class="row-btns">
+    <button class="btn" id="tourBack" type="button" hidden>← Back</button>
     <span class="tour-count" id="tourCount"></span>
     <span style="display:flex;gap:8px">
       <button class="btn" id="tourSkip" type="button">Skip tour</button>
       <button class="btn brass" id="tourNext" type="button">Next</button>
     </span>
   </div>
+  <div class="tour-dots" id="tourDots" aria-hidden="true"></div>
 </div>
 
 <script>
@@ -1902,7 +1905,10 @@ $("fbSubmit").addEventListener("click", function(){
 /* ---------- how to play + walkthrough ---------- */
 var howOverlay = $("howOverlay");
 function markSeen(){ try{ localStorage.setItem(LS_SEEN,"1"); }catch(e){} $("hintBar").hidden = true; }
-$("howBtn").addEventListener("click", function(){ howOverlay.hidden = false; markSeen(); });
+/* How to Play opens the walk-through directly — one walk-through, one
+   button (see the TOUR comment above for the batch marker). The separate
+   Tour button and the overlay's walkthrough button are gone. */
+$("howBtn").addEventListener("click", startTour);
 $("howClose").addEventListener("click", function(){ howOverlay.hidden = true; });
 howOverlay.addEventListener("click", function(e){ if(e.target===howOverlay) howOverlay.hidden = true; });
 
@@ -1916,11 +1922,19 @@ $("hintClose").addEventListener("click", markSeen);
 
 /* BATTLESHIP-WALKTHROUGH-2026-11-25: the tour is placement-only now
    (3 steps) — difficulty + practice live in the options walk-through,
-   enemy waters + records are met in the battle / done screens. */
+   enemy waters + records are met in the battle / done screens.
+   BATTLESHIP-HOWTO-2026-11-26 (Holo 2026-11-26 23:14): How to Play opens
+   this walk-through, so the static How text is folded into its bubbles
+   — how-to + navigation + rules together, one bubble at a time. Steps
+   4–6 added: firing + win condition, the captains, practice + finding
+   your way around. */
 var TOUR = [
   {sel:"#shipTray", title:"1 · Pick a ship", text:"These are your five ships — Carrier (5) down to Destroyer (2). Tap one to select it, then tap your board to place it. Tap a placed ship any time to pick it back up and move it."},
-  {sel:"#playerPanel", title:"2 · Your waters", text:"This board is your fleet. Ships show as grey hulls. During the battle, red ✕ marks are enemy hits on you and pale dots are their misses — and your fleet shows small in the top-right corner while you fight."},
-  {sel:"#rotateBtn", title:"3 · Rotate & random", text:"Rotate flips the selected ship between horizontal and vertical (keyboard: R). Random fleet places everything instantly if you'd rather just get fighting. When the last ship is placed, pick Replace ships to start over or Start battle to fight."}
+  {sel:"#playerPanel", title:"2 · Your waters", text:"This board is your fleet. Ships show as grey hulls — they can't overlap or run off the board, and the preview turns red when a spot won't work. During the battle, red ✕ marks are enemy hits on you and pale dots are their misses — and your fleet shows small in the top-right corner while you fight."},
+  {sel:"#rotateBtn", title:"3 · Rotate & random", text:"Rotate flips the selected ship between horizontal and vertical (keyboard: R). Random fleet places everything instantly if you'd rather just get fighting. When the last ship is placed, pick Replace ships to start over or Start battle to fight."},
+  {sel:".boards", title:"4 · Fire on the enemy", text:"Once the battle starts, tap a square in Enemy waters to fire. A red ✕ is a hit, a pale dot is a miss — hit every square of a ship to sink it. After your shot the computer fires back at your fleet. First side to sink all five ships wins."},
+  {sel:".topbar", title:"5 · Pick your opponent", text:"Your opponent is picked in Step 1 before you place ships. Ensign fires at random — a gentle first game. Captain follows up on its hits. Admiral hunts on a checkerboard, follows the line of a damaged ship, and remembers the water around ships it has sunk."},
+  {sel:".topbar", title:"6 · Practice & finding your way", text:"Step 2's Practice round switch means no return fire, hints on, and nothing counts toward your records. The ❓ button up top re-opens this walkthrough any time, and New game starts a fresh battle."}
 ];
 var tourIdx = -1, tourSteps = TOUR;
 /* BATTLESHIP-WALKTHROUGH-2026-11-25: tour steps pointing at hidden
@@ -1940,7 +1954,15 @@ function showTourStep(i){
   $("tourTitle").textContent = step.title;
   $("tourText").textContent = step.text;
   $("tourCount").textContent = "Step "+(i+1)+" of "+tourSteps.length;
-  $("tourNext").textContent = i===TOUR.length-1 ? "Finish" : "Next";
+  $("tourNext").textContent = i===tourSteps.length-1 ? "Finish" : "Next";
+  $("tourBack").hidden = (i===0);
+  var dots = $("tourDots");
+  dots.innerHTML = "";
+  for(var d=0; d<tourSteps.length; d++){
+    var dot = document.createElement("i");
+    if(d===i) dot.className = "on";
+    dots.appendChild(dot);
+  }
   $("tourCard").hidden = false;
   var hi = $("tourHi");
   if(target){
@@ -1958,6 +1980,7 @@ function endTour(){
   try{ localStorage.setItem(LS_SEEN,"1"); }catch(e){}
 }
 $("tourNext").addEventListener("click", function(){ showTourStep(tourIdx+1); });
+$("tourBack").addEventListener("click", function(){ if(tourIdx>0) showTourStep(tourIdx-1); });
 $("tourSkip").addEventListener("click", endTour);
 /* BATTLESHIP-WALKTHROUGH-2026-11-25: the tour is placement-only — from
    the walk-through it enters placement first; from How to play it runs
@@ -1970,8 +1993,6 @@ function startTour(){
   if(!tourSteps.length) return;
   showTourStep(0);
 }
-$("tourBtn").addEventListener("click", startTour);
-$("howTour").addEventListener("click", function(){ howOverlay.hidden = true; startTour(); });
 window.addEventListener("resize", function(){ if(tourIdx>=0) showTourStep(tourIdx); });
 
 /* =================================================================
@@ -2638,7 +2659,7 @@ showOptStep(0);
 bsPanelsHide();
 bsBoot();
 /* Tutorial is opt-in only: never auto-open it. First visit gets one small,
-   non-blocking hint pointing at the How to play / Tour / Rules buttons. */
+   non-blocking hint pointing at the How to play / Rules buttons. */
 var seen = false;
 try{ seen = !!localStorage.getItem(LS_SEEN); }catch(e){}
 if(!seen){ $("hintBar").hidden = false; }
