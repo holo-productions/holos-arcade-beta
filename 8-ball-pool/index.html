@@ -315,6 +315,34 @@ footer{margin-top:22px;text-align:center;font-family:system-ui,sans-serif;font-s
 .practice-stats span{background:rgba(0,0,0,.07);border-radius:999px;padding:6px 10px;font-size:12.5px;font-weight:700}
 body.is-practice .status{background:#7c4a12;color:#fff7d6}
 body.is-practice .table-wrap{outline:3px solid #c89b3c;outline-offset:2px}
+/* POOL-C4-2026-11-26: in-play compaction. While a rack is in progress
+   (body.playing) the pre-game chrome hides and one compact row carries
+   the chips + one-line status. Result ≈638px solo/friend ≤ the 671px hub
+   frame (ball-in-hand ≈666px). The static Tip hides; the ball-in-hand
+   hint (#placeHint, outside .controls) stays. */
+.compact-bar{display:none}
+body.playing .top,body.playing .modebar,body.playing .toolbar{display:none}
+body.playing .scorebar,body.playing #status{display:none}
+body.playing #friendBar{display:none!important}
+body.playing #statsBar{display:none}
+body.playing .controls .hint{display:none}
+body.playing .wrap{padding:8px 14px 12px}
+body.playing .compact-bar{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-bottom:6px;font-family:system-ui,sans-serif;font-size:13px;line-height:1.35}
+.compact-bar .cb-chip{font-weight:800;white-space:nowrap}
+.compact-bar .cb-chip.on{outline:2px solid var(--accent2);outline-offset:1px;border-radius:8px;padding:1px 5px}
+.compact-bar .cb-vs{font-weight:800;background:var(--ink);color:var(--bg);border-radius:50%;width:24px;height:24px;display:grid;place-items:center;font-size:10px;flex:none}
+.compact-bar .cb-status{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted)}
+.compact-bar .cb-acts{display:flex;gap:6px;flex:none}
+.compact-bar .cb-acts button{border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:6px 10px;font-weight:700;cursor:pointer;font-size:12px;min-height:0}
+/* Landscape fit (phone rotate, Holo 19:47): cap the canvas so the table
+   fits the short frame while keeping the 900:460 ratio, centered.
+   In-play chrome ≈ wrap pad 20 + compactBar 42 + table-wrap pad 20 +
+   controls 116 ≈ 198px; the 210px cap leaves ~12px slack. No
+   orientation lock, no fullscreen (both are off). Menu (not playing)
+   keeps the width-driven canvas. */
+@media (orientation:landscape) and (max-height:500px){
+  body.playing canvas{max-height:calc(100vh - 210px);width:auto;max-width:100%;margin:0 auto}
+}
 /* vtut visual steps */
 .vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
 @media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
@@ -402,6 +430,7 @@ a{color:var(--ha-cyan)}
     </div>
     <div class="status" id="status">Your break! Drag / move on the table to aim, set power, then tap <strong>SHOOT</strong>. First ball potted decides solids vs. stripes.</div>
     <div class="status" id="friendBar" style="display:none"></div>
+    <div class="compact-bar" id="compactBar" aria-live="polite"></div>
 
     <div class="practice-panel" id="practicePanel" aria-live="polite">
       <h3>🎱 Practice Round — no pressure, just practice</h3>
@@ -550,12 +579,52 @@ function rack(){
 }
 function cue(){return balls.find(b=>b.n===0)}
 function groupBalls(g){return balls.filter(b=>b.type===g&&!b.pocketed)}
-function setStatus(html){document.getElementById('status').innerHTML=html}
-function showView(v){document.getElementById('gameView').classList.toggle('active',v==='game'); document.getElementById('rulesView').classList.toggle('active',v==='rules'); window.scrollTo({top:0,behavior:'smooth'})}
+/* POOL-C4-2026-11-26: compact in-play row. While a rack is in progress
+   the scorebar + status + friendBar hide (CSS) and this one row carries
+   the chips + one-line status. Reads the live DOM labels (so the friend
+   wrapper's renames show) and the game state. Safe before the multiplayer
+   block loads (typeof guards on isFriend/pfNudge/pfLeave/pfMatch). */
+function renderCompactBar(){
+  var bar=document.getElementById('compactBar'); if(!bar) return;
+  var esc=function(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');};
+  var youB=document.querySelector('#youCard b'), aiB=document.querySelector('#aiCard b');
+  var youName=youB?youB.textContent.trim():'YOU';
+  var oppName=aiB?aiB.textContent.trim():'RACK — AI';
+  var grp=function(g){return g==='solid'?'Solids':g==='stripe'?'Stripes':null;};
+  var youG, oppG;
+  if(isPractice()){
+    var left=balls.filter(function(b){return b.n!==0&&!b.pocketed;}).length;
+    youG=balls.length? (left+' balls left') : 'Open table'; oppG='Hints on';
+  } else {
+    youG=groups.you? (grp(groups.you)+' · '+groupBalls(groups.you).length+' left') : 'Open table';
+    oppG=groups.ai? (grp(groups.ai)+' · '+groupBalls(groups.ai).length+' left') : 'Open table';
+  }
+  var st=document.getElementById('status');
+  var statusTxt=st?st.textContent.replace(/\s+/g,' ').trim():'';
+  var fr=(typeof isFriend==='function' && isFriend());
+  var vs=isPractice()?'SOLO':'VS';
+  var html='<span class="cb-chip'+(turn==='you'?' on':'')+'">'+esc(youName)+' · '+esc(youG)+'</span><span class="cb-vs">'+vs+'</span><span class="cb-chip'+(turn!=='you'?' on':'')+'">'+esc(oppName)+' · '+esc(oppG)+'</span><span class="cb-status">'+esc(statusTxt)+'</span>';
+  if(fr){
+    var meTurn=false;
+    try{ var _H=(typeof window!=='undefined'&&window.holoPoolFriend)?window.holoPoolFriend:null; if(_H && _H.state && typeof pfIsMyTurn==='function' && typeof pfUid==='function'){ var _m=_H.state(); if(_m) meTurn=pfIsMyTurn(_m,pfUid()); } }catch(e){} /* POOL-C4-2026-11-26: the match lives in the IIFE (holoPoolFriend.state()), the bare pfMatch is not global */
+    var acts='';
+    if(!meTurn && typeof pfNudge==='function') acts+='<button type="button" data-cb="nudge">🔔 Nudge</button>';
+    if(document.getElementById('friendSyncErr') && typeof pfPublishTurn==='function') acts+='<button type="button" data-cb="retry">⚠️ Retry sync</button>';
+    if(typeof pfLeave==='function') acts+='<button type="button" data-cb="leave">🚪 Leave</button>';
+    if(acts) html+='<span class="cb-acts">'+acts+'</span>';
+  }
+  bar.innerHTML=html;
+  var nb=bar.querySelector('[data-cb="nudge"]'); if(nb) nb.onclick=function(){ pfNudge(); };
+  var rb=bar.querySelector('[data-cb="retry"]'); if(rb) rb.onclick=function(){ var o=window.__poolLastShot||{}; pfPublishTurn(o); };
+  var lb=bar.querySelector('[data-cb="leave"]'); if(lb) lb.onclick=function(){ pfLeave(); };
+}
+function setStatus(html){document.getElementById('status').innerHTML=html; renderCompactBar();}
+function showView(v){document.getElementById('gameView').classList.toggle('active',v==='game'); document.getElementById('rulesView').classList.toggle('active',v==='rules'); if(v==='rules'){document.body.classList.remove('playing');} else if(!gameOver){document.body.classList.add('playing');} window.scrollTo({top:0,behavior:'smooth'})} /* POOL-C4-2026-11-26: playing off while reading rules */
 document.getElementById('rulesBtn').onclick=()=>showView('rules');
 document.getElementById('newBtn').onclick=()=>newRack();
 
 function newRack(){
+  document.body.classList.add('playing'); /* POOL-C4-2026-11-26: rack in progress */
   const drill=document.getElementById('drillSel')?.value||'full';
   if(isPractice() && drill!=='full' && drill!=='break'){ setupDrill(drill); }
   else { rack(); }
@@ -633,6 +702,7 @@ function updateCards(){
   document.getElementById('shootBtn').disabled = moving||turn!=='you'||gameOver||ballInHand;
   document.getElementById('shootBtn').textContent = practice ? 'SHOOT — PRACTICE 🎱' : 'SHOOT 🎱';
   if(practice) renderStats();
+  renderCompactBar(); /* POOL-C4-2026-11-26 */
 }
 
 function draw(){
@@ -782,6 +852,7 @@ function resolveTurn(){
 }
 
 function endGame(winner, reason){
+  document.body.classList.remove('playing'); /* POOL-C4-2026-11-26: rack over */
   gameOver=true;
   /* POOL-MULTIPLAYER-2026-11-24: friend matches don't touch solo bests. */
   if(!(typeof isFriend==='function' && isFriend())){
@@ -1068,6 +1139,10 @@ function pfRefreshLiveName(m){
   pfApi('GET','/users/'+encodeURIComponent(opp)+'/username').then(function(n){
     if(n&&typeof n==='string'&&n.trim()){
       pfLiveNameCache[opp]=n.trim();
+      /* POOL-C4-2026-11-26: re-set the turn status now the live name is
+         known — the #status (and the compact row mirroring it) was set
+         before the fetch landed, so it still showed the stored name. */
+      if(pfMatch) pfSetTurnStatus(pfMatch);
       pfUpdateFriendBar(); try{ updateCards(); }catch(e){}
     }
   });
@@ -1106,6 +1181,21 @@ function pfApplyState(st){
   document.getElementById('placeHint').style.display=(ballInHand&&turn==='you')?'block':'none';
   updateCards(); draw();
 }
+/* POOL-C4-2026-11-26: the turn status line, factored out of pfApplyMatch
+   so the live-name refresh can re-set it once the current Code Name
+   resolves (the #status was set before the fetch landed, so it showed
+   the stored name — the compact row mirrors #status, so it inherited
+   the stale name). */
+function pfSetTurnStatus(m){
+  if(!m||m.status!=='playing') return;
+  var me2=pfUid();
+  if(m.turn===me2){
+    var ls=(m.state&&m.state.lastShot)||null;
+    setStatus('<strong>Your turn!</strong> '+(ls&&ls.text?pfEsc(ls.text):'Aim and shoot when ready.'));
+  } else {
+    setStatus('⏳ <strong>'+pfEsc(pfOtherName(m,me2))+'’s turn…</strong> Their shot will appear here when it lands.');
+  }
+}
 function pfApplyMatch(m){
   pfMatch=m;
   /* POOL-EXPIRE-2026-11-26 (C6): 7-day lazy expiry, mirror
@@ -1123,18 +1213,11 @@ function pfApplyMatch(m){
   if(m&&(m.status==='playing'||m.status==='waiting'||m.status==='won')) pfRefreshLiveName(m);
   if(m&&m.state) pfApplyState(m.state);
   if(m&&m.status==='won'&&m.winner){ gameOver=true; pfShowEnd(m); }
-  if(m&&m.status==='playing'){
-    var me2=pfUid();
-    if(m.turn===me2){
-      var ls=(m.state&&m.state.lastShot)||null;
-      setStatus('<strong>Your turn!</strong> '+(ls&&ls.text?pfEsc(ls.text):'Aim and shoot when ready.'));
-    } else {
-      setStatus('⏳ <strong>'+pfEsc(pfOtherName(m,me2))+'’s turn…</strong> Their shot will appear here when it lands.');
-    }
-  }
+  pfSetTurnStatus(m);
   pfUpdateFriendBar(); updateCards(); draw();
 }
 function pfShowEnd(m){
+  document.body.classList.remove('playing'); /* POOL-C4-2026-11-26: rack over */
   var me=pfUid();
   var iWon=m.winner===me;
   var oppName=pfOtherName(m,me);
@@ -1217,6 +1300,7 @@ function pfSetSyncError(on){
     b.onclick=function(){ var o=window.__poolLastShot||{}; pfPublishTurn(o); };
     bar.appendChild(b);
   } else if(!on&&err){ err.parentNode.removeChild(err); }
+  renderCompactBar(); /* POOL-C4-2026-11-26: sync-error state shows in the compact row */
 }
 /* Called from resolveTurn (hooked at the end + in the 8-ball branch).
    Only publishes when the shot was MINE in a friend match. */
@@ -1668,6 +1752,7 @@ function pfUpdateFriendBar(){
   var nb=document.getElementById('pfNudgeBtn'); if(nb) nb.onclick=pfNudge;
   var rb=document.getElementById('pfRematchBtn'); if(rb) rb.onclick=pfRematch;
   var lb=document.getElementById('pfLeaveBtn'); if(lb) lb.onclick=pfLeave;
+  renderCompactBar(); /* POOL-C4-2026-11-26 */
 }
 
 /* ---------- hooks into the existing engine ---------- */
@@ -1690,6 +1775,7 @@ updateCards=function(){
     var st=pfMatchStatusText(pfMatch,me);
     sb.innerHTML='<span class="stat">👥 Friend match vs <b>'+pfEsc(opp)+'</b></span><span class="stat">'+pfEsc(st)+'</span><span class="stat">Shots — you '+(totalShots.you||0)+' • '+pfEsc(opp)+' '+(totalShots.ai||0)+'</span><span class="stat">Turn-based • No live server</span>';
   }
+  renderCompactBar(); /* POOL-C4-2026-11-26: re-render after the friend relabel */
 };
 /* Rewrite 'Rack' mentions in the status line while in friend mode. */
 function pfFixStatus(){
@@ -1697,6 +1783,7 @@ function pfFixStatus(){
   var el=document.getElementById('status'); if(!el) return;
   var opp=pfOtherName(pfMatch,pfUid());
   el.innerHTML=el.innerHTML.replace(/Rack/g,pfEsc(opp));
+  renderCompactBar(); /* POOL-C4-2026-11-26: status rewrite mirrors to the compact row */
 }
 window.pfFixStatus=pfFixStatus;
 
@@ -1751,6 +1838,10 @@ window.holoPoolFriend={
   setMatch:function(mid,m){ if(mid) pfMatchList[mid]=m; pfMid=mid||null; pfMatch=m||null; if(m){ pfSeenMoves=m.moves||0; pfSeenUpdated=m.updatedAt||0; } return pfMatch; }
 };
 document.getElementById('modeFriendBtn').addEventListener('click',pfOpenPanel);
+/* POOL-C4-2026-11-26: the compact row lives in the solo script block (a
+   different <script>), so it can only see the friend actions if they are
+   on window — expose them like isFriend/poolFriendAfterShot. */
+window.pfLeave=pfLeave; window.pfNudge=pfNudge; window.pfIsMyTurn=pfIsMyTurn; window.pfUid=pfUid; window.pfPublishTurn=pfPublishTurn;
 pfBoot();
 })();
 
