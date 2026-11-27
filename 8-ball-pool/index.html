@@ -978,7 +978,9 @@ if (window.HoloGamepad) HoloGamepad.bind({ keys: { action: 'Space', down: 'Arrow
    shoots in friend mode. After each of MY shots resolves, the final
    resting state (ball positions, groups, turn, ball-in-hand, win) is
    published to the SAME /turnMatches protocol as Tic Tac Toe
-   (game:'8-ball-pool', board:[] for rules compat). My friend polls
+   (game:'8-ball-pool'; board is the 16-ball rack — never [] — so the
+   pending validate's hasChildren holds; RTDB prunes empty arrays).
+   My friend polls
    and applies the state — no re-simulation, no real-time needed.
    State lives in Firebase, so a reload mid-match restores the table.
    Challenge from inside this game, or join via a private room link
@@ -1052,7 +1054,30 @@ var pfSeenMoves=-1, pfSeenUpdated=0, pfFriendsCache=null, pfBusy=false;
 function isFriend(){ return (typeof mode!=='undefined' && mode==='friend'); }
 window.isFriend=isFriend;
 function pfOtherUid(m,me){ if(!m) return null; return m.aUid===me?m.bUid:m.aUid; }
-function pfOtherName(m,me){ if(!m) return 'Tester'; return m.aUid===me?(m.bName||'Tester'):(m.aName||'Tester'); }
+var pfLiveNameCache={}, pfLiveNameTried={};
+/* POOL-LIVE-NAME-2026-11-26 (C4): resolve the opponent's CURRENT Code
+   Name (GET /users/<uid>/username — the child read the pending rules
+   grant) and cache it per uid; fall back to the stored match name when
+   the read fails (it 401s before the publish). One GET per uid per page
+   load, never per poll tick. */
+function pfRefreshLiveName(m){
+  if(!m) return;
+  var me=pfUid(); var opp=pfOtherUid(m,me);
+  if(!opp||pfLiveNameCache[opp]||pfLiveNameTried[opp]) return;
+  pfLiveNameTried[opp]=true;
+  pfApi('GET','/users/'+encodeURIComponent(opp)+'/username').then(function(n){
+    if(n&&typeof n==='string'&&n.trim()){
+      pfLiveNameCache[opp]=n.trim();
+      pfUpdateFriendBar(); try{ updateCards(); }catch(e){}
+    }
+  });
+}
+function pfOtherName(m,me){
+  if(!m) return 'Tester';
+  var opp=pfOtherUid(m,me);
+  if(opp&&pfLiveNameCache[opp]) return pfLiveNameCache[opp];
+  return m.aUid===me?(m.bName||'Tester'):(m.aName||'Tester');
+}
 function pfIsMyTurn(m,me){ return !!m && m.status==='playing' && m.turn===me; }
 function pfSeatOf(m,uid){ return null; } /* seats are local: I am always 'you' */
 
@@ -1083,6 +1108,19 @@ function pfApplyState(st){
 }
 function pfApplyMatch(m){
   pfMatch=m;
+  /* POOL-EXPIRE-2026-11-26 (C6): 7-day lazy expiry, mirror
+     mmApplyMatch — a waiting/playing match older than 7 days expires
+     on render. The poll short-circuits on 'expired', so it stops. */
+  if(m&&pfMid&&(m.status==='waiting'||m.status==='playing')&&m.createdAt&&(Date.now()-m.createdAt)>7*86400000){
+    pfApi('PATCH','/turnMatches/'+encodeURIComponent(pfMid),{status:'expired',updatedAt:Date.now()});
+    m.status='expired'; m.updatedAt=Date.now();
+    setStatus('This Duel expired after 7 days.');
+    pfUpdateFriendBar(); updateCards(); draw();
+    return;
+  }
+  /* POOL-LIVE-NAME-2026-11-26 (C4): resolve the opponent's current
+     Code Name once per open (cached; never per poll tick). */
+  if(m&&(m.status==='playing'||m.status==='waiting'||m.status==='won')) pfRefreshLiveName(m);
   if(m&&m.state) pfApplyState(m.state);
   if(m&&m.status==='won'&&m.winner){ gameOver=true; pfShowEnd(m); }
   if(m&&m.status==='playing'){
@@ -1139,7 +1177,11 @@ function pfPublishTurn(outcome){
     st.lastShot={by:me,text:shotTxt,at:now};
   }
   if(status==='won'){ pfShowEnd({status:'won',winner:winner,aUid:m.aUid,bUid:m.bUid,aName:m.aName,bName:m.bName}); }
-  var patch={state:st,turn:nextTurnUid,status:status,winner:winner,lastMoveAt:now,lastMoveBy:me,lastMoveCell:-1,history:hist,moves:(m.moves||0)+1,updatedAt:now};
+  /* POOL-BOARD-2026-11-26 (C3): write board (the 16-ball table) on
+     every shot — RTDB prunes empty arrays, so the record's board was
+     absent and the pending validate would deny shots after publish.
+     board is the same array pfSerialize builds for state.balls. */
+  var patch={state:st,board:st.balls,turn:nextTurnUid,status:status,winner:winner,lastMoveAt:now,lastMoveBy:me,lastMoveCell:-1,history:hist,moves:(m.moves||0)+1,updatedAt:now};
   function attempt(n){
     return pfApi('PATCH','/turnMatches/'+encodeURIComponent(pfMid),patch).then(function(r){
       if(r===null&&n<3){ return new Promise(function(res){ setTimeout(function(){ attempt(n+1).then(res); },1500); }); }
@@ -1194,7 +1236,7 @@ function poolFriendAfterShot(shooter){
 window.poolFriendAfterShot=poolFriendAfterShot;
 
 /* ---------- challenge / accept / decline / rematch / leave / nudge ---------- */
-function pfChallenge(uid,name){
+function pfChallenge(uid,name,firstUid){
   var me=pfUid();
   if(!me){ setStatus('Sign in to the Arcade to play with a friend — friend matches need your Arcade account.'); return Promise.resolve(null); }
   if(!uid||uid===me) return Promise.resolve(null);
@@ -1202,8 +1244,18 @@ function pfChallenge(uid,name){
   return pfMyName().then(function(myN){
     var now=Date.now();
     newRack();
-    var match={game:GAME,aUid:me,bUid:uid,aName:myN,bName:String(name||'Tester'),xUid:me,oUid:uid,board:[],turn:me,status:'waiting',winner:null,
-      state:{balls:balls.map(function(b){return {n:b.n,x:Math.round(b.x*10)/10,y:Math.round(b.y*10)/10,pocketed:false};}),groups:{},ballInHand:false,cue:{x:220,y:230},shots:{},turnUid:me},
+    /* POOL-FIRST-2026-11-26 (C1, Holo 2026-11-26 17:39): the challenged
+       player (accepter) moves first / breaks first. firstUid is the
+       rematch pass-through (C2 — the finished match's second player);
+       a fresh challenge defaults to the challenged uid. */
+    var first=firstUid||uid;
+    var other=(first===uid)?me:uid;
+    /* POOL-BOARD-2026-11-26 (C3): board is the non-empty 16-ball rack
+       (never []) — RTDB prunes empty arrays, which is why the live
+       match has no board. The same array serves state.balls. */
+    var rackBalls=balls.map(function(b){return {n:b.n,x:Math.round(b.x*10)/10,y:Math.round(b.y*10)/10,pocketed:false};});
+    var match={game:GAME,aUid:me,bUid:uid,aName:myN,bName:String(name||'Tester'),xUid:first,oUid:other,board:rackBalls,turn:first,status:'waiting',winner:null,
+      state:{balls:rackBalls,groups:{},ballInHand:false,cue:{x:220,y:230},shots:{},turnUid:first},
       lastMoveAt:0,lastMoveBy:'',lastMoveCell:-1,history:[],moves:0,createdAt:now,updatedAt:now};
     match.state.groups[me]=null; match.state.groups[uid]=null;
     match.state.shots[me]=0; match.state.shots[uid]=0;
@@ -1217,7 +1269,7 @@ function pfChallenge(uid,name){
       pfMid=mid; pfMatch=match; pfSeenMoves=0; pfSeenUpdated=now;
       try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
       setMode('friend',true); updateCards(); draw(); pfStartPoll();
-      setStatus('Challenge sent to <strong>'+pfEsc(name||'your friend')+'</strong>! You break when they accept.');
+      setStatus('Challenge sent to <strong>'+pfEsc(name||'your friend')+'</strong>! '+(first===me?'You break first when they accept.':'They break first when they accept.'));
       pfUpdateFriendBar(); pfRenderPanel();
       return mid;
     });
@@ -1235,9 +1287,11 @@ function pfAccept(mid){
     try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
     setMode('friend',true); pfApplyMatch(m); pfStartPoll();
     pfMyName().then(function(myN){
-      pfNotice(m.aUid,{type:'turn',title:'Your turn in 8-Ball Pool',body:'Your turn in 8-Ball Pool vs '+myN+' — '+myN+' accepted at '+pfTimeShort(Date.now())+'.',link:'game:8-ball-pool',fromName:myN,fromUid:me});
+      /* POOL-FIRST-2026-11-26 (C1): the accepter breaks first, so the
+         challenger is NOT to move — the notice says so plainly. */
+      pfNotice(m.aUid,{type:'turn',title:'8-Ball Pool — '+myN+' accepted',body:myN+' accepted — their break first, watch the table.',link:'game:8-ball-pool',fromName:myN,fromUid:me});
     });
-    setStatus('<strong>'+pfEsc(m.aName||'Your friend')+'</strong> breaks first — watch the table, your turn is next.');
+    setStatus('<strong>Your break — shoot when ready.</strong>');
     return true;
   });
   }
@@ -1263,9 +1317,13 @@ function pfCancel(mid){
 function pfRematch(){
   if(!pfMatch) return;
   var me=pfUid(); var opp=pfOtherUid(pfMatch,me), name=pfOtherName(pfMatch,me);
+  /* POOL-REMATCH-2026-11-26 (C2, Holo 2026-11-26 18:48 + 18:50):
+     rematches alternate — the player who went SECOND in the finished
+     match (its oUid) goes FIRST in the rematch, whoever taps Rematch. */
+  var firstUid=pfMatch.oUid;
   pfStopPoll(); pfMatch=null; pfMid=null;
   try{localStorage.removeItem(LS_MATCH);}catch(e){}
-  pfChallenge(opp,name);
+  pfChallenge(opp,name,firstUid);
 }
 function pfLeave(){
   if(!pfMatch||!pfMid) return Promise.resolve(false);
@@ -1482,17 +1540,25 @@ function pfEnterRoom(room){
     return pfCreateRoomMatch(room);
   });
 }
-function pfCreateRoomMatch(room){
+function pfCreateRoomMatch(room,firstUid){
   var me=pfUid();
-  /* No match yet — the first arrival creates it (host breaks). */
+  /* POOL-FIRST-2026-11-26 (C1): no match yet — the first arrival
+     creates it, and the GUEST (the accepter) breaks first. firstUid
+     is the rematch pass-through (C2); a fresh room defaults to the
+     guest. */
   var hostUid=room.hostUid, guestUid=room.guestUid||me;
+  var first=firstUid||guestUid;
+  var other=(first===guestUid)?hostUid:guestUid;
   var oppUid=(me===hostUid)?guestUid:hostUid;
   var oppName=(me===hostUid)?(room.guestName||'Tester'):(room.hostName||'Tester');
   return pfMyName().then(function(myN){
     var now=Date.now();
     newRack();
-    var match={game:GAME,aUid:hostUid,bUid:guestUid,aName:(me===hostUid?myN:room.hostName),bName:(me===hostUid?(room.guestName||'Tester'):myN),xUid:hostUid,oUid:guestUid,board:[],turn:hostUid,status:'waiting',winner:null,roomCode:pfRoomCode,
-      state:{balls:balls.map(function(b){return {n:b.n,x:Math.round(b.x*10)/10,y:Math.round(b.y*10)/10,pocketed:false};}),groups:{},ballInHand:false,cue:{x:220,y:230},shots:{},turnUid:hostUid},
+    /* POOL-BOARD-2026-11-26 (C3): board is the non-empty 16-ball rack
+       (never []) — see pfChallenge. */
+    var rackBalls=balls.map(function(b){return {n:b.n,x:Math.round(b.x*10)/10,y:Math.round(b.y*10)/10,pocketed:false};});
+    var match={game:GAME,aUid:hostUid,bUid:guestUid,aName:(me===hostUid?myN:room.hostName),bName:(me===hostUid?(room.guestName||'Tester'):myN),xUid:first,oUid:other,board:rackBalls,turn:first,status:'waiting',winner:null,roomCode:pfRoomCode,
+      state:{balls:rackBalls,groups:{},ballInHand:false,cue:{x:220,y:230},shots:{},turnUid:first},
       lastMoveAt:0,lastMoveBy:'',lastMoveCell:-1,history:[],moves:0,createdAt:now,updatedAt:now};
     match.state.groups[hostUid]=null; match.state.groups[guestUid]=null;
     match.state.shots[hostUid]=0; match.state.shots[guestUid]=0;
@@ -1506,7 +1572,7 @@ function pfCreateRoomMatch(room){
       pfMid=mid; pfMatch=match; pfSeenMoves=0; pfSeenUpdated=now;
       try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
       setMode('friend',true); updateCards(); draw(); pfStartPoll();
-      setStatus('Room joined! '+(me===hostUid?'Waiting for '+pfEsc(oppName)+' to join — you break first.':'Match ready — '+pfEsc(room.hostName||'the host')+' breaks first.'));
+      setStatus('Room joined! '+(me===hostUid?'Waiting for '+pfEsc(oppName)+' to join — they break first.':'Match ready — you break first.'));
       pfUpdateFriendBar();
       return true;
     });
@@ -1527,6 +1593,7 @@ function pfMatchStatusText(m,me){
   if(m.status==='won') return (m.winner===me)?'🏆 You won!':(opp+' won');
   if(m.status==='declined') return 'Declined';
   if(m.status==='left') return opp+' left';
+  if(m.status==='expired') return 'Expired — challenge again any time';
   return m.status;
 }
 function pfOpenPanel(){
@@ -1592,7 +1659,7 @@ function pfUpdateFriendBar(){
   if(!isFriend()||!pfMatch){ bar.style.display='none'; bar.innerHTML=''; return; }
   var me=pfUid(), opp=pfOtherName(pfMatch,me);
   var last=pfMatch.lastMoveAt?(' • Last move '+pfTimeShort(pfMatch.lastMoveAt)):'';
-  var turnTxt=pfMatch.status==='won'?(pfMatch.winner===me?'🏆 You won!':('🎱 '+opp+' won')):(pfIsMyTurn(pfMatch,me)?'🔥 Your turn — shoot!':('⏳ Waiting for '+opp+'…'));
+  var turnTxt=pfMatch.status==='won'?(pfMatch.winner===me?'🏆 You won!':('🎱 '+opp+' won')):(pfMatch.status==='expired'?'⏳ This Duel expired — challenge again any time.':(pfIsMyTurn(pfMatch,me)?'🔥 Your turn — shoot!':('⏳ Waiting for '+opp+'…')));
   bar.style.display='block';
   bar.innerHTML='<strong>👥 Friend match vs '+pfEsc(opp)+'</strong> • '+turnTxt+last+' <span style="float:right;display:inline-flex;gap:6px;flex-wrap:wrap">'
     +(pfMatch.status==='playing'&&!pfIsMyTurn(pfMatch,me)?'<button type="button" id="pfNudgeBtn">🔔 Nudge</button>':'')
@@ -1644,6 +1711,11 @@ function pfBoot(){
       if(e&&e.data&&e.data.type==='holo-pool-match'&&e.data.mid){ pfLoadMyMatches().then(function(){ pfOpenMatch(e.data.mid); }); }
     }catch(err){}
   });
+  /* POOL-READY-2026-11-26 (C5): tell the hub the room listener is
+     installed, so handIntoPool can (re-)send the room/match instead of
+     the one-shot 2 s fallback racing the lazy iframe load (hub H3).
+     pfBoot re-runs on every frame reload, so a reload re-posts. */
+  try{ if(window.parent&&window.parent!==window) window.parent.postMessage({type:'holo-pool-ready',game:GAME,mid:pfMid||null},'*'); }catch(e){}
   if(roomCode){ pfJoinRoom(roomCode); return; }
   if(matchParam){
     pfLoadMyMatches().then(function(){
@@ -1671,7 +1743,12 @@ window.holoPoolFriend={
   joinRoom:pfJoinRoom, state:function(){ return pfMatch; },
   matchId:function(){ return pfMid; }, serialize:pfSerialize, applyState:pfApplyState,
   publishTurn:pfPublishTurn, loadMyMatches:pfLoadMyMatches, renderPanel:pfRenderPanel,
-  pollNow:pfPollTick, leave:pfLeave, nudge:pfNudge, rematch:pfRematch
+  pollNow:pfPollTick, leave:pfLeave, nudge:pfNudge, rematch:pfRematch,
+  /* POOL-TEST-HOOKS-2026-11-26 (C7): mirror window.__mm.duel — inject
+     a test auth record / a match row so the suite can drive the room
+     layer without a live sign-in. */
+  setAuth:function(a){ try{ if(a) localStorage.setItem(AUTH_KEY,JSON.stringify(a)); else localStorage.removeItem(AUTH_KEY); }catch(e){} myNameCache=null; return pfAuth(); },
+  setMatch:function(mid,m){ if(mid) pfMatchList[mid]=m; pfMid=mid||null; pfMatch=m||null; if(m){ pfSeenMoves=m.moves||0; pfSeenUpdated=m.updatedAt||0; } return pfMatch; }
 };
 document.getElementById('modeFriendBtn').addEventListener('click',pfOpenPanel);
 pfBoot();
