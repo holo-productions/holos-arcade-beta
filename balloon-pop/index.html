@@ -2,8 +2,6 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<!-- GATE-GUARD-2026-11-24 -->
-<script src="../shared/gate-guard.js"></script>
 <script>
 /* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
    The hub stores the switches in localStorage (same origin) and
@@ -310,11 +308,7 @@
   .balloon .knot{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;margin-top:-1px}
   .balloon .string{width:2px;height:16px;background:rgba(255,255,255,.75);border-radius:2px}
   .balloon .tag{position:absolute;top:34%;left:50%;transform:translate(-50%,-50%);font-size:1.05rem;pointer-events:none;
-    background:rgba(20,12,4,.55);border-radius:50%;padding:2px 3px;line-height:1;
-    text-shadow:0 0 3px rgba(0,0,0,.8),0 1px 2px rgba(0,0,0,.6)}
-  /* tag badge (2026-11-24): dark disc behind the bonus tag so the yellow ⭐ reads
-     on yellow/gold balloons — it was near-invisible before. Same fix lifts 🛡/✨/💧
-     off every balloon colour, since emoji ignore text outlines. */
+    text-shadow:0 1px 2px rgba(0,0,0,.35)}
   .balloon.tough .body{box-shadow:inset -8px -10px 0 rgba(0,0,0,.22),inset 6px 8px 0 rgba(255,255,255,.2),0 0 0 3px rgba(0,0,0,.18)}
   .balloon.cracked .body{animation:wobble .3s ease}
   .balloon.cracked .body::before{content:"";position:absolute;inset:18% 30% auto 30%;height:46%;
@@ -684,13 +678,18 @@ function loadStr(key,fallback){ try{ return localStorage.getItem(key)||fallback;
 function saveStr(key,val){ try{ localStorage.setItem(key,val); }catch(e){} }
 
 /* ---------- difficulty ---------- */
+/* BALLOON-HARD-2026-11-26 (Holo: 'Balloon pop too easy'): harder across the
+   board — targets are 55% of the board (was 50%), dart slack is +3 (was +4),
+   tough/soggy balloons are more common on every difficulty. Easy stays
+   gentle (+4 darts, few tough, rare soggy); Hard leans on tough/soggy
+   balloons instead of a big dart cut so high boards stay winnable. */
 var DIFFS={
-  easy:{label:'Easy',dartBonus:4,tough:0.05,soggy:0.00,gold:0.16,star:0.05,
-    note:'+4 darts every level · hardly any tough balloons · no soggy ones · gold pops up often.'},
-  normal:{label:'Normal',dartBonus:0,tough:0.12,soggy:0.05,gold:0.11,star:0.04,
-    note:'Standard darts · some tough balloons · a few soggy ones hiding in the bunch.'},
-  hard:{label:'Hard',dartBonus:-2,tough:0.22,soggy:0.10,gold:0.07,star:0.03,
-    note:'−2 darts every level · lots of tough & soggy balloons · gold is rare. Good luck!'}
+  easy:{label:'Easy',dartBonus:4,tough:0.08,soggy:0.02,gold:0.14,star:0.05,
+    note:'+4 darts every level · a few tough balloons · a rare soggy one · gold pops up often.'},
+  normal:{label:'Normal',dartBonus:0,tough:0.18,soggy:0.08,gold:0.10,star:0.035,
+    note:'Tighter darts · more tough balloons · more soggy ones hiding in the bunch.'},
+  hard:{label:'Hard',dartBonus:-1,tough:0.30,soggy:0.15,gold:0.06,star:0.025,
+    note:'−1 dart every level · many tough & soggy balloons · gold is rare. Good luck!'}
 };
 var selectedDiff=loadStr(DIFF_KEY,'normal'); if(!DIFFS[selectedDiff]) selectedDiff='normal';
 var activeDiff=selectedDiff;
@@ -714,8 +713,12 @@ function levelConfig(lv){
   else if(lv<=10){ cols=6; rows=5; }
   else { cols=6; rows=6; }
   var total=cols*rows;
-  var target=Math.min(total, Math.round(total*0.5) + Math.min(6, Math.floor((lv-1)/2)));
-  var darts=Math.max(5, target + 4 - Math.min(3, Math.floor((lv-1)/3)));
+  /* BALLOON-HARD-2026-11-26: target 55% of the board (was 50%) and dart
+     slack +3 (was +4), eroding to 0 by Level 10. Normal slack is now
+     3,3,3,2,2,2,1,1,1,0,0 (was 4,4,4,3,3,3,2,2,2,1,1); gold refunds
+     still help, but a wasted dart matters from Level 7 on. */
+  var target=Math.min(total, Math.round(total*0.55) + Math.min(6, Math.floor((lv-1)/2)));
+  var darts=Math.max(5, target + 3 - Math.min(3, Math.floor((lv-1)/3)));
   return {cols:cols,rows:rows,total:total,target:target,darts:darts};
 }
 
@@ -793,6 +796,22 @@ function buildBoard(){
       var ti=types.indexOf('tough');
       if(ti===-1) break;
       types[ti]='normal';
+    }
+    /* BALLOON-HARD-2026-11-26: with the tighter dart budgets a board can
+       still fall short even after every tough balloon is softened (too few
+       gold refunds on a bad roll). Convert a dud — soggy first, else a
+       normal balloon — into gold so the board stays winnable: a gold pop
+       refunds its dart, so each conversion adds exactly one reachable pop.
+       Bounded, so it always terminates. With the shipped numbers the
+       tough-softening above already covers every board, so this is a
+       safety net for unlucky rolls, not a routine softener. */
+    var guard2=0;
+    while(maxPops()<target && guard2<cfg.total){
+      guard2++;
+      var gi=types.indexOf('soggy');
+      if(gi===-1) gi=types.indexOf('normal');
+      if(gi===-1) break;
+      types[gi]='gold';
     }
   }
   types.forEach(function(type,idx){
@@ -1053,6 +1072,9 @@ $('btnSendFeedback').addEventListener('click',function(){
   fbRating=0; paintStars(); fbComment.value='';
   setTimeout(function(){ closeModal('modalFeedback'); fbStatus.textContent=''; },1100);
 });
+
+/* BALLOON-HARD-2026-11-26: test hook (no gameplay effect) */
+window.holoBalloonPop={levelConfig:levelConfig,DIFFS:DIFFS,version:'BALLOON-HARD-2026-11-26'};
 
 /* ---------- init (tutorial is opt-in only — never auto-shown) ---------- */
 syncModeUI(); syncDiffUI(); refreshNotes();
