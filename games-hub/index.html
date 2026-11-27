@@ -9511,12 +9511,12 @@ setTimeout(function(){
 
   function openGame(name){
     /* GATE-COMINGSOON-2026-11-23: signed-in users only — a signed-out visitor never opens a game. Card taps, Game Menu Play, Game of the Day, Shuffle, deep links (#game/<slug>) and practice opens all funnel through here; send them to the Coming Soon gate instead. */
-    try { if(typeof getTester !== 'function' || !getTester()){ var lv0 = document.getElementById('loginView'); if(lv0) lv0.hidden = false; document.body.classList.add('auth-locked'); document.body.style.overflow = 'hidden'; return; } } catch(e){}
+    try { if(typeof getTester !== 'function' || !getTester()){ var lv0 = document.getElementById('loginView'); if(lv0) lv0.hidden = false; document.body.classList.add('auth-locked'); document.body.style.overflow = 'hidden'; window.__holoHubStart = false; /* HUBSTART-2026-11-27: a gated start never loads a frame — drop any menu-START flag so a later direct start stays flag-free. */ return; } } catch(e){}
     /* AGE18-2026-11-23: 18+ games never open while hidden — covers
        card taps, Game Menu Play, Game of the Day, Shuffle, deep
        links (#game/<slug>) and practice opens, all of which funnel
        through here. */
-    if(window.holoAge18 && window.holoAge18.isAdultSlug(name) && !window.holoAge18.adultGamesVisible()){ try { window.holoAge18.showBlocked(); } catch(e){} return; }
+    if(window.holoAge18 && window.holoAge18.isAdultSlug(name) && !window.holoAge18.adultGamesVisible()){ try { window.holoAge18.showBlocked(); } catch(e){} window.__holoHubStart = false; /* HUBSTART-2026-11-27: a blocked start never loads a frame — drop any menu-START flag so a later direct start stays flag-free. */ return; }
     /* GAME-START-POPUP-2026-11-27: re-opening the game that is already running just re-shows the player — no start menu over live play, and the stopper must not tear the running game down. */
     var _alreadyRunning = (currentGame === name && !player.hidden && frameFor(name) && frameFor(name).getAttribute('src'));
     if(!_alreadyRunning && currentGame && stoppers[currentGame]) stoppers[currentGame]();
@@ -9540,6 +9540,8 @@ setTimeout(function(){
     // Tutorials are opt-in only (Holo's standard): the game starts right
     // away; the walkthrough opens only from the game's ❓ How to play button.
     if(starters[name]) starters[name]();
+    /* HUBSTART-2026-11-27: safety net — the flag is consumed by lazyFrame above, but built-in games (trivia / werewolf / madcow / dj) have no iframe starter, and an already-loaded frame takes no src assignment, so clear any leftover here. A stale flag must never leak into a later direct start. */
+    window.__holoHubStart = false;
     if(wantPractice[name]){
       showPracticeBanner(name);
       var btnId = PRACTICE_BTN[name];
@@ -9979,10 +9981,14 @@ setTimeout(function(){
      of staying in whichever mode loaded first. data-src itself is
      never mutated. */
   var wantPractice = {}, framePractice = {}, practiceOpen = false;
-  function frameUrl(f, practice){
+  function frameUrl(f, practice, hubStart){
     var ds = f.getAttribute('data-src') || '';
     ds = ds.replace(/([?&])practice=1(&|$)/, function(m, p1, p2){ return p2 ? p1 : ''; });
+    /* HUBSTART-2026-11-27: never carry a stale hubstart flag from data-src. */
+    ds = ds.replace(/([?&])hubstart=1(&|$)/, function(m, p1, p2){ return p2 ? p1 : ''; });
     if(practice) ds += (ds.indexOf('?') === -1 ? '?' : '&') + 'practice=1';
+    /* HUBSTART-2026-11-27: a menu-initiated START appends hubstart=1 so the game file can skip its own in-file start menu (Holo's "ONLY ONE START" rule). Direct starts never pass hubStart. */
+    if(hubStart) ds += (ds.indexOf('?') === -1 ? '?' : '&') + 'hubstart=1';
     return ds;
   }
   function frameFor(slug){
@@ -9995,10 +10001,15 @@ setTimeout(function(){
     return function(){
       var f = $(frameId); if(!f) return;
       var practice = !!(slug && wantPractice[slug]);
-      if(!f.getAttribute('src') || framePractice[slug] !== practice){
-        f.setAttribute('src', frameUrl(f, practice));
+      /* HUBSTART-2026-11-27: a menu-initiated START (window.__holoHubStart, set in startGame) loads the frame with hubstart=1. A frame already loaded WITHOUT the flag reloads with it, so the in-file menu is skipped even on a re-open; a frame already carrying hubstart=1 needs no reload. The flag is consumed here either way — a direct start later must never inherit it. */
+      var hubStart = !!window.__holoHubStart;
+      var curSrc = f.getAttribute('src') || '';
+      if(hubStart && curSrc.indexOf('hubstart=1') !== -1) hubStart = false;
+      if(!f.getAttribute('src') || framePractice[slug] !== practice || hubStart){
+        f.setAttribute('src', frameUrl(f, practice, hubStart));
         framePractice[slug] = practice;
       }
+      window.__holoHubStart = false;
     };
   }
   // HOLO-PRACTICE-2026-11-23: the 2026-11-21 "-2 artifact" rewrite
@@ -24222,6 +24233,8 @@ function renderTesterAuth(){
     var btn = currentBtn;
     closeMenu();
     window.__holoDirectStart = true;
+    /* HUBSTART-2026-11-27: START came from the in-box start menu (real and practice paths alike) — the game file may skip its own in-file start menu (Holo's "ONLY ONE START" rule). lazyFrame appends hubstart=1 to the iframe src and consumes this flag; direct starts never set it. */
+    window.__holoHubStart = true;
     /* GAME-START-POPUP-2026-11-27: a REAL start clicks the card button (as before) — the click is what the play-count hooks (GOTD streak / Recently Played / play log) and the points logger listen for, so a direct openGame() call here would silently earn no points. A PRACTICE start must NOT count (no points, no streak, no recent/log), so it opens the game directly instead — no click, no hooks. Fall back to openGame() if there is no card button. */
     if(window.holoPractice && window.holoPractice.is && window.holoPractice.is(currentSlug)){
       if(window.holoOpenGame) window.holoOpenGame(currentSlug);
