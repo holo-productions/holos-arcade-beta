@@ -2870,14 +2870,14 @@ body.in-game .nav-line-btns #signOutBtn,body.in-game .nav-line-btns #settingsGea
 /* Toggles — same pill look, pixel font, violet border; On stays
    the gradient (the pressed rule below must beat the ID rule
    above it, so it is listed with [aria-pressed="true"]). */
-#cbToggle,#bigToggle,#hapToggle,#soundToggle,#musicToggle,#friendReqToggle,
+#cbToggle,#bigToggle,#hapToggle,#scaleFitToggle,#soundToggle,#musicToggle,#friendReqToggle,
 #emailPrefMessages,#emailPrefNotifications,#emailPrefFriendRequests,#emailPrefReportReplies,#emailPrefTurnMoves,#hide18Toggle{
   font-family:var(--pixel);font-size:10px;line-height:1.6;
   padding:10px 16px;min-height:44px;
   border:2px solid var(--violet);border-radius:999px;
   background:#0a0620;color:#e9e4ff;
 }
-#cbToggle[aria-pressed="true"],#bigToggle[aria-pressed="true"],#hapToggle[aria-pressed="true"],
+#cbToggle[aria-pressed="true"],#bigToggle[aria-pressed="true"],#hapToggle[aria-pressed="true"],#scaleFitToggle[aria-pressed="true"],
 #soundToggle[aria-pressed="true"],#musicToggle[aria-pressed="true"],#friendReqToggle[aria-pressed="true"],
 #emailPrefMessages[aria-pressed="true"],#emailPrefNotifications[aria-pressed="true"],
 #emailPrefFriendRequests[aria-pressed="true"],#emailPrefReportReplies[aria-pressed="true"],#emailPrefTurnMoves[aria-pressed="true"],
@@ -2890,7 +2890,7 @@ body.in-game .nav-line-btns #signOutBtn,body.in-game .nav-line-btns #settingsGea
 #copyCodeNameBtn:focus-visible,#adultDobChangeBtn:focus-visible,
 #age18PinCancel:focus-visible,#signOutEverywhereCancel:focus-visible,#deleteAccountCancel:focus-visible,
 #age18CheckBtn:focus-visible,#age18PinGo:focus-visible,#age18SetGo:focus-visible,#age18SendEmail:focus-visible,
-#cbToggle:focus-visible,#bigToggle:focus-visible,#hapToggle:focus-visible,
+#cbToggle:focus-visible,#bigToggle:focus-visible,#hapToggle:focus-visible,#scaleFitToggle:focus-visible,
 #soundToggle:focus-visible,#musicToggle:focus-visible,#friendReqToggle:focus-visible,
 #emailPrefMessages:focus-visible,#emailPrefNotifications:focus-visible,
 #emailPrefFriendRequests:focus-visible,#emailPrefReportReplies:focus-visible,#emailPrefTurnMoves:focus-visible,
@@ -3550,6 +3550,11 @@ setTimeout(function(){
         <span class="lbl">Vibration (haptics)</span>
         <button class="tgl" id="hapToggle" type="button" aria-pressed="true">On</button>
       </div>
+      <div class="set-row">
+        <span class="lbl">Auto-fit game to screen<br><small>Scales the game window to fit your screen. Takes effect when you open your next game.</small></span>
+        <button class="tgl" id="scaleFitToggle" type="button" aria-pressed="true">On</button>
+      </div>
+      <!-- POOL-SIZING-2026-11-26 (D1, Holo 19:16-19:17): auto-fit on by default, off switch here in Settings → Display. -->
       <p style="margin-top:10px">Settings are saved in this browser and apply to the hub only — games keep their own look.</p>
     </div>
     <div class="hub-box" id="settingsFoldsBox">
@@ -6425,6 +6430,12 @@ setTimeout(function(){
   <div id="playerMid">
     <aside class="side-panel" id="sidePanelL" aria-label="Scores and records" hidden></aside>
   <div class="player-body">
+    <!-- POOL-SIZING-2026-11-26 (Phone rotate, Holo 19:47 "This seems small can we rotate on phone"): a friendly prompt on phone portrait — turn sideways for a bigger game. Portrait-only (CSS), dismissible (✕, remembered for the session), never an orientation lock, never fullscreen. -->
+    <div class="rotate-prompt" id="rotatePrompt" hidden>
+      <span aria-hidden="true">📱</span>
+      <span>Turn your phone sideways for a bigger game</span>
+      <button type="button" id="rotatePromptX" aria-label="Dismiss">✕</button>
+    </div>
     <div id="practiceBanner" hidden role="status">
       <span class="pb-icon" aria-hidden="true">🎓</span>
       <div class="pb-copy"><b id="practiceTitle">Practice round</b><span id="practiceText"></span></div>
@@ -7569,9 +7580,10 @@ setTimeout(function(){
     </section>
 
     <!-- ===== 8-Ball Pool — the standalone game, embedded ===== -->
+    <!-- POOL-SIZING-2026-11-26 (C1, Holo 19:20): the est-line + description moved to the side bars (desktop, shown while playing) / the phone info view (below 1280px) — the pane holds only the frame + the phone summary bar. -->
     <section class="game-pane" id="pane-8-ball-pool" hidden>
-      <p class="est-line"><span aria-hidden="true">⏱</span><span><strong>Estimated completion time:</strong> ~5–10 min a match.</span></p>
-      <p class="g-note" style="margin-top:0">The full 8-Ball Pool game — playing right here. When you're finished, tap <strong>← Back</strong> above to leave. If it doesn't load in this frame, <a href="../8-ball-pool/" target="_blank" rel="noopener">open 8-Ball Pool in its own page ↗</a>.</p>
+      <button type="button" class="pool-sumbar" id="poolSumBar" aria-expanded="false">⏱ ~5–10 min a match · Scores &amp; how to play</button>
+      <div class="pool-info side-panel" id="poolPhoneInfo" hidden></div>
       <iframe class="rff-frame" id="8-ball-poolFrame" title="8-Ball Pool" data-src="../8-ball-pool/" loading="lazy"></iframe>
     </section>
 
@@ -9413,6 +9425,29 @@ setTimeout(function(){
   var TITLES = { trivia:'Trivia', werewolf:'Capture the Werewolf', madcow:'Mad Cow', dj:'DJ Game', edm:'Popular Radio Music Trivia', rhythm:'Tap to the Beat', gizmo:"Gizmo's Pom Pom Adventure", poker:"Texas Hold'em Poker", solitaire:'Solitaire Pack' };
   var player = $('player'), currentGame = null;
   var starters = {}, stoppers = {};
+  /* POOL-SIZING-2026-11-26 (C6, Holo 19:08 + 19:23 "My space bar takes me back again"): the hub focused #playerBack on game open and never focused the game iframe, so Space (Pool's shoot key) clicked the focused Back button and went back to the Library — hub-wide, not Pool-only. This helper focuses the visible pane's iframe (element + contentWindow, with a one-time load listener so a reload re-focuses the fresh document); hub-native games with no iframe get their first focusable game control instead. It never throws. Shared game-open path; Pool is the verification case. */
+  function focusGameFrame(name){
+    try {
+      var pane = name ? document.getElementById('pane-' + name) : null;
+      var fr = pane ? pane.querySelector('iframe') : null;
+      if(!fr) fr = document.querySelector('.game-pane:not([hidden]) iframe');
+      if(fr){
+        try { fr.focus(); } catch(e){}
+        var arm = function(){ try { if(fr.contentWindow) fr.contentWindow.focus(); } catch(e){} };
+        try {
+          if(fr.contentWindow && fr.contentDocument && fr.contentDocument.readyState === 'complete'){ arm(); }
+          /* Always arm a one-time load listener too, so a reload (e.g. end-bar Replay) re-focuses the fresh document. */
+          try { fr.addEventListener('load', arm, { once:true }); } catch(e){ try { fr.addEventListener('load', arm); } catch(e2){} }
+        } catch(e){}
+        return true;
+      }
+      var host = pane || document.querySelector('.game-pane:not([hidden])');
+      if(host){ var c = host.querySelector('button:not([disabled]), [tabindex]:not([tabindex="-1"]), a[href]'); if(c){ try { c.focus(); return true; } catch(e){} } }
+    } catch(e){}
+    return false;
+  }
+  window.holoFocusGameFrame = focusGameFrame; /* POOL-SIZING-2026-11-26: bridge so the end-bar IIFE + closeTut + tests can focus the game too. */
+
   function openGame(name){
     /* GATE-COMINGSOON-2026-11-23: signed-in users only — a signed-out visitor never opens a game. Card taps, Game Menu Play, Game of the Day, Shuffle, deep links (#game/<slug>) and practice opens all funnel through here; send them to the Coming Soon gate instead. */
     try { if(typeof getTester !== 'function' || !getTester()){ var lv0 = document.getElementById('loginView'); if(lv0) lv0.hidden = false; document.body.classList.add('auth-locked'); document.body.style.overflow = 'hidden'; return; } } catch(e){}
@@ -9423,6 +9458,9 @@ setTimeout(function(){
     if(window.holoAge18 && window.holoAge18.isAdultSlug(name) && !window.holoAge18.adultGamesVisible()){ try { window.holoAge18.showBlocked(); } catch(e){} return; }
     if(currentGame && stoppers[currentGame]) stoppers[currentGame]();
     currentGame = name;
+    /* POOL-SIZING-2026-11-26 (C5): a fresh open never shows the previous game's end menu. (D1) the auto-fit size applies when a game opens. */
+    try { if(window.holoEndBar) window.holoEndBar.hide(); } catch(e){}
+    try { if(window.holoApplyScaleFit) window.holoApplyScaleFit(); } catch(e){}
     $('playerTitle').textContent = TITLES[name] || 'Game';
     /* DAB-LOGO-2026-11-25: Dots and Boxes gets its own crisp neon SVG in the player bar; every other game keeps the Arcade mark. */
     var pbl = $('playerBarLogo'), pgl = $('playerGameLogo');
@@ -9437,7 +9475,19 @@ setTimeout(function(){
     if(!practiceOpen) wantPractice[name] = false; /* HOLO-PRACTICE-2026-11-23: real opens clear practice intent */
     if(starters[name]) starters[name]();
     renderSidePanels(name); /* SIDE-PANELS-2026-11-25: fill the side writing for this game */
-    $('playerBack').focus();
+    /* POOL-SIZING-2026-11-26 (C6): focus goes INTO the game on open, not onto the Back button — Space reaches the game. (C1 phone) reset the Pool phone info view to the game. (Phone rotate) on phone portrait, suggest turning sideways for a bigger game — once per session (the ✕ dismisses it). */
+    try { if(window.holoFocusGameFrame) window.holoFocusGameFrame(name); } catch(e){}
+    try { resetPoolPhone(); } catch(e){}
+    try {
+      var rp = $('rotatePrompt');
+      if(rp){
+        var rDismissed = false;
+        try { rDismissed = sessionStorage.getItem('holos-arcade-rotate-dismissed') === '1'; } catch(e){}
+        var rPortrait = false;
+        try { rPortrait = window.matchMedia && window.matchMedia('(max-width:820px) and (orientation:portrait)').matches; } catch(e){}
+        rp.hidden = rDismissed || !rPortrait;
+      }
+    } catch(e){}
   }
 
   /* ============ Side writing panels (SIDE-PANELS-2026-11-25) ============
@@ -9474,27 +9524,64 @@ setTimeout(function(){
         ghosts: 'Regular 10 · Sleepy 15 · Shy 20 · Golden 50 pts',
         more: 'Full rules live in the game — tap 📜 Rules in the game.'
       }
+    },
+    /* POOL-SIZING-2026-11-26 (C1): Pool joins the live side-panel pattern (Ghost Hunt pilot). Pool stores ONE JSON object (pool8_bests) — not one key per row — so scores use .json; how-to steps are verbatim from the live game text; the "open in its own page" fallback line is verbatim from the pane's g-note. */
+    '8-ball-pool': {
+      scores: {
+        json: 'pool8_bests',
+        prefix: 'pool8_bests',
+        rows: [['wins', 'Wins'], ['losses', 'Losses'], ['played', 'Played'], ['streak', 'Current streak'], ['bestStreak', 'Best streak'], ['fewest', 'Fewest shots']],
+        note: 'Saved on this device — your best game so far.',
+        est: '⏱ ~5–10 min a match.'
+      },
+      howto: {
+        icon: '🎱',
+        fallback: 'Playing right here — if it doesn\'t load, <a href="../8-ball-pool/" target="_blank" rel="noopener">open 8-Ball Pool in its own page ↗</a>.',
+        steps: [
+          ['Your break!', 'Drag / move on the table to aim, set power, then tap SHOOT. First ball potted decides solids vs. stripes.'],
+          ['Claim a group', 'Pot all balls in your group (solids 1–7 or stripes 9–15), then pot the black 8-ball to win.'],
+          ['Keep shooting', 'Pot a ball from your group and you shoot again. Miss or pot nothing and the turn passes.'],
+          ['The 8-ball last', 'Only aim for the 8 after your group is cleared. Potting the 8 early loses the game instantly.'],
+          ['Scratch = foul', 'If the cue ball goes in a pocket, your opponent gets ball in hand.']
+        ],
+        more: 'Full rules live in the game — tap 📜 Rules in the game.'
+      }
     }
   };
   var SIDE_PANEL_SECTIONS = { left: ['scores'], right: ['howto'] };
   function spScoresHTML(g){
     var any = false, rows = '';
     try {
-      any = g.scores.rows.some(function(r){ return localStorage.getItem(g.scores.prefix + r[0]) !== null; });
-      rows = g.scores.rows.map(function(r){
-        var n = parseInt(localStorage.getItem(g.scores.prefix + r[0]), 10);
-        return '<div class="sp-bestrow"><span>' + r[1] + '</span><span>' + (isNaN(n) ? '—' : n + ' pts') + '</span></div>';
-      }).join('');
+      /* POOL-SIZING-2026-11-26 (C1): Pool stores ONE JSON object (pool8_bests) — not one key per row like Ghost Hunt — so the scores builder reads the object when g.scores.json is set. Ghost Hunt (no .json) is byte-identical to before. */
+      if(g.scores.json){
+        var bj = JSON.parse(localStorage.getItem(g.scores.json) || 'null');
+        any = !!(bj && typeof bj === 'object' && g.scores.rows.some(function(r){ return typeof bj[r[0]] === 'number'; }));
+        rows = g.scores.rows.map(function(r){
+          var n = (bj && typeof bj === 'object') ? bj[r[0]] : null;
+          return '<div class="sp-bestrow"><span>' + r[1] + '</span><span>' + ((typeof n === 'number') ? n : '—') + '</span></div>';
+        }).join('');
+      } else {
+        any = g.scores.rows.some(function(r){ return localStorage.getItem(g.scores.prefix + r[0]) !== null; });
+        rows = g.scores.rows.map(function(r){
+          var n = parseInt(localStorage.getItem(g.scores.prefix + r[0]), 10);
+          return '<div class="sp-bestrow"><span>' + r[1] + '</span><span>' + (isNaN(n) ? '—' : n + ' pts') + '</span></div>';
+        }).join('');
+      }
     } catch(e){}
+    var est = g.scores.est ? '<p class="sp-note">' + g.scores.est + '</p>' : '';
     return '<section class="sp-section" data-sp="scores"><h3>🏆 Scores &amp; records</h3>'
       + (any ? rows : '<p class="sp-empty">No scores yet — play a round!</p>')
-      + '<p class="sp-note">' + g.scores.note + '</p></section>';
+      + '<p class="sp-note">' + g.scores.note + '</p>' + est + '</section>';
   }
   function spHowtoHTML(g){
+    /* POOL-SIZING-2026-11-26 (C1): icon + fallback link + ghosts line are optional per game — Ghost Hunt (no icon/fallback, ghosts set) is byte-identical to before. */
     var steps = g.howto.steps.map(function(s){ return '<li><b>' + s[0] + '</b> — ' + s[1] + '</li>'; }).join('');
-    return '<section class="sp-section" data-sp="howto"><h3>👻 How to play</h3>'
-      + '<ol class="sp-steps">' + steps + '</ol>'
-      + '<p class="sp-ghosts"><b>Ghosts:</b> ' + g.howto.ghosts + '</p>'
+    var icon = g.howto.icon || '👻';
+    var fb = g.howto.fallback ? '<p class="sp-note">' + g.howto.fallback + '</p>' : '';
+    var gh = g.howto.ghosts ? '<p class="sp-ghosts"><b>Ghosts:</b> ' + g.howto.ghosts + '</p>' : '';
+    return '<section class="sp-section" data-sp="howto"><h3>' + icon + ' How to play</h3>'
+      + fb + '<ol class="sp-steps">' + steps + '</ol>'
+      + gh
       + '<p class="sp-note">' + g.howto.more + '</p></section>';
   }
   var SECTION_BUILDERS = { scores: spScoresHTML, howto: spHowtoHTML };
@@ -9504,9 +9591,12 @@ setTimeout(function(){
     if(!L || !R) return;
     var g = slug && SIDE_PANEL_GAMES[slug];
     sidePanelSlug = g ? slug : null;
-    if(!g){ L.hidden = true; R.hidden = true; return; }
+    if(!g){ L.hidden = true; R.hidden = true; var pi0 = document.getElementById('poolPhoneInfo'); if(pi0) pi0.innerHTML = ''; return; }
     L.innerHTML = SIDE_PANEL_SECTIONS.left.map(function(id){ return SECTION_BUILDERS[id](g); }).join('');
     R.innerHTML = SIDE_PANEL_SECTIONS.right.map(function(id){ return SECTION_BUILDERS[id](g); }).join('');
+    /* POOL-SIZING-2026-11-26 (C1 phone): the phone info view gets the same left + right content (scores + how-to + est-line + fallback link) for the view swap. */
+    var pi = document.getElementById('poolPhoneInfo');
+    if(pi) pi.innerHTML = (slug === '8-ball-pool') ? (L.innerHTML + R.innerHTML) : '';
     L.hidden = false; R.hidden = false;
   }
   /* Scores refresh live: the game (in its iframe) writes its bests to the
@@ -9518,10 +9608,41 @@ setTimeout(function(){
     if(g && e.key.indexOf(g.scores.prefix) === 0) renderSidePanels(sidePanelSlug);
   });
   window.holoSidePanels = { render: renderSidePanels, games: SIDE_PANEL_GAMES, sections: SIDE_PANEL_SECTIONS }; /* test hook */
+
+  /* POOL-SIZING-2026-11-26 (C1 phone): the Pool phone info view — the summary bar swaps the pane between the game and the scores/how-to info (the TTT view-swap pattern); the game view is the default whenever a game opens. */
+  function resetPoolPhone(){
+    try {
+      var sb = document.getElementById('poolSumBar'), pi = document.getElementById('poolPhoneInfo'), fr = document.getElementById('8-ball-poolFrame');
+      if(sb && pi && fr){ pi.hidden = true; fr.hidden = false; sb.setAttribute('aria-expanded', 'false'); sb.textContent = '⏱ ~5–10 min a match · Scores & how to play'; }
+    } catch(e){}
+  }
+  (function(){
+    var sb = document.getElementById('poolSumBar');
+    if(!sb) return;
+    sb.addEventListener('click', function(){
+      var pi = document.getElementById('poolPhoneInfo'), fr = document.getElementById('8-ball-poolFrame');
+      if(!pi || !fr) return;
+      var toInfo = pi.hidden;
+      pi.hidden = !toInfo; fr.hidden = toInfo;
+      sb.setAttribute('aria-expanded', toInfo ? 'true' : 'false');
+      sb.textContent = toInfo ? '← Back to game' : '⏱ ~5–10 min a match · Scores & how to play';
+    });
+  })();
+  /* POOL-SIZING-2026-11-26 (Phone rotate, Holo 19:47): the rotate prompt's ✕ dismisses it for the session (sessionStorage flag). */
+  (function(){
+    var rx = document.getElementById('rotatePromptX');
+    if(!rx) return;
+    rx.addEventListener('click', function(){
+      var rp = document.getElementById('rotatePrompt');
+      if(rp) rp.hidden = true;
+      try { sessionStorage.setItem('holos-arcade-rotate-dismissed', '1'); } catch(e){}
+    });
+  })();
   function closePlayer(){
     if(currentGame && stoppers[currentGame]) stoppers[currentGame]();
     currentGame = null;
     renderSidePanels(null); /* SIDE-PANELS-2026-11-25: clear the side writing */
+    try { var rp2 = $('rotatePrompt'); if(rp2) rp2.hidden = true; } catch(e){} /* POOL-SIZING-2026-11-26 (Phone rotate): reset the rotate prompt when the player closes. */
     /* DAB-LOGO-2026-11-25: reset the player-bar logo to the Arcade mark. */
     var pbl = $('playerBarLogo'), pgl = $('playerGameLogo');
     if(pbl) pbl.hidden = false;
@@ -10043,7 +10164,7 @@ setTimeout(function(){
     var game = tutGame;
     var cb = tutOnClose; tutOnClose = null; tutGame = null;
     if(cb) cb();
-    if(!player.hidden) $('playerBack').focus();
+    if(!player.hidden){ try { if(window.holoFocusGameFrame) window.holoFocusGameFrame(game); } catch(e){} } /* POOL-SIZING-2026-11-26 (C6): tutorial close returns focus to the game, not the Back button. */
     /* WOLF-LETSPLAY-2026-11-23 (Holo 16:55, merged from live): the "Got it — let's play"
        button must actually start the game. For Werewolf the tutorial
        opens WITHOUT starting the hunt (WEREWOLF-GOTIT), so tapping it
@@ -13895,6 +14016,7 @@ window.holoDaily = (function(){
   H.lastGotdDay = H.lastGotdDay || ''; H.gotdEver = !!H.gotdEver;
   H.cb = !!H.cb; H.big = !!H.big;
   H.hap = H.hap !== false; /* EASY-ADDS-2026-11-23: vibration on by default */
+  H.scaleFit = H.scaleFit !== false; /* POOL-SIZING-2026-11-26 (D1): auto-fit on by default. */
   H.playDays = Array.isArray(H.playDays) ? H.playDays : []; /* EASY-ADDS-2026-11-23: play-day history for the Trophy Case calendar */
   Object.keys(H.dayPlays).forEach(function(k){ if(k !== todayK && k !== yK) delete H.dayPlays[k]; });
   function saveHub(){ try { localStorage.setItem(HUB_KEY, JSON.stringify(H)); } catch(e){} }
@@ -14343,6 +14465,14 @@ window.holoDaily = (function(){
   if(hapT) hapT.addEventListener('click', function(){ gateSettingsChange('Vibration', function(){ H.hap = !H.hap; saveHub(); hapSync(); if(H.hap) holoBuzz(20); }); });
   hapSync();
 
+  /* POOL-SIZING-2026-11-26 (D1, Holo 19:16-19:17): auto-fit the game window to the screen, on by default, with an off switch in Settings → Display. The size change applies when the next game opens — the toggle click saves + syncs the button but does NOT change the class; openGame applies it (window.holoApplyScaleFit). When off, the game stays at its fixed 920px size on every screen (no scaling, no growth). */
+  function syncScaleFitBtn(){ var b = $('scaleFitToggle'); if(b){ b.setAttribute('aria-pressed', H.scaleFit ? 'true' : 'false'); b.textContent = H.scaleFit ? 'On' : 'Off'; } }
+  function applyScaleFit(){ try { document.body.classList.toggle('scale-off', !H.scaleFit); } catch(e){} syncScaleFitBtn(); }
+  window.holoApplyScaleFit = applyScaleFit; /* POOL-SIZING-2026-11-26: bridge so openGame can apply the saved size when a game opens. */
+  var scaleFitT = $('scaleFitToggle');
+  if(scaleFitT) scaleFitT.addEventListener('click', function(){ gateSettingsChange('Auto-fit game to screen', function(){ H.scaleFit = !H.scaleFit; saveHub(); syncScaleFitBtn(); }); });
+  syncScaleFitBtn();
+
   /* ---------- Play events → points, challenge, stats ---------- */
   function onPlay(slug){
     if(!slug) return;
@@ -14379,7 +14509,7 @@ window.holoDaily = (function(){
   });
 
   function renderAll(){ checkBadges(); renderPoints(); renderChallenge(); renderBadges(); renderStats(); }
-  applySettings(); saveHub(); renderAll();
+  applySettings(); applyScaleFit(); saveHub(); renderAll(); /* POOL-SIZING-2026-11-26 (D1): apply the saved auto-fit size at boot. */
 
   /* ---------- Feedback + Tester Reviews ---------- */
   var FB_KEY = 'holos-arcade-feedback';
@@ -29175,9 +29305,12 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
      Practice Replay = practice again (no score saved, unchanged). -->
 <style>
 /* END-BAR-2026-11-22 */
-#endBar{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin:12px 0;padding:12px;background:#0a0620;border:2px solid #8b5cff;border-radius:14px}
+/* POOL-SIZING-2026-11-26 (C5, Holo 19:10 + 19:11 x3, + 19:47 "Game over should work same way on phone"): the end menu is a pop-up panel INSIDE the gameplay screen, over the game, at game end only — never in-flow, never while playing, on desktop AND phone (same rule; phone gets the 2×2 button grid below). #endBar is absolutely positioned over .player-body (its positioned ancestor) with a dim backdrop; the buttons live in a centered card. The top bar (Back/Report) stays visible and usable above it. */
+#endBar{position:absolute;inset:0;z-index:4;display:grid;place-items:center;background:rgba(10,10,10,.55);padding:16px}
 #endBar[hidden]{display:none!important}
+#endBar .endbar-card{width:min(92vw,520px);background:#0a0620;border:2px solid #8b5cff;border-radius:14px;padding:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
 #endBar .endbar-title{width:100%;text-align:center;color:#fff;font-weight:800;font-size:15px}
+@media (max-width:820px){ #endBar .endbar-card{display:grid;grid-template-columns:1fr 1fr;gap:10px} #endBar .endbar-title{grid-column:1 / -1} }
 </style>
 <script>
 /* END-BAR-2026-11-22 */
@@ -29185,11 +29318,11 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   var player = document.getElementById('player'); if(!player) return;
   var bar = document.createElement('div');
   bar.id = 'endBar'; bar.hidden = true; bar.setAttribute('role','group'); bar.setAttribute('aria-label','Game finished — what next?');
-  bar.innerHTML = '<span class="endbar-title">Game over — what next?</span>' +
+  bar.innerHTML = '<div class="endbar-card"><span class="endbar-title">Game over — what next?</span>' +
     '<button type="button" class="g-btn primary" id="endReplay">▶ Replay</button>' +
     '<button type="button" class="g-btn" id="endStartOver">Start over</button>' +
     '<button type="button" class="g-btn" id="endInvite">Invite friend</button>' +
-    '<button type="button" class="g-btn" id="endExit">Exit</button>';
+    '<button type="button" class="g-btn" id="endExit">Exit</button></div>'; /* POOL-SIZING-2026-11-26 (C5): buttons wrapped in the centered card; labels unchanged. */
   var banner = document.getElementById('practiceBanner');
   if(banner && banner.parentNode) banner.parentNode.insertBefore(bar, banner.nextSibling); else player.appendChild(bar);
   var lastSlug = null;
@@ -29204,7 +29337,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   function isPractice(){ var b = document.getElementById('practiceBanner'); return !!(b && !b.hidden); }
   /* SWEEP-FIX4-2026-11-25: Werewolf + Monster Match already show their own compliant end screen (locked set, no X) — #endBar must not stack over it. */
   var COMPLIANT_NATIVE = { 'werewolf':1, 'monster-match':1 };
-  function show(){ if(player.hidden) return; if(COMPLIANT_NATIVE[slug()]) return; var first = bar.hidden; bar.hidden = false; if(first){ try { if(window.holoBadges) window.holoBadges.recordFinish(slug()); } catch(e){} } try { if(window.holoComp) window.holoComp.onGameFinished(slug()); } catch(e){} }
+  function show(){ if(player.hidden) return; if(COMPLIANT_NATIVE[slug()]) return; var first = bar.hidden; bar.hidden = false; if(first){ try { if(window.holoBadges) window.holoBadges.recordFinish(slug()); } catch(e){} } try { if(window.holoComp) window.holoComp.onGameFinished(slug()); } catch(e){} /* POOL-SIZING-2026-11-26 (C5): focus the panel's primary button so Space/Enter activates Replay, not the game behind it. */ try { var rb = document.getElementById('endReplay'); if(rb) rb.focus(); } catch(e){} }
   function hide(){ bar.hidden = true; }
   window.holoGameFinished = show;
   /* Native end panels */
@@ -29228,6 +29361,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
         var el = cands[i];
         var st = fr.contentWindow.getComputedStyle(el);
         if(st.display === 'none' || st.visibility === 'hidden') continue;
+        /* POOL-SIZING-2026-11-26 (C5 poll gate): computed display alone does not prove an element is on screen — a child of a hidden modal (e.g. the Pool friend-matches list inside the closed friend modal) still reports display:block while carrying a stale "You won!" row. Only count elements that actually have a rendered box. */
+        try { if(!el.getClientRects || !el.getClientRects().length) continue; } catch(e){ continue; }
         if(OVER_RE.test(el.textContent || '')) return true;
       }
     } catch(e){}
@@ -29243,6 +29378,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   var AGAIN = { trivia:'tAgain', madcow:'mcRestart' };
   document.getElementById('endReplay').addEventListener('click', function(){
     var s = slug(); hide();
+    try { if(window.holoFocusGameFrame) window.holoFocusGameFrame(s); } catch(e){} /* POOL-SIZING-2026-11-26 (C6): Replay returns focus to the game so Space shoots again (the load listener re-focuses after the frame reloads). */
     if(!s) return;
     if(isPractice()){ if(window.holoOpenPractice) window.holoOpenPractice(s); return; }
     var againId = AGAIN[s]; var again = againId && document.getElementById(againId);
@@ -29264,11 +29400,12 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(s && window.holoOpenGameMenu) setTimeout(function(){ window.holoOpenGameMenu(s); }, 30);
   });
   document.getElementById('endInvite').addEventListener('click', function(){
+    hide(); /* POOL-SIZING-2026-11-26 (C5): Invite hides the panel like the other three buttons. */
     var s = slug();
     var title = ''; try { var pt = document.getElementById('playerTitle'); if(pt) title = (pt.textContent || '').trim(); } catch(e){}
     var base = ''; try { base = location.origin + location.pathname; } catch(e){}
     var text = 'Play ' + (title || 'a game') + ' with me in Holo\'s Arcade: ' + base + (s ? '#game/' + s : '');
-    function done(){ try { if(typeof showBadgeToast === 'function') showBadgeToast('Invite copied — send it to a friend to play together.'); } catch(e){} }
+    function done(){ try { if(typeof showBadgeToast === 'function') showBadgeToast('Invite copied — send it to a friend to play together.'); } catch(e){} try { if(window.holoFocusGameFrame) window.holoFocusGameFrame(s); } catch(e){} } /* POOL-SIZING-2026-11-26 (C6): after copying, focus returns to the game. */
     function fallback(){
       var ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
       document.body.appendChild(ta); try { ta.select(); document.execCommand('copy'); } catch(e){}
@@ -31962,6 +32099,25 @@ body.wt-on.in-game #player .player-body{flex:1 1 auto;min-height:0;overflow:hidd
 body.wt-on.in-game #player .player-body .game-pane{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden;}
 body.wt-on.in-game #player .rff-frame{flex:1 1 auto;height:auto!important;min-height:0;}
 body.wt-on.in-game #player .player-bar{flex:0 0 auto;}
+/* POOL-SIZING-2026-11-26 (C2): the in-game bottom pad was dead space under a frame that already ends at the page bottom — reclaim it for the frame. The calc() frame-height rules are left alone: in wt-on mode (always on after boot) the flex rules above override them, so the frame height comes from flex + this padding, not from a magic offset. */
+body.wt-on.in-game #player .player-body{padding-bottom:12px}
+/* POOL-SIZING-2026-11-26 (Holo 19:21 "Turn off the full screen thing" / "Not full screen but the auto fit resolution", confirmed 19:45 by her photo of the top-nav Fullscreen button next to FAQ): the game never goes fullscreen — BOTH fullscreen buttons (in-game #playerFsBtn and top-nav #hubFsBtn) stay off (hidden). Those two buttons are the page's only fullscreen triggers; the game auto-fits its window instead. */
+#playerFsBtn,#hubFsBtn{display:none!important}
+/* POOL-SIZING-2026-11-26 (C1 phone): the Pool phone summary bar + info view. Desktop (side panels) never shows them. */
+#pane-8-ball-pool .pool-sumbar{display:none;width:100%;text-align:left;background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:10px}
+#pane-8-ball-pool .pool-info:not([hidden]){display:block;flex:1 1 auto;min-height:0;overflow-y:auto}
+@media (max-width:1279px){ #pane-8-ball-pool .pool-sumbar{display:block} }
+@media (min-width:1280px){ #pane-8-ball-pool .pool-info{display:none!important} }
+/* POOL-SIZING-2026-11-26 (D1, Holo 19:18 "Let it grow on big screens"): above 1600px the game window widens so the table grows too (up to 1200px) — still inside the page, never fullscreen. Off when body.scale-off (Settings → Display toggle). */
+@media (min-width:1600px){ body.wt-on.in-game:not(.scale-off) #playerMid .player-body{flex:0 1 calc(100vw - 680px);max-width:1200px} }
+/* POOL-SIZING-2026-11-26 (D1): the auto-fit toggle's note line in Settings. */
+.set-row .lbl small{display:block;font-weight:600;font-size:12px;color:var(--muted);margin-top:2px}
+/* POOL-SIZING-2026-11-26 (Phone rotate, Holo 19:47): the rotate prompt — phone portrait only, in-flow above the game so it never covers play. */
+.rotate-prompt{display:none;align-items:center;justify-content:center;gap:8px;background:#0a0620;border:2px solid var(--gold);border-radius:999px;color:#fff;font-weight:800;font-size:14px;padding:8px 12px;margin-bottom:10px}
+.rotate-prompt button{flex:0 0 auto;background:none;border:none;color:#fff;font-size:16px;line-height:1;padding:4px 8px;cursor:pointer;min-height:32px;min-width:32px}
+@media (max-width:820px) and (orientation:portrait){ body.wt-on.in-game #player .rotate-prompt:not([hidden]){display:flex} }
+/* POOL-SIZING-2026-11-26 (Phone rotate, landscape): tighten the in-game padding so the (wider, bigger) landscape frame gets the most height. The table itself is sized by the game file — the landscape fit-by-height rule rides the game-file push (see C4). */
+@media (max-width:820px) and (orientation:landscape){ body.wt-on.in-game #player .player-body{padding:8px 12px} }
 
 /* ---------- 3b. Side writing panels (SIDE-PANELS-2026-11-25) ----------
    Holo 2026-11-25 23:27-23:33 (Ghost Hunt photo): the writing that used to
