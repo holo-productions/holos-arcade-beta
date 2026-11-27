@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>The Rat &amp; the Robber — Holo's Arcade</title>
+<!-- GATE-GUARD-2026-11-24 -->
+<script src="../shared/gate-guard.js"></script>
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches (localStorage + postMessage).
+   Sound off = silent; Music off = looping audio muted. Exposes window.holoSettings + holoBuzz. */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  try {
+    if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+    if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+    if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+  } catch (e) {}
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  window.__holoGains = [];
+  window.holoRegisterGain = function (g) { window.__holoGains.push(g); };
+  function apply() {
+    window.__holoGains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try { document.querySelectorAll('audio,video').forEach(function (el) { el.muted = !(el.loop ? settings.music : settings.sound); }); } catch (e) {}
+  }
+  window.addEventListener('message', function (e) {
+    try {
+      var d = e.data || {};
+      if (d.type === 'holo-settings') {
+        if (typeof d.sound === 'boolean') settings.sound = d.sound;
+        if (typeof d.music === 'boolean') settings.music = d.music;
+        if (typeof d.haptics === 'boolean') settings.haptics = d.haptics;
+        apply();
+      }
+    } catch (err) {}
+  });
+  window.__holoApplySound = apply;
+})();
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+/* THE-RAT-AND-THE-ROBBER-2026-11-27: NEON ARCADE theme (dark navy, glowing lines). Dark menus only. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #06030f; color: #e9e4ff; font-family: "Press Start 2P", system-ui, sans-serif; }
+body { overflow: hidden; }
+.wrap { width: 920px; max-width: 100vw; margin: 0 auto; padding: 8px 10px 0; }
+.hud { display: flex; gap: 14px; align-items: center; justify-content: space-between; padding: 6px 4px; font-size: 11px; line-height: 1.6; color: #cfc6ff; }
+.hud b { color: #ffd43b; }
+.hud .gold { color: #ffd43b; }
+.game-box { position: relative; width: 880px; max-width: 100%; height: 520px; margin: 0 auto; border: 2px solid #8b5cff; border-radius: 16px; overflow: hidden; background: #0a0620; box-shadow: 0 0 24px rgba(139,92,255,.35), inset 0 0 60px rgba(139,92,255,.12); }
+canvas { display: block; width: 100%; height: 100%; }
+.overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(6,3,15,.82); z-index: 20; }
+.overlay.hidden, .hidden { display: none !important; }
+.card { width: 560px; max-width: 100%; max-height: 100%; overflow-y: auto; text-align: center; background: #140b33; border: 2px solid #8b5cff; border-radius: 20px; padding: 22px 20px; box-shadow: 0 18px 40px rgba(0,0,0,.5), 0 0 30px rgba(139,92,255,.3); }
+.card h1 { font-size: 20px; line-height: 1.7; color: #ffd43b; text-shadow: 0 0 14px rgba(255,212,59,.6); margin-bottom: 6px; }
+.card h2 { font-size: 14px; line-height: 1.8; color: #4de3ff; margin-bottom: 12px; }
+.card p { font-size: 11px; line-height: 1.9; color: #cfc6ff; margin: 10px 0; }
+.card .duo { font-size: 26px; letter-spacing: 6px; margin: 8px 0 2px; }
+.btn { display: inline-block; font-family: inherit; font-size: 12px; line-height: 1.4; color: #fff; background: #2a1a5e; border: 2px solid #8b5cff; border-radius: 999px; padding: 12px 20px; margin: 6px 4px; cursor: pointer; box-shadow: 0 0 14px rgba(139,92,255,.35); }
+.btn:hover { background: #3a2480; }
+.btn:active { transform: translateY(1px); }
+.btn.gold { background: #ffd43b; color: #1a1033; border-color: #ffdf6b; box-shadow: 0 0 18px rgba(255,212,59,.55); }
+.btn.gold:hover { background: #ffe066; }
+.btn.small { font-size: 10px; padding: 9px 14px; }
+.btn.active { background: #4de3ff; color: #06222b; border-color: #8ef1ff; }
+.level-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 8px 0; }
+.level-row .btn { min-width: 52px; }
+.level-row .btn.locked { opacity: .35; cursor: default; }
+.wt-bubble { font-size: 12px; line-height: 2.0; color: #fff; text-align: left; background: #1b0f3d; border: 2px solid #4de3ff; border-radius: 16px; padding: 18px; margin: 10px 0; min-height: 120px; }
+.wt-step { font-size: 10px; color: #4de3ff; margin-bottom: 8px; }
+.toast { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 30; background: #ff5b5b; color: #fff; font-size: 12px; padding: 10px 18px; border-radius: 999px; border: 2px solid #ffb3b3; box-shadow: 0 0 18px rgba(255,91,91,.6); pointer-events: none; }
+.toast.gold { background: #ffd43b; color: #1a1033; border-color: #ffdf6b; box-shadow: 0 0 18px rgba(255,212,59,.55); }
+.controls { display: flex; gap: 8px; justify-content: center; align-items: center; padding: 10px 4px 4px; flex-wrap: wrap; }
+.controls .btn { min-width: 56px; padding: 12px 10px; }
+.controls .btn.switch { min-width: 120px; background: #4de3ff; color: #06222b; border-color: #8ef1ff; }
+.controls .btn.switch .who { display: block; font-size: 9px; margin-top: 4px; color: #0b3a44; }
+.hint { text-align: center; font-size: 9px; line-height: 1.8; color: #8f86b8; padding: 4px 0 8px; }
+@media (max-width: 700px) {
+  .wrap { padding: 4px 4px 0; }
+  .game-box { height: 62vw; max-height: 520px; }
+  .card h1 { font-size: 15px; }
+  .hud { font-size: 9px; gap: 8px; flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hud" id="hud">
+    <span>🐀 <b id="hudRoom">Room 1/5</b></span>
+    <span class="gold">🪙 Loot <b id="hudLoot">0/1</b></span>
+    <span>Moves <b id="hudMoves">0</b></span>
+    <span>⏱ <b id="hudTime">0:00</b></span>
+    <span id="hudActive">You: <b>Greg</b></span>
+  </div>
+  <div class="game-box" id="gameBox">
+    <canvas id="cv" width="880" height="520"></canvas>
+    <div class="toast hidden" id="toast"></div>
+
+    <!-- Start menu -->
+    <div class="overlay" id="ovMenu">
+      <div class="card">
+        <div class="duo">🐀&nbsp;💰</div>
+        <h1>THE RAT &amp;<br>THE ROBBER</h1>
+        <h2>Greg &amp; Wesley's bank job</h2>
+        <p>Switch between Greg the robber and Wesley the rat. Solve each room, grab the loot, and get BOTH of them out the exit.</p>
+        <p id="menuBest" style="color:#ffd43b"></p>
+        <div class="level-row" id="levelRow"></div>
+        <div>
+          <button class="btn gold" id="btnStart">▶ START</button>
+          <button class="btn" id="btnHow">How to Play</button>
+        </div>
+        <div>
+          <button class="btn small" id="btnPractice" aria-pressed="false">Practice: OFF</button>
+          <button class="btn small" id="btnSound">Sound: ON</button>
+        </div>
+        <p style="font-size:9px;color:#8f86b8">Practice — scores don't count. Best rooms &amp; loot are saved on this device.</p>
+      </div>
+    </div>
+
+    <!-- How to Play walk-through (one bubble at a time) -->
+    <div class="overlay hidden" id="ovHow">
+      <div class="card">
+        <h2>How to Play</h2>
+        <div class="wt-bubble"><div class="wt-step" id="wtStep"></div><div id="wtText"></div></div>
+        <div>
+          <button class="btn small" id="wtBack">← Back</button>
+          <button class="btn gold" id="wtNext">Next →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- End screen -->
+    <div class="overlay hidden" id="ovEnd">
+      <div class="card">
+        <div class="duo">🎉&nbsp;💰</div>
+        <h1 id="endTitle">CLEAN GETAWAY!</h1>
+        <p id="endText"></p>
+        <p id="endStats" style="color:#ffd43b"></p>
+        <div>
+          <button class="btn gold" id="btnAgain">INSERT COIN TO CONTINUE</button>
+        </div>
+        <div>
+          <button class="btn small" id="btnMenu">Back to Menu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls" id="controls">
+    <button class="btn" id="cLeft" aria-label="Move left">◀</button>
+    <button class="btn" id="cRight" aria-label="Move right">▶</button>
+    <button class="btn" id="cJump" aria-label="Jump">⤒ JUMP</button>
+    <button class="btn" id="cAct" aria-label="Interact">✋ USE</button>
+    <button class="btn switch" id="cSwitch" aria-label="Switch character">⇄ SWITCH<span class="who" id="cSwitchWho">Now: Greg</span></button>
+  </div>
+  <div class="hint">Arrows / WASD move &nbsp;•&nbsp; Space / ↑ jump &nbsp;•&nbsp; E use &nbsp;•&nbsp; Tab switch &nbsp;•&nbsp; Greg pushes crates &amp; opens doors &nbsp;•&nbsp; Wesley slips through vents &amp; chews ropes</div>
+</div>
+<script>
+/* ================= THE RAT & THE ROBBER — game code ================= */
+'use strict';
+/* RAT-OWNER-ONLY-2026-11-27: Holo's game is owner-only until she approves the go-live.
+   Flip RAT_OWNER_ONLY to false (one place, below) to open it to testers. The gate reads the
+   same Firebase session marker the hub stores (localStorage 'holos-firebase-auth', an object
+   with a uid) — the same marker shared/gate-guard.js uses. */
+const RAT_OWNER_ONLY = true;
+const RAT_OWNER_UID = 'wQEvX4fiG6QSDMWaxx20JaQwRPP2'; /* HoloElizabeth */
+function ratIsOwner() {
+  if (!RAT_OWNER_ONLY) return true;
+  try {
+    var v = JSON.parse(localStorage.getItem('holos-firebase-auth') || 'null');
+    return !!(v && v.uid === RAT_OWNER_UID);
+  } catch (e) { return false; }
+}
+function ratOwnerGate() {
+  if (ratIsOwner()) return true;
+  try { var w = document.querySelector('.wrap'); if (w) w.style.display = 'none'; } catch (e) {}
+  if (document.getElementById('rat-owner-only')) return false;
+  var d = document.createElement('div');
+  d.id = 'rat-owner-only';
+  d.setAttribute('role', 'dialog');
+  d.setAttribute('aria-label', 'Game not ready yet');
+  d.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(120% 100% at 50% 0%,#1b0f3d 0%,#0a0620 60%,#06030f 100%);font-family:"Press Start 2P",system-ui,sans-serif;color:#fff;box-sizing:border-box;';
+  d.innerHTML = '<div style="max-width:520px;width:100%;text-align:center;background:#140b33;border:2px solid #8b5cff;border-radius:24px;padding:28px 22px;box-shadow:0 18px 40px rgba(0,0,0,.5),0 0 34px rgba(139,92,255,.25);box-sizing:border-box;">'
+    + '<div style="font-size:13px;line-height:1.8;color:#ffd43b;letter-spacing:1px;">NOT READY YET</div>'
+    + '<div style="font-size:15px;line-height:1.9;margin:18px 0 24px;">This game isn\'t ready for testers yet — check back soon!</div>'
+    + '<a href="https://beta.holosarcade.ca/games-hub/" style="display:inline-block;background:#ffd43b;color:#1a1033;text-decoration:none;font-weight:700;font-size:13px;padding:14px 22px;border-radius:999px;border:2px solid #ffdf6b;box-shadow:0 0 18px rgba(255,212,59,.55);">Back to the Arcade</a>'
+    + '</div>';
+  document.body.appendChild(d);
+  return false;
+}
+
+/* ---- sound: tiny WebAudio bleeps, no credits ---- */
+var AC = null, masterGain = null;
+function audio() {
+  if (AC) return AC;
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = AC.createGain();
+    masterGain.gain.value = (window.holoSettings && window.holoSettings.sound === false) ? 0 : 1;
+    masterGain.connect(AC.destination);
+    if (window.holoRegisterGain) window.holoRegisterGain(masterGain);
+  } catch (e) { AC = null; }
+  return AC;
+}
+function blip(f0, f1, dur, type, vol) {
+  if (!audio()) return;
+  try {
+    if (AC.state === 'suspended') AC.resume();
+    var o = AC.createOscillator(), g = AC.createGain();
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(f0, AC.currentTime);
+    o.frequency.exponentialRampToValueAtTime(Math.max(30, f1), AC.currentTime + dur);
+    g.gain.setValueAtTime(vol || 0.12, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(); o.stop(AC.currentTime + dur);
+  } catch (e) {}
+}
+var sfx = {
+  jump: function () { blip(280, 520, 0.12, 'square', 0.08); },
+  pickup: function () { blip(880, 1320, 0.12, 'sine', 0.14); },
+  coin: function () { blip(660, 990, 0.1, 'sine', 0.12); blip(990, 1320, 0.14, 'sine', 0.12); },
+  swap: function () { blip(440, 660, 0.09, 'triangle', 0.12); },
+  chew: function () { blip(180, 120, 0.07, 'sawtooth', 0.07); },
+  push: function () { blip(140, 110, 0.08, 'sawtooth', 0.06); },
+  open: function () { blip(330, 660, 0.18, 'triangle', 0.12); },
+  caught: function () { blip(400, 90, 0.4, 'sawtooth', 0.14); },
+  win: function () { [523, 659, 784, 1046].forEach(function (f, i) { setTimeout(function () { blip(f, f, 0.16, 'sine', 0.14); }, i * 110); }); }
+};
+
+/* ---- constants & state ---- */
+var TILE = 40, COLS = 22, ROWS = 13, VW = 880, VH = 520;
+var GRAV = 0.6, MAXFALL = 14;
+var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+function $(id) { return document.getElementById(id); }
+
+/* Map legend:
+   # wall/floor · G Greg spawn · W Wesley spawn · C crate · L loot · E exit
+   V vent gap (1 tile high, Wesley only — Greg is too tall) · R rope · K key
+   D vault door (Greg opens with E, needs key) · g gate (floor switch S opens)
+   h gate (tiny button T opens) · B bridge (drops when its rope is cut)
+   S floor switch · T tiny button (Wesley walks over) · ^ floor laser · U guard */
+var LEVELS = [
+{ name: '1 · The Lobby', guardMin: 0, guardMax: 0, map: [
+"######################",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#      L             #",
+"#  G   ## W       EE #",
+"######################" ] },
+{ name: '2 · The Vent', guardMin: 0, guardMax: 0, map: [
+"######################",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#      L   h         #",
+"#  G   W   V   T  EE #",
+"######################" ] },
+{ name: '3 · Heavy Lifting', guardMin: 0, guardMax: 0, map: [
+"######################",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#          #         #",
+"#      L   g         #",
+"#  G C  S Wg      EE #",
+"######################" ] },
+{ name: '4 · Cut the Rope', guardMin: 0, guardMax: 0, map: [
+"######################",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#                    #",
+"#  G   W R     L  EE #",
+"#########BBBB#########" ] },
+{ name: '5 · The Vault', guardMin: 9, guardMax: 12, map: [
+"######################",
+"#      #        #    #",
+"#      #        #    #",
+"#      #        #    #",
+"#      #        #    #",
+"#      #        #    #",
+"#      #        #    #",
+"#      #        #    #",
+"#      #        #    #",
+"#      #        #    #",
+"#      g   U  R D    #",
+"# GWC Sg     ^K D LEE#",
+"######################" ] }
+];
+
+var state = 'menu'; /* menu | howto | playing | end */
+var levelIdx = 0, practiceMode = false;
+var chars = [], active = 0; /* 0 = Greg, 1 = Wesley */
+var crates = [], loots = [], ropes = [], keys = [], gates = [], doors = [], bridges = [];
+var switches = [], buttons = [], guards = [], lasers = [], vents = [];
+var exitZone = null, grid = [];
+var moves = 0, lootGot = 0, lootTotal = 0, playT = 0, playTimer = null;
+var hasKey = false, unlocked = 0, best = null, chewTarget = null, chewT = 0;
+var camShake = 0;
+try { best = JSON.parse(localStorage.getItem('rat-robber-best') || 'null'); } catch (e) {}
+try { unlocked = parseInt(localStorage.getItem('rat-robber-unlocked') || '0', 10) || 0; } catch (e) {}
+
+/* ---- level parsing ---- */
+function tileAt(c, r) {
+  if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return '#';
+  return grid[r][c];
+}
+function dynAt(c, r) {
+  var k = c + ',' + r, i;
+  for (i = 0; i < gates.length; i++) if (gates[i].c === c && gates[i].r === r && !gates[i].open) return 'gate';
+  for (i = 0; i < doors.length; i++) if (doors[i].c === c && doors[i].r === r && !doors[i].open) return 'door';
+  for (i = 0; i < bridges.length; i++) if (bridges[i].c === c && bridges[i].r === r && bridges[i].active) return 'bridge';
+  return null;
+}
+function solidAt(c, r) {
+  if (tileAt(c, r) === '#') return true;
+  return !!dynAt(c, r);
+}
+function loadLevel(idx) {
+  var L = LEVELS[idx], r, c, ch;
+  grid = []; chars = []; crates = []; loots = []; ropes = []; keys = []; gates = [];
+  doors = []; bridges = []; switches = []; buttons = []; guards = []; lasers = []; vents = [];
+  exitZone = null; hasKey = false; chewTarget = null; chewT = 0;
+  var spawns = {};
+  for (r = 0; r < ROWS; r++) {
+    grid.push(L.map[r].split(''));
+    for (c = 0; c < COLS; c++) {
+      ch = L.map[r][c];
+      if (ch === 'G') spawns.g = { c: c, r: r };
+      else if (ch === 'W') spawns.w = { c: c, r: r };
+      else if (ch === 'C') crates.push({ x: c * TILE + 2, y: r * TILE + 4, w: 36, h: 36, vx: 0, vy: 0 });
+      else if (ch === 'L') loots.push({ x: c * TILE + 8, y: r * TILE + 8, w: 24, h: 24, taken: false });
+      else if (ch === 'E') { if (!exitZone) exitZone = { x: c * TILE, y: r * TILE, w: TILE, h: TILE }; else exitZone.w += TILE; }
+      else if (ch === 'V') vents.push({ c: c, r: r });
+      else if (ch === 'R') ropes.push({ c: c, r: r, x: c * TILE + 20, y: r * TILE + 20, cut: false, prog: 0 });
+      else if (ch === 'K') keys.push({ x: c * TILE + 10, y: r * TILE + 8, w: 20, h: 24, vy: 0, dropped: false, taken: false, hanging: true });
+      else if (ch === 'D') doors.push({ c: c, r: r, open: false });
+      else if (ch === 'g' || ch === 'h') gates.push({ c: c, r: r, kind: ch, open: false });
+      else if (ch === 'B') bridges.push({ c: c, r: r, active: false });
+      else if (ch === 'S') switches.push({ c: c, r: r, pressed: false });
+      else if (ch === 'T') buttons.push({ c: c, r: r, latched: false });
+      else if (ch === '^') lasers.push({ x: c * TILE, y: r * TILE, w: TILE, h: TILE });
+      else if (ch === 'U') guards.push({ x: c * TILE + 6, y: r * TILE, w: 28, h: 44, dir: 1, speed: 1.1, minX: (L.guardMin || 0) * TILE, maxX: (L.guardMax || 0) * TILE + TILE - 28 });
+    }
+  }
+  /* rope holds: bridge if the level has one, else the key */
+  var hasBridge = bridges.length > 0, hasKeyEnt = keys.length > 0;
+  ropes.forEach(function (rp) { rp.holds = hasBridge ? 'bridge' : (hasKeyEnt ? 'key' : 'none'); });
+  function mkChar(s, isGreg) {
+    /* spawn standing on the floor below the marker row (feet at (r+1)*TILE) */
+    var sr = isGreg ? spawns.g.r : spawns.w.r;
+    var h = isGreg ? 44 : 20;
+    return { name: s, greg: isGreg, x: (isGreg ? spawns.g.c : spawns.w.c) * TILE + 5,
+      y: (sr + 1) * TILE - h, w: isGreg ? 30 : 18, h: h,
+      vx: 0, vy: 0, onGround: false, face: 1, speed: isGreg ? 3.0 : 3.5, jump: isGreg ? -12.5 : -12 };
+  }
+  chars = [mkChar('Greg', true), mkChar('Wesley', false)];
+  active = 0;
+  lootTotal = loots.length;
+  updateHUD();
+}
+
+/* ---- physics: AABB vs tile grid, axis-separated ---- */
+function overlap(a, b) { return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+function hitsSolid(ent) {
+  var c0 = Math.floor(ent.x / TILE), c1 = Math.floor((ent.x + ent.w - 0.01) / TILE);
+  var r0 = Math.floor(ent.y / TILE), r1 = Math.floor((ent.y + ent.h - 0.01) / TILE), c, r;
+  for (r = r0; r <= r1; r++) for (c = c0; c <= c1; c++) if (solidAt(c, r)) return true;
+  return false;
+}
+function moveEntity(ent, dx, dy, isCrate) {
+  ent.x += dx;
+  if (hitsSolid(ent)) {
+    if (dx > 0) ent.x = Math.floor((ent.x + ent.w) / TILE) * TILE - ent.w - 0.01;
+    else if (dx < 0) ent.x = (Math.floor(ent.x / TILE) + 1) * TILE + 0.01;
+    ent.vx = 0;
+  }
+  ent.y += dy;
+  ent.onGround = false;
+  if (hitsSolid(ent)) {
+    if (dy > 0) { ent.y = Math.floor((ent.y + ent.h) / TILE) * TILE - ent.h - 0.01; ent.onGround = true; }
+    else if (dy < 0) { ent.y = (Math.floor(ent.y / TILE) + 1) * TILE + 0.01; }
+    ent.vy = 0;
+  }
+}
+function crateAt(x, y, w, h, self) {
+  for (var i = 0; i < crates.length; i++) {
+    var cr = crates[i];
+    if (cr !== self && overlap({ x: x, y: y, w: w, h: h }, cr)) return cr;
+  }
+  return null;
+}
+function tryPush(crate, dx) {
+  var nx = crate.x + dx;
+  var test = { x: nx, y: crate.y, w: crate.w, h: crate.h };
+  if (hitsSolid(test)) return false;
+  if (crateAt(nx, crate.y, crate.w, crate.h, crate)) return false;
+  crate.x = nx;
+  return true;
+}
+
+/* ---- rendering ---- */
+function draw() {
+  ctx.clearRect(0, 0, VW, VH);
+  var g = ctx.createLinearGradient(0, 0, 0, VH);
+  g.addColorStop(0, '#0d0830'); g.addColorStop(1, '#06030f');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, VW, VH);
+  /* faint bank pillars */
+  ctx.fillStyle = 'rgba(139,92,255,0.07)';
+  for (var px = 60; px < VW; px += 220) ctx.fillRect(px, 0, 34, VH);
+  var r, c;
+  for (r = 0; r < ROWS; r++) for (c = 0; c < COLS; c++) {
+    var ch = tileAt(c, r), x = c * TILE, y = r * TILE;
+    if (ch === '#') {
+      ctx.fillStyle = '#241a4d'; ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#312464'; ctx.fillRect(x, y, TILE, 4);
+      ctx.strokeStyle = 'rgba(139,92,255,0.35)'; ctx.strokeRect(x + 0.5, y + 0.5, TILE - 1, TILE - 1);
+    }
+  }
+  vents.forEach(function (v) {
+    var x = v.c * TILE, y = v.r * TILE;
+    ctx.fillStyle = '#1b1440'; ctx.fillRect(x, y, TILE, TILE);
+    ctx.strokeStyle = '#4de3ff'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x + 6, y + 10); ctx.lineTo(x + 34, y + 10);
+    ctx.moveTo(x + 6, y + 20); ctx.lineTo(x + 34, y + 20);
+    ctx.moveTo(x + 6, y + 30); ctx.lineTo(x + 34, y + 30);
+    ctx.stroke(); ctx.lineWidth = 1;
+  });
+  bridges.forEach(function (b) {
+    var x = b.c * TILE, y = b.r * TILE;
+    if (b.active) {
+      ctx.fillStyle = '#8a6a2f'; ctx.fillRect(x, y, TILE, TILE);
+      ctx.fillStyle = '#ffd43b'; ctx.fillRect(x, y, TILE, 5);
+    } else {
+      ctx.fillStyle = 'rgba(138,106,47,0.35)'; ctx.fillRect(x, y + 14, TILE, 12);
+      ctx.strokeStyle = 'rgba(255,212,59,0.5)'; ctx.strokeRect(x + 2, y + 14, TILE - 4, 12);
+    }
+  });
+  gates.forEach(function (gt) {
+    var x = gt.c * TILE, y = gt.r * TILE;
+    if (!gt.open) {
+      ctx.fillStyle = gt.kind === 'g' ? '#3a2a7a' : '#7a2a5e';
+      ctx.fillRect(x + 3, y, TILE - 6, TILE);
+      ctx.fillStyle = gt.kind === 'g' ? '#4de3ff' : '#ff7ad9';
+      for (var i = 0; i < 3; i++) ctx.fillRect(x + 6, y + 6 + i * 12, TILE - 12, 4);
+    }
+  });
+  doors.forEach(function (d) {
+    var x = d.c * TILE, y = d.r * TILE;
+    if (!d.open) {
+      ctx.fillStyle = '#5e4a1a'; ctx.fillRect(x, y, TILE, TILE);
+      ctx.strokeStyle = '#ffd43b'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x + 20, y + 20, 11, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = '#ffd43b'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('$', x + 20, y + 25);
+    }
+  });
+  switches.forEach(function (s) {
+    var x = s.c * TILE, y = s.r * TILE + 30;
+    ctx.fillStyle = s.pressed ? '#4de3ff' : '#3a2a7a';
+    ctx.fillRect(x + 4, y, TILE - 8, 10);
+    ctx.strokeStyle = s.pressed ? '#8ef1ff' : '#8b5cff'; ctx.strokeRect(x + 4, y, TILE - 8, 10);
+  });
+  buttons.forEach(function (b) {
+    var x = b.c * TILE + 20, y = b.r * TILE + 30;
+    ctx.fillStyle = b.latched ? '#4de3ff' : '#ff5b5b';
+    ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.stroke();
+  });
+  ropes.forEach(function (rp) {
+    if (rp.cut) return;
+    ctx.strokeStyle = '#b98a4a'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(rp.x, rp.r * TILE); ctx.lineTo(rp.x, rp.y + 14); ctx.stroke(); ctx.lineWidth = 1;
+    if (rp.prog > 0) {
+      ctx.fillStyle = '#ffd43b'; ctx.fillRect(rp.x - 16, rp.y - 14, 32 * rp.prog, 5);
+      ctx.strokeStyle = '#fff'; ctx.strokeRect(rp.x - 16, rp.y - 14, 32, 5);
+    }
+  });
+  keys.forEach(function (k) {
+    if (k.taken) return;
+    ctx.fillStyle = '#ffd43b';
+    ctx.beginPath(); ctx.arc(k.x + 10, k.y + 8, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(k.x + 15, k.y + 6, 12, 5);
+    ctx.fillRect(k.x + 20, k.y + 11, 4, 6); ctx.fillRect(k.x + 25, k.y + 11, 4, 6);
+  });
+  loots.forEach(function (l) {
+    if (l.taken) return;
+    var bob = Math.sin(Date.now() / 300 + l.x) * 2;
+    ctx.fillStyle = '#ffd43b'; ctx.fillRect(l.x, l.y + bob, 24, 14);
+    ctx.fillStyle = '#ffdf6b'; ctx.fillRect(l.x + 3, l.y + 2 + bob, 18, 4);
+    ctx.strokeStyle = '#8a6a2f'; ctx.strokeRect(l.x, l.y + bob, 24, 14);
+  });
+  lasers.forEach(function (lz) {
+    var a = 0.55 + 0.35 * Math.sin(Date.now() / 90);
+    ctx.fillStyle = 'rgba(255,60,60,' + a + ')';
+    ctx.fillRect(lz.x + 2, lz.y + 4, lz.w - 4, lz.h - 8);
+    ctx.fillStyle = '#ff2020';
+    ctx.fillRect(lz.x, lz.y, 4, lz.h); ctx.fillRect(lz.x + lz.w - 4, lz.y, 4, lz.h);
+  });
+  if (exitZone) {
+    var pulse = 0.5 + 0.3 * Math.sin(Date.now() / 200);
+    ctx.fillStyle = 'rgba(77,227,255,' + pulse * 0.4 + ')';
+    ctx.fillRect(exitZone.x, exitZone.y - TILE, exitZone.w, exitZone.h + TILE);
+    ctx.strokeStyle = '#4de3ff'; ctx.lineWidth = 3;
+    ctx.strokeRect(exitZone.x + 2, exitZone.y - TILE + 2, exitZone.w - 4, exitZone.h + TILE - 4);
+    ctx.lineWidth = 1;
+    ctx.fillStyle = '#4de3ff'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('EXIT', exitZone.x + exitZone.w / 2, exitZone.y - TILE + 16);
+  }
+  crates.forEach(function (cr) {
+    ctx.fillStyle = '#7a5a2e'; ctx.fillRect(cr.x, cr.y, cr.w, cr.h);
+    ctx.strokeStyle = '#ffd43b'; ctx.strokeRect(cr.x + 2, cr.y + 2, cr.w - 4, cr.h - 4);
+    ctx.beginPath(); ctx.moveTo(cr.x, cr.y); ctx.lineTo(cr.x + cr.w, cr.y + cr.h);
+    ctx.moveTo(cr.x + cr.w, cr.y); ctx.lineTo(cr.x, cr.y + cr.h); ctx.stroke();
+  });
+  guards.forEach(function (gd) {
+    ctx.fillStyle = 'rgba(255,220,120,0.13)';
+    var coneW = 120;
+    ctx.fillRect(gd.dir > 0 ? gd.x + gd.w : gd.x - coneW, gd.y + 8, coneW, 26);
+    ctx.fillStyle = '#2b3a67';
+    ctx.fillRect(gd.x, gd.y, gd.w, gd.h);
+    ctx.fillStyle = '#ffd43b';
+    ctx.fillRect(gd.x + (gd.dir > 0 ? gd.w - 8 : 2), gd.y + 8, 6, 6);
+    ctx.fillStyle = '#0a0620'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('!', gd.x + gd.w / 2, gd.y + 26);
+  });
+  chars.forEach(function (ch, i) {
+    var isAct = i === active;
+    if (isAct) {
+      ctx.strokeStyle = '#ffd43b'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(ch.x + ch.w / 2, ch.y - 10, 7, 0, Math.PI * 2); ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = '#ffd43b';
+      ctx.beginPath(); ctx.moveTo(ch.x + ch.w / 2 - 5, ch.y - 4); ctx.lineTo(ch.x + ch.w / 2 + 5, ch.y - 4); ctx.lineTo(ch.x + ch.w / 2, ch.y + 2); ctx.closePath(); ctx.fill();
+    }
+    if (ch.greg) {
+      ctx.fillStyle = '#1c1c22';
+      ctx.fillRect(ch.x, ch.y + 14, ch.w, ch.h - 14);
+      ctx.fillStyle = '#e9e4ff';
+      for (var s = 0; s < 3; s++) ctx.fillRect(ch.x, ch.y + 18 + s * 9, ch.w, 3);
+      ctx.fillStyle = '#f2c89b';
+      ctx.beginPath(); ctx.arc(ch.x + ch.w / 2, ch.y + 9, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1c1c22';
+      ctx.fillRect(ch.x + ch.w / 2 - 10, ch.y + 2, 20, 5);
+      ctx.fillStyle = '#8b5cff';
+      ctx.fillRect(ch.x + ch.w / 2 - 12, ch.y - 2, 24, 5);
+    } else {
+      ctx.fillStyle = '#9a9ab0';
+      ctx.beginPath(); ctx.ellipse(ch.x + ch.w / 2, ch.y + ch.h - 7, 10, 7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ch.x + ch.w - 2, ch.y + 5, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#c9c9de';
+      ctx.beginPath(); ctx.arc(ch.x + 4, ch.y + 2, 3, 0, Math.PI * 2); ctx.arc(ch.x + 11, ch.y + 1, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#c9a0a0'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(ch.x + 2, ch.y + ch.h - 6); ctx.quadraticCurveTo(ch.x - 8, ch.y + ch.h - 2, ch.x - 10, ch.y + ch.h - 10); ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = '#1a1033';
+      ctx.beginPath(); ctx.arc(ch.x + ch.w - 4, ch.y + 4, 1.6, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+  /* chew progress ring over Wesley when chewing */
+  if (chewTarget && chewT > 0) {
+    var w = chars[1];
+    ctx.fillStyle = '#ffd43b'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('CHEWING…', w.x + w.w / 2, w.y - 18);
+  }
+}
+
+/* ---- input ---- */
+var input = { left: false, right: false, use: false };
+var lastPushSfx = 0;
+function activeChar() { return chars[active]; }
+function switchChar() {
+  if (state !== 'playing') return;
+  active = 1 - active;
+  moves++;
+  sfx.swap();
+  updateHUD();
+}
+function tryOpenDoor() {
+  var ch = activeChar();
+  if (!ch.greg) { toast('Only Greg can open doors.', false); return; }
+  for (var i = 0; i < doors.length; i++) {
+    var d = doors[i];
+    if (d.open) continue;
+    var dx = Math.abs((d.c * TILE + TILE / 2) - (ch.x + ch.w / 2));
+    var dy = Math.abs((d.r * TILE + TILE / 2) - (ch.y + ch.h / 2));
+    if (dx < TILE + 12 && dy < TILE + 20) {
+      if (!hasKey) { toast('Locked — find the key first.', false); return; }
+      /* a door can span two tiles (rows 10–11) — open every tile of it */
+      doors.forEach(function (dd) { if (dd.c === d.c) dd.open = true; });
+      sfx.open(); toast('Vault open!', true); return;
+    }
+  }
+}
+function doJump(ch) {
+  if (state !== 'playing' || !ch.onGround) return;
+  ch.vy = ch.jump; ch.onGround = false; sfx.jump();
+}
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Tab') { e.preventDefault(); switchChar(); return; }
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { input.left = true; e.preventDefault(); }
+  else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { input.right = true; e.preventDefault(); }
+  else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' ') {
+    e.preventDefault();
+    if (!e.repeat) doJump(activeChar());
+  }
+  else if (e.key === 'e' || e.key === 'E') {
+    if (!e.repeat) { input.use = true; moves++; tryOpenDoor(); }
+  }
+  else if (e.key === 'Escape') { if (state === 'playing') showMenu(); }
+});
+document.addEventListener('keyup', function (e) {
+  if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') input.left = false;
+  else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') input.right = false;
+  else if (e.key === 'e' || e.key === 'E') input.use = false;
+});
+function bindHold(id, on, off) {
+  var el = $(id);
+  el.style.touchAction = 'none';
+  el.addEventListener('pointerdown', function (e) { e.preventDefault(); on(); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) {
+    el.addEventListener(ev, function (e) { e.preventDefault(); if (off) off(); });
+  });
+}
+bindHold('cLeft', function () { input.left = true; }, function () { input.left = false; });
+bindHold('cRight', function () { input.right = true; }, function () { input.right = false; });
+bindHold('cJump', function () { doJump(activeChar()); });
+bindHold('cAct', function () { input.use = true; moves++; tryOpenDoor(); }, function () { input.use = false; });
+bindHold('cSwitch', function () { switchChar(); });
+
+/* ---- toast & HUD ---- */
+var toastTimer = null;
+function toast(msg, gold) {
+  var t = $('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (gold ? ' gold' : '');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.classList.add('hidden'); }, 1800);
+}
+function fmtTime(s) {
+  s = Math.floor(s);
+  return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2);
+}
+function updateHUD() {
+  $('hudRoom').textContent = 'Room ' + (levelIdx + 1) + '/5';
+  $('hudLoot').textContent = lootGot + '/' + lootTotal;
+  $('hudMoves').textContent = moves;
+  $('hudTime').textContent = fmtTime(playT);
+  var a = chars[active];
+  $('hudActive').innerHTML = 'You: <b>' + (a ? a.name : 'Greg') + '</b>';
+  $('cSwitchWho').textContent = 'Now: ' + (a ? a.name : 'Greg');
+}
+
+/* ---- per-frame update ---- */
+var dead = false, deadT = 0;
+function resetRoom(msg, gold) {
+  if (dead) return;
+  dead = true; deadT = 0;
+  sfx.caught();
+  toast(msg, gold);
+}
+function update(dt) {
+  var ch = activeChar(), i;
+  if (dead) {
+    deadT += dt;
+    if (deadT > 0.9) { dead = false; loadLevel(levelIdx); }
+    return;
+  }
+  playT += dt;
+  /* horizontal move (+ crate push for Greg) */
+  var dx = 0;
+  if (input.left) dx -= ch.speed;
+  if (input.right) dx += ch.speed;
+  if (dx !== 0) {
+    ch.face = dx > 0 ? 1 : -1;
+    var hit = crateAt(ch.x + dx, ch.y, ch.w, ch.h, null);
+    if (hit) {
+      if (ch.greg && tryPush(hit, dx)) {
+        var now = Date.now();
+        if (now - lastPushSfx > 220) { sfx.push(); lastPushSfx = now; }
+      } else dx = 0;
+    }
+    moveEntity(ch, dx, 0);
+  }
+  /* gravity */
+  ch.vy = Math.min(MAXFALL, ch.vy + GRAV);
+  moveEntity(ch, 0, ch.vy);
+  /* crates settle */
+  crates.forEach(function (cr) {
+    cr.vy = Math.min(MAXFALL, cr.vy + GRAV);
+    moveEntity(cr, 0, cr.vy);
+  });
+  /* falling keys */
+  keys.forEach(function (k) {
+    if (k.taken || k.hanging) return;
+    k.vy = Math.min(MAXFALL, (k.vy || 0) + GRAV);
+    var probe = { x: k.x, y: k.y, w: k.w, h: k.h };
+    probe.y += k.vy;
+    if (!hitsSolid(probe)) k.y += k.vy;
+    else { k.vy = 0; }
+    if (overlap(ch, k) || overlap(chars[1 - active], k)) {
+      k.taken = true; hasKey = true; sfx.pickup(); toast('Key! Now open the vault door.', true);
+    }
+  });
+  /* Wesley chewing a rope (hold USE near it) */
+  chewTarget = null;
+  if (!ch.greg && input.use) {
+    var cx = ch.x + ch.w / 2, cy = ch.y + ch.h / 2, bestR = null, bestD = 1e9;
+    ropes.forEach(function (rp) {
+      if (rp.cut) return;
+      var d = Math.hypot(rp.x - cx, rp.y - cy);
+      if (d < bestD) { bestD = d; bestR = rp; }
+    });
+    if (bestR && bestD < 85) {
+      chewTarget = bestR;
+      chewT += dt;
+      if (Math.random() < 0.25) sfx.chew();
+      if (chewT >= 0.8) {
+        bestR.cut = true; chewT = 0; chewTarget = null;
+        if (bestR.holds === 'bridge') {
+          bridges.forEach(function (b) { b.active = true; });
+          sfx.open(); toast('Bridge down!', true);
+        } else if (bestR.holds === 'key') {
+          keys.forEach(function (k) { k.dropped = true; k.hanging = false; });
+          sfx.open(); toast('The key dropped!', true);
+        }
+      }
+    } else chewT = 0;
+  } else chewT = 0;
+  /* switches: pressed while a crate or Greg stands on one; a crate LATCHES it
+     (so the gate stays open even if the crate is pushed on past it) */
+  switches.forEach(function (s) {
+    var tile = { x: s.c * TILE, y: s.r * TILE, w: TILE, h: TILE };
+    var gregOn = overlap(chars[0], tile), crateOn = false;
+    for (i = 0; i < crates.length; i++) if (overlap(crates[i], tile)) { crateOn = true; break; }
+    if (crateOn && !s.latched) { s.latched = true; sfx.coin(); }
+    var on = gregOn || crateOn || s.latched;
+    if (on && !s.pressed) sfx.coin();
+    s.pressed = on;
+  });
+  /* tiny buttons (Wesley walks over; latch) */
+  buttons.forEach(function (b) {
+    var tile = { x: b.c * TILE, y: b.r * TILE, w: TILE, h: TILE };
+    if (!b.latched && overlap(chars[1], tile)) { b.latched = true; sfx.open(); toast('Click! Something opened.', true); }
+  });
+  /* gates follow their triggers */
+  gates.forEach(function (gt) {
+    if (gt.kind === 'g') gt.open = switches.some(function (s) { return s.pressed; });
+    else gt.open = buttons.some(function (b) { return b.latched; });
+  });
+  /* guards patrol + sight (active character only) */
+  guards.forEach(function (gd) {
+    gd.x += gd.dir * gd.speed;
+    if (gd.x <= gd.minX) { gd.x = gd.minX; gd.dir = 1; }
+    if (gd.x >= gd.maxX) { gd.x = gd.maxX; gd.dir = -1; }
+    var ac = activeChar();
+    var acx = ac.x + ac.w / 2, gdx = gd.x + gd.w / 2;
+    var inFront = (gd.dir > 0 && acx > gdx && acx - gdx < 120) || (gd.dir < 0 && acx < gdx && gdx - acx < 120);
+    var sameBand = Math.abs((ac.y + ac.h) - (gd.y + gd.h)) < 60;
+    if (inFront && sameBand) {
+      /* line of sight: no solid wall between guard and character */
+      var blocked = false;
+      var step = gd.dir > 0 ? 8 : -8;
+      for (var x = gdx; gd.dir > 0 ? x < acx : x > acx; x += step) {
+        if (solidAt(Math.floor(x / TILE), Math.floor((gd.y + 20) / TILE))) { blocked = true; break; }
+      }
+      if (!blocked) resetRoom('SPOTTED! The guard saw you.', false);
+    }
+  });
+  /* lasers (active character only) */
+  lasers.forEach(function (lz) {
+    if (overlap(activeChar(), lz)) resetRoom('ZAPPED! Mind the lasers.', false);
+  });
+  /* loot pickup (either character) */
+  loots.forEach(function (l) {
+    if (l.taken) return;
+    if (overlap(chars[0], l) || overlap(chars[1], l)) {
+      l.taken = true; lootGot++; sfx.pickup(); updateHUD();
+    }
+  });
+  /* fell out of the world */
+  chars.forEach(function (c2) {
+    if (c2.y > VH + 40) resetRoom('You fell! Room reset.', false);
+  });
+  /* exit needs BOTH characters in the zone */
+  if (exitZone && overlap(chars[0], exitZone) && overlap(chars[1], exitZone)) levelComplete();
+  updateHUD();
+}
+function levelComplete() {
+  sfx.win();
+  if (levelIdx >= LEVELS.length - 1) {
+    state = 'end';
+    var t = fmtTime(playT);
+    $('endTitle').textContent = lootGot >= lootTotal ? 'CLEAN GETAWAY!' : 'GETAWAY!';
+    $('endText').textContent = lootGot >= lootTotal
+      ? 'Greg & Wesley cracked the vault and grabbed every last gold bar.'
+      : 'Greg & Wesley got out — but some loot is still in there.';
+    $('endStats').textContent = 'Loot ' + lootGot + '/' + lootTotal + '  •  Moves ' + moves + '  •  Time ' + t + (practiceMode ? '  •  Practice' : '');
+    if (!practiceMode) {
+      var nb = { loot: lootGot, moves: moves, time: Math.round(playT) };
+      if (!best || nb.loot > best.loot || (nb.loot === best.loot && nb.moves < best.moves)) {
+        best = nb;
+        try { localStorage.setItem('rat-robber-best', JSON.stringify(best)); } catch (e) {}
+      }
+    }
+    $('ovEnd').classList.remove('hidden');
+    return;
+  }
+  unlocked = Math.max(unlocked, levelIdx + 1);
+  try { localStorage.setItem('rat-robber-unlocked', String(unlocked)); } catch (e) {}
+  toast('Room cleared! Next room…', true);
+  levelIdx++;
+  loadLevel(levelIdx);
+  buildLevelRow();
+}
+
+/* ---- menus & walk-through ---- */
+var selectedLevel = 0;
+var WT = [
+  'Meet Greg & Wesley! Greg is the muscle — he pushes crates, opens doors and carries the loot. Wesley is the rat — he slips through vents, chews ropes and presses tiny buttons.',
+  'Move with the arrow keys or WASD. Jump with Space or Up. Press E (or the USE button) to push, chew, or open — what it does depends on who you are controlling.',
+  'Switch between them with Tab or the big SWITCH button. Some puzzles need both in the right place — the one you are not controlling waits right where you left them.',
+  'Grab every gold bar, then get BOTH of them to the glowing EXIT. Watch out for guards — if one spots you, the room resets. Lasers too: jump over them!',
+  'Practice mode: scores don\'t count, and every room is open so you can retry freely. Ready? Hit START and crack the bank!'
+];
+var wtStep = 0;
+function showMenu() {
+  state = 'menu';
+  $('ovMenu').classList.remove('hidden');
+  $('ovHow').classList.add('hidden');
+  $('ovEnd').classList.add('hidden');
+  selectedLevel = Math.min(unlocked, LEVELS.length - 1);
+  buildLevelRow();
+  $('menuBest').textContent = best
+    ? 'Best getaway: ' + best.loot + '/' + lootTotal + ' loot · ' + best.moves + ' moves · ' + fmtTime(best.time)
+    : '';
+}
+function buildLevelRow() {
+  var row = $('levelRow');
+  row.innerHTML = '';
+  LEVELS.forEach(function (L, i) {
+    var b = document.createElement('button');
+    b.className = 'btn small' + (i === selectedLevel ? ' active' : '') + ((i > unlocked && !practiceMode) ? ' locked' : '');
+    b.textContent = 'Room ' + (i + 1);
+    b.addEventListener('click', function () {
+      if (i > unlocked && !practiceMode) { toast('Finish Room ' + i + ' first!', false); return; }
+      selectedLevel = i;
+      buildLevelRow();
+    });
+    row.appendChild(b);
+  });
+}
+function showHow(fromMenu) {
+  state = 'howto';
+  wtStep = 0;
+  $('ovMenu').classList.add('hidden');
+  $('ovHow').classList.remove('hidden');
+  renderWt();
+}
+function renderWt() {
+  $('wtStep').textContent = 'Step ' + (wtStep + 1) + ' of ' + WT.length;
+  $('wtText').textContent = WT[wtStep];
+  $('wtBack').textContent = wtStep === 0 ? '← Menu' : '← Back';
+  $('wtNext').textContent = wtStep === WT.length - 1 ? 'Got it — let\'s play!' : 'Next →';
+}
+function startGame(idx, practice) {
+  if (!ratOwnerGate()) return;
+  levelIdx = idx;
+  practiceMode = !!practice;
+  moves = 0; lootGot = 0; playT = 0; dead = false;
+  loadLevel(idx);
+  state = 'playing';
+  $('ovMenu').classList.add('hidden');
+  $('ovHow').classList.add('hidden');
+  $('ovEnd').classList.add('hidden');
+  updateHUD();
+  toast(LEVELS[idx].name, true);
+}
+$('btnStart').addEventListener('click', function () { startGame(selectedLevel, practiceMode); });
+$('btnHow').addEventListener('click', function () { showHow(true); });
+$('btnPractice').addEventListener('click', function () {
+  practiceMode = !practiceMode;
+  this.textContent = 'Practice: ' + (practiceMode ? 'ON' : 'OFF');
+  this.setAttribute('aria-pressed', String(practiceMode));
+  buildLevelRow();
+});
+$('btnSound').addEventListener('click', function () {
+  var s = window.holoSettings || { sound: true };
+  s.sound = !s.sound;
+  try { localStorage.setItem('holos-arcade-sound', s.sound ? 'on' : 'off'); } catch (e) {}
+  this.textContent = 'Sound: ' + (s.sound ? 'ON' : 'OFF');
+  if (window.__holoApplySound) window.__holoApplySound();
+});
+$('wtNext').addEventListener('click', function () {
+  if (wtStep < WT.length - 1) { wtStep++; renderWt(); }
+  else showMenu();
+});
+$('wtBack').addEventListener('click', function () {
+  if (wtStep > 0) { wtStep--; renderWt(); }
+  else showMenu();
+});
+$('btnAgain').addEventListener('click', function () { startGame(0, practiceMode); });
+$('btnMenu').addEventListener('click', function () { showMenu(); });
+
+/* ---- main loop ---- */
+var lastT = 0;
+function loop(t) {
+  requestAnimationFrame(loop);
+  var dt = Math.min(0.05, (t - lastT) / 1000 || 0.016);
+  lastT = t;
+  if (state === 'playing') update(dt);
+  draw();
+}
+
+/* ---- test hooks (not player-facing) ---- */
+window.__rr = {
+  loadLevel: loadLevel, get state() { return state; }, set state(s) { state = s; },
+  get levelIdx() { return levelIdx; }, get chars() { return chars; }, get active() { return active; },
+  get crates() { return crates; }, get loots() { return loots; }, get gates() { return gates; },
+  get doors() { return doors; }, get bridges() { return bridges; }, get ropes() { return ropes; },
+  get keys() { return keys; }, get switches() { return switches; }, get buttons() { return buttons; },
+  get guards() { return guards; }, get lasers() { return lasers; }, get exitZone() { return exitZone; },
+  get lootGot() { return lootGot; }, get moves() { return moves; }, get hasKey() { return hasKey; },
+  input: input, switchChar: switchChar, update: update, draw: draw, startGame: startGame,
+  ratIsOwner: ratIsOwner, solidAt: solidAt, overlap: overlap, moveEntity: moveEntity, tryPush: tryPush
+};
+
+/* ---- init ---- */
+(function init() {
+  if (!ratOwnerGate()) return;
+  var qp = {};
+  try {
+    location.search.replace(/[?&]([^=]+)=([^&]*)/g, function (m, k, v) { qp[k] = decodeURIComponent(v); });
+  } catch (e) {}
+  if (qp.practice === '1') {
+    practiceMode = true;
+    $('btnPractice').textContent = 'Practice: ON';
+    $('btnPractice').setAttribute('aria-pressed', 'true');
+  }
+  if (window.holoSettings && window.holoSettings.sound === false) $('btnSound').textContent = 'Sound: OFF';
+  loadLevel(0);
+  showMenu();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
