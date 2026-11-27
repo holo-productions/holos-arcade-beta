@@ -295,6 +295,18 @@
   .msgbar .sub{font-size:.92rem;opacity:.85;margin-top:2px}
   .msgbar .sub:empty{display:none}
 
+  /* BATTLESHIP-DUEL-2026-11-26 (BS-13): friend-match strip — one slim row
+     (opponent + turn status + Nudge / Leave), placement + battle only.
+     Filled by bsUpdateFriendBar(); hidden whenever no match is bound. */
+  #friendBar{display:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;margin-bottom:8px;font-size:.92rem;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.07)}
+  #friendBar button{border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);padding:6px 12px;font-weight:700;min-height:36px;margin-left:6px}
+  #friendBar button:hover{border-color:var(--sonar)}
+  /* the strip costs ~45px of column height — the dvh-sized boards absorb
+     it in friend mode so the column still fits with no scroll (Holo 17:40:
+     rearrange inside, never resize the window). */
+  body.bs-friend[data-phase="placement"] #playerPanel{max-width:min(340px,calc(100dvh - 285px))}
+  body.bs-friend[data-phase="battle"] #enemyBoard{width:min(320px,calc(100dvh - 279px),calc(100% - 165px))}
+
   /* ---------- boards ---------- */
   .boards{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
   @media (max-width:860px){.boards{grid-template-columns:1fr}}
@@ -557,6 +569,7 @@ body[data-phase="battle"] .log-details{display:block;background:none;border:none
 .mini-cell.hit{background:var(--hit);border-color:#7e1a1a}
 .mini-cell.miss{background:rgba(220,232,238,.28)}
 .mini-cell.sunk{background:#6e1423;border-color:#450a16}
+.mini-cell.last{outline:2px solid var(--brass);outline-offset:-1px}
 
 /* --- board sizing: placement board + battle board, sized from the window --- */
 body[data-phase="placement"] #playerPanel{max-width:min(340px,calc(100dvh - 240px));margin-inline:auto}
@@ -566,7 +579,8 @@ body[data-phase="battle"] #enemyPanel .board-head{margin-bottom:8px}
 @media (min-width:861px){
   body[data-phase="placement"] .wrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;column-gap:16px}
   body[data-phase="placement"] .topbar,
-  body[data-phase="placement"] .msgbar{grid-column:1/-1}
+  body[data-phase="placement"] .msgbar,
+  body[data-phase="placement"] #friendBar{grid-column:1/-1}
   body[data-phase="placement"] .boards{grid-column:1}
   body[data-phase="placement"] #placePanel{grid-column:2;margin-top:0}
   body[data-phase="placement"] #placePanel .ship-tray{display:grid;grid-template-columns:1fr 1fr}
@@ -591,6 +605,7 @@ body[data-phase="battle"] #enemyPanel .board-head{margin-bottom:8px}
   /* placement: name-only chips + one-row buttons (labels no longer wrap
      to two lines, which was adding 8px to the button row) */
   body[data-phase="placement"] #playerPanel{max-width:min(100%,calc(100dvh - 280px))}
+  body.bs-friend[data-phase="placement"] #playerPanel{max-width:min(100%,calc(100dvh - 325px))}
   body[data-phase="placement"] #placePanel{padding:8px 10px}
   body[data-phase="placement"] #placePanel .ship-tray{flex-wrap:nowrap}
   body[data-phase="placement"] #placePanel .ship-chip{flex:1 1 0;min-width:0;overflow:hidden;padding:6px 4px;font-size:.72rem;min-height:36px}
@@ -766,6 +781,10 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
     <div class="main" id="message">Place your fleet, Captain.</div>
     <div class="sub" id="subMessage">Pick a ship, then tap your waters to place it. Rotate any time.</div>
   </div>
+
+  <!-- BATTLESHIP-DUEL-2026-11-26 (BS-13): friend-match strip, filled by
+       bsUpdateFriendBar(). Hidden whenever no match is bound. -->
+  <div id="friendBar" style="display:none" aria-live="polite"></div>
 
   <div class="practice-banner" id="practiceBanner" hidden>
     <span>🎯 <strong>Practice round</strong> — take your time. The enemy holds fire, hints are on, and this game won't count toward your records or win rate.</span>
@@ -1259,8 +1278,11 @@ function renderAll(){
     el.className = "cell" + (st ? (st==="hit" ? " hit" : " miss") : "") + (i===G.lastPlayerShot ? " last" : "");
     var sh = st==="hit" ? shipAt(G.enemy, i) : null;
     if(sh && sh.sunk) el.classList.add("sunk");
-    el.disabled = G.phase!=="battle" || !!st || G.busy;
-    el.classList.toggle("targetable", G.phase==="battle" && !st);
+    /* BATTLESHIP-DUEL-2026-11-26: in a duel the enemy cells are only
+       tappable on my turn (the record gates it — bsMyTurnNow reads the
+       local match copy, so a tap before the accept lands is refused). */
+    el.disabled = G.phase!=="battle" || !!st || G.busy || (isFriend() && !bsMyTurnNow());
+    el.classList.toggle("targetable", G.phase==="battle" && !st && (!isFriend() || bsMyTurnNow()));
     if(i===hintCell && G.phase==="battle" && !st) el.classList.add("hint-target");
     if(peeking && G.practice){
       var psh = shipAt(G.enemy, i);
@@ -1283,20 +1305,28 @@ function renderAll(){
      per-step layout (see CSS block); the practice banner is retired —
      the walk-through step 2 + the message bar carry the practice note. */
   try{ document.body.dataset.phase = G.phase; }catch(e){}
+  /* BATTLESHIP-DUEL-2026-11-26: the bs-friend class drives the friend
+     strip's board-size absorption (CSS) — it tracks the match, not the phase. */
+  try{ document.body.classList.toggle("bs-friend", isFriend()); }catch(e){}
   $("placePanel").hidden = G.phase!=="placement";
   $("battlePanel").hidden = !(G.phase==="battle" || G.phase==="done");
   $("practiceBanner").hidden = true;
-  var pt = $("practiceTools"); if(pt) pt.hidden = !(G.practice && G.phase==="battle");
+  /* BATTLESHIP-DUEL-2026-11-26: practice tools read the enemy fleet —
+     they are off in a duel (the fleet must never render). */
+  var pt = $("practiceTools"); if(pt) pt.hidden = !(G.practice && !isFriend() && G.phase==="battle");
   var pn = $("peekNote"); if(pn) pn.hidden = !peeking;
   var rb = $("revealBtn"); if(rb) rb.textContent = peeking ? "Hide enemy fleet" : "Peek at enemy fleet";
   var mp = $("miniPanel"); if(mp) mp.hidden = G.phase!=="battle";
   renderMini();
   var sb = $("soundBtnTop"); if(sb) sb.textContent = settings.sound ? "🔊" : "🔇";
+  /* BATTLESHIP-DUEL-2026-11-26: New game is hidden in a duel — leaving a
+     match goes through bsLeave in the friend strip, not through the menu. */
+  var nb = $("newBtn"); if(nb) nb.style.display = isFriend() ? "none" : "";
   $("enemyTag").textContent = G.phase==="placement" ? "Fleet hidden" : (G.phase==="done" ? "Battle over" : (G.phase==="options" ? "Setup" : "Tap a square to fire"));
   $("enemyTag").classList.toggle("live", G.phase==="battle");
   $("playerTag").textContent = G.phase==="placement" ? "Placing ships" : (G.phase==="done" ? "Battle over" : (G.phase==="options" ? "Setup" : "Under fire"));
   $("turnLabel").textContent = G.practice ? (G.phase==="placement" ? "Practice · Placement" : (G.phase==="done" ? "Practice · Done" : (G.phase==="options" ? "Practice · Setup" : "Practice"))) : (G.phase==="placement" ? "Placement" : (G.phase==="done" ? "Game over" : (G.phase==="options" ? "Setup" : "Battle")));
-  $("diffLabel").textContent = DIFFS[settings.difficulty].label;
+  $("diffLabel").textContent = isFriend() ? "Duel" : DIFFS[settings.difficulty].label;
   /* tray */
   renderTray();
   $("startBtn").disabled = !allPlaced(G.player);
@@ -1304,6 +1334,9 @@ function renderAll(){
      placed, offer Replace ships OR Start battle — once per placement. */
   if(G.phase==="placement" && allPlaced(G.player) && !choiceShown){
     choiceShown = true;
+    /* BATTLESHIP-DUEL-2026-11-26: the overlay's primary button reads
+       "Challenge <name>" / "Accept duel & start battle" in a duel. */
+    bsSetOverlayLabels();
     $("fleetReadyOverlay").hidden = false;
   }
   /* battle stats */
@@ -1357,7 +1390,7 @@ function renderMini(){
   miniCellEls.forEach(function(el, i){
     var sh = shipAt(G.player, i);
     var st = G.aiShots[i];
-    el.className = "mini-cell" + (sh && sh.placed ? " ship" : "") + (st ? (st==="hit" ? " hit" : " miss") : "");
+    el.className = "mini-cell" + (sh && sh.placed ? " ship" : "") + (st ? (st==="hit" ? " hit" : " miss") : "") + (i===G.lastAiShot ? " last" : "");
     if(sh && sh.sunk && st==="hit") el.classList.add("sunk");
   });
   var hits = 0, k;
@@ -1439,6 +1472,11 @@ $("fleetReadyAdjust").addEventListener("click", function(){
 });
 function startBattle(){
   if(!allPlaced(G.player)) return;
+  /* BATTLESHIP-DUEL-2026-11-26: in a duel the overlay's Start button
+     sends the challenge / accepts it — the battle itself begins only
+     when the match row exists (challenge) or flips to playing (accept),
+     never by flipping the phase here. */
+  if(isFriend()){ bsStartBattleFromOverlay(); return; }
   $("fleetReadyOverlay").hidden = true;
   G.phase = "battle";
   if(G.practice){
@@ -1478,6 +1516,10 @@ function computeHint(){
 }
 async function onEnemyCell(i){
   if(G.phase!=="battle" || G.busy || G.playerShots[i]) return;
+  /* BATTLESHIP-DUEL-2026-11-26: in a duel, fire only on my turn (the
+     record gates it — the local bsMatch is the source of truth, so a tap
+     before the accept lands, or off-turn, is refused, never published). */
+  if(isFriend() && !bsMyTurnNow()) return;
   hintCell = -1;
   G.busy = true; G.shots++; G.lastPlayerShot = i;
   var res = applyShot(G.enemy, G.playerShots, i);
@@ -1490,7 +1532,14 @@ async function onEnemyCell(i){
     logLine("🌊 " + coordName(i) + " — miss.", "");
   }
   renderAll();
-  if(fleetSunk(G.enemy)){ endGame(true); return; }
+  if(fleetSunk(G.enemy)){
+    /* BATTLESHIP-DUEL-2026-11-26: the winning shot publishes first —
+       endGame runs on publish success (inside bsPublishTurn), so a failed
+       publish leaves the game in battle with a Retry, never a victory
+       the opponent never sees. */
+    if(isFriend()){ await bsPublishTurn({cell:i, hit:true, sunk:true, sunkName:res.sunk?res.sunk.name:null, won:true}); renderAll(); return; }
+    endGame(true); return;
+  }
   if(G.practice){
     G.busy = false;
     if(!res.hit) setMsg("Miss at " + coordName(i) + " — try again!", "Practice: no return fire. Tap the hint button if you want a nudge.");
@@ -1498,6 +1547,10 @@ async function onEnemyCell(i){
     renderAll();
     return;
   }
+  /* BATTLESHIP-DUEL-2026-11-26: no AI return fire in a duel — the shot
+     publishes instead and the turn passes to the opponent (one shot
+     each, strictly alternating; a hit earns no extra shot). */
+  if(isFriend()){ await bsPublishTurn({cell:i, hit:res.hit, sunk:!!res.sunk, sunkName:res.sunk?res.sunk.name:null, won:false}); renderAll(); return; }
   await sleep(750);
   if(G.phase!=="battle") return;
   aiTurn();
@@ -1613,7 +1666,10 @@ function endGame(won){
     renderAll();
     return;
   }
-  if(!G.counted){
+  /* BATTLESHIP-DUEL-2026-11-26: a Duel never touches the solo records
+     (rff-battleship-bests-v1 counts finished non-practice games vs the
+     computer only — same guard as Pool's endGame / C4's finishGame). */
+  if(!G.counted && !isFriend()){
     G.counted = true;
     bests.games++;
     if(won){
@@ -1628,17 +1684,35 @@ function endGame(won){
   var acc = G.shots ? Math.round(G.hits/G.shots*100) : 0;
   if(won){
     sndSunk();
-    setMsg("Victory! The enemy fleet is sunk.", "");
-    $("resultTitle").textContent = "🏆 Victory!";
-    $("resultText").textContent = "You sank all five enemy ships in " + G.shots + " shots (" + acc + "% accuracy)" +
-      (bests.fewestShots === G.shots ? " — a new personal best!" : ". Your record is " + bests.fewestShots + " shots.");
+    if(isFriend()){
+      /* BATTLESHIP-DUEL-2026-11-26: the duel result names the opponent —
+         there is no AI difficulty and no personal best in a duel. */
+      var oppW = bsMatch ? bsOtherName(bsMatch, bsUid()) : "your opponent";
+      setMsg("Victory! You sank their fleet.", "");
+      $("resultTitle").textContent = "🏆 Victory!";
+      $("resultText").textContent = "You sank " + oppW + "’s fleet in " + G.shots + " shots (" + acc + "% accuracy). Rematch to run it back — fresh fleets, first shot alternates.";
+    } else {
+      setMsg("Victory! The enemy fleet is sunk.", "");
+      $("resultTitle").textContent = "🏆 Victory!";
+      $("resultText").textContent = "You sank all five enemy ships in " + G.shots + " shots (" + acc + "% accuracy)" +
+        (bests.fewestShots === G.shots ? " — a new personal best!" : ". Your record is " + bests.fewestShots + " shots.");
+    }
     logLine("🏆 Victory in " + G.shots + " shots!", "good");
   } else {
-    setMsg("Your fleet is sunk.", "");
-    $("resultTitle").textContent = "Defeat";
-    var remaining = G.enemy.filter(function(s){ return !s.sunk; }).length;
-    $("resultText").textContent = "The " + DIFFS[settings.difficulty].label + " sank your fleet with " + remaining +
-      " enemy ship" + (remaining===1?"":"s") + " still afloat. Reveal: the enemy board now shows what you hit — rematch and hunt them down.";
+    if(isFriend()){
+      var oppL = bsMatch ? bsOtherName(bsMatch, bsUid()) : "Your opponent";
+      setMsg("Your fleet is sunk.", "");
+      $("resultTitle").textContent = "Defeat";
+      var remainingF = G.enemy.filter(function(s){ return !s.sunk; }).length;
+      $("resultText").textContent = oppL + " sank your fleet with " + remainingF +
+        " of their ship" + (remainingF===1?"":"s") + " still afloat. Reveal: the enemy board now shows what you hit — rematch and hunt them down.";
+    } else {
+      setMsg("Your fleet is sunk.", "");
+      $("resultTitle").textContent = "Defeat";
+      var remaining = G.enemy.filter(function(s){ return !s.sunk; }).length;
+      $("resultText").textContent = "The " + DIFFS[settings.difficulty].label + " sank your fleet with " + remaining +
+        " enemy ship" + (remaining===1?"":"s") + " still afloat. Reveal: the enemy board now shows what you hit — rematch and hunt them down.";
+    }
     logLine("Defeat — your fleet is sunk.", "bad");
   }
   $("resultBox").classList.add("show");
@@ -1693,6 +1767,9 @@ $("soundBtnTop").addEventListener("click", function(){
 /* BATTLESHIP-WALKTHROUGH-2026-11-25: New game goes back to the options
    walk-through (the menu), it does not instantly restart. */
 function showOptions(){
+  /* BATTLESHIP-DUEL-2026-11-26: never drop back to the solo menu mid-duel
+     (New game is hidden in friend mode; bsLeave clears the flag first). */
+  if(isFriend()) return;
   endTour();
   $("resultBox").classList.remove("show");
   $("fleetReadyOverlay").hidden = true;
@@ -1706,6 +1783,9 @@ function showOptions(){
 $("newBtn").addEventListener("click", showOptions);
 $("rematchBtn").addEventListener("click", function(){
   $("resultBox").classList.remove("show");
+  /* BATTLESHIP-DUEL-2026-11-26: a duel rematch places fresh fleets first
+     (place-first, first shot alternates) — it never restarts solo. */
+  if(isFriend()){ bsRematch(); return; }
   newGame();
 });
 $("practiceToggle").addEventListener("change", function(){
@@ -1894,6 +1974,654 @@ $("tourBtn").addEventListener("click", startTour);
 $("howTour").addEventListener("click", function(){ howOverlay.hidden = true; startTour(); });
 window.addEventListener("resize", function(){ if(tourIdx>=0) showTourStep(tourIdx); });
 
+/* =================================================================
+   BATTLESHIP-DUEL-2026-11-26 — turn-based Duel layer (BS-1..BS-13).
+   Mirrors the 8-ball Pool pf* layer: same RTDB shapes, same rules
+   surface (turnMatches + notice), same fail-soft pattern (api -> null
+   on any failure; callers toast, never claim success). Solo untouched:
+   none of this runs unless bsFriend is true, which only the match
+   entry points below ever set. Hub part (TURN_GAMES entry,
+   handIntoBattleship, match view) + rules-doc R1/R2 folds are separate.
+   ================================================================= */
+
+  /* ---- match state (module-level, NOT on G) ----
+     newGame() rebuilds G wholesale, so a flag stored on G would not
+     survive the rematch placement — bsFriend must live here. */
+  var bsFriend = false;               // true while bound to a Duel match
+  var bsMatch = null;                 // last /turnMatches/<mid> record seen
+  var bsMid = null;                   // match id
+  var bsContext = null;               // {kind:'challenge'|'accept'|'waiting'|'match'|'rematch', uid, name, firstUid, rematchOf}
+  var bsPollTimer = null;
+  var bsSeenMoves = -1;
+  var bsSeenUpdated = -1;
+  var bsBusy = false;                 // one match write in flight at a time
+  var bsSyncOn = false;               // sync-error state (Retry shown)
+  var bsLiveName = {};                // uid -> live Code Name cache
+  var bsNameCacheAt = {};
+  var bsMatchList = {};                // mid -> match cache (test hook / leave)
+  var bsPollMs = 4000;
+  var LS_MATCH = "bs_friend_match";    // localStorage: current match id
+  var LS_AUTH = "holos-firebase-auth"; // localStorage: {user:{uid,displayName?,username?},token?}
+  var FB_API_KEY = "AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak"; // Firebase web key (public, identifies the project — same value as Pool/hub)
+  var FB_RTDB = "https://holos-arcade-default-rtdb.firebaseio.com";
+  var LS_FRIEND = "bs_duel_friend";    // localStorage: last opponent {uid,name} (restore)
+
+  function isFriend(){ return !!bsFriend; }
+  function bsUid(){ try{ var a = JSON.parse(localStorage.getItem(LS_AUTH) || "null"); return a && a.user ? (a.user.uid || a.user.localId || null) : null; }catch(e){ return null; } }
+  function bsMyName(){
+    try{ var a = JSON.parse(localStorage.getItem(LS_AUTH) || "null"); if(a && a.user) return a.user.username || a.user.displayName || a.user.email || "A player"; }catch(e){}
+    return "A player";
+  }
+  function bsOppUid(m){
+    var me = bsUid();
+    return (m && m.aUid === me) ? m.bUid : (m ? m.aUid : null);
+  }
+  function bsOtherName(m, me){
+    var opp = bsOppUid(m);
+    if(opp && bsLiveName[opp]) return bsLiveName[opp];
+    if(!m) return "your opponent";
+    return (m.aUid === me) ? (m.bName || "your opponent") : (m.aName || "your opponent");
+  }
+  function bsMyTurnNow(){
+    if(!bsFriend || !bsMatch) return false;
+    if(bsMatch.status !== "playing") return false;
+    return (bsMatch.state ? bsMatch.state.turnUid : bsMatch.turn) === bsUid();
+  }
+  function bsEnterFriend(){
+    bsFriend = true;
+    /* match entry skips the AI difficulty step: there is no AI in a duel. */
+    if(G) G.practice = false;
+    try{ var t = $("practiceToggle"); if(t) t.checked = false; }catch(e){}
+    try{ document.body.classList.toggle("bs-friend", true); }catch(e){}
+  }
+  function bsClearMatch(clearLS){
+    bsStopPoll();
+    bsMatch = null; bsMid = null; bsContext = null;
+    bsSeenMoves = -1; bsSeenUpdated = -1;
+    bsSyncOn = false;
+    if(clearLS !== false){ try{ localStorage.removeItem(LS_MATCH); }catch(e){} }
+    try{ var bar = $("friendBar"); if(bar) bar.style.display = "none"; }catch(e){}
+  }
+
+  /* ---- auth + API (BS-1, copy Pool pfAuth/pfApi) ---- */
+  function bsAuth(){
+    try{ return JSON.parse(localStorage.getItem(LS_AUTH) || "null"); }catch(e){ return null; }
+  }
+  function bsFreshToken(){
+    var a = bsAuth(); if(!a || !a.token) return Promise.resolve(null);
+    /* fresh token: return it without a refresh round-trip (Pool pfFreshToken). */
+    if(a.expiresAt && a.expiresAt > Date.now() + 60 * 1000) return Promise.resolve(a.token);
+    if(!a.refreshToken) return Promise.resolve(a.token);
+    return fetch("https://securetoken.googleapis.com/v1/token?key=" + FB_API_KEY, {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "grant_type=refresh_token&refresh_token=" + encodeURIComponent(a.refreshToken)
+    }).then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
+      if(!d || !d.id_token) return null;
+      try{ a.token = d.id_token; a.refreshToken = d.refresh_token || a.refreshToken; a.expiresAt = Date.now() + (parseInt(d.expires_in, 10) || 3600) * 1000; localStorage.setItem(LS_AUTH, JSON.stringify(a)); }catch(e){}
+      return d.id_token;
+    }).catch(function(){ return null; });
+  }
+  function bsApi(method, path, body){
+    /* one fetch, no internal retry (Pool pfApi): a failed publish must
+       surface as null so bsPublishTurn's own 3-attempt retry counts
+       real attempts — an internal retry would double-consume them. */
+    return bsFreshToken().then(function(tok){
+      if(!tok) return null;
+      return fetch(FB_RTDB + path + "?auth=" + encodeURIComponent(tok), {
+        method: method, headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined
+      }).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
+    }).catch(function(){ return null; });
+  }
+  function bsToast(msg){ try{ setMsg(msg, ""); }catch(e){} }
+  function bsNeedUpdate(){
+    /* never claim success — the live rules evidently allow a turn publish
+       only while playing + my turn; any other failure is the same toast
+       until the hub part lands the rules fold (plan §1). */
+    bsToast("⚠️ That didn’t save — one more Arcade update is needed before this Duel will sync.");
+  }
+
+  /* ---- serialize / apply (BS-2, BS-3) ---- */
+  function bsSerializeFleet(fleet){
+    return (fleet || []).map(function(s){
+      return { name: s.name, size: s.size, cells: (s.cells || []).slice().sort(function(x, y){ return x - y; }), hits: (s.hits || []).slice(), sunk: !!s.sunk };
+    });
+  }
+  function bsCloneFleet(arr){
+    var f = makeFleet();
+    if(!arr || arr.length !== 5) return f;
+    arr.forEach(function(s, k){
+      if(!s) return;
+      f[k].name = s.name || f[k].name;
+      f[k].size = s.size || f[k].size;
+      f[k].cells = (s.cells || []).slice();
+      f[k].hits = (s.hits || []).slice();
+      f[k].sunk = !!s.sunk;
+      f[k].placed = f[k].cells.length > 0;
+    });
+    return f;
+  }
+  function bsSerialize(nextTurnUid){
+    var me = bsUid();
+    var opp = bsMatch ? bsOppUid(bsMatch) : (bsContext ? bsContext.uid : null);
+    var state = { mode: "take-turns", turnUid: nextTurnUid, fleets: {}, shots: {} };
+    if(me){
+      /* if I reloaded mid-match my local fleet is empty — fall back to
+         the record's copy so a publish never overwrites my fleet with
+         five empty ships (bsApplyState restores it on open; this is the
+         belt to those braces). */
+      var myFleet = G.player && G.player.some(function(s){ return s && s.cells && s.cells.length; })
+        ? bsSerializeFleet(G.player)
+        : (bsMatch && bsMatch.state && bsMatch.state.fleets && bsMatch.state.fleets[me]) || bsSerializeFleet(G.player);
+      state.fleets[me] = myFleet;
+      state.shots[me] = Object.assign({}, G.playerShots);
+    }
+    if(opp){
+      var oppFleet = G.enemy && G.enemy.some(function(s){ return s && s.cells && s.cells.length; })
+        ? bsSerializeFleet(G.enemy)
+        : (bsMatch && bsMatch.state && bsMatch.state.fleets && bsMatch.state.fleets[opp]) || null;
+      if(oppFleet) state.fleets[opp] = oppFleet;
+      state.shots[opp] = Object.assign({}, G.aiShots);
+    }
+    /* D1 tomorrow: series state slots in here as
+       state.series = { bestOf: 3, wins: { <uid>: n, <uid>: n } }
+       and bsRematch carries it forward instead of a fresh single. */
+    return state;
+  }
+  function bsApplyState(st){
+    if(!st || !st.fleets) return;
+    var me = bsUid();
+    var opp = bsMatch ? bsOppUid(bsMatch) : null;
+    if(opp && st.fleets[opp] && st.fleets[opp].length === 5){
+      var enemyCells = st.fleets[opp].reduce(function(n, s){ return n + (s.cells ? s.cells.length : 0); }, 0);
+      if(enemyCells > 0) G.enemy = bsCloneFleet(st.fleets[opp]);
+    }
+    /* restore MY fleet from the record when this session has none placed
+       yet (reload mid-match) — the mini-board needs it, and bsSerialize
+       must never publish an empty fleet over it. Never clobbers a
+       freshly placed local fleet. */
+    if(me && st.fleets[me] && st.fleets[me].length === 5){
+      var myCells = st.fleets[me].reduce(function(n, s){ return n + (s.cells ? s.cells.length : 0); }, 0);
+      if(myCells > 0 && !allPlaced(G.player)) G.player = bsCloneFleet(st.fleets[me]);
+    }
+    if(st.shots){
+      if(me && st.shots[me]) G.playerShots = Object.assign({}, st.shots[me]);
+      if(opp && st.shots[opp]) G.aiShots = Object.assign({}, st.shots[opp]);
+    }
+    G.shots = Object.keys(G.playerShots).length;
+    G.hits = Object.keys(G.playerShots).filter(function(k){ return G.playerShots[k] === "hit"; }).length;
+    if(bsMatch){
+      if(bsMatch.lastMoveBy && bsMatch.lastMoveBy === me) G.lastPlayerShot = bsMatch.lastMoveCell;
+      else if(bsMatch.lastMoveBy && bsMatch.lastMoveBy === opp) G.lastAiShot = bsMatch.lastMoveCell;
+    }
+  }
+  function bsRefreshLiveName(m){
+    var uid = bsOppUid(m);
+    if(!uid || bsLiveName[uid]) return;
+    if(bsNameCacheAt[uid] && Date.now() - bsNameCacheAt[uid] < 10 * 60 * 1000) return;
+    bsNameCacheAt[uid] = Date.now();
+    bsApi("GET", "/users/" + uid + "/username").then(function(name){
+      /* Pool C4 parity: the turn-status line re-renders on the live name
+         too, so "Waiting for honeybear…" becomes "Waiting for MamaBear…"
+         the moment the name resolves (bsSetTurnStatus is a no-op unless
+         the match is playing). */
+      if(name && typeof name === "string"){ bsLiveName[uid] = name; bsUpdateFriendBar(); if(G && G.phase === "battle"){ bsSetTurnStatus(bsMatch); renderAll(); } }
+    });
+  }
+
+  /* ---- create / accept / publish (BS-4, BS-5) ---- */
+  function bsChallenge(uid, name, firstUid, opts){
+    var me = bsUid();
+    if(!me || !uid || uid === me || !allPlaced(G.player) || bsBusy) return Promise.resolve(false);
+    /* Place-first: the match row carries my complete fleet in state —
+       never an empty hub-side row (that path is DENIED by the live
+       rules; the Darcarma Pool failure, 2026-11-26 21:55–22:03). */
+    bsBusy = true;
+    var now = Date.now();
+    var first = firstUid || uid; // accepter-first (Holo 17:39); rematch passes the finished oUid
+    var other = first === me ? uid : me;
+    var state = { mode: "take-turns", turnUid: first, fleets: {}, shots: {} };
+    state.fleets[me] = bsSerializeFleet(G.player);
+    state.shots[me] = {};
+    state.shots[uid] = {};
+    /* D1 tomorrow: opts.series = { bestOf: 3 } -> state.series =
+       { bestOf: 3, wins: { [me]: 0, [uid]: 0 } }; bsRematch carries it. */
+    if(opts && opts.series) state.series = { bestOf: opts.series.bestOf || 3, wins: {} };
+    var row = {
+      game: "battleship", aUid: me, bUid: uid, aName: bsMyName(), bName: name || "a friend",
+      xUid: first, oUid: other, turn: first, status: "waiting", winner: null,
+      state: state, lastMoveAt: 0, lastMoveBy: "", lastMoveCell: -1,
+      history: [], moves: 0, createdAt: now, updatedAt: now
+    };
+    var mid = null;
+    return bsApi("POST", "/turnMatches.json", row).then(function(res){
+      if(!res || !res.name) return null;
+      mid = res.name;
+      return bsApi("PUT", "/turnMatchesIndex/" + me + "/" + mid + ".json", { game: "battleship", updatedAt: now });
+    }).then(function(ok){
+      if(!ok && ok !== false) return null;
+      return bsApi("PUT", "/turnMatchesIndex/" + uid + "/" + mid + ".json", { game: "battleship", updatedAt: now });
+    }).then(function(){
+      return bsApi("POST", "/dmInbox/" + uid + "/msgs.json", {
+        kind: "turn-invite", from: me, to: uid, game: "battleship", matchId: mid,
+        text: bsMyName() + " challenged you to Battleship.", link: "game:battleship?match=" + mid,
+        at: Date.now(), read: false
+      });
+    }).then(function(){
+      bsMid = mid; bsMatch = row;
+      bsSeenMoves = 0; bsSeenUpdated = row.updatedAt;
+      bsMatchList[mid] = row;
+      try{ localStorage.setItem(LS_MATCH, mid); localStorage.setItem(LS_FRIEND, JSON.stringify({ uid: uid, name: name || "a friend" })); }catch(e){}
+      bsFriend = true;
+      try{ $("fleetReadyOverlay").hidden = true; }catch(e){}
+      G.phase = "battle";
+      bsSetTurnStatus(bsMatch);
+      bsApplyMatch(bsMatch);
+      bsStartPoll();
+      bsToast("Challenge sent — waiting for " + (name || "your friend") + " to accept…");
+      bsBusy = false;
+      return true;
+    }).catch(function(){
+      bsBusy = false;
+      bsNeedUpdate();
+      return false;
+    });
+  }
+  function bsAccept(){
+    var me = bsUid();
+    if(!me || !bsMatch || bsMatch.status !== "waiting" || bsMatch.bUid !== me) return Promise.resolve(false);
+    if(!allPlaced(G.player)){ bsToast("Place all five ships first — then accept."); return Promise.resolve(false); }
+    if(bsBusy) return Promise.resolve(false);
+    bsBusy = true;
+    /* the accept PATCH carries BOTH fleets (the challenger's from the
+       record, mine placed just now) and flips status only — it never
+       touches `turn`, so the accepter keeps the first shot (C1). */
+    var st = bsSerialize(bsMatch.state ? bsMatch.state.turnUid : bsMatch.turn);
+    if(!(st.fleets && st.fleets[bsMatch.aUid])) st.fleets[bsMatch.aUid] = (bsMatch.state && bsMatch.state.fleets && bsMatch.state.fleets[bsMatch.aUid]) || [];
+    var now = Date.now();
+    return bsApi("PATCH", "/turnMatches/" + bsMid + ".json", { state: st, status: "playing", updatedAt: now }).then(function(out){
+      if(!out){ bsBusy = false; bsNeedUpdate(); return false; }
+      bsMatch.state = st; bsMatch.status = "playing"; bsMatch.updatedAt = now;
+      bsSeenUpdated = now; bsSeenMoves = bsMatch.moves || 0;
+      bsMatchList[bsMid] = bsMatch;
+      try{ $("fleetReadyOverlay").hidden = true; }catch(e){}
+      G.phase = "battle";
+      bsApplyMatch(bsMatch);
+      bsStartPoll();
+      bsApi("POST", "/dmInbox/" + bsMatch.aUid + "/msgs.json", {
+        kind: "turn", from: me, to: bsMatch.aUid, game: "battleship", matchId: bsMid,
+        text: bsMyName() + " accepted — they fire first, watch the waters.",
+        link: "game:battleship?match=" + bsMid, at: Date.now(), read: false
+      });
+      bsToast("Your shot — fire when ready!");
+      bsBusy = false;
+      return true;
+    }).catch(function(){ bsBusy = false; bsNeedUpdate(); return false; });
+  }
+  function bsPublishTurn(shot){
+    var me = bsUid();
+    if(!me || !bsMatch || !bsMid || bsMatch.status !== "playing") return Promise.resolve(false);
+    if(bsMatch.state && bsMatch.state.turnUid !== me) return Promise.resolve(false);
+    var opp = bsOppUid(bsMatch);
+    var nextTurn = shot.won ? me : opp;
+    var now = Date.now();
+    var hist = ((bsMatch.history || []).slice(-19));
+    var verb = shot.sunk ? ("sank the " + (shot.sunkName || "ship")) : (shot.hit ? "hit" : "miss");
+    hist.push(verb + " at " + coordName(shot.cell));
+    var patch = {
+      state: bsSerialize(nextTurn), turn: nextTurn,
+      status: shot.won ? "won" : "playing",
+      winner: shot.won ? me : (bsMatch.winner || null),
+      lastMoveAt: now, lastMoveBy: me, lastMoveCell: shot.cell,
+      history: hist, moves: (bsMatch.moves || 0) + 1, updatedAt: now
+    };
+    var lastShot = Object.assign({}, shot);
+    window.__bsLastShot = lastShot; // Retry re-runs this exact shot (any outcome)
+    function attemptLeft(n){
+      return bsApi("PATCH", "/turnMatches/" + bsMid + ".json", patch).then(function(out){
+        if(out){
+          /* apply the patch fields locally — no optimistic mutation of
+             bsMatch on the way in (a failed publish leaves G.busy true,
+             which locks the cells until Retry succeeds). */
+          bsMatch.state = patch.state; bsMatch.turn = patch.turn;
+          bsMatch.status = patch.status; bsMatch.winner = patch.winner;
+          bsMatch.lastMoveAt = patch.lastMoveAt; bsMatch.lastMoveBy = me;
+          bsMatch.lastMoveCell = patch.lastMoveCell; bsMatch.history = patch.history;
+          bsMatch.moves = patch.moves; bsMatch.updatedAt = patch.updatedAt;
+          bsSeenMoves = patch.moves; bsSeenUpdated = patch.updatedAt;
+          bsMatchList[bsMid] = bsMatch;
+          bsSetSyncError(false);
+          G.busy = false;
+          if(shot.won){
+            endGame(true);
+            bsApi("POST", "/dmInbox/" + opp + "/msgs.json", {
+              kind: "turn", from: me, to: opp, game: "battleship", matchId: bsMid,
+              text: bsMyName() + " sank your fleet — Battleship duel over.",
+              link: "game:battleship?match=" + bsMid, at: Date.now(), read: false
+            });
+          } else {
+            bsApi("POST", "/dmInbox/" + opp + "/msgs.json", {
+              kind: "turn", from: me, to: opp, game: "battleship", matchId: bsMid,
+              text: "Your turn in Battleship — " + bsMyName() + " " + verb + " at " + coordName(shot.cell) + ".",
+              link: "game:battleship?match=" + bsMid, at: Date.now(), read: false
+            });
+          }
+          bsUpdateFriendBar(); renderAll();
+          return true;
+        }
+        if(n > 1) return new Promise(function(res){ setTimeout(function(){ res(attemptLeft(n - 1)); }, 1500); });
+        bsSetSyncError(true);
+        return false;
+      });
+    }
+    return attemptLeft(3).catch(function(){ bsSetSyncError(true); return false; });
+  }
+
+  /* ---- poll + apply (BS-7) ---- */
+  function bsStartPoll(){
+    if(bsPollTimer) return;
+    bsPollTimer = setInterval(bsPollTick, bsPollMs);
+  }
+  function bsStopPoll(){ if(bsPollTimer){ clearInterval(bsPollTimer); bsPollTimer = null; } }
+  function bsPollTick(){
+    if(!bsMid || !bsMatch) return Promise.resolve(false);
+    if(document.hidden) return Promise.resolve(false);
+    if(bsBusy) return Promise.resolve(false);
+    return bsApi("GET", "/turnMatches/" + bsMid + ".json").then(function(m){
+      if(!m) return false;
+      if(m.updatedAt === bsSeenUpdated && (m.moves || 0) === bsSeenMoves) return false;
+      var wasStatus = bsMatch.status;
+      bsMatch = m;
+      bsSeenUpdated = m.updatedAt || bsSeenUpdated;
+      bsSeenMoves = m.moves || 0;
+      bsMatchList[bsMid] = m;
+      var me = bsUid();
+      var opp = bsOppUid(m);
+      if(m.status === "won"){
+        bsApplyMatch(m);
+        return true;
+      }
+      if(m.status === "left" || m.status === "declined" || m.status === "expired"){
+        var nm = bsOtherName(m, me);
+        bsClearMatch(true);
+        bsFriend = false;
+        showOptions();
+        bsToast(nm + (m.status === "left" ? " left the match." : m.status === "declined" ? " declined the duel." : " — this Duel expired."));
+        renderAll();
+        return true;
+      }
+      var grew = (m.moves || 0) > 0 && m.lastMoveBy === opp;
+      bsApplyMatch(m);
+      if(wasStatus === "waiting" && m.status === "playing"){
+        /* re-set AFTER the apply so the accept message sticks. */
+        bsToast(bsOtherName(m, me) + " accepted — they fire first, watch the waters.");
+      }
+      if(grew){
+        var verb2 = m.lastMoveCell >= 0 && m.state && m.state.shots && m.state.shots[me] ? (m.state.shots[me][m.lastMoveCell] || "miss") : "miss";
+        logLine(bsOtherName(m, me) + " fired at " + coordName(m.lastMoveCell) + " — " + (verb2 === "hit" ? "HIT on your fleet!" : "miss."), verb2 === "hit" ? "bad" : "");
+      }
+      return true;
+    }).catch(function(){ return false; });
+  }
+  function bsApplyMatch(m){
+    var me = bsUid();
+    var opp = bsOppUid(m);
+    /* 7-day lazy expiry — any waiting/playing match older than 7 days
+       expires on first touch (matches the hub's Pool rule; the rules
+       doc's turnMatches validate already allows 'expired'). */
+    if((m.status === "waiting" || m.status === "playing") && m.createdAt && Date.now() - m.createdAt > 7 * 24 * 60 * 60 * 1000){
+      bsApi("PATCH", "/turnMatches/" + bsMid + ".json", { status: "expired", updatedAt: Date.now() });
+      bsClearMatch(true); bsFriend = false; showOptions();
+      bsToast("This Duel expired after 7 days.");
+      renderAll();
+      return;
+    }
+    if(m.status === "playing" || m.status === "waiting" || m.status === "won") bsRefreshLiveName(m);
+    bsApplyState(m.state);
+    if(m.status === "won" && G.phase !== "done"){
+      endGame(m.winner === me);
+    } else if(m.status === "playing"){
+      bsSetTurnStatus(m);
+    }
+    bsUpdateFriendBar();
+    renderAll();
+  }
+  function bsSetTurnStatus(m){
+    if(!m || m.status !== "playing") return;
+    var me = bsUid();
+    if((m.state ? m.state.turnUid : m.turn) === me){
+      setMsg("Your shot — fire when ready!", "Pick a square on " + bsOtherName(m, me) + "’s waters. A hit earns no extra shot.");
+    } else {
+      setMsg("Waiting for " + bsOtherName(m, me) + "…", "They’re lining up their shot. You can leave and come back — the match keeps.");
+    }
+  }
+
+  /* ---- open flows (BS-8) ---- */
+  function bsSetOverlayLabels(){
+    var btn = $("startBtn"); if(!btn) return;
+    if(!isFriend()){ btn.textContent = "▶ Start battle"; return; }
+    if(bsContext && bsContext.kind === "accept") btn.textContent = "▶ Accept duel & start battle";
+    else if(bsContext && (bsContext.kind === "challenge" || bsContext.kind === "rematch")) btn.textContent = "▶ Challenge " + (bsContext.name || "friend");
+    else btn.textContent = "▶ Start battle";
+  }
+  function bsStartBattleFromOverlay(){
+    if(!allPlaced(G.player)) return;
+    if(!bsContext) return;
+    if(bsContext.kind === "challenge" || bsContext.kind === "rematch"){
+      bsChallenge(bsContext.uid, bsContext.name, bsContext.firstUid || null, bsContext.opts || null);
+    } else if(bsContext.kind === "accept"){
+      bsAccept();
+    }
+  }
+  function bsOpenChallenge(ch){
+    bsContext = { kind: "challenge", uid: ch.uid, name: ch.name || "a friend", firstUid: null, opts: ch.opts || null };
+    bsEnterFriend();
+    newGame("placement");
+    bsSetOverlayLabels();
+    setMsg("Placing your fleet — vs " + (ch.name || "a friend") + ".", "Place all five ships, then the challenge goes out.");
+  }
+  function bsOpenRematch(rm){
+    bsClearMatch(true);
+    bsContext = { kind: "rematch", rematchOf: rm.rematchOf, firstUid: rm.firstUid || null, uid: rm.oppUid, name: rm.oppName || "a friend", opts: rm.opts || null };
+    bsEnterFriend();
+    newGame("placement");
+    bsSetOverlayLabels();
+    setMsg("Place a fresh fleet — rematch vs " + (rm.oppName || "a friend") + ".", (rm.firstUid === bsUid() ? "You fire first this time." : rm.oppName + " fires first this time."));
+  }
+  function bsRematch(){
+    if(!bsMatch || !bsMid) return;
+    /* rematch alternation (Holo 18:48 + 18:50): the player who went
+       SECOND in the finished match goes FIRST in the rematch — whoever
+       taps Rematch. Tomorrow's series: carry state.series forward. */
+    var opp = bsOppUid(bsMatch);
+    var oppName = bsOtherName(bsMatch, bsUid());
+    var first = bsMatch.oUid;
+    var series = bsMatch.state && bsMatch.state.series ? { series: bsMatch.state.series } : null;
+    bsOpenRematch({ rematchOf: bsMid, firstUid: first, oppUid: opp, oppName: oppName, opts: series });
+  }
+  function bsOpenMatch(mid){
+    var me = bsUid();
+    if(!mid) return Promise.resolve(false);
+    if(!me){ bsToast("Sign in to open this Duel."); return Promise.resolve(false); }
+    return bsApi("GET", "/turnMatches/" + mid + ".json").then(function(m){
+      if(!m) return false;
+      /* expiry PRE-CHECK first, before newGame — otherwise the
+         expired message is overwritten by the later setMsg calls. */
+      if((m.status === "waiting" || m.status === "playing") && m.createdAt && Date.now() - m.createdAt > 7 * 24 * 60 * 60 * 1000){
+        bsApi("PATCH", "/turnMatches/" + mid + ".json", { status: "expired", updatedAt: Date.now() });
+        try{ localStorage.removeItem(LS_MATCH); }catch(e){}
+        bsToast("This Duel expired after 7 days.");
+        return false;
+      }
+      if(m.aUid !== me && m.bUid !== me){ bsToast("This game already started — only the two players can open it."); return false; }
+      if(m.status === "declined" || m.status === "left" || m.status === "expired"){
+        try{ localStorage.removeItem(LS_MATCH); }catch(e){}
+        bsToast("That Duel is over — " + m.status + ".");
+        return false;
+      }
+      bsMid = mid; bsMatch = m; bsMatchList[mid] = m;
+      bsSeenMoves = m.moves || 0; bsSeenUpdated = m.updatedAt || -1;
+      try{ localStorage.setItem(LS_MATCH, mid); }catch(e){}
+      var opp = bsOppUid(m);
+      var oppName = bsOtherName(m, me);
+      try{ localStorage.setItem(LS_FRIEND, JSON.stringify({ uid: opp, name: oppName })); }catch(e){}
+      bsEnterFriend();
+      if(m.status === "waiting" && m.bUid === me){
+        bsContext = { kind: "accept", uid: m.aUid, name: m.aName };
+        newGame("placement");
+        bsApplyMatch(m);
+        bsSetOverlayLabels();
+        setMsg("Placing your fleet — vs " + (m.aName || "your challenger") + ".", "Place all five ships, then accept — you fire first.");
+        return true;
+      }
+      if(m.status === "waiting" && m.aUid === me){
+        bsContext = { kind: "waiting", uid: m.bUid, name: m.bName };
+        newGame("placement");
+        G.enemy = makeFleet(); // empty fleet — a phantom random fleet must never produce a false hit
+        G.phase = "battle"; // BEFORE bsApplyMatch — bsApplyState restores my fleet from the record, and renderAll must not pop the last-ship overlay mid-battle
+        bsApplyMatch(m);
+        bsSetTurnStatus(m);
+        setMsg("Challenge sent — waiting for " + (m.bName || "your friend") + " to accept…", "");
+        bsStartPoll();
+        bsUpdateFriendBar(); renderAll();
+        return true;
+      }
+      /* playing / won */
+      bsContext = { kind: "match", uid: opp, name: oppName };
+      newGame("placement");
+      G.phase = "battle"; // BEFORE bsApplyMatch — a won match's endGame -> phase done must not be undone
+      bsApplyMatch(m);
+      bsUpdateFriendBar(); renderAll();
+      if(m.status === "playing") bsStartPoll();
+      return true;
+    }).catch(function(){ return false; });
+  }
+
+  /* ---- leave / nudge / decline / cancel (BS-9) ---- */
+  function bsLeave(){
+    var me = bsUid();
+    if(!bsMatch || !bsMid) return Promise.resolve(false);
+    var opp = bsOppUid(bsMatch);
+    return bsApi("PATCH", "/turnMatches/" + bsMid + ".json", { status: "left", winner: null, updatedAt: Date.now() }).then(function(out){
+      if(!out){ bsNeedUpdate(); return false; }
+      bsApi("POST", "/dmInbox/" + opp + "/msgs.json", {
+        kind: "turn", from: me, to: opp, game: "battleship", matchId: bsMid,
+        text: bsMyName() + " left your Battleship duel.", link: "game:battleship?match=" + bsMid,
+        at: Date.now(), read: false
+      });
+      bsClearMatch(true);
+      bsFriend = false;
+      showOptions();
+      bsToast("You left the match.");
+      renderAll();
+      return true;
+    }).catch(function(){ bsNeedUpdate(); return false; });
+  }
+  function bsNudge(){
+    var me = bsUid();
+    if(!bsMatch || !bsMid || bsMatch.status !== "playing" || bsMyTurnNow()) return Promise.resolve(false);
+    var key = "bs_nudge_" + bsMid;
+    try{ var last = parseInt(localStorage.getItem(key) || "0", 10); if(Date.now() - last < 10 * 60 * 1000) return Promise.resolve(false); }catch(e){}
+    try{ localStorage.setItem(key, String(Date.now())); }catch(e){}
+    var opp = bsOppUid(bsMatch);
+    return bsApi("POST", "/dmInbox/" + opp + "/msgs.json", {
+      kind: "turn", from: me, to: opp, game: "battleship", matchId: bsMid,
+      text: bsMyName() + " nudged you — your turn in Battleship!",
+      link: "game:battleship?match=" + bsMid, at: Date.now(), read: false
+    }).then(function(out){ return !!out; });
+  }
+  function bsDecline(mid){
+    if(!mid) return Promise.resolve(false);
+    return bsApi("PATCH", "/turnMatches/" + mid + ".json", { status: "declined", updatedAt: Date.now() }).then(function(out){ return !!out; });
+  }
+  function bsCancel(mid){
+    return bsDecline(mid);
+  }
+
+  /* ---- friend strip + sync error (BS-13, BS-6) ---- */
+  function bsUpdateFriendBar(){
+    var bar = $("friendBar");
+    if(!bar) return;
+    if(!isFriend() || !bsMatch){ bar.style.display = "none"; bar.innerHTML = ""; return; }
+    var me = bsUid();
+    var oppName = bsOtherName(bsMatch, me);
+    var st = bsMatch.status;
+    var turnTxt = st === "playing"
+      ? ((bsMatch.state ? bsMatch.state.turnUid : bsMatch.turn) === me ? "Your shot" : oppName + "’s shot")
+      : st === "waiting" ? "Waiting for " + oppName + " to accept…"
+      : st === "won" ? ((bsMatch.winner === me) ? "You won!" : oppName + " won")
+      : st;
+    var lastAt = bsMatch.lastMoveAt ? new Date(bsMatch.lastMoveAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+    var html = "<span>⚓ Duel vs " + oppName + " · " + turnTxt + (lastAt ? " · last move " + lastAt : "") + "</span>";
+    if(st === "playing" && !bsMyTurnNow()) html += '<button type="button" id="bsNudgeBtn">Nudge</button>';
+    if(st === "won") html += '<button type="button" id="bsRematchBtn">Rematch</button>';
+    html += '<button type="button" id="bsLeaveBtn">Leave</button>';
+    if(bsSyncOn) html += '<button type="button" id="bsSyncErr" style="border-color:var(--danger);color:var(--danger)">⚠️ Shot didn’t sync — Retry</button>';
+    bar.innerHTML = html;
+    bar.style.display = "block";
+    var nb = $("bsNudgeBtn"); if(nb) nb.onclick = function(){ bsNudge(); };
+    var lb = $("bsLeaveBtn"); if(lb) lb.onclick = function(){ bsLeave(); };
+    var rb = $("bsRematchBtn"); if(rb) rb.onclick = function(){ bsRematch(); };
+    var se = $("bsSyncErr"); if(se) se.onclick = function(){ var s = window.__bsLastShot || {}; bsSetSyncError(false); bsPublishTurn(s); };
+  }
+  function bsSetSyncError(on){
+    bsSyncOn = !!on;
+    if(on) bsToast("⚠️ Shot didn’t sync — Retry");
+    bsUpdateFriendBar();
+  }
+
+  /* ---- side panels (BS-12) ---- */
+  function bsPanelsHide(){
+    var q = new URLSearchParams(location.search || "");
+    if(q.get("panels") !== "1") return;
+    var st = document.querySelector(".stats");
+    if(st) st.style.display = "none";
+    var rb = $("resetBtn");
+    if(rb && rb.parentElement) rb.parentElement.style.display = "none";
+  }
+
+  /* ---- boot + handshake (BS-8) ---- */
+  function bsBoot(){
+    function post(msg){ try{ if(window.parent && window.parent !== window) window.parent.postMessage(msg, "*"); }catch(e){} }
+    post({ type: "holo-bs-ready", game: "battleship", mid: bsMid || null });
+    window.addEventListener("message", function(ev){
+      var d = ev && ev.data;
+      if(!d || typeof d !== "object") return;
+      if(d.type === "holo-bs-match" && d.mid) bsOpenMatch(d.mid);
+      else if(d.type === "holo-bs-challenge" && d.uid) bsOpenChallenge({ uid: d.uid, name: d.name || "a friend" });
+      else if(d.type === "holo-bs-rematch" && d.rematchOf) bsOpenRematch(d);
+    });
+    var q = new URLSearchParams(location.search || "");
+    var mid = q.get("match");
+    if(mid){ bsOpenMatch(mid); return; }
+    var stored = null;
+    try{ stored = localStorage.getItem(LS_MATCH); }catch(e){}
+    if(stored) bsOpenMatch(stored);
+  }
+
+  /* ---- test hooks (BS-10, mirrors Pool C7) ---- */
+  window.holoBattleship = {
+    isFriend: isFriend,
+    openMatch: bsOpenMatch,
+    openChallenge: bsOpenChallenge,
+    openRematch: bsOpenRematch,
+    challenge: bsChallenge,
+    accept: bsAccept,
+    decline: bsDecline,
+    fire: function(cell){ return onEnemyCell(cell); },
+    publishTurn: bsPublishTurn,
+    pollNow: bsPollTick,
+    leave: bsLeave,
+    nudge: bsNudge,
+    rematch: bsRematch,
+    setAuth: function(a){ try{ localStorage.setItem(LS_AUTH, JSON.stringify(a)); }catch(e){} },
+    setMatch: function(mid, m){ bsMid = mid; bsMatch = m; bsMatchList[mid] = m; bsSeenMoves = m.moves || 0; bsSeenUpdated = m.updatedAt || -1; },
+    state: function(){ return bsMatch ? bsMatch.state : null; },
+    matchId: function(){ return bsMid; },
+    serialize: function(next){ return bsSerialize(next); },
+    applyState: bsApplyState
+  };
+
 /* ---------- init ---------- */
 /* Inside the hub frame the footer hides (the hub carries navigation);
    the walk-through shows in both contexts — it is the standard open. */
@@ -1905,6 +2633,10 @@ var statsEl = document.querySelector(".stats"); statsEl.parentNode.insertBefore(
 buildMiniBoard();
 newGame("options");
 showOptStep(0);
+/* BATTLESHIP-DUEL-2026-11-26 (BS-12, BS-8): side-panel hide for the
+   hub's match-view embed, then the ready handshake + match restore. */
+bsPanelsHide();
+bsBoot();
 /* Tutorial is opt-in only: never auto-open it. First visit gets one small,
    non-blocking hint pointing at the How to play / Tour / Rules buttons. */
 var seen = false;
