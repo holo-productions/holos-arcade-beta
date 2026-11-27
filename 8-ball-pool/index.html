@@ -1351,7 +1351,18 @@ function poolFriendAfterShot(shooter){
 window.poolFriendAfterShot=poolFriendAfterShot;
 
 /* ---------- challenge / accept / decline / rematch / leave / nudge ---------- */
-function pfChallenge(uid,name,firstUid){
+/* POOL-DUEL-FREEZE-2026-11-27 (Holo 2026-11-27 08:08, Feedback row 51 "duel froze"):
+   a rematch created from inside a room now carries the room with it —
+   the new match gets roomCode and the room's matchId follows it, so the
+   room tile + re-opening the room land on the live rematch instead of
+   the finished match ("This invite is used up"). The room PATCH is
+   fire-and-forget: the live rules let only the guest write matchId
+   into a room, so a host-side denial is harmless — the match itself
+   carries roomCode, and the guest's entry adopts it (pfAdoptRoomMatch)
+   and writes matchId back. Without this, a rematch was an orphan
+   turnMatch with no roomCode and the room kept pointing at the won
+   match, freezing the duel. */
+function pfChallenge(uid,name,firstUid,roomCode){
   var me=pfUid();
   if(!me){ setStatus('Sign in to the Arcade to play with a friend — friend matches need your Arcade account.'); return Promise.resolve(null); }
   if(!uid||uid===me) return Promise.resolve(null);
@@ -1372,6 +1383,10 @@ function pfChallenge(uid,name,firstUid){
     var match={game:GAME,aUid:me,bUid:uid,aName:myN,bName:String(name||'Tester'),xUid:first,oUid:other,board:rackBalls,turn:first,status:'waiting',winner:null,
       state:{balls:rackBalls,groups:{},ballInHand:false,cue:{x:220,y:230},shots:{},turnUid:first},
       lastMoveAt:0,lastMoveBy:'',lastMoveCell:-1,history:[],moves:0,createdAt:now,updatedAt:now};
+    /* POOL-DUEL-FREEZE-2026-11-27: link the match to the room it was
+       challenged from (a rematch keeps the room; a panel challenge has
+       no roomCode and is untouched). */
+    if(roomCode) match.roomCode=roomCode;
     match.state.groups[me]=null; match.state.groups[uid]=null;
     match.state.shots[me]=0; match.state.shots[uid]=0;
     return pfApi('POST','/turnMatches',match).then(function(r){
@@ -1380,6 +1395,11 @@ function pfChallenge(uid,name,firstUid){
       var mid=r.name;
       pfApi('PUT','/users/'+encodeURIComponent(me)+'/turnMatches/'+encodeURIComponent(mid),true);
       pfApi('PUT','/users/'+encodeURIComponent(uid)+'/turnMatches/'+encodeURIComponent(mid),true);
+      /* POOL-DUEL-FREEZE-2026-11-27: point the room at the new match so
+         the room follows the rematch (fire-and-forget — a host-side
+         denial under the live rules is harmless; the match carries
+         roomCode and the guest's entry adopts it). */
+      if(roomCode){ pfApi('PATCH','/'+ROOM_NODE+'/'+encodeURIComponent(roomCode),{matchId:mid,status:'ready'}); }
       pfNotice(uid,{type:'turn-invite',title:'8-Ball Pool challenge!',body:myN+' challenged you to 8-Ball Pool.',link:'game:8-ball-pool',fromName:myN,fromUid:me});
       pfMid=mid; pfMatch=match; pfSeenMoves=0; pfSeenUpdated=now;
       try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
@@ -1402,7 +1422,10 @@ function pfAccept(mid){
     try{localStorage.setItem(LS_MATCH,mid);}catch(e){}
     setMode('friend',true); pfApplyMatch(m); pfStartPoll();
     /* POOL-FIRST-2026-11-26 (C1 accept notice REMOVED 2026-11-27, Holo 00:32 "Take them out" — parity with the hub H2 removal): the accepter used to notify the challenger ("accepted — their break first, watch the table"); the 19:25 turn-notice stop applies here too. Accept still PATCHes the match to 'playing' and opens it; only the notice is gone. */
-    setStatus('<strong>Your break — shoot when ready.</strong>');
+    /* POOL-DUEL-FREEZE-2026-11-27: the accepter is NOT always the breaker —
+       a rematch's first player is the finished match's second player (C2),
+       which may be the opponent. Say who actually breaks. */
+    setStatus(m.turn===me?'<strong>Your break — shoot when ready.</strong>':('<strong>'+pfEsc(pfOtherName(m,me))+' breaks first — watch the table.</strong>'));
     return true;
   });
   }
@@ -1425,16 +1448,62 @@ function pfCancel(mid){
   var m=pfMatchList[mid]; if(!m||m.status!=='waiting'||m.aUid!==me) return Promise.resolve(false);
   return pfDecline(mid);
 }
+/* POOL-DUEL-FREEZE-2026-11-27 (Holo 2026-11-27 08:08, Feedback row 51 "duel froze"):
+   find a live rematch for a finished match — a 'waiting' OR 'playing'
+   8-ball-pool match against the same opponent, created AFTER the
+   finished match ended. ('Playing' counts too: a rematch the opponent
+   already accepted is still the live duel, and re-opening the room
+   should land in it.) The roomCode rule keeps it to this duel: a
+   candidate must belong to this room (roomCode matches) or be an
+   orphan (no roomCode — a rematch created before this fix carried
+   none); a match carrying a DIFFERENT roomCode is another room's
+   challenge, never a rematch of this one. Preference: a match I can
+   accept (I'm bUid — the opponent already rematched) beats one I
+   created (I'm aUid — open it, don't make another); newest first
+   either way. Returns a Promise resolving to {mid,m} or null. */
+function pfFindLiveRematch(oppUid, finishedAt, roomCode){
+  var me=pfUid(); if(!me||!oppUid) return Promise.resolve(null);
+  return pfLoadMyMatches().then(function(){
+    var best=null, bestOwn=null;
+    Object.keys(pfMatchList).forEach(function(mid){
+      var m=pfMatchList[mid];
+      if(!m||m.game!==GAME||(m.status!=='waiting'&&m.status!=='playing')) return;
+      if(m.aUid!==oppUid&&m.bUid!==oppUid) return;
+      if((m.createdAt||0)<=(finishedAt||0)) return;
+      if(roomCode){ if(m.roomCode&&m.roomCode!==roomCode) return; }
+      else if(m.roomCode) return;
+      if(m.bUid===me){ if(!best||(m.createdAt||0)>(best.m.createdAt||0)) best={mid:mid,m:m}; }
+      else if(m.aUid===me){ if(!bestOwn||(m.createdAt||0)>(bestOwn.m.createdAt||0)) bestOwn={mid:mid,m:m}; }
+    });
+    return best||bestOwn||null;
+  });
+}
 function pfRematch(){
-  if(!pfMatch) return;
+  if(!pfMatch) return Promise.resolve(false);
   var me=pfUid(); var opp=pfOtherUid(pfMatch,me), name=pfOtherName(pfMatch,me);
   /* POOL-REMATCH-2026-11-26 (C2, Holo 2026-11-26 18:48 + 18:50):
      rematches alternate — the player who went SECOND in the finished
      match (its oUid) goes FIRST in the rematch, whoever taps Rematch. */
   var firstUid=pfMatch.oUid;
+  var finished=pfMatch, finishedAt=finished.updatedAt||0;
+  /* POOL-DUEL-FREEZE-2026-11-27: the rematch keeps the room (the
+     finished match's room, or the room the player entered through).
+     Dedup first: if the opponent already rematched, adopt theirs
+     instead of creating a second orphan — both players tapping Rematch
+     used to create TWO 'waiting' matches, each parked expecting the
+     other to accept, and the room kept pointing at the won match. */
+  var roomCode=pfRoomCode||finished.roomCode||null;
   pfStopPoll(); pfMatch=null; pfMid=null;
   try{localStorage.removeItem(LS_MATCH);}catch(e){}
-  pfChallenge(opp,name,firstUid);
+  return pfFindLiveRematch(opp, finishedAt, roomCode).then(function(found){
+    if(found){
+      /* Accept only a waiting match I'm the guest of; a playing rematch
+         (or my own waiting one) just opens — never create another. */
+      if(found.m.status==='waiting'&&found.m.bUid===me){ return pfAccept(found.mid); }
+      pfOpenMatch(found.mid); return true;
+    }
+    return pfChallenge(opp,name,firstUid,roomCode);
+  });
 }
 function pfLeave(){
   if(!pfMatch||!pfMid) return Promise.resolve(false);
@@ -1651,6 +1720,20 @@ function pfEnterRoom(room){
   if(room.matchId){
     return pfApi('GET','/turnMatches/'+encodeURIComponent(room.matchId)).then(function(m){
       if(!m||typeof m!=='object'){ setStatus('⚠️ That room’s match couldn’t be found — ask the host to share a fresh link.'); return false; }
+      /* POOL-DUEL-FREEZE-2026-11-27: the room's match is over, but a
+         live rematch may exist (an opponent's rematch from before this
+         fix carries no roomCode, so the room never followed it). Fall
+         through to the rematch instead of dead-ending with "used up"
+         — that dead end is what Holo hit at 08:08 (Feedback row 51).
+         The rematch is re-read for freshness before opening. */
+      if(m.status==='won'||m.status==='draw'||m.status==='left'){
+        return pfFindLiveRematch(pfOtherUid(m,me), m.updatedAt||0, pfRoomCode||m.roomCode||null).then(function(found){
+          if(!found) return pfEnterMatch(room.matchId, m, room);
+          return pfApi('GET','/turnMatches/'+encodeURIComponent(found.mid)).then(function(fm){
+            return pfEnterMatch(found.mid, (fm&&typeof fm==='object')?fm:found.m, room);
+          });
+        });
+      }
       return pfEnterMatch(room.matchId, m, room);
     });
   }
