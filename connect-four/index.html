@@ -516,6 +516,18 @@ a{color:var(--ha-cyan)}
 @keyframes haCoinBlink{50%{opacity:.25}}
 .insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
 @media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+
+/* Walk-through pop-up styles (batch 4, Dominoes wt template, adapted inside #tutScrim). */
+.wt-card{ background:#22163a; color:#fff; border:2px solid #ffb020; border-radius:16px; box-shadow:0 8px 22px rgba(0,0,0,.4); padding:16px; }
+.wt-card .step-tag{ font-size:.72rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#38e1ff; }
+.wt-card h3{ margin:4px 0 6px; font-size:1.12rem; color:#fff; }
+.wt-card p{ margin:0 0 12px; color:#c9b8ff; font-weight:500; }
+.wt-actions{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.wt-dots{ display:flex; gap:5px; }
+.wt-dots i{ width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.25); display:block; }
+.wt-dots i.on{ background:#38e1ff; }
+.wt-actions .btn{ padding:8px 12px; font-size:13px; min-height:40px; }
+.wt-highlight{ outline:4px solid #ffb020 !important; outline-offset:3px; position:relative; z-index:45; }
 </style>
   </head>
   <body>
@@ -590,28 +602,23 @@ a{color:var(--ha-cyan)}
     <div class="scrim" id="tutScrim" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
       <div class="sheet">
         <h2 id="tutTitle">How to play — quick tutorial</h2>
-        <p>Two players take turns dropping discs into a 7-wide, 6-tall grid. First to line up <b>four of their discs in a row</b> wins.</p>
-        <div class="vtut-grid">
-          <div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#7dd3fc" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="18" r="7"/><path d="M24 25v13M14 38h20"/></svg></div><b>Drop a disc</b><p>Tap a column (or keys 1–7). Your disc falls to the lowest empty slot.</p></div>
-          <div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#34d399" stroke-width="3"><rect x="8" y="8" width="32" height="32" rx="3"/><path d="M18.7 8v32M29.3 8v32M8 18.7h32M8 29.3h32"/></svg></div><b>Build your line</b><p>Fours count across, down, or diagonally — watch for double setups.</p></div>
-          <div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#f472b6" stroke-width="3"><circle cx="24" cy="24" r="16"/><circle cx="24" cy="24" r="9"/><circle cx="24" cy="24" r="3" fill="#f472b6"/></svg></div><b>Block theirs</b><p>Opponent has three with an open end? Drop there first — unless you can win.</p></div>
-        </div>
-        <h3>Good to know</h3>
-        <ul>
-          <li><b>Center is king early.</b> The middle column (column 4) joins more possible lines than any other.</li>
-          <li><b>Vs Computer:</b> Easy makes friendly mistakes, Medium plays solid, Hard looks 7 moves ahead. Your bests are tracked against the computer only.</li>
-          <li><b>Practice round:</b> play the computer with a suggested move and a short explanation every turn — the suggested column is highlighted above the board. Practice games never count toward your score or bests, so experiment and undo freely.</li>
-          <li><b>2 Players:</b> pass the device back and forth — Red always drops first unless you change “First move”.</li>
-          <li><b>Undo</b> takes back the last round (your move + the reply) in Vs Computer, or one move in 2 Players.</li>
-          <li>If the board fills with no four in a row, it's a draw.</li>
-        </ul>
-        <div class="closeRow">
-          <button class="btn primary" id="tutClose">Start playing</button>
+        <div class="wt-card" id="wtCard" role="dialog" aria-modal="false" aria-labelledby="wtTitle">
+          <div class="step-tag" id="wtTag">Step 1 of 6 \u00b7 The goal</div>
+          <h3 id="wtTitle">First to four in a row wins</h3>
+          <p id="wtText"></p>
+          <div class="wt-actions">
+            <span style="display:flex;gap:8px;">
+              <button type="button" class="btn" id="wtBack">\u2190 Back</button>
+              <button type="button" class="btn" id="wtSkip">Skip</button>
+            </span>
+            <div class="wt-dots" id="wtDots"></div>
+            <button type="button" class="btn primary" id="wtNext">Next</button>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Full rules -->
+        <!-- Full rules -->
     <div class="scrim" id="rulesScrim" role="dialog" aria-modal="true" aria-labelledby="rulesTitle">
       <div class="sheet">
         <h2 id="rulesTitle">Connect Four — full rules</h2>
@@ -1213,15 +1220,75 @@ a{color:var(--ha-cyan)}
         if (soundOn) sndDrop();
       });
 
-      // Tutorial
-      function openTut(){ $("tutScrim").classList.add("open"); }
-      function closeTut(){
+      /* HOWTO-B4-2026-11-26: one bubble at a time (Monster Match model) */
+      /* How to Play is one pop-up walk-through (Dominoes wt template).
+         Steps reuse the old static How to Play text, cut to one idea per
+         bubble. Rules text itself is unchanged. */
+      var WT_STEPS = [
+        { tag: "The goal", title: "First to four in a row wins",
+          text: "Two players take turns dropping discs into a 7-wide, 6-tall grid. First to line up four of their discs in a row \u2014 across, down, or diagonally \u2014 wins.",
+          target: "board" },
+        { tag: "Drop a disc", title: "Drop a disc",
+          text: "Tap a column (or keys 1\u20137). Your disc falls to the lowest empty slot.",
+          target: "colBtns" },
+        { tag: "Build your line", title: "Build your line",
+          text: "Fours count across, down, or diagonally \u2014 watch for double setups.",
+          target: "board" },
+        { tag: "Block theirs", title: "Block theirs",
+          text: "Opponent has three with an open end? Drop there first \u2014 unless you can win.",
+          target: "board" },
+        { tag: "Center is king", title: "Center is king early",
+          text: "The middle column (column 4) joins more possible lines than any other.",
+          target: "colBtns" },
+        { tag: "Good to know", title: "Good to know",
+          text: "Practice rounds never count toward your score or bests, so experiment and undo freely. Undo takes back the last round in Vs Computer, or one move in 2 Players. If the board fills with no four in a row, it\u2019s a draw.",
+          target: "undoBtn" }
+      ];
+      var wtIndex = 0, wtActive = false;
+      function wtHighlight(id){
+        var prev = document.querySelectorAll(".wt-highlight");
+        for (var i = 0; i < prev.length; i++) prev[i].classList.remove("wt-highlight");
+        if (id){
+          var t = $(id);
+          if (t){ t.classList.add("wt-highlight"); if (t.scrollIntoView) t.scrollIntoView({ behavior: "smooth", block: "center" }); }
+        }
+      }
+      function wtRender(){
+        var step = WT_STEPS[wtIndex];
+        $("wtTag").textContent = "Step " + (wtIndex + 1) + " of " + WT_STEPS.length + " \u00b7 " + step.tag;
+        $("wtTitle").textContent = step.title;
+        $("wtText").textContent = step.text;
+        $("wtNext").textContent = wtIndex === WT_STEPS.length - 1 ? "Start playing" : "Next";
+        $("wtBack").style.visibility = wtIndex === 0 ? "hidden" : "visible";
+        var dots = $("wtDots"); dots.innerHTML = "";
+        for (var i = 0; i < WT_STEPS.length; i++){
+          var dot = document.createElement("i");
+          if (i === wtIndex) dot.className = "on";
+          dots.appendChild(dot);
+        }
+        wtHighlight(step.target);
+      }
+      function wtOpen(){
+        wtActive = true; wtIndex = 0;
+        $("tutScrim").classList.add("open");
+        wtRender();
+      }
+      function wtClose(){
+        wtActive = false;
         $("tutScrim").classList.remove("open");
+        wtHighlight(null);
         try { localStorage.setItem(LS_TUT, "1"); } catch(e){}
       }
-      $("howBtn").addEventListener("click", openTut);
-      $("tutClose").addEventListener("click", closeTut);
-      $("tutScrim").addEventListener("click", function(e){ if (e.target === this) closeTut(); });
+      $("wtNext").addEventListener("click", function(){
+        if (wtIndex < WT_STEPS.length - 1){ wtIndex++; wtRender(); }
+        else wtClose();
+      });
+      $("wtBack").addEventListener("click", function(){
+        if (wtIndex > 0){ wtIndex--; wtRender(); }
+      });
+      $("wtSkip").addEventListener("click", wtClose);
+      $("howBtn").addEventListener("click", wtOpen);
+      $("tutScrim").addEventListener("click", function(e){ if (e.target === this) wtClose(); });
       // Rules (separate from the tutorial, also opt-in only)
       $("rulesBtn").addEventListener("click", function(){ $("rulesScrim").classList.add("open"); });
       $("rulesClose").addEventListener("click", function(){ $("rulesScrim").classList.remove("open"); });
@@ -1294,7 +1361,7 @@ a{color:var(--ha-cyan)}
       var kbCol = 3;
       document.addEventListener("keydown", function(e){
         if ($("tutScrim").classList.contains("open") || $("overScrim").classList.contains("open") || $("rulesScrim").classList.contains("open") || $("feedbackScrim").classList.contains("open")){
-          if (e.key === "Escape"){ closeTut(); $("overScrim").classList.remove("open"); $("rulesScrim").classList.remove("open"); closeFeedback(); }
+          if (e.key === "Escape"){ wtClose(); $("overScrim").classList.remove("open"); $("rulesScrim").classList.remove("open"); closeFeedback(); }
           return;
         }
         if (e.key >= "1" && e.key <= "7"){ dropInColumn(+e.key - 1); }
