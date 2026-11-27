@@ -737,6 +737,46 @@ var settings={theme:"animals",diff:"medium",mode:"solo"};
 try{var s=JSON.parse(localStorage.getItem(LS_SET)||"null"); if(s) settings=s;}catch(e){}
 function saveBests(){try{localStorage.setItem(LS_BEST,JSON.stringify(bests));}catch(e){}}
 function saveSettings(){try{localStorage.setItem(LS_SET,JSON.stringify(settings));}catch(e){}}
+/* THEME-ROTATION-2026-11-27 (Holo 2026-11-27 12:20): "Make sure it's a
+   unique theme from the last few played." Every "New puzzle" (and every
+   fresh puzzle from Play again or a size/mode change) picks a theme that
+   is NOT among the last 4 themes played. The history lives in
+   localStorage, so it persists across sessions on this device. An
+   explicit theme picked in the theme dropdown is always honoured —
+   rotation never overrides it: the dropdown change generates that theme
+   as-is, and rotation only happens on New puzzle / Play again / size /
+   mode changes. If every theme were somehow in the history, the oldest
+   one is reused (a repeat is only ever the oldest, never a recent one). */
+var LS_THEME_HIST="rff-wordsearch-theme-history-v1", THEME_HIST_N=4;
+function themeHistory(){
+  try{var h=JSON.parse(localStorage.getItem(LS_THEME_HIST)||"null");
+    if(Array.isArray(h)) return h.filter(function(k){return Object.prototype.hasOwnProperty.call(THEMES,k);});
+  }catch(e){}
+  return [];
+}
+function recordTheme(key){
+  try{
+    var h=themeHistory();
+    if(h[h.length-1]!==key) h.push(key);
+    localStorage.setItem(LS_THEME_HIST,JSON.stringify(h.slice(-THEME_HIST_N)));
+  }catch(e){}
+}
+function pickFreshTheme(){
+  var h=themeHistory();
+  var pool=Object.keys(THEMES).filter(function(k){return h.indexOf(k)===-1;});
+  if(!pool.length) pool=[h[0]||"animals"];
+  return pool[Math.floor(Math.random()*pool.length)];
+}
+function rotateTheme(){
+  var key=pickFreshTheme();
+  settings.theme=key; saveSettings();
+  $("themeSel").value=key;
+  return key;
+}
+function themeLabel(){
+  try{var o=$("themeSel").selectedOptions[0]; if(o) return o.textContent.trim();}catch(e){}
+  return settings.theme;
+}
 function fmt(sec){ if(sec==null) return "—"; var m=Math.floor(sec/60), s2=sec%60; return m+":"+(s2<10?"0":"")+s2; }
 function shuffle(a){ for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t;} return a; }
 
@@ -793,8 +833,13 @@ function pauseClock(){
   $("timer").textContent=fmt(G.seconds);
 }
 
-function newPuzzle(customWords, isPractice){
+function newPuzzle(customWords, isPractice, scrollToGrid){
   stopTimers();
+  /* Guard against a stale/corrupt saved setting: an unknown theme or size
+     used to throw here, so the tap did nothing at all. */
+  if(!Object.prototype.hasOwnProperty.call(THEMES,settings.theme)) settings.theme="animals";
+  if(!DIFFS[settings.diff]) settings.diff="medium";
+  try{ $("themeSel").value=settings.theme; $("diffSel").value=settings.diff; $("modeSel").value=settings.mode==="race"?"race":"solo"; }catch(e){}
   var diffKey=settings.diff;
   var pool, maxWords;
   if(customWords && customWords.length){
@@ -806,15 +851,23 @@ function newPuzzle(customWords, isPractice){
   var gen=generate(pool, diffKey, maxWords);
   G={grid:gen.grid, placed:gen.placed, size:gen.size, seconds:0, baseSeconds:0, clockRunning:false, runStart:0, hints:isPractice?Infinity:3, finished:false,
      selecting:false, start:null, current:null, selCells:[], custom:!!customWords, practice:!!isPractice};
+  if(!G.custom) recordTheme(settings.theme);
   $("hintBtn").disabled=false;
   $("practiceBanner").hidden=!G.practice;
   $("practiceBtn").setAttribute("aria-pressed", G.practice?"true":"false");
   $("practiceBtn").classList.toggle("practice-on", G.practice);
   renderAll();
+  /* NEW-PUZZLE-FIX-2026-11-27: the old message was byte-identical on
+     every regeneration (same theme, same word count, same 0/11, same
+     0:00), and the changed grid/word list sat below the fold — so a tap
+     on "New puzzle" looked like nothing had happened. Announce the fresh
+     puzzle by theme, and bring the grid into view so the player sees it. */
   if(G.practice) setMsg("Practice round — drag across a word to find it.", G.placed.length+" words hidden in this "+G.size+" × "+G.size+" grid. No clock, unlimited hints, nothing saved.");
-  else setMsg("Drag across a word to find it.", G.placed.length+" words hidden in this "+G.size+" × "+G.size+" grid. The clock starts on your first drag.");
+  else if(G.custom) setMsg("New custom puzzle — drag across a word to find it.", G.placed.length+" words hidden in this "+G.size+" × "+G.size+" grid. The clock starts on your first drag.");
+  else setMsg("New "+themeLabel()+" puzzle — drag across a word to find it.", G.placed.length+" words hidden in this "+G.size+" × "+G.size+" grid. The clock starts on your first drag.");
   $("winBanner").hidden=true; $("againBtn").hidden=true;
   updateStats();
+  if(scrollToGrid){ try{ var lay=document.querySelector(".layout"); if(lay) lay.scrollIntoView({block:"start"}); }catch(e){} }
 }
 function startAI(){
   var ms=DIFFS[settings.diff].aiMs;
@@ -996,13 +1049,13 @@ function checkEnd(){
 $("themeSel").value=settings.theme in THEMES ? settings.theme : "animals";
 $("diffSel").value=DIFFS[settings.diff] ? settings.diff : "medium";
 $("modeSel").value=settings.mode==="race" ? "race" : "solo";
-$("themeSel").addEventListener("change",function(){ settings.theme=this.value; saveSettings(); newPuzzle(); });
-$("diffSel").addEventListener("change",function(){ settings.diff=this.value; saveSettings(); newPuzzle(); updateStats(); });
-$("modeSel").addEventListener("change",function(){ settings.mode=this.value; saveSettings(); newPuzzle(); });
-$("newBtn").addEventListener("click",function(){ newPuzzle(); });
-$("practiceBtn").addEventListener("click",function(){ newPuzzle(null,true); });
-$("exitPracticeBtn").addEventListener("click",function(){ newPuzzle(); });
-$("againBtn").addEventListener("click",function(){ newPuzzle(null, !!(G && G.practice)); });
+$("themeSel").addEventListener("change",function(){ settings.theme=this.value; saveSettings(); newPuzzle(null,false,true); });
+$("diffSel").addEventListener("change",function(){ settings.diff=this.value; saveSettings(); rotateTheme(); newPuzzle(null,false,true); updateStats(); });
+$("modeSel").addEventListener("change",function(){ settings.mode=this.value; saveSettings(); rotateTheme(); newPuzzle(null,false,true); });
+$("newBtn").addEventListener("click",function(){ rotateTheme(); newPuzzle(null,false,true); });
+$("practiceBtn").addEventListener("click",function(){ newPuzzle(null,true,true); });
+$("exitPracticeBtn").addEventListener("click",function(){ newPuzzle(null,false,true); });
+$("againBtn").addEventListener("click",function(){ rotateTheme(); newPuzzle(null, !!(G && G.practice), true); });
 $("hintBtn").addEventListener("click",function(){
   if(!G || G.finished) return;
   if(!G.practice && G.hints<=0){ setMsg("No hints left this puzzle.","You've got this — scan row by row."); return; }
@@ -1030,7 +1083,7 @@ $("customBtn").addEventListener("click",function(){
   if(tooLong.length){ $("customMsg").textContent="Too long for this grid size: "+tooLong.join(", ")+". Pick a bigger size or shorten them."; return; }
   if(words.length>20) words=words.slice(0,20);
   $("customMsg").textContent="Built a custom puzzle with "+words.length+" of your words.";
-  newPuzzle(words);
+  newPuzzle(words,false,true);
 });
 $("copyBtn").addEventListener("click",function(){
   if(!G) return;
