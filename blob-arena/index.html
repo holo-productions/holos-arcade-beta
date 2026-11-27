@@ -487,6 +487,21 @@ a{color:var(--ha-cyan)}
 @keyframes haCoinBlink{50%{opacity:.25}}
 .insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
 @media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+
+/* Walk-through pop-up styles (batch 4, Dominoes wt template). */
+.wt-backdrop{ display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:40; }
+.wt-backdrop.show{ display:block; }
+.wt-card{ display:none; position:fixed; left:50%; transform:translateX(-50%); bottom:16px; z-index:60; width:min(480px, calc(100vw - 24px)); background:#22163a; color:#fff; border:2px solid #ffb020; border-radius:16px; box-shadow:0 8px 22px rgba(0,0,0,.4); padding:16px; }
+.wt-card.show{ display:block; }
+.wt-card .step-tag{ font-size:.72rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#38e1ff; }
+.wt-card h3{ margin:4px 0 6px; font-size:1.12rem; color:#fff; }
+.wt-card p{ margin:0 0 12px; color:#c9b8ff; font-weight:500; }
+.wt-actions{ display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.wt-dots{ display:flex; gap:5px; }
+.wt-dots i{ width:8px; height:8px; border-radius:50%; background:rgba(255,255,255,.25); display:block; }
+.wt-dots i.on{ background:#38e1ff; }
+.wt-actions .btn{ padding:8px 12px; font-size:13px; min-height:40px; }
+.wt-highlight{ outline:4px solid #ffb020 !important; outline-offset:3px; position:relative; z-index:45; }
 </style>
 <style id="pop26-css">
 /* POPUP26-2026-11-23 (Holo overnight 1/7): theme the 26 non-vtut
@@ -712,40 +727,19 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
   </div>
 </div>
 
-<!-- ============ TUTORIAL ============ -->
-<div class="overlay" id="tutOverlay" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
-  <div class="sheet">
-    <button class="x-btn" id="btnTutX" type="button" aria-label="Close tutorial">✕</button>
-    <h2 id="tutTitle">How to Play Blob Arena</h2>
-    <p style="color:var(--muted);margin-top:0">Thirty seconds of know-how, then you're dangerous.</p>
-    <div class="tut-step">
-      <div class="ic" aria-hidden="true">✦</div>
-      <p><b>1. Steer your blob</b><br />Point with your mouse, drag with a finger, or use <span class="kbd">W A S D</span> / arrow keys. Your blob glides toward where you point.</p>
-    </div>
-    <div class="tut-step">
-      <div class="ic" aria-hidden="true">✦</div>
-      <p><b>2. Snack to grow</b><br />Roll over pellets to eat them. Small ones add 1 size, golden ones add 5. Bigger blob = more eating power, but slower feet… er, blob.</p>
-    </div>
-    <div class="tut-step">
-      <div class="ic" aria-hidden="true">✦</div>
-      <p><b>3. Eat smaller blobs</b><br />If you're at least 10% bigger than a rival, roll over it to absorb it. Watch the leaderboard on the right to see who's worth chasing.</p>
-    </div>
-    <div class="tut-step">
-      <div class="ic" aria-hidden="true">✦</div>
-      <p><b>4. Run from bigger blobs</b><br />Anything notably bigger than you can eat you. Zigzag, hug the wall, and boost away when one locks onto you.</p>
-    </div>
-    <div class="tut-step">
-      <div class="ic" aria-hidden="true">✦</div>
-      <p><b>5. Boost wisely</b><br />Hold <span class="kbd">Space</span> or the BOOST button for speed. It burns size as fuel, so spend it on escapes and ambushes — not joyrides.</p>
-    </div>
-    <div class="tut-step">
-      <div class="ic" aria-hidden="true">✦</div>
-      <p><b>New here? Try a Practice Round</b><br />From the menu, pick <b>Practice Round</b>: no score is kept, you can't lose, and hints appear while you play. Perfect for a first run.</p>
-    </div>
-    <div class="close-row">
-      <button class="btn primary" id="btnTutPlay" type="button">▶ Start Playing</button>
-      <button class="btn" id="btnTutClose" type="button">Close</button>
-    </div>
+<!-- Walk-through pop-up (batch 4): one bubble at a time. -->
+<div class="wt-backdrop" id="wtBackdrop"></div>
+<div class="wt-card" id="wtCard" role="dialog" aria-modal="false" aria-labelledby="wtTitle">
+  <div class="step-tag" id="wtTag">Step 1 of 5</div>
+  <h3 id="wtTitle">Grow big, reach #1</h3>
+  <p id="wtText"></p>
+  <div class="wt-actions">
+    <span style="display:flex;gap:8px;">
+      <button type="button" class="btn" id="wtBack">← Back</button>
+      <button type="button" class="btn" id="wtSkip">Skip</button>
+    </span>
+    <div class="wt-dots" id="wtDots"></div>
+    <button type="button" class="btn primary" id="wtNext">Next</button>
   </div>
 </div>
 
@@ -843,21 +837,86 @@ nameInput.addEventListener("change",function(){
 /* ================= overlays ================= */
 function openOv(id){ $(id).classList.add("open"); }
 function closeOv(id){ $(id).classList.remove("open"); }
-$("btnTutorial").addEventListener("click",function(){ openOv("tutOverlay"); });
-$("btnTutorial2").addEventListener("click",function(){ openOv("tutOverlay"); });
-$("btnTutClose").addEventListener("click",function(){ closeOv("tutOverlay"); });
-$("btnTutX").addEventListener("click",function(){ closeOv("tutOverlay"); });
+$("btnTutorial").addEventListener("click", wtOpen);
+$("btnTutorial2").addEventListener("click", wtOpen);
 $("btnFbX").addEventListener("click",function(){ closeOv("fbOverlay"); });
-$("btnTutPlay").addEventListener("click",function(){ closeOv("tutOverlay"); startGame(false); });
 $("btnRules").addEventListener("click",function(){ showView("rules"); });
 $("btnRules2").addEventListener("click",function(){ showView("rules"); });
 $("btnRulesBack").addEventListener("click",function(){ showView("menu"); });
 $("btnRulesPlay").addEventListener("click",function(){ startGame(false); });
 $("btnFeedback").addEventListener("click",function(){ openFb(); });
 $("btnFbClose").addEventListener("click",function(){ closeOv("fbOverlay"); });
-["tutOverlay","fbOverlay"].forEach(function(id){
+["fbOverlay"].forEach(function(id){
   $(id).addEventListener("click",function(e){ if(e.target===$(id)) closeOv(id); });
 });
+
+/* HOWTO-B4-2026-11-26: one bubble at a time (Monster Match model) */
+/* How to Play is one pop-up walk-through (Dominoes wt template).
+   Steps reuse the old static How to Play text, cut to one idea per
+   bubble. Rules text itself is unchanged. */
+var WT_STEPS = [
+  { tag:"Goal", title:"Grow big, reach #1",
+    text:"Grow your blob as big as you can and reach #1 on the leaderboard. There is no timer — a run ends only when a bigger blob eats you.",
+    target:"leaderboard" },
+  { tag:"Steer", title:"Point, drag, or use keys",
+    text:"Point with your mouse, drag with a finger, or use W A S D / arrow keys. Your blob glides toward where you point.",
+    target:"game" },
+  { tag:"Snack to grow", title:"Pellets make you bigger",
+    text:"Roll over pellets to eat them. Small ones add 1 size, golden ones add 5. Bigger blob = more eating power, but slower.",
+    target:"game" },
+  { tag:"Eat or be eaten", title:"10% bigger wins the meal",
+    text:"If you're at least 10% bigger than a rival, roll over it to absorb it — watch the leaderboard to see who's worth chasing. Anything notably bigger than you can eat you, so zigzag, hug the wall, and boost away.",
+    target:"leaderboard" },
+  { tag:"Boost wisely", title:"Boost burns size — spend it well",
+    text:"Hold Space or the BOOST button for speed. It burns size as fuel, so spend it on escapes and ambushes, not joyrides. New here? Pick Practice Round from the menu: no score is kept, you can't lose, and hints appear while you play.",
+    target:"btnBoost" },
+];
+var wtIndex = 0, wtActive = false;
+var wtBackdrop = document.getElementById("wtBackdrop"), wtCard = document.getElementById("wtCard");
+function wtHighlight(id){
+  var prev = document.querySelectorAll(".wt-highlight");
+  for (var i = 0; i < prev.length; i++) prev[i].classList.remove("wt-highlight");
+  if (id){
+    var t = document.getElementById(id);
+    if (t){ t.classList.add("wt-highlight"); if (t.scrollIntoView) t.scrollIntoView({ behavior:"smooth", block:"center" }); }
+  }
+}
+function wtRender(){
+  var step = WT_STEPS[wtIndex];
+  document.getElementById("wtTag").textContent = "Step " + (wtIndex + 1) + " of " + WT_STEPS.length + " \u00b7 " + step.tag;
+  document.getElementById("wtTitle").textContent = step.title;
+  document.getElementById("wtText").textContent = step.text;
+  document.getElementById("wtNext").textContent = wtIndex === WT_STEPS.length - 1 ? "Start playing" : "Next";
+  document.getElementById("wtBack").style.visibility = wtIndex === 0 ? "hidden" : "visible";
+  var dots = document.getElementById("wtDots"); dots.innerHTML = "";
+  for (var i = 0; i < WT_STEPS.length; i++){
+    var dot = document.createElement("i");
+    if (i === wtIndex) dot.className = "on";
+    dots.appendChild(dot);
+  }
+  wtHighlight(step.target);
+}
+function wtOpen(){
+  wtActive = true; wtIndex = 0;
+  wtBackdrop.classList.add("show");
+  wtCard.classList.add("show");
+  wtRender();
+}
+function wtClose(){
+  wtActive = false;
+  wtBackdrop.classList.remove("show");
+  wtCard.classList.remove("show");
+  wtHighlight(null);
+}
+document.getElementById("wtNext").addEventListener("click", function(){
+  if (wtIndex < WT_STEPS.length - 1){ wtIndex++; wtRender(); }
+  else wtClose();
+});
+document.getElementById("wtBack").addEventListener("click", function(){
+  if (wtIndex > 0){ wtIndex--; wtRender(); }
+});
+document.getElementById("wtSkip").addEventListener("click", wtClose);
+wtBackdrop.addEventListener("click", wtClose);
 
 /* ================= feedback ================= */
 var fbRating = 0;
