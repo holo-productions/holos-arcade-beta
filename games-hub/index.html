@@ -2040,8 +2040,10 @@ body[data-view="about"] .view-main,body[data-view="about"] .view-library,body[da
 /* SETTINGS-SPLIT-2026-11-23: standalone Settings view + Your account stats panel. */
 body[data-view="settings"] .view-main,body[data-view="settings"] .view-library,body[data-view="settings"] .view-daily,body[data-view="settings"] .view-favourites,body[data-view="settings"] #friends,body[data-view="settings"] #categories,body[data-view="settings"] #about,body[data-view="settings"] #yourArcadePanel,body[data-view="settings"] #recentShelf{display:none!important}
 body:not([data-view="settings"]) #settingsPanel{display:none!important}
-/* ROOMS-BUBBLE-2026-11-25: Rooms is its own bubble on the Friends page — it only shows in the friends view, like #friends itself. */
-body:not([data-view="friends"]) #rooms{display:none!important}
+/* ROOM-CHAT-2026-11-26 (Holo 19:25): Rooms is its OWN page now — it only shows in the rooms view. */
+body:not([data-view="rooms"]) #rooms{display:none!important}
+body[data-view="rooms"] .view-main,body[data-view="rooms"] .view-library,body[data-view="rooms"] .view-daily,body[data-view="rooms"] .view-favourites,body[data-view="rooms"] #friends,body[data-view="rooms"] #yourArcadePanel,body[data-view="rooms"] #categories,body[data-view="rooms"] #about,body[data-view="rooms"] #recentShelf{display:none!important}
+body[data-view="rooms"] #rooms,body[data-view="rooms"] #roomsSection{overflow-x:hidden}
 /* TOURNAMENT-HIDE-2026-11-25 (Holo 2026-11-25 00:02 + 09:21): the site-wide
    weekly tournament panel is HIDDEN in beta — it returns at launch. The
    panel is hidden by default; the body.tournaments-live class (set from the
@@ -2955,6 +2957,7 @@ setTimeout(function(){
       <a href="#categories" id="categoriesNavLink">Categories</a>
       <a href="#favorites" id="favoritesNavLink"><svg class="egg-duck egg-duck-xs" aria-hidden="true"><use href="#eggDuck"></use></svg> Favourites <span id="favNavCount" hidden></span></a>
       <a href="#friends" id="friendsNavLink">Friends <span id="friendNavCount" hidden></span></a>
+      <a href="#rooms" id="roomsNavLink">Rooms</a>
       <a href="#reviews" id="reviewsNavLink2">Trophy Case</a>
           </nav>
     <nav class="nav nav-outside" id="navOutside" aria-label="Account">
@@ -3280,7 +3283,7 @@ setTimeout(function(){
   </section>
 
   <!-- ================= ROOMS (game rooms) ================= -->
-  <!-- ROOMS-BUBBLE-2026-11-25 (Holo 2026-11-25 12:23): Rooms is its OWN bubble now, separate from Friends — one tile per active game. Filled by the Rooms module (window.holoRooms); empty until it renders. Hidden in every view except friends (see the #rooms rule in the view CSS). -->
+  <!-- ROOM-CHAT-2026-11-26 (Holo 19:25): Rooms is its OWN PAGE now (was a bubble on the Friends page) — one tile per active game. Filled by the Rooms module (window.holoRooms); empty until it renders. Hidden in every view except rooms (see the #rooms rule in the view CSS). -->
   <section class="hub-panel" id="rooms" aria-label="Game rooms">
     <span class="kicker personal">Your Arcade</span>
     <h2>Rooms</h2>
@@ -9525,8 +9528,19 @@ setTimeout(function(){
         more: 'Full rules live in the game — tap 📜 Rules in the game.'
       }
     },
+    /* TTT-FIXES-2026-11-26: Tic Tac Toe uses the side panels for the
+       match list (left) + challenge (right) instead of the in-pane
+       challenge block — the board alone lives in the center column,
+       so the view fits with zero scroll. Per-game `sections` override
+       the global SIDE_PANEL_SECTIONS (see renderSidePanels). */
+    'tic-tac-toe': {
+      /* ROOM-CHAT-2026-11-26 (Holo 19:57): notifications ride the left panel under the matches list. */
+      sections: { left: ['matches', 'notifications'], right: ['challenge'] }
+    },
     /* POOL-SIZING-2026-11-26 (C1): Pool joins the live side-panel pattern (Ghost Hunt pilot). Pool stores ONE JSON object (pool8_bests) — not one key per row — so scores use .json; how-to steps are verbatim from the live game text; the "open in its own page" fallback line is verbatim from the pane's g-note. */
+    /* ROOM-CHAT-2026-11-26 (Holo 2026-11-26 19:57, desktop layout — MERGED with the sizing half in the rebase onto live 403a0e35): Pool rooms get the "Your matches" side list too (the 18:39 side list, placed) + game notifications under it. Final Pool sections: left ['matches','notifications','scores'], right ['howto'] — the rooms-chat half (matches + notifications) + the sizing half (scores + howto). */
     '8-ball-pool': {
+      sections: { left: ['matches', 'notifications', 'scores'], right: ['howto'] },
       scores: {
         json: 'pool8_bests',
         prefix: 'pool8_bests',
@@ -9584,20 +9598,140 @@ setTimeout(function(){
       + gh
       + '<p class="sp-note">' + g.howto.more + '</p></section>';
   }
-  var SECTION_BUILDERS = { scores: spScoresHTML, howto: spHowtoHTML };
+  function spEsc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function spTttMatchesHTML(g){
+    /* TTT-FIXES-2026-11-26: "Your matches" — live from the turn module (window.holoTurn). Capped at 5 rows + "Show all (n)" (switches the pane to list view; n = all active matches, what the list view shows). The rows live outside #turnPlay, so the turn module's delegated click handler covers them. Holo 2026-11-26 18:39: inside a room this lists her OTHER active games (the open match is excluded) so she can bounce between games — "Your turn" rows sort first and are gold-highlighted; the whole row is tappable (data-turn-open on the row) and opens the match in place. Status is the same canonical statusText() as the tile and the match view. */
+    var h = '<section class="sp-section" data-sp="matches"><h3>🎮 Your matches</h3>';
+    var list = [], me = null, totalCount = 0, openMidNow = null;
+    try {
+      me = (window.holoTurn && typeof window.holoTurn.me === 'function') ? window.holoTurn.me() : null;
+      var ms = (window.holoTurn && typeof window.holoTurn.matches === 'function') ? window.holoTurn.matches() : {};
+      Object.keys(ms || {}).forEach(function(mid){ var m = ms[mid]; if(m && (m.status === 'playing' || m.status === 'waiting')) list.push({ mid:mid, m:m }); });
+      totalCount = list.length;
+      openMidNow = (window.holoTurn && typeof window.holoTurn.openMatch === 'function') ? window.holoTurn.openMatch() : null;
+      list = list.filter(function(it){ return it.mid !== openMidNow; });
+      list.forEach(function(it){
+        try { it.st = (window.holoTurn && typeof window.holoTurn.statusText === 'function') ? window.holoTurn.statusText(it.m, me) : ''; } catch(e){ it.st = ''; }
+        it.mine = (it.st === 'Your turn');
+      });
+      list.sort(function(a, b){ return ((a.mine ? 0 : 1) - (b.mine ? 0 : 1)) || ((b.m.updatedAt || 0) - (a.m.updatedAt || 0)); });
+    } catch(e){ list = []; }
+    if(!totalCount){ return h + '<p class="sp-empty">No matches yet — challenge a friend!</p></section>'; }
+    if(!list.length){ return h + '<p class="sp-empty">No other matches right now — challenge a friend!</p></section>'; }
+    var shown = list.slice(0, 5);
+    h += shown.map(function(it){
+      var m = it.m;
+      var oppUid = (m.aUid === me) ? m.bUid : m.aUid;
+      var oppName = (m.aUid === me) ? m.bName : m.aName;
+      try { var cf = (window.holoFriends && typeof window.holoFriends.cloudFriends === 'function') ? window.holoFriends.cloudFriends() : {}; if(cf[oppUid] && cf[oppUid].name) oppName = cf[oppUid].name; } catch(e){}
+      var gn = '';
+      try { gn = (window.holoTurn && typeof window.holoTurn.gameName === 'function') ? window.holoTurn.gameName(m.game) : m.game; } catch(e){}
+      return '<div class="sp-matchrow' + (it.mine ? ' your-turn' : '') + '" data-turn-open="' + spEsc(it.mid) + '"><b>' + spEsc(oppName) + '</b><span>' + spEsc(gn) + ' · ' + spEsc(it.st) + '</span><button type="button" class="btn btn-dark dm-mini">Open</button></div>';
+    }).join('');
+    if(list.length > 5) h += '<button type="button" class="btn btn-dark dm-mini sp-showall" data-sp-showall>Show all (' + totalCount + ')</button>';
+    return h + '</section>';
+  }
+  function spTttChallengeHTML(g){
+    /* TTT-FIXES-2026-11-26: "Challenge a friend" — friend chips with Challenge buttons (same source as the pane's challenge block). Capped at 5 chips + "Show all (n)". */
+    var h = '<section class="sp-section" data-sp="challenge"><h3>🤝 Challenge a friend</h3>';
+    var friends = [];
+    try { var cf = (window.holoFriends && typeof window.holoFriends.cloudFriends === 'function') ? window.holoFriends.cloudFriends() : {}; Object.keys(cf).forEach(function(uid){ friends.push({ uid:uid, name:(cf[uid] && cf[uid].name) || 'Tester' }); }); } catch(e){}
+    if(!friends.length){ return h + '<p class="sp-empty">No friends yet — add a friend first, then challenge them here.</p></section>'; }
+    var shown = friends.slice(0, 5);
+    h += '<div class="turn-friends">' + shown.map(function(f){
+      return '<span class="turn-friend-chip">' + spEsc(f.name) + ' <button type="button" class="btn btn-dark dm-mini" data-turn-challenge="' + spEsc(f.uid) + '" data-turn-name="' + spEsc(f.name) + '">Challenge</button></span>';
+    }).join('') + '</div>';
+    if(friends.length > 5) h += '<button type="button" class="btn btn-dark dm-mini sp-showall" data-sp-showall>Show all (' + friends.length + ')</button>';
+    return h + '</section>';
+  }
+  function spNotificationsHTML(g){
+    /* ROOM-CHAT-2026-11-26 (Holo 2026-11-26 19:57, desktop layout): "Game notifications" in the empty space beside the game — the same feed as the Inbox, game types only (turn / turn-invite / room-chat), newest first, capped at 5. Tap a row to open it (same routing as the pop-up Accept); unread rows are gold-highlighted. Read from the inbox cache (holoInbox.items) — no new poll, no new node. */
+    var h = '<section class="sp-section" data-sp="notifications"><h3>🔔 Game notifications</h3>';
+    var list = [];
+    try {
+      var all = (window.holoInbox && typeof window.holoInbox.items === 'function') ? window.holoInbox.items() : [];
+      list = all.filter(function(n){ return n && (n.type === 'turn' || n.type === 'turn-invite' || n.type === 'room-chat'); });
+    } catch(e){ list = []; }
+    if(!list.length){ return h + '<p class="sp-empty">No game notifications yet — challenges and turns show up here.</p></section>'; }
+    var shown = list.slice(0, 5);
+    h += shown.map(function(it){
+      var t = '';
+      try { if(it.createdAt) t = new Date(it.createdAt).toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ' · ' + new Date(it.createdAt).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' }); } catch(e){}
+      return '<div class="sp-matchrow' + (it.read ? '' : ' your-turn') + '" data-sp-notif="' + spEsc(it.link || '') + '" data-sp-notif-id="' + spEsc(it.id || '') + '"><b>' + spEsc(it.title || 'Game notification') + '</b><span>' + spEsc(t) + '</span></div>';
+    }).join('');
+    if(list.length > 5) h += '<button type="button" class="btn btn-dark dm-mini sp-showall" data-sp-notif-all>Show all (' + list.length + ')</button>';
+    return h + '</section>';
+  }
+  function spRoomMid(slug){
+    /* ROOM-CHAT-2026-11-26 (Holo 20:56): the match currently open for this game — the room chat replaces How to play while one is open, solo keeps the how-to. Turn games (TTT/MM/RPS) via the turn module's open match (the same signal the matches list already uses to exclude the open match); Pool via the rooms module (handIntoPool tracks it — the turn module never opens Pool matches). */
+    try {
+      var om = (window.holoTurn && typeof window.holoTurn.openMatch === 'function') ? window.holoTurn.openMatch() : null;
+      if(om){
+        var ms = (window.holoTurn && typeof window.holoTurn.matches === 'function') ? window.holoTurn.matches() : {};
+        var mm = ms && ms[om];
+        if(mm && mm.game === slug) return om;
+      }
+      if(slug === '8-ball-pool' && window.holoRooms && typeof window.holoRooms.currentMatch === 'function'){
+        var pm = window.holoRooms.currentMatch();
+        if(pm) return pm;
+      }
+    } catch(e){}
+    return null;
+  }
+  function spChatHTML(g){
+    /* ROOM-CHAT-2026-11-26 (Holo 20:56): the room chat docked in the side panel — replaces the How to play section while a match is open (desktop room views). Messages scroll up and down inside the box; compose + registration-style keyboard below (wired by holoRoomChat.panelChat after the panels render). */
+    var mid = spRoomMid(sidePanelSlug);
+    if(!mid){ return '<section class="sp-section rc-panel-chat" data-sp="chat"><h3>💬 Room chat</h3><p class="sp-empty">Open a match to chat with your opponent here.</p></section>'; }
+    var oppName = 'your opponent';
+    try {
+      var ms = (window.holoTurn && typeof window.holoTurn.matches === 'function') ? window.holoTurn.matches() : {};
+      var m = ms && ms[mid];
+      var me = (window.holoTurn && typeof window.holoTurn.me === 'function') ? window.holoTurn.me() : null;
+      if(m){
+        var oppUid = (m.aUid === me) ? m.bUid : m.aUid;
+        oppName = (m.aUid === me) ? m.bName : m.aName;
+        var cf = (window.holoFriends && typeof window.holoFriends.cloudFriends === 'function') ? window.holoFriends.cloudFriends() : {};
+        if(cf[oppUid] && cf[oppUid].name) oppName = cf[oppUid].name;
+      }
+    } catch(e){}
+    var h = '<section class="sp-section rc-panel-chat" data-sp="chat" data-rc-panel-mid="' + spEsc(mid) + '"><h3>💬 Chat with ' + spEsc(oppName) + '</h3>';
+    h += '<div class="rc-msgs rc-panel-msgs"><p class="dm-empty">Say hi — only the two of you can see this chat.</p></div>';
+    h += '<div class="rc-note" hidden></div>';
+    h += '<div class="dm-compose"><input class="rc-input" maxlength="500" placeholder="Type a message…" autocomplete="off"><button class="dm-tool rc-kb-btn" type="button" aria-label="Keyboard">⌨️</button><button class="dm-tool rc-emoji-btn" type="button" aria-label="Emoji">😀</button><button class="dm-tool rc-send-btn" type="button" aria-label="Send">➤</button></div>';
+    h += '<div class="hs-name-panel rc-kb" hidden><div class="hs-name-board"></div></div>';
+    h += '<div class="dm-emoji-panel rc-emoji-panel" hidden><p class="dm-panel-label">Emoji</p><div class="dm-emoji-grid"></div></div>';
+    return h + '</section>';
+  }
+  var SECTION_BUILDERS = { scores: spScoresHTML, howto: spHowtoHTML, matches: spTttMatchesHTML, challenge: spTttChallengeHTML, notifications: spNotificationsHTML, chat: spChatHTML };
   var sidePanelSlug = null; /* the game the panels are showing right now (null = hidden) */
   function renderSidePanels(slug){
     var L = $('sidePanelL'), R = $('sidePanelR');
     if(!L || !R) return;
     var g = slug && SIDE_PANEL_GAMES[slug];
     sidePanelSlug = g ? slug : null;
-    if(!g){ L.hidden = true; R.hidden = true; var pi0 = document.getElementById('poolPhoneInfo'); if(pi0) pi0.innerHTML = ''; return; }
-    L.innerHTML = SIDE_PANEL_SECTIONS.left.map(function(id){ return SECTION_BUILDERS[id](g); }).join('');
-    R.innerHTML = SIDE_PANEL_SECTIONS.right.map(function(id){ return SECTION_BUILDERS[id](g); }).join('');
-    /* POOL-SIZING-2026-11-26 (C1 phone): the phone info view gets the same left + right content (scores + how-to + est-line + fallback link) for the view swap. */
+    if(!g){ L.hidden = true; R.hidden = true; var pi0 = document.getElementById('poolPhoneInfo'); if(pi0) pi0.innerHTML = ''; try { if(window.holoRoomChat && window.holoRoomChat.clearPanelChat) window.holoRoomChat.clearPanelChat(); if(window.holoRooms && window.holoRooms.clearCurrentMatch) window.holoRooms.clearCurrentMatch(); } catch(e){} return; }
+    /* TTT-FIXES-2026-11-26: per-game `sections` override the global SIDE_PANEL_SECTIONS when present. */
+    var secs = (g.sections || SIDE_PANEL_SECTIONS);
+    /* ROOM-CHAT-2026-11-26 (Holo 20:56): in a room/match view the chat REPLACES the how-to section (Pool) / the challenge section (TTT) — the side slot holds the chat with the current opponent, not the how-to. Solo views keep how-to / challenge (roomMid is null there). */
+    var roomMid = spRoomMid(slug);
+    var L2 = secs.left.slice(), R2 = secs.right.slice();
+    if(roomMid){
+      L2 = L2.map(function(id){ return (id === 'howto' || id === 'challenge') ? 'chat' : id; });
+      R2 = R2.map(function(id){ return (id === 'howto' || id === 'challenge') ? 'chat' : id; });
+    }
+    L.innerHTML = L2.map(function(id){ return SECTION_BUILDERS[id](g); }).join('');
+    R.innerHTML = R2.map(function(id){ return SECTION_BUILDERS[id](g); }).join('');
+    /* POOL-SIZING-2026-11-26 (C1 phone): the phone info view gets the same left + right content for the view swap. (Merged rebase: for Pool that now includes the matches + notifications sections too, since they ride the same panels — the phone summary bar shows the full side-panel content.) Built from the UNSWAPPED sections: the phone info view is scores + how-to (+ matches/notifications), never the chat — on phone the chat is the popup bubble. */
     var pi = document.getElementById('poolPhoneInfo');
-    if(pi) pi.innerHTML = (slug === '8-ball-pool') ? (L.innerHTML + R.innerHTML) : '';
-    L.hidden = false; R.hidden = false;
+    if(pi) pi.innerHTML = (slug === '8-ball-pool') ? (secs.left.map(function(id){ return SECTION_BUILDERS[id](g); }).join('') + secs.right.map(function(id){ return SECTION_BUILDERS[id](g); }).join('')) : '';
+    /* ROOM-CHAT-2026-11-26 (Holo 19:57): a panel with no sections stays hidden — an empty bordered box would show otherwise. */
+    L.hidden = L2.length === 0;
+    R.hidden = R2.length === 0;
+    /* ROOM-CHAT-2026-11-26 (Holo 20:56): wire the panel chat when a room is open; clear it when the panels show no room (solo / another game). */
+    try {
+      if(roomMid && window.holoRoomChat && typeof window.holoRoomChat.panelChat === 'function') window.holoRoomChat.panelChat(roomMid);
+      else if(window.holoRoomChat && typeof window.holoRoomChat.clearPanelChat === 'function') window.holoRoomChat.clearPanelChat();
+    } catch(e){}
   }
   /* Scores refresh live: the game (in its iframe) writes its bests to the
      same origin's localStorage, so the hub hears the storage event and
@@ -9605,9 +9739,9 @@ setTimeout(function(){
   window.addEventListener('storage', function(e){
     if(!sidePanelSlug || !e || !e.key) return;
     var g = SIDE_PANEL_GAMES[sidePanelSlug];
-    if(g && e.key.indexOf(g.scores.prefix) === 0) renderSidePanels(sidePanelSlug);
+    if(g && g.scores && g.scores.prefix && e.key.indexOf(g.scores.prefix) === 0) renderSidePanels(sidePanelSlug);
   });
-  window.holoSidePanels = { render: renderSidePanels, games: SIDE_PANEL_GAMES, sections: SIDE_PANEL_SECTIONS }; /* test hook */
+  window.holoSidePanels = { render: renderSidePanels, games: SIDE_PANEL_GAMES, sections: SIDE_PANEL_SECTIONS, current: function(){ return sidePanelSlug; } }; /* test hook */
 
   /* POOL-SIZING-2026-11-26 (C1 phone): the Pool phone info view — the summary bar swaps the pane between the game and the scores/how-to info (the TTT view-swap pattern); the game view is the default whenever a game opens. */
   function resetPoolPhone(){
@@ -9638,6 +9772,26 @@ setTimeout(function(){
       try { sessionStorage.setItem('holos-arcade-rotate-dismissed', '1'); } catch(e){}
     });
   })();
+  /* ROOM-CHAT-2026-11-26 (Holo 19:57): notification rows follow their link (same routing as the pop-up Accept) and mark the notice read; "Show all" opens the Inbox. */
+  document.addEventListener('click', function(ev){
+    var t = ev.target && ev.target.closest ? ev.target.closest('[data-sp-notif],[data-sp-notif-all]') : null;
+    if(!t) return;
+    if(t.hasAttribute('data-sp-notif-all')){ try { if(window.holoShowView) window.holoShowView('inbox'); } catch(e){} return; }
+    var link = t.getAttribute('data-sp-notif');
+    var nid = t.getAttribute('data-sp-notif-id');
+    if(nid){
+      try {
+        if(window.holoInbox && typeof window.holoInbox.markRead === 'function'){
+          window.holoInbox.markRead(nid).then(function(){ try { if(sidePanelSlug) renderSidePanels(sidePanelSlug); } catch(e){} }).catch(function(){});
+        }
+      } catch(e){}
+    }
+    if(!link) return;
+    try {
+      if(window.holoNotifyPopups && typeof window.holoNotifyPopups.followLink === 'function'){ window.holoNotifyPopups.followLink(link); return; }
+    } catch(e){}
+    try { if(link.indexOf('game:') === 0) location.hash = '#game/' + link.slice(5).split('?')[0]; else if(window.holoShowView) window.holoShowView(link); } catch(e){}
+  });
   function closePlayer(){
     if(currentGame && stoppers[currentGame]) stoppers[currentGame]();
     currentGame = null;
@@ -23356,13 +23510,13 @@ function renderTesterAuth(){
   }
   window.holoPlaceRecentShelf = placeRecentShelf;
   placeRecentShelf(document.body.getAttribute('data-view') || 'main');
-  var VIEWS = { main:'#top', library:'#library', categories:'#categories', friends:'#friends', account:'#account', settings:'#settings', daily:'#daily', favourites:'#favorites', about:'#about', inbox:'#inbox' };
+  var VIEWS = { main:'#top', library:'#library', categories:'#categories', friends:'#friends', rooms:'#rooms', account:'#account', settings:'#settings', daily:'#daily', favourites:'#favorites', about:'#about', inbox:'#inbox' };
   /* SUBNAV-2026-11-22 (Holo 20:56): second sticky nav under the
      topbar, SAME links on desktop + phone (phone only scrolls the
      row sideways — viewing exception). View links move here with
      ids/handlers intact; active link syncs with the view. */
-  var SUBNAV_LINKS = ['gotdNavLink','libraryNavLink','categoriesNavLink','favoritesNavLink','reviewsNavLink2','friendsNavLink'];
-  var SUBNAV_ACTIVE = { daily:'gotdNavLink', library:'libraryNavLink', categories:'categoriesNavLink', favourites:'favoritesNavLink', account:'reviewsNavLink2', friends:'friendsNavLink' };
+  var SUBNAV_LINKS = ['gotdNavLink','libraryNavLink','categoriesNavLink','favoritesNavLink','reviewsNavLink2','friendsNavLink','roomsNavLink'];
+  var SUBNAV_ACTIVE = { daily:'gotdNavLink', library:'libraryNavLink', categories:'categoriesNavLink', favourites:'favoritesNavLink', account:'reviewsNavLink2', friends:'friendsNavLink', rooms:'roomsNavLink' };
   (function(){
     var sn = document.getElementById('subNav');
     if(!sn) return;
@@ -23442,6 +23596,7 @@ function renderTesterAuth(){
     if(h === '#categories') return 'categories';
     if(h === '#library' || h === '#all-games') return 'library';
     if(h === '#friends') return 'friends';
+    if(h === '#rooms') return 'rooms';
     if(h === '#account' || h === '#your-account' || h === '#unsubscribe' || h === '#reviews') return 'account';
     if(h === '#settings') return 'settings';
     if(h === '#daily' || h === '#game-of-the-day') return 'daily';
@@ -23473,6 +23628,7 @@ function renderTesterAuth(){
   wire('categoriesNavLink', 'categories', '#categories');
   wire('heroCategoriesBtn', 'categories', '#categories'); /* HERO-CATEGORIES-2026-11-22 (Holo 22:22): Categories button in the Pick-a-game section */
   wire('friendsNavLink', 'friends');
+  wire('roomsNavLink', 'rooms');
   wire('favoritesNavLink', 'favourites', '#favorites');
   wire('gotdNavLink', 'daily', '#dailyTiles');
   wire('aboutLink', 'about', '#about');
@@ -24656,7 +24812,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
      anyone is playing a game (the inbox tick only updates the badge;
      nothing toasts on a new turn notice). Notices show the Code Name
      + the time the move was submitted (see the turn module). */
-  var TYPES = { 'review-fixed':'✅', 'friend-request':'👥', 'friend-accepted':'🤝', 'announcement':'📣', 'support-reply':'💬', 'system':'🔔', 'turn':'🎮', 'turn-invite':'🎮' };
+  var TYPES = { 'review-fixed':'✅', 'friend-request':'👥', 'friend-accepted':'🤝', 'announcement':'📣', 'support-reply':'💬', 'system':'🔔', 'turn':'🎮', 'turn-invite':'🎮', 'room-chat':'💬' };
   function loadAuth(){
     /* INBOX-LEAK-FIX-2026-11-24 (Holo 2026-11-24 07:58): never trust a
        Firebase record that disagrees with the signed-in tester
@@ -24887,6 +25043,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       renderBadge(); renderList();
       /* NOTIFY-POPUP-2026-11-25: new-item hook for the bottom-right pop-up — the pop-up module diffs these items for fresh duel invites + HQ notices. Never edits or marks anything; detection only. */
       try { if(window.holoNotifyPopups && typeof window.holoNotifyPopups.onInboxItems === 'function') window.holoNotifyPopups.onInboxItems(items.slice()); } catch(e){}
+      /* ROOM-CHAT-2026-11-26 (Holo 19:57): the in-room notifications section reads this feed — re-render the side panels when the inbox refreshes so a new game notice appears beside the game. Never edits or marks anything; no-op when no game is open. */
+      try { if(window.holoSidePanels && typeof window.holoSidePanels.current === 'function'){ var sg = window.holoSidePanels.current(); if(sg) window.holoSidePanels.render(sg); } } catch(e){}
       return items;
     });
   }
@@ -25239,6 +25397,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var rest = link.slice(5); var qi = rest.indexOf('?'); var slug = qi === -1 ? rest : rest.slice(0, qi);
     var mm = rest.match(/match=([A-Za-z0-9_-]+)/);
     if(mm && mm[1] && window.holoTurn && window.holoTurn.openSoon){ try { window.holoTurn.openSoon(mm[1]); } catch(e){} }
+    /* ROOM-CHAT-2026-11-26: a room-chat notice link carries &chat=1 — open the chat box for that room once the match is up. */
+    if(rest.indexOf('chat=1') !== -1 && mm && mm[1]){ setTimeout(function(){ try { if(window.holoRoomChat) window.holoRoomChat.openBox(mm[1]); } catch(e){} }, 900); }
     try { location.hash = '#game/' + slug; } catch(e){}
     /* CHALLENGE-ROOM-2026-11-24: a room link carries ?room=<CODE> — the
        hub opens the game in its iframe, so the code would be lost from
@@ -27390,6 +27550,16 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 .turn-history li:first-child{border-top:0}
 .turn-empty{color:#cfc8ff;font-size:14px;margin:6px 0}
 .turn-muted-head{margin:10px 0 0;color:#cfc8ff;font-size:13px;font-weight:700}
+.side-panel .sp-matchrow{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;padding:7px 0;border-bottom:1px dashed var(--line)}
+.side-panel .sp-matchrow:last-of-type{border-bottom:none}
+.side-panel .sp-matchrow b{color:#fff}
+.side-panel .sp-matchrow span{color:var(--muted);font-size:12.5px}
+.side-panel .sp-matchrow .btn{margin-left:auto}
+.side-panel .sp-matchrow{cursor:pointer}
+.side-panel .sp-showall{margin-top:10px}
+/* ROOM-CHAT-2026-11-26 (Holo 19:57): notification titles can run long — the title ellipsizes, the time stays put. */
+.side-panel .sp-matchrow[data-sp-notif] b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.side-panel .sp-matchrow[data-sp-notif] span{flex:0 0 auto}
 /* CHALLENGE-ROOM-2026-11-24: Rooms live on the Friends page — the
    next-move tiles row (Recently Played tile style, horizontal) plus
    one card per room. ROOM-PRIVACY-2026-11-24: beta is PRIVATE-ONLY —
@@ -27398,8 +27568,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 #roomsSection{margin:18px 0 0}
 .rooms-head{margin:0 0 4px;font-family:var(--pixel);font-size:13px;color:#ffd43b}
 .rooms-sub{margin:0 0 12px;color:#cfc8ff;font-size:13.5px}
-.nextmove-row{display:flex;gap:10px;overflow-x:auto;padding:6px 2px 10px;-webkit-overflow-scrolling:touch}
-.nextmove-tile{flex:0 0 auto;display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:150px;max-width:196px;text-align:left;background:var(--card);border:1.5px solid var(--gold);border-radius:14px;padding:12px 13px;cursor:pointer;font-family:inherit;color:var(--ink)}
+/* ROOM-CHAT-2026-11-26 (Holo 19:44): the room list scrolls UP AND DOWN — tiles stack top-to-bottom in one vertical column. NO horizontal scrolling on Rooms (the old sideways-scrolling strip is gone). */
+.nextmove-row{display:flex;flex-direction:column;gap:10px;padding:6px 2px 10px;overflow-x:hidden}
+.nextmove-tile{flex:1 1 auto;width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;background:var(--card);border:1.5px solid var(--gold);border-radius:14px;padding:12px 13px;cursor:pointer;font-family:inherit;color:var(--ink)}
 .nextmove-tile:hover{border-color:var(--pink)}
 .nextmove-tile b{font-size:14.5px;line-height:1.35}
 .nextmove-tile span{font-size:12.5px;color:var(--muted);line-height:1.4}
@@ -27415,6 +27586,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 .nextmove-tile.your-turn{border-color:#ffd43b;box-shadow:0 0 10px rgba(255,212,59,.35)}
 .nextmove-status{font-size:12.5px;color:var(--muted);line-height:1.4;font-weight:700}
 .nextmove-status.mine{color:#ffd43b}
+.nextmove-status.needs{color:#39d5ff}
+.nextmove-date{font-size:11.5px;color:var(--muted);opacity:.85}
 .room-actions{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 0}
 .room-share{margin:10px 0 0;padding:10px 12px;border:2px dashed #2a1b5e;border-radius:12px;background:#171040}
 .room-share input{width:100%;box-sizing:border-box;background:#0a0620;color:#e9e4ff;border:1.5px solid #2a1b5e;border-radius:8px;padding:8px 10px;font-size:13px;margin:0 0 8px}
@@ -27665,6 +27838,20 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           var mid = r.name;
           api('PUT', '/users/' + encodeURIComponent(me) + '/turnMatches/' + encodeURIComponent(mid), true);
           api('PUT', '/users/' + encodeURIComponent(uid) + '/turnMatches/' + encodeURIComponent(mid), true);
+          if(!!mmOpts.autoAccept && match.bUid === me){
+            /* Swapped rematch: I am bUid, so waiting to playing is mine to flip (pending rules: only bUid accepts). The new first player gets a turn notice, not an invite — the match is already playing. */
+            api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'playing', updatedAt:Date.now() }).then(function(){
+              match.status = 'playing'; match.updatedAt = Date.now();
+              /* ROOM-CHAT-2026-11-26 (Holo 19:25, corrected 2026-11-26 ~21:05): this turn notice STAYS — it is a match-start notice, not a per-move one. The new first player never tapped anything (the rematch auto-started with them first), so without it they would never know a new match began; the indicator alone cannot prompt them. Per-move turn notices stay stopped (see makeMove). */
+              sendNotice(uid, { type:'turn', title:'Your turn in ' + gName, body:myN + ' started a rematch — you go first in ' + gName + '.', link:'game:' + gSlug + '?match=' + mid, fromName:myN, fromUid:me });
+              try { if(window.holoRoomChat) window.holoRoomChat.updateTurnIndicator(); } catch(e){}
+              render();
+            });
+            matches[mid] = match; openMid = mid; render();
+            toast('Rematch started! ' + (name || friendName(uid)) + ' goes first.');
+            try { location.hash = '#game/' + gSlug; } catch(e){}
+            return;
+          }
           /* MM-DUEL-2026-11-26: the invite names the mode in plain words, so the friend knows what they are accepting. */
           var inviteBody = myN + ' challenged you to ' + gName + '.';
           if(gSlug === 'monster-match' && mmMode === 'same-board') inviteBody = myN + ' challenged you to Monster Match. Play the same board and beat their score.';
@@ -27699,7 +27886,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           return;
         }
         /* RPS-TURN-GAMES-2026-11-25: the accept notice names the real game (was hardcoded Tic Tac Toe). */
-        sendNotice(m.aUid, { type:'turn', title:'Your turn in ' + turnGameName(m.game), body:'Your turn in ' + turnGameName(m.game) + ' vs ' + myN + ' — ' + myN + ' accepted at ' + timeShort(Date.now()) + '.', link:'game:' + m.game + '?match=' + mid });
+/* ROOM-CHAT-2026-11-26 (Holo 19:25): automatic turn notices STOP — the top-nav "Your turn" indicator replaces them (the other player sees it on their own client when their matches poll). */
+        try { if(window.holoRoomChat) window.holoRoomChat.updateTurnIndicator(); } catch(e){}
       });
     });
   }
@@ -27738,7 +27926,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       render();
       myName().then(function(myN){
         if(status === 'playing'){
-          sendNotice(opp.uid, { type:'turn', title:'Your turn in Tic Tac Toe', body:'Your turn in Tic Tac Toe vs ' + myN + ' — ' + myN + ' played at ' + timeShort(now) + '.', link:'game:tic-tac-toe?match=' + mid });
+/* ROOM-CHAT-2026-11-26 (Holo 19:25): automatic turn notices STOP — the top-nav "Your turn" indicator replaces them (the other player sees it on their own client when their matches poll). */
+          try { if(window.holoRoomChat) window.holoRoomChat.updateTurnIndicator(); } catch(e){}
         } else if(status === 'won'){
           sendNotice(opp.uid, { type:'turn', title:'Tic Tac Toe — ' + myN + ' won', body:myN + ' won Tic Tac Toe vs you at ' + timeShort(now) + '. Tap to rematch.', link:'game:tic-tac-toe?match=' + mid });
         } else {
@@ -27787,6 +27976,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(!m || !me) return;
     var opp = oppOf(m, me);
     var p = pairParts(me, opp.uid);
+    /* ROOM-CHAT-2026-11-26: block also stops the room chat (dual-write — same blockedBy marker in roomChats). */
+    api('PUT', '/roomChats/' + encodeURIComponent(mid) + '/blockedBy/' + encodeURIComponent(opp.uid), true);
     api('PUT', '/dmThreads/' + encodeURIComponent(p[0]) + '/' + encodeURIComponent(p[1]) + '/blockedBy/' + encodeURIComponent(opp.uid), true).then(function(r){
       if(r === null){ toast('Block did not save — the new rules publish is still pending.'); return; }
       if(m.status === 'waiting' || m.status === 'playing') decline(mid);
@@ -27923,6 +28114,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var un = root.querySelector('[data-turn-unmute-all]');
     if(un) un.addEventListener('click', function(){ hidden.forEach(function(mid){ delete muted[mid]; }); saveMuted(); render(); });
     bindOpen(root);
+    /* ROOM-CHAT-2026-11-26 (Holo 19:25): the top-nav "Your turn" indicator refreshes on every turn-view render — it replaces the DM turn notices. */
+    try { if(window.holoRoomChat) window.holoRoomChat.updateTurnIndicator(); } catch(e){}
   }
   /* RPS-TURN-GAMES-2026-11-25: the hub panel for an RPS match is a
      SUMMARY only — score, last round, Accept/Decline, and an Open
@@ -27958,6 +28151,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     h += '<button type="button" class="btn btn-dark" data-turn-report="' + esc(mid) + '">Report</button>' +
       '<button type="button" class="btn btn-dark" data-turn-block="' + esc(mid) + '">Block ' + esc(opp.name) + '</button>' +
       '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>';
+    /* ROOM-CHAT-2026-11-26: per-room chat for this match (only while the match is live — the rules close the chat when the game ends). */
+    if(m.status === 'waiting' || m.status === 'playing'){
+      h += '<button type="button" class="btn btn-light" data-turn-chat="' + esc(mid) + '">Chat<span class="dm-count rc-tile-badge" hidden>0</span></button>';
+    }
     if(m.status === 'waiting' || m.status === 'playing'){
       h += '<button type="button" class="btn btn-dark" data-turn-reset="' + esc(mid) + '">Reset match</button>';
     }
@@ -27996,6 +28193,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     h += '<button type="button" class="btn btn-dark" data-turn-report="' + esc(mid) + '">Report</button>' +
       '<button type="button" class="btn btn-dark" data-turn-block="' + esc(mid) + '">Block ' + esc(opp.name) + '</button>' +
       '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>';
+    /* ROOM-CHAT-2026-11-26: per-room chat for this match (only while the match is live — the rules close the chat when the game ends). */
+    if(m.status === 'waiting' || m.status === 'playing'){
+      h += '<button type="button" class="btn btn-light" data-turn-chat="' + esc(mid) + '">Chat<span class="dm-count rc-tile-badge" hidden>0</span></button>';
+    }
     if(m.status === 'waiting' || m.status === 'playing'){
       h += '<button type="button" class="btn btn-dark" data-turn-reset="' + esc(mid) + '">Reset match</button>';
     }
@@ -28037,6 +28238,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     h += '<button type="button" class="btn btn-dark" data-turn-report="' + esc(mid) + '">Report</button>' +
       '<button type="button" class="btn btn-dark" data-turn-block="' + esc(mid) + '">Block ' + esc(opp.name) + '</button>' +
       '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>';
+    /* ROOM-CHAT-2026-11-26: per-room chat for this match (only while the match is live — the rules close the chat when the game ends). */
+    if(m.status === 'waiting' || m.status === 'playing'){
+      h += '<button type="button" class="btn btn-light" data-turn-chat="' + esc(mid) + '">Chat<span class="dm-count rc-tile-badge" hidden>0</span></button>';
+    }
     /* MATCH-RESET-2026-11-24: Reset match on the match view too (either
        player; ends a stuck match cleanly — see the Rooms module). */
     if(m.status === 'waiting' || m.status === 'playing'){
@@ -28078,6 +28283,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     }
   }
   function bindOpen(root){
+    /* ROOM-CHAT-2026-11-26: open the per-room chat box for this match. */
+    root.querySelectorAll('[data-turn-chat]').forEach(function(b){
+      b.addEventListener('click', function(){ if(window.holoRoomChat) window.holoRoomChat.openBox(b.getAttribute('data-turn-chat')); });
+    });
     root.querySelectorAll('[data-turn-cell]').forEach(function(b){
       /* TURN-AUTO-PASS-2026-11-24 (Holo 20:33): all turn-based games pass the turn automatically, pool-style — tapping a square places the mark and passes the turn at once, one move at a time, X then O. NO Send-button step anywhere (the earlier pick+Send design was removed per this rule). The passing itself was unblocked by the rules re-publish (the /turnMatches .validate board bug, POOL-BOARD-BUG-2026-11-24) — verified live 26/27. */
       b.addEventListener('click', function(){ makeMove(openMid, parseInt(b.getAttribute('data-turn-cell'), 10)); });
@@ -28231,7 +28440,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   setInterval(function(){ injectFriendCardButtons(); }, 5000);
   setTimeout(function(){ buildUI(); loadMatches(); injectFriendCardButtons(); }, 2500);
   window.addEventListener('hashchange', function(){ try { if((location.hash || '').indexOf('#game/tic-tac-toe') !== -1){ var pm = pendingMatchFromHash(); if(pm) pendingOpenMid = pm; loadMatches(); } } catch(e){} });
-  window.holoTurn = { challenge:challenge, refresh:loadMatches, matches:function(){ return matches; }, turnGames:function(){ return TURN_GAMES.slice(); }, myTurnCount:myTurnCount, open:function(mid){ openMid = mid; render(); }, openSoon:function(mid){ pendingOpenMid = mid; if(matches[mid] && !muted[mid]){ openMid = mid; render(); } }, accept:accept, openMatch:function(){ return openMid; }, handIntoMM:handIntoMM };
+  window.holoTurn = { challenge:challenge, refresh:loadMatches, matches:function(){ return matches; }, turnGames:function(){ return TURN_GAMES.slice(); }, myTurnCount:myTurnCount, statusText:statusText, gameName:turnGameName, me:function(){ return myUid(); }, isMuted:function(mid){ return !!muted[mid]; }, block:function(mid){ blockOpponent(mid); }, open:function(mid){ openMid = mid; render(); }, openSoon:function(mid){ pendingOpenMid = mid; if(matches[mid] && !muted[mid]){ openMid = mid; render(); } }, accept:accept, openMatch:function(){ return openMid; }, handIntoMM:handIntoMM };
 })();
 </script>
 
@@ -28375,6 +28584,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
      guest learns a room from the turn-invite notice / share link and
      registers it on first open (joinRoom). */
   var registry = {};
+  var currentPoolMid = null; /* ROOM-CHAT-2026-11-26 (Holo 20:56): the Pool match currently handed into the game frame — the side panels show the room chat in place of How to play while a Pool match is open. Set by handIntoPool, cleared when the player closes (side panels call clearCurrentMatch). Solo Pool never sets it, so solo keeps the how-to. */
   try { registry = JSON.parse(localStorage.getItem(ROOMS_KEY) || '{}') || {}; } catch(e){ registry = {}; }
   function saveRegistry(){ try { localStorage.setItem(ROOMS_KEY, JSON.stringify(registry)); } catch(e){} }
   function registerRoom(code, room, role){
@@ -28542,7 +28752,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'playing', updatedAt:Date.now() }).then(function(r){
         if(r === null){ toast('That did not save — the new rules publish is still pending.'); return; }
         myName().then(function(myN){
-          sendNotice(m.aUid, { type:'turn', title:'Your turn in ' + gameTitle(m.game), body:'Your turn in ' + gameTitle(m.game) + ' vs ' + myN + ' — ' + myN + ' accepted at ' + timeShort(Date.now()) + '.', link:'game:' + m.game + '?match=' + mid, fromName:myN, fromUid:me });
+/* ROOM-CHAT-2026-11-26 (Holo 19:25): automatic turn notices STOP — the top-nav "Your turn" indicator replaces them (the other player sees it on their own client when their matches poll). */
+          try { if(window.holoRoomChat) window.holoRoomChat.updateTurnIndicator(); } catch(e){}
         });
         if(window.holoTurn) window.holoTurn.refresh();
         renderRooms();
@@ -28612,6 +28823,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
        loads (the pool file listens for 'holo-room-join' /
        'holo-pool-match'). Posted once: the load event or the 2s
        fallback, whichever lands first. */
+    /* ROOM-CHAT-2026-11-26 (Holo 20:56): remember which match was handed in, so the side panels can show the room chat instead of How to play while a Pool match is open. A room code resolves through the registry's matchId; a solo open never calls handIntoPool, so the slot stays null and solo keeps the how-to. */
+    try { currentPoolMid = (opts && opts.mid) || (opts && opts.room && registry[opts.room] ? registry[opts.room].matchId : null) || null; } catch(e){ currentPoolMid = null; }
     try { location.hash = '#game/8-ball-pool'; } catch(e){}
     var sent = false;
     function send(){
@@ -28668,7 +28881,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     });
   }
   function openRoomsView(){
-    try { if(window.holoShowView) window.holoShowView('friends'); else document.body.setAttribute('data-view', 'friends'); } catch(e){}
+    /* ROOM-CHAT-2026-11-26 (Holo 19:25): Rooms is its own page now — open the Rooms view, not Friends. */
+    try { if(window.holoShowView) window.holoShowView('rooms'); else document.body.setAttribute('data-view', 'rooms'); } catch(e){}
   }
 
   /* ---------- MULTIPLAYER-ENDGAME-2026-11-24 ----------
@@ -28718,11 +28932,13 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       h += '<button type="button" class="btn btn-dark" data-room-reset="' + esc(mid) + '">Reset match</button>';
     }
     h += '<button type="button" class="btn btn-dark" data-room-report="' + esc(mid) + '">Report</button>';
+    /* ROOM-CHAT-2026-11-26: per-room chat (only while the match is live — the rules close the chat when the game ends). */
+    if(m.status === 'waiting' || m.status === 'playing') h += '<button type="button" class="btn btn-light" data-room-chat="' + esc(mid) + '">Chat<span class="dm-count rc-tile-badge" hidden>0</span></button>';
     h += '</div></div>';
     return h;
   }
 
-  /* ---------- Rooms section (own bubble on the Friends page) ---------- */
+  /* ---------- Rooms section (its own page, NOT under Friends — Holo 2026-11-26 21:28 re-confirmed) ---------- */
   function ensureSection(){
     var sec = document.getElementById('roomsSection');
     if(sec) return sec;
@@ -28752,6 +28968,11 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
      "Waiting on other player" when it is not my move. Tapping a tile
      opens that game room. Replaces NEXT-MOVE-TILES-2026-11-24, which
      only tiled my-turn matches. */
+  function createdShort(ts){
+    /* TTT-FIXES-2026-11-26: "Nov 24 · 7:43 PM" — tells near-identical tiles apart. */
+    if(!ts) return '';
+    try { return new Date(ts).toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ' · ' + timeShort(ts); } catch(e){ return ''; }
+  }
   function activeGameTiles(ms, me){
     var mids = Object.keys(ms).sort(function(a, b){ return (ms[b].updatedAt || 0) - (ms[a].updatedAt || 0); });
     var active = mids.filter(function(mid){
@@ -28759,7 +28980,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       return m && (m.status === 'playing' || m.status === 'waiting');
     });
     if(!active.length) return '';
-    var h = '<div class="nextmove-row" role="list" aria-label="Your games — one tile per game">';
+    /* ROOM-CHAT-2026-11-26 (Holo 19:45): returns the tile ITEMS only — renderRooms wraps them with the pool-room tiles in ONE vertical .nextmove-row. */
+    var h = '';
     active.forEach(function(mid){
       var m = ms[mid];
       var oppUid = (m.aUid === me) ? m.bUid : m.aUid;
@@ -28767,61 +28989,59 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       if(!opp || opp === 'Tester') opp = (m.aUid === me) ? m.bName : m.aName;
       var mine = (m.status === 'playing' && m.turn === me) || (m.status === 'waiting' && m.bUid === me);
       var status = mine ? 'Your turn' : 'Waiting on other player';
-      h += '<button type="button" class="nextmove-tile' + (mine ? ' your-turn' : '') + '" role="listitem" data-room-open="' + esc(mid) + '"><b>' + esc(gameTitle(m.game)) + ' vs ' + esc(opp) + '</b><span class="nextmove-status' + (mine ? ' mine' : '') + '">' + status + '</span><span class="nextmove-play">▶ Open room</span></button>';
+      h += '<div class="nextmove-tile-wrap"><button type="button" class="nextmove-tile' + (mine ? ' your-turn' : '') + '" role="listitem" data-room-open="' + esc(mid) + '"><b>' + esc(gameTitle(m.game)) + ' vs ' + esc(opp) + '</b><span class="nextmove-status' + (mine ? ' mine' : '') + '">' + status + '</span><span class="nextmove-play">▶ Open room</span></button>';
+      /* ROOM-CHAT-2026-11-26: per-room chat — the Chat button is a SIBLING of the tile button (a tile is a single <button>, so a button cannot nest inside it). */
+      h += '<button type="button" class="pill dm-act dm-linkbtn rc-tile-chat" data-room-chat="' + esc(mid) + '">Chat<span class="dm-count rc-tile-badge" hidden>0</span></button></div>';
     });
-    return h + '</div>';
+    return h;
   }
-  function roomCardHtml(code, entry, ms, me){
+  /* ROOM-CHAT-2026-11-26 (Holo 19:45, photo): the Pool room is a TILE in
+     the same vertical list as the turn-match tiles — one tile per active
+     game, no separate card below the strip. Replaces roomCardHtml (the
+     card is gone; its state + actions live on the tile now).
+     DEDUPE: a room whose match is already tiled as a turn match
+     (playing/waiting) gets NO second tile — the turn-match tile IS its
+     tile (with the Chat button). That is the TPJVW9 case in Holo's
+     photo: the live 8-Ball Pool vs SummerOf69 match already has a tile
+     in the strip, so the stray card just goes away.
+     The waiting/playing branches from the old card are NOT ported —
+     they are unreachable after the dedupe (every playing/waiting match
+     is tiled). The tile carries the room's state + the same actions
+     the card had (Rematch / Play a different game / Close room /
+     Challenge again / Dismiss / Cancel request / Share link). */
+  function poolRoomTileHtml(code, entry, ms, me){
     var m = entry.matchId ? ms[entry.matchId] : null;
     if(m && matchEnded(m) && !entry.ended){ entry.ended = true; saveRegistry(); }
+    if(m && (m.status === 'playing' || m.status === 'waiting')) return ''; /* deduped — the turn-match tile covers this room */
     var oppName = (entry.role === 'host') ? (entry.guestName || friendName(entry.guestUid)) : (entry.hostName || friendName(entry.hostUid));
     var isHost = entry.hostUid === me;
-    var cls = 'room-card';
-    var status = '', statusCls = '';
+    var status = '', tone = '';
     var acts = '';
     if(entry.withdrawn){
-      status = 'Withdrawn'; statusCls = ' wait';
+      status = 'Withdrawn';
       acts += '<button type="button" class="btn btn-dark dm-mini" data-room-close="' + esc(code) + '">Dismiss</button>';
     } else if(entry.closed){
       return '';
     } else if(m && matchEnded(m)){
-      cls += '';
       if(m.status === 'won'){ var w = m.winner === me ? 'You' : (m.winner === m.aUid ? m.aName : m.bName); status = 'Game over — ' + w + ' won'; }
       else if(m.status === 'draw') status = 'Game over — draw';
       else status = 'Game over — match ended';
       acts += '<button type="button" class="btn btn-light dm-mini" data-room-rematch="' + esc(entry.matchId) + '">Rematch</button>';
       acts += '<button type="button" class="btn btn-dark dm-mini" data-room-diffgame="' + esc(entry.matchId) + '">Play a different game</button>';
       acts += '<button type="button" class="btn btn-dark dm-mini" data-room-close="' + esc(code) + '">Close room</button>';
-    } else if(m && m.status === 'waiting'){
-      if(m.bUid === me){ status = 'Challenge from ' + m.aName + ' — accept?'; statusCls = ' wait';
-        acts += '<button type="button" class="btn btn-light dm-mini" data-room-accept="' + esc(entry.matchId) + '">Accept challenge</button>';
-        acts += '<button type="button" class="btn btn-dark dm-mini" data-room-decline="' + esc(entry.matchId) + '">Decline</button>';
-      } else { status = 'Waiting for ' + m.bName + ' to accept'; statusCls = ' wait';
-        acts += '<button type="button" class="btn btn-dark dm-mini" data-room-decline="' + esc(entry.matchId) + '">Cancel challenge</button>';
-      }
-      acts += '<button type="button" class="btn btn-dark dm-mini" data-room-open="' + esc(entry.matchId) + '">Open room</button>';
-    } else if(m && m.status === 'playing'){
-      if(m.turn === me){ cls += ' your-turn'; status = 'Your turn — shoot!'; }
-      else { status = 'Waiting for ' + (m.turn === m.aUid ? m.aName : m.bName) + '…'; statusCls = ' wait'; }
-      acts += '<button type="button" class="btn btn-light dm-mini" data-room-open="' + esc(entry.matchId) + '">Open room</button>';
-      acts += '<button type="button" class="btn btn-dark dm-mini" data-room-reset="' + esc(entry.matchId) + '">Reset match</button>';
     } else if(roomExpired(entry)){
-      status = 'Invite expired (24h) — unjoined rooms only last a day'; statusCls = ' wait';
+      status = 'Invite expired (24h) — unjoined rooms only last a day'; tone = ' needs';
       acts += '<button type="button" class="btn btn-light dm-mini" data-room-rechallenge="' + esc(code) + '">Challenge again</button>';
       acts += '<button type="button" class="btn btn-dark dm-mini" data-room-close="' + esc(code) + '">Dismiss</button>';
     } else if(entry.pendingFriend && !isMutualFriend(entry.guestUid)){
-      status = 'Requested, waiting — ' + (entry.guestName || 'your friend') + ' must accept your friend request first'; statusCls = ' wait';
+      status = 'Requested, waiting — ' + (entry.guestName || 'your friend') + ' must accept your friend request first'; tone = ' needs';
       acts += '<button type="button" class="btn btn-dark dm-mini" data-room-cancel="' + esc(code) + '">Cancel request</button>';
     } else if(entry.matchId){
-      status = 'Room open'; statusCls = ' wait';
+      status = 'Room open';
       acts += '<button type="button" class="btn btn-light dm-mini" data-room-open="' + esc(entry.matchId) + '">Open room</button>';
     } else {
-      status = 'Waiting for ' + (entry.guestName || 'your friend') + ' to join the room'; statusCls = ' wait';
+      status = 'Waiting for ' + (entry.guestName || 'your friend') + ' to join the room';
       if(isHost) acts += '<button type="button" class="btn btn-dark dm-mini" data-room-cancel="' + esc(code) + '">Cancel request</button>';
-    }
-    if(m && isStuck(m) && (m.status === 'waiting' || m.status === 'playing')){
-      status += ' · Looks stuck — Reset?';
-      if(acts.indexOf('data-room-reset') === -1) acts += '<button type="button" class="btn btn-dark dm-mini" data-room-reset="' + esc(entry.matchId) + '">Reset match</button>';
     }
     /* Share link — host only, only when Holo asks (she taps it; links
        are never auto-created). The guest gets NO share action. */
@@ -28835,12 +29055,25 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           '<p class="room-note">Only you can share this link — your friend can\u2019t re-share it. They\u2019ll need to sign in first (register with an invite code). The link stays good through the game, then it\u2019s used up.</p></div>';
       }
     }
-    var h = '<div class="' + cls + '" data-room-code="' + esc(code) + '">';
-    h += '<div class="room-row"><b>🎱 8-Ball Pool</b><span class="room-status' + statusCls + '">' + esc(status) + '</span></div>';
-    h += '<p class="room-note">vs ' + esc(oppName) + ' · Room ' + esc(code) + (entry.createdAt ? ' · ' + timeShort(entry.createdAt) : '') + '</p>';
-    h += '<div class="room-actions">' + shareBtn + acts + '</div>';
+    var dateLine = createdShort(entry.createdAt);
+    dateLine = dateLine ? (dateLine + ' · Room ' + code) : ('Room ' + code);
+    var h = '<div class="nextmove-tile-wrap"><button type="button" class="nextmove-tile" role="listitem" data-room-tile="' + esc(code) + '"><b>8-Ball Pool vs ' + esc(oppName) + '</b><span class="nextmove-status' + tone + '">' + esc(status) + '</span><span class="nextmove-date">' + esc(dateLine) + '</span><span class="nextmove-play">▶ Open room</span></button>';
+    if(shareBtn || acts) h += '<div class="room-actions">' + shareBtn + acts + '</div>';
     h += sharePanel;
     return h + '</div>';
+  }
+  /* ROOM-CHAT-2026-11-26 (Holo 19:45): tapping a pool-room tile opens
+     it — an ended match opens its match view; an unjoined room opens
+     the pool room itself; an expired / withdrawn / friend-waiting room
+     says so (its action buttons under the tile are the way forward). */
+  function openRoomTile(code){
+    var e = registry[code]; if(!e) return;
+    var m = e.matchId ? matchesCache()[e.matchId] : null;
+    if(m){ openMatch(e.matchId); return; }
+    if(e.withdrawn){ toast('That invite was withdrawn — dismiss it from the list.'); return; }
+    if(roomExpired(e)){ toast('That invite expired after a day — challenge again or dismiss it.'); return; }
+    if(e.pendingFriend && !isMutualFriend(e.guestUid)){ toast('Waiting on the friend request first — they need to accept it before the room opens.'); return; }
+    joinRoom(code);
   }
   function renderRooms(){
     var sec = ensureSection();
@@ -28853,19 +29086,22 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var ms = matchesCache();
     var codes = Object.keys(registry).sort(function(a, b){ return (registry[b].createdAt || 0) - (registry[a].createdAt || 0); });
     var h = '<p class="rooms-sub">One tile per active game — tap a tile to open it. Your game rooms stay open until the game completes.</p>';
-    h += activeGameTiles(ms, me);
-    var cards = '';
+    /* ROOM-CHAT-2026-11-26 (Holo 19:44 + 19:45): ONE vertical list — the turn-match tiles AND the pool-room tiles stack top-to-bottom in the same .nextmove-row. The separate pool-card list below the strip is gone; a room whose match already has a tile is deduped inside poolRoomTileHtml. TTT-FIXES-2026-11-26: the empty-state line showed UNDER the tiles — it shows only when BOTH sources are empty. */
+    var items = activeGameTiles(ms, me);
     codes.forEach(function(code){
       var e = registry[code];
       if(!e || e.closed) return;
-      cards += roomCardHtml(code, e, ms, me);
+      items += poolRoomTileHtml(code, e, ms, me);
     });
-    if(cards){
-      h += '<div class="room-list">' + cards + '</div>';
-    } else {
+    if(items){
+      h += '<div class="nextmove-row" role="list" aria-label="Your games — one tile per game">' + items + '</div>';
+    }
+    if(!items){
       h += '<p class="rooms-sub">No rooms yet — challenge a friend from their card (Duel) or from inside 8-Ball Pool.</p>';
     }
     sec.innerHTML = h;
+    /* ROOM-CHAT-2026-11-26: tiles/cards were just rebuilt — refill the chat badges. */
+    try { if(window.holoRoomChat) window.holoRoomChat.refreshChatBadges(); } catch(e){}
   }
 
   /* ---------- pending-friend withdrawal watch ----------
@@ -28897,18 +29133,20 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   function refreshRooms(){
     var p = null;
     try { if(window.holoTurn && window.holoTurn.refresh) p = window.holoTurn.refresh(); } catch(e){}
-    if(p && p.then) p.then(function(){ renderRooms(); checkPendingFriendWithdrawals(); });
-    else { renderRooms(); checkPendingFriendWithdrawals(); }
+    if(p && p.then) p.then(function(){ renderRooms(); checkPendingFriendWithdrawals(); try { if(window.holoRoomChat) window.holoRoomChat.updateTurnIndicator(); } catch(e){} });
+    else { renderRooms(); checkPendingFriendWithdrawals(); try { if(window.holoRoomChat) window.holoRoomChat.updateTurnIndicator(); } catch(e){} }
   }
 
   /* ---------- click delegation (survives re-renders) ---------- */
   document.addEventListener('click', function(ev){
-    var t = ev.target && ev.target.closest ? ev.target.closest('[data-room-accept],[data-room-decline],[data-room-open],[data-room-rematch],[data-room-diffgame],[data-room-reset],[data-room-report],[data-room-cancel],[data-room-close],[data-room-share],[data-room-copy],[data-room-share-send],[data-room-rechallenge],[data-room-pickgame]') : null;
+    var t = ev.target && ev.target.closest ? ev.target.closest('[data-room-accept],[data-room-decline],[data-room-open],[data-room-rematch],[data-room-diffgame],[data-room-reset],[data-room-report],[data-room-cancel],[data-room-close],[data-room-share],[data-room-copy],[data-room-share-send],[data-room-rechallenge],[data-room-pickgame],[data-room-chat],[data-room-tile]') : null;
     if(!t) return;
     var mid, code, m, me;
     if(t.hasAttribute('data-room-accept')){ acceptMatch(t.getAttribute('data-room-accept')); return; }
     if(t.hasAttribute('data-room-decline')){ declineMatch(t.getAttribute('data-room-decline')); return; }
     if(t.hasAttribute('data-room-open')){ openMatch(t.getAttribute('data-room-open')); return; }
+    if(t.hasAttribute('data-room-chat')){ if(window.holoRoomChat) window.holoRoomChat.openBox(t.getAttribute('data-room-chat')); return; }
+    if(t.hasAttribute('data-room-tile')){ openRoomTile(t.getAttribute('data-room-tile')); return; }
     if(t.hasAttribute('data-room-reset')){ resetMatch(t.getAttribute('data-room-reset')); return; }
     if(t.hasAttribute('data-room-report')){
       if(typeof fbOpen === 'function'){ try { fbOpen('8-ball-pool'); } catch(e){ toast('Report is in the game view — open 8-Ball Pool first.'); } }
@@ -28985,7 +29223,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 
   /* ---------- boot ---------- */
   try {
-    new MutationObserver(function(){ if(document.body.getAttribute('data-view') === 'friends') renderRooms(); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] });
+    new MutationObserver(function(){ if(document.body.getAttribute('data-view') === 'rooms') renderRooms(); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] });
   } catch(e){}
   setInterval(function(){ if(myUid()) refreshRooms(); }, 20000);
   setTimeout(function(){ renderRooms(); refreshRooms(); }, 2500);
@@ -28993,6 +29231,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   window.holoRooms = {
     challengePool:challengePool, joinRoom:joinRoom, openMatch:openMatch, resetMatch:resetMatch,
     acceptMatch:acceptMatch, declineMatch:declineMatch, cancelRoom:cancelRoom,
+    currentMatch:function(){ return currentPoolMid; }, clearCurrentMatch:function(){ currentPoolMid = null; },
     poolMatchHtml:poolMatchHtml, isStuck:isStuck, roomPendingFriend:roomPendingFriend,
     renderRooms:renderRooms, refresh:refreshRooms, roomLink:roomLink,
     rooms:function(){ return JSON.parse(JSON.stringify(registry)); }
@@ -29001,8 +29240,1087 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 </script>
 
 <style>
+/* ROOM-CHAT-2026-11-26 (Holo 2026-11-26 17:58 + 19:25): per-match room chat.
+   One chat per turn match (room), between exactly the two players.
+   Laptop: docked box in the side space (fixed, bottom-right — the
+   shared chat-box shell; the DM chat boxes ride this shell later).
+   Phone: one floating bubble that pops open into a bottom sheet.
+   Only the chat's own message list scrolls, inside the box — the
+   page and the game pane never scroll. Turn indicator: a "Your turn"
+   button in the top nav, same line as the Inbox bell, shown only
+   when a match needs the player's move; it taps through to Rooms. */
+#turnIndicatorBtn{border-color:#ffd43b!important;color:#ffd43b;box-shadow:0 0 10px rgba(255,212,59,.35)}
+#turnIndicatorBtn[hidden]{display:none!important}
+.nav-line-btns #turnIndicatorBtn{order:7}
+#turnBadge{display:inline-block;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#ffd43b;color:#0a0620;font-size:11px;font-weight:800;line-height:18px;text-align:center;margin-left:6px;vertical-align:middle}
+#turnBadge[hidden]{display:none!important}
+#chatDock{position:fixed;right:16px;bottom:16px;z-index:12500;display:flex;gap:10px;align-items:flex-end;pointer-events:none}
+.rc-box,.rc-bar{pointer-events:auto}
+.rc-box{width:320px;height:420px;max-height:calc(100vh - 32px);background:linear-gradient(180deg,#171040,#0e0828 75%);border:2px solid var(--violet);border-radius:18px;box-shadow:0 0 0 3px #0a0620,0 0 26px rgba(139,92,255,.35);overflow:hidden;display:flex;flex-direction:column}
+.rc-box::before{content:"";display:block;height:6px;background:linear-gradient(90deg,var(--pink),var(--violet),var(--blue),var(--cyan));flex:0 0 auto}
+.rc-head{display:flex;align-items:flex-start;gap:8px;padding:10px 12px 0}
+.rc-head-main{flex:1 1 auto;min-width:0}
+.rc-head-main b{display:block;font-family:var(--pixel);font-size:11px;line-height:1.6;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc-turn{display:block;font-size:12px;color:#b8f4ff;margin-top:2px}
+.rc-head-btns{flex:0 0 auto;display:flex;gap:4px}
+.rc-head-btns button{background:none;border:1px solid #453070;border-radius:8px;color:#e9e4ff;font-size:15px;line-height:1;min-width:30px;min-height:30px;cursor:pointer;padding:2px 6px}
+.rc-head-btns button:hover{border-color:#ffd43b;color:#ffd43b}
+.rc-menu{margin:8px 12px 0;border:2px solid var(--violet);border-radius:12px;background:#241a3d;padding:6px;display:flex;flex-direction:column;gap:4px}
+.rc-menu[hidden]{display:none!important}
+.rc-menu button{background:none;border:0;color:#e9e4ff;font-family:inherit;font-size:13.5px;font-weight:700;text-align:left;padding:8px 10px;border-radius:8px;cursor:pointer}
+.rc-menu button:hover{background:#ffd43b22;color:#ffd43b}
+.rc-msgs{flex:1 1 auto;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:12px 14px}
+.rc-note{padding:0 14px 12px;color:#ffb3d9;font-size:13.5px;font-weight:700}
+.rc-note[hidden]{display:none!important}
+.rc-bar{width:210px;background:#0a0620;border:2px solid #8b5cff;border-radius:12px;padding:8px 10px;color:#e9e4ff;display:flex;gap:8px;align-items:center;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;text-align:left;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+.rc-bar:hover{border-color:#ffd43b}
+.rc-bar .rc-bar-main{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc-bar .dm-count{flex:0 0 auto}
+.rc-bar .rc-bar-x{flex:0 0 auto;background:none;border:0;color:#b8f4ff;font-size:16px;cursor:pointer;padding:0 2px}
+.rc-bar .rc-bar-x:hover{color:#ff2e9a}
+/* ROOM-CHAT-2026-11-26 (Holo 2026-11-26 20:06): the room chat keyboard looks the SAME as the registration Code Name board — same panel, same keys. The board REUSES the registration classes (hs-name-panel / hs-name-board / hs-key / hs-key-del) so the look is identical by construction, not a copy: one consistent keyboard look across the site. Only placement differs (margin inside the box) and the Space key stretches to fill its row. The DM keyboard (dm-kb / gold dm-key) is a different look and is NOT used here. Phone sheet keeps the system keyboard (plan §3 — a board is too tall for a sheet), so the board lives in the desktop box only. */
+.rc-box .hs-name-panel.rc-kb{margin:0 12px 12px;flex:0 0 auto}
+.rc-box .hs-name-panel.rc-kb[hidden]{display:none!important}
+.rc-kb .hs-key.space{flex:1 1 64px}
+.rc-kb .hs-key.action{border-color:var(--pink);color:#fff}
+.rc-kb .hs-key.shift-on{border-color:var(--pink);background:#3d0a2e;color:#fff;box-shadow:0 0 10px rgba(255,46,154,.35)}
+.rc-box.rc-kb-on{height:600px}
+.dm-tool.rc-kb-on{border-color:#ffd43b;background:#ffd43b22;box-shadow:0 0 8px rgba(255,212,59,.5)}
+/* ROOM-CHAT-2026-11-26 (Holo 20:56): the chat docked in the side panel (desktop room views) — messages scroll up and down inside their own box (the TTT panels are overflow:hidden, so the scroll lives on the messages area, not the panel); compose + registration keyboard below, same hs-key board as the dock box. */
+.rc-panel-chat .rc-msgs{max-height:340px;overflow-y:auto}
+.rc-panel-chat .dm-compose{margin-top:10px}
+.rc-panel-chat .hs-name-panel.rc-kb{margin:10px 0 0;flex:0 0 auto}
+.rc-panel-chat .hs-name-panel.rc-kb[hidden]{display:none!important}
+.rc-tile-chat{margin-top:6px;width:100%}
+.nextmove-tile-wrap{display:flex;flex-direction:column;gap:0;flex:1 1 auto;width:100%;min-width:0}
+.nextmove-tile-wrap .nextmove-tile{flex:1 1 auto}
+#rcBubble{position:fixed;right:16px;bottom:16px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#8b5cff,#ff2e9a);color:#fff;font-size:24px;border:2px solid #fff;z-index:12500;display:none;place-items:center;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,.5)}
+#rcBubble .dm-count{position:absolute;top:-4px;right:-4px}
+#rcSheet{position:fixed;left:12px;right:12px;bottom:12px;height:70vh;z-index:12500;background:linear-gradient(180deg,#171040,#0e0828 75%);border:2px solid var(--violet);border-radius:18px;box-shadow:0 0 0 3px #0a0620,0 0 26px rgba(139,92,255,.35);display:none;flex-direction:column;overflow:hidden}
+#rcSheet.open{display:flex}
+.rc-switcher{margin:8px 12px 0;border:2px solid var(--violet);border-radius:12px;background:#241a3d;padding:6px;display:flex;flex-direction:column;gap:4px;max-height:132px;overflow-y:auto}
+.rc-switcher[hidden]{display:none!important}
+.rc-switcher button{background:none;border:0;color:#e9e4ff;font-family:inherit;font-size:13.5px;font-weight:700;text-align:left;padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;gap:8px;align-items:center}
+.rc-switcher button:hover{background:#ffd43b22}
+.rc-switcher button.on{background:#ffd43b22;color:#ffd43b}
+.rc-switcher .dm-count{flex:0 0 auto}
+@media (max-width:768px){
+  #chatDock{display:none!important}
+  #rcBubble{display:grid}
+  body.rc-bubble-on #notifyPopups{bottom:84px}
+}
+@media (min-width:769px){
+  #rcBubble{display:none!important}
+  #rcSheet{display:none!important}
+}
+body.rc-dock-on #notifyPopups{bottom:448px}
+</style>
+<script>
+/* ROOM-CHAT-2026-11-26 (Holo 2026-11-26 17:58 + 19:25): per-match room
+   chat + top-nav "Your turn" indicator + Rooms as its own page.
+   One chat per turnMatches/<mid>, between exactly the two players.
+   Laptop: docked box bottom-right in the side space (the shared
+   chat-box shell — DM chat boxes ride this shell later; cap 2 open
+   room chats, opening a 3rd auto-minimizes the oldest). Phone: one
+   floating bubble for all room chats, opening a bottom sheet with a
+   room switcher. Rules: 500 chars, 20/min, no links, mask on display
+   (same as DMs). Block + mute follow the DM rules; sending stops
+   when the match is no longer waiting/playing (rules-enforced).
+   The chat cannot light up until Holo publishes the pending rules
+   (roomChats block) — until then sends fail soft with "Room chat
+   needs one more Arcade update". The turn indicator REPLACES the DM
+   "your turn" notices (Holo 19:25): the automatic per-move / accept
+   / rematch turn nudges no longer send; the indicator shows when a
+   match needs the player's move and taps through to Rooms. The
+   manual Remind button still sends its one nudge (deliberate tap,
+   5-min guard). Game-over / withdrawn / reset notices are untouched. */
+(function(){
+  var FB_API_KEY='AIzaSyB14R-XM3k7Nab5kgizi3joOK_pI-uK9Ak';
+  var FB_RTDB = 'https://holos-arcade-default-rtdb.firebaseio.com';
+  var AUTH_KEY = 'holos-firebase-auth';
+  var MAX_LEN = 500, RATE_MAX = 20, RATE_WINDOW = 60000;
+  var STORE_KEY = 'holos-arcade-roomchat-v1';
+  var PROFANITY = ['damn','hell','shit','fuck','bitch','bastard','crap','dick','piss','asshole','douche'];
+  var FALLBACK_EMOJIS = ['😀','😂','😍','😜','😎','🤔','😢','😡','👍','👎','👏','🙌','🎮','🏆','🔥','❤️','💙','🎉','✨','🐶','🐱','🦆','👾','🤖','👻','⚡'];
+  function loadAuth(){ try { var v = JSON.parse(localStorage.getItem(AUTH_KEY)); if(v && v.idToken && v.uid) return v; } catch(e){} return null; }
+  function freshToken(){
+    var a = loadAuth(); if(!a) return Promise.resolve(null);
+    if(a.exp && a.exp > Date.now() + 60000) return Promise.resolve(a.idToken);
+    if(!a.refreshToken) return Promise.resolve(null);
+    return fetch('https://securetoken.googleapis.com/v1/token?key=' + FB_API_KEY, { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body:'grant_type=refresh_token&refresh_token=' + encodeURIComponent(a.refreshToken) })
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if(j && j.id_token){ a.idToken = j.id_token; a.refreshToken = j.refresh_token || a.refreshToken; a.exp = Date.now() + ((parseInt(j.expires_in,10)||3600)*1000); try { localStorage.setItem(AUTH_KEY, JSON.stringify(a)); } catch(e){} return a.idToken; } return null; })
+      .catch(function(){ return null; });
+  }
+  function api(method, path, body){
+    return freshToken().then(function(tok){
+      if(!tok) return null;
+      var q = '', p = path, qi = path.indexOf('?');
+      if(qi !== -1){ p = path.slice(0, qi); q = path.slice(qi + 1); }
+      var url = FB_RTDB + p + '.json?auth=' + encodeURIComponent(tok) + (q ? '&' + q : '');
+      return fetch(url, { method:method, headers:{ 'Content-Type':'application/json' }, body: body ? JSON.stringify(body) : undefined })
+        .then(function(r){ if(!r.ok) return null; if(method === 'DELETE') return true; return r.json().catch(function(){ return true; }); }).catch(function(){ return null; });
+    }).catch(function(){ return null; });
+  }
+  function esc(s){ var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+  function maskText(s){
+    var out = String(s || '');
+    PROFANITY.forEach(function(w){
+      var re = new RegExp('\\b' + w + '\\b', 'gi');
+      out = out.replace(re, function(m){ return m.charAt(0) + '*'.repeat(Math.max(1, m.length - 1)); });
+    });
+    return out;
+  }
+  function whenShort(ts){
+    try {
+      var d = new Date(ts); if(isNaN(d)) return '';
+      var now = new Date();
+      var sameDay = d.toDateString() === now.toDateString();
+      var t = d.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+      if(sameDay) return t;
+      return d.toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ' ' + t;
+    } catch(e){ return ''; }
+  }
+  function myUid(){ try { var v = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); return (v && v.uid) ? String(v.uid) : null; } catch(e){ return null; } }
+  function isPhone(){ try { return window.matchMedia && window.matchMedia('(max-width:768px)').matches; } catch(e){ return false; } }
+  var myNameCache = null;
+  function myCodeName(){
+    if(myNameCache) return Promise.resolve(myNameCache);
+    var uid = myUid(); if(!uid) return Promise.resolve('Tester');
+    return api('GET', '/users/' + encodeURIComponent(uid) + '/username').then(function(n){
+      if(typeof n === 'string' && n){ myNameCache = n; return n; }
+      return 'Tester';
+    });
+  }
+  function liveName(uid, fallback){
+    if(!uid) return Promise.resolve(fallback || 'Tester');
+    return api('GET', '/users/' + encodeURIComponent(uid) + '/username').then(function(n){
+      if(typeof n === 'string' && n) return n;
+      return fallback || 'Tester';
+    });
+  }
+  function matchOf(mid){
+    try { var ms = (window.holoTurn && typeof window.holoTurn.matches === 'function') ? window.holoTurn.matches() : {}; return ms[mid] || null; } catch(e){ return null; }
+  }
+  function oppOf(m, me){
+    if(!m) return { uid:null, name:'Tester' };
+    var ouid = (m.aUid === me) ? m.bUid : m.aUid;
+    var oname = (m.aUid === me) ? (m.bName || 'Tester') : (m.aName || 'Tester');
+    return { uid:ouid, name:oname };
+  }
+  function gameNameOf(m){
+    try { if(window.holoTurn && typeof window.holoTurn.gameName === 'function') return window.holoTurn.gameName(m.game); } catch(e){}
+    return m.game || 'Game';
+  }
+  function gameSlugOf(m){ return m.game || 'tic-tac-toe'; }
+  function statusLineOf(m, me){
+    try { if(window.holoTurn && typeof window.holoTurn.statusText === 'function') return window.holoTurn.statusText(m, me); } catch(e){}
+    if(!m) return '';
+    if(m.status === 'playing') return (m.turn === me) ? 'Your turn' : 'Waiting on opponent';
+    if(m.status === 'waiting') return (m.bUid === me) ? 'Accept?' : 'Waiting to be accepted';
+    return m.status || '';
+  }
+
+  /* ---------- state ---------- */
+  var boxes = {}; /* mid -> {el, bar, msgsEl, inputEl, sendEl, noteEl, menuEl, pollTimer, blockedMe, blockedByMe, failSoft, lastCount} */
+  var openOrder = []; /* mids, oldest first */
+  var sheetMid = null, sheetPollTimer = null;
+  var panelMid = null, panelPollTimer = null, panelBox = null; /* ROOM-CHAT-2026-11-26 (Holo 20:56): the room chat docked in the side panel (desktop room views) — the mid shown there + its poll + its wired elements. Mirrors sheetMid for the phone sheet. */
+  var mutedCache = {}; /* mid -> true (own-record /users/<uid>/roomChatsMuted) */
+  var readCache = {}; /* mid -> timestamp of my last read (server /roomChats/<mid>/read/<uid>) */
+  var unreadCache = {}; /* mid -> unread count (0 = none) */
+  var sentTimes = [];
+  var failSoftShown = {}; /* mid -> true once the "needs one more update" note is up */
+
+  function loadPersist(){
+    try { var v = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); return (v && typeof v === 'object') ? v : { open:[], sheetMid:null }; } catch(e){ return { open:[], sheetMid:null }; }
+  }
+  function savePersist(){
+    try {
+      var open = openOrder.map(function(mid){ var b = boxes[mid]; return { mid:mid, min:!!(b && b.minimized) }; });
+      localStorage.setItem(STORE_KEY, JSON.stringify({ open:open, sheetMid:sheetMid }));
+    } catch(e){}
+  }
+
+  /* ---------- mute / block / read ---------- */
+  function isMuted(mid){
+    if(mutedCache[mid]) return true;
+    try { if(window.holoTurn && typeof window.holoTurn.isMuted === 'function' && window.holoTurn.isMuted(mid)) return true; } catch(e){}
+    return false;
+  }
+  function loadMuted(){
+    var uid = myUid(); if(!uid) return;
+    api('GET', '/users/' + encodeURIComponent(uid) + '/roomChatsMuted').then(function(d){
+      if(d && typeof d === 'object'){ Object.keys(d).forEach(function(k){ if(d[k]) mutedCache[k] = true; }); }
+    });
+  }
+  function toggleMute(mid){
+    var uid = myUid(); if(!uid || !mid) return;
+    if(mutedCache[mid]){
+      api('DELETE', '/users/' + encodeURIComponent(uid) + '/roomChatsMuted/' + encodeURIComponent(mid)).then(function(){
+        delete mutedCache[mid]; syncBoxMenu(mid); toast('Room chat unmuted — new messages will badge again.');
+      });
+    } else {
+      api('PUT', '/users/' + encodeURIComponent(uid) + '/roomChatsMuted/' + encodeURIComponent(mid), true).then(function(){
+        mutedCache[mid] = true; syncBoxMenu(mid); refreshChatBadges(); toast('Room chat muted — no badge for new messages here.');
+      });
+    }
+  }
+  function markRead(mid){
+    var uid = myUid(); if(!uid || !mid) return;
+    var now = Date.now();
+    readCache[mid] = now; unreadCache[mid] = 0;
+    api('PUT', '/roomChats/' + encodeURIComponent(mid) + '/read/' + encodeURIComponent(uid), now);
+    syncBadges();
+  }
+  function rateOk(){
+    var now = Date.now();
+    sentTimes = sentTimes.filter(function(t){ return now - t < RATE_WINDOW; });
+    if(sentTimes.length >= RATE_MAX){ toast('Slow down a little — too many messages at once.'); return false; }
+    sentTimes.push(now); return true;
+  }
+
+  /* ---------- turn indicator (top nav, same line as Inbox) ---------- */
+  function turnActionCount(){
+    var me = myUid(); if(!me) return 0;
+    var ms = (window.holoTurn && typeof window.holoTurn.matches === 'function') ? window.holoTurn.matches() : {};
+    var n = 0;
+    Object.keys(ms).forEach(function(mid){
+      var m = ms[mid]; if(!m) return;
+      if(isMuted(mid)) return;
+      if(m.status === 'playing' && m.turn === me) n++;
+      else if(m.status === 'waiting' && m.bUid === me) n++;
+    });
+    return n;
+  }
+  function updateTurnIndicator(){
+    var btn = document.getElementById('turnIndicatorBtn');
+    if(!btn) return;
+    var n = turnActionCount();
+    var badge = document.getElementById('turnBadge');
+    if(badge){ badge.textContent = String(n); badge.hidden = n <= 0; }
+    btn.hidden = n <= 0;
+    btn.setAttribute('aria-label', n > 0 ? ('Your turn in ' + n + (n === 1 ? ' game' : ' games') + ' — open Rooms') : 'Your turn');
+  }
+
+  /* ---------- dock / bubble / sheet shell ---------- */
+  function ensureDock(){
+    var d = document.getElementById('chatDock');
+    if(!d){
+      d = document.createElement('div'); d.id = 'chatDock';
+      document.body.appendChild(d);
+    }
+    return d;
+  }
+  function ensureBubble(){
+    var b = document.getElementById('rcBubble');
+    if(!b){
+      b = document.createElement('button'); b.type = 'button'; b.id = 'rcBubble'; b.setAttribute('aria-label', 'Room chats'); b.title = 'Room chats';
+      b.innerHTML = '💬<span class="dm-count" id="rcBubbleBadge" hidden>0</span>';
+      b.addEventListener('click', function(){
+        var mid = mostRecentUnread() || sheetMid || mostRecentActive();
+        if(mid) openSheet(mid); else toast('No active room chats right now.');
+      });
+      document.body.appendChild(b);
+    }
+    return b;
+  }
+  function ensureSheet(){
+    var s = document.getElementById('rcSheet');
+    if(!s){
+      s = document.createElement('div'); s.id = 'rcSheet';
+      s.innerHTML = '<div class="rc-head"><div class="rc-head-main"><b id="rcSheetTitle">Room chat</b><span class="rc-turn" id="rcSheetTurn"></span></div><div class="rc-head-btns"><button type="button" id="rcSheetMenuBtn" aria-label="More">•••</button><button type="button" id="rcSheetClose" aria-label="Close">×</button></div></div>' +
+        '<div class="rc-menu" id="rcSheetMenu" hidden><button type="button" data-rc-sheet-act="mute">Mute</button><button type="button" data-rc-sheet-act="report">Report</button><button type="button" data-rc-sheet-act="block">Block</button></div>' +
+        '<div class="rc-switcher" id="rcSwitcher" hidden></div>' +
+        '<div class="rc-msgs" id="rcSheetMsgs"></div>' +
+        '<div class="rc-note" id="rcSheetNote" hidden></div>' +
+        '<div class="dm-compose"><input id="rcSheetInput" maxlength="500" placeholder="Type a message…" autocomplete="off"><button class="dm-tool" type="button" id="rcSheetEmojiBtn" aria-label="Emoji">😀</button><button class="dm-tool" type="button" id="rcSheetSend" aria-label="Send">➤</button></div>' +
+        '<div class="dm-emoji-panel rc-emoji-panel" id="rcSheetEmojiPanel" hidden><p class="dm-panel-label">Emoji</p><div class="dm-emoji-grid" id="rcSheetEmojiGrid"></div></div>';
+      document.body.appendChild(s);
+      s.querySelector('#rcSheetClose').addEventListener('click', closeSheet);
+      s.querySelector('#rcSheetMenuBtn').addEventListener('click', function(){ var m = s.querySelector('#rcSheetMenu'); if(m) m.hidden = !m.hidden; });
+      s.querySelector('#rcSheetMenu').addEventListener('click', function(ev){
+        var b = ev.target && ev.target.closest ? ev.target.closest('[data-rc-sheet-act]') : null;
+        if(!b || !sheetMid) return;
+        var act = b.getAttribute('data-rc-sheet-act');
+        s.querySelector('#rcSheetMenu').hidden = true;
+        if(act === 'mute') toggleMute(sheetMid);
+        else if(act === 'block') blockRoom(sheetMid);
+        else if(act === 'report') reportRoom(sheetMid);
+      });
+      s.querySelector('#rcSheetSend').addEventListener('click', function(){ sendSheet(); });
+      s.querySelector('#rcSheetInput').addEventListener('keydown', function(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); sendSheet(); } });
+      s.querySelector('#rcSheetEmojiBtn').addEventListener('click', function(){
+        var p = s.querySelector('#rcSheetEmojiPanel'); if(!p) return;
+        p.hidden = !p.hidden;
+        if(!p.hidden) fillEmojiGrid(s.querySelector('#rcSheetEmojiGrid'), s.querySelector('#rcSheetInput'));
+      });
+    }
+    return s;
+  }
+  function ensureIndicator(){
+    var line = document.querySelector('.nav-line-btns');
+    if(!line) return null;
+    var btn = document.getElementById('turnIndicatorBtn');
+    if(!btn){
+      btn = document.createElement('button');
+      btn.type = 'button'; btn.id = 'turnIndicatorBtn'; btn.className = 'nav-actbtn';
+      btn.setAttribute('aria-label', 'Your turn'); btn.title = 'Your turn — open Rooms';
+      btn.innerHTML = '<span class="ti-label">Your turn</span><span id="turnBadge" hidden>0</span>';
+      btn.hidden = true;
+      btn.addEventListener('click', function(){ try { if(window.holoShowView) window.holoShowView('rooms'); } catch(e){} });
+      var bell = document.getElementById('inboxBellBtn');
+      if(bell && bell.nextSibling) line.insertBefore(btn, bell.nextSibling);
+      else line.appendChild(btn);
+    }
+    return btn;
+  }
+  function buildUI(){
+    ensureDock(); ensureBubble(); ensureSheet(); ensureIndicator();
+    updateTurnIndicator(); syncBadges();
+  }
+
+  /* ---------- badges ---------- */
+  function totalUnread(){
+    var n = 0;
+    Object.keys(unreadCache).forEach(function(mid){ if(!isMuted(mid)) n += (unreadCache[mid] || 0); });
+    return n;
+  }
+  function mostRecentUnread(){
+    var me = myUid(); if(!me) return null;
+    var ms = (window.holoTurn && typeof window.holoTurn.matches === 'function') ? window.holoTurn.matches() : {};
+    var best = null, bestAt = 0;
+    Object.keys(unreadCache).forEach(function(mid){
+      if(!(unreadCache[mid] > 0) || isMuted(mid)) return;
+      var m = ms[mid]; if(!m) return;
+      var at = m.updatedAt || 0;
+      if(at >= bestAt){ bestAt = at; best = mid; }
+    });
+    return best;
+  }
+  function mostRecentActive(){
+    var me = myUid(); if(!me) return null;
+    var ms = (window.holoTurn && typeof window.holoTurn.matches === 'function') ? window.holoTurn.matches() : {};
+    var best = null, bestAt = 0;
+    Object.keys(ms).forEach(function(mid){
+      var m = ms[mid]; if(!m || (m.status !== 'playing' && m.status !== 'waiting')) return;
+      var at = m.updatedAt || 0;
+      if(at >= bestAt){ bestAt = at; best = mid; }
+    });
+    return best;
+  }
+  function syncBadges(){
+    /* tile + card chat buttons (rebuilt by renderRooms every 20s — refill after each render) + match-view Chat buttons */
+    document.querySelectorAll('[data-room-chat],[data-turn-chat]').forEach(function(b){
+      var mid = b.getAttribute('data-room-chat') || b.getAttribute('data-turn-chat');
+      var badge = b.querySelector('.rc-tile-badge');
+      if(!badge) return;
+      var n = unreadCache[mid] || 0;
+      badge.textContent = String(n);
+      badge.hidden = !(n > 0) || isMuted(mid);
+    });
+    /* minimized bars */
+    Object.keys(boxes).forEach(function(mid){
+      var b = boxes[mid]; if(!b || !b.bar) return;
+      var badge = b.bar.querySelector('.dm-count');
+      if(!badge) return;
+      var n = unreadCache[mid] || 0;
+      badge.textContent = String(n);
+      badge.hidden = !(n > 0) || isMuted(mid);
+    });
+    /* phone bubble — only visible when there is a room chat to open */
+    var bb = document.getElementById('rcBubbleBadge');
+    var total = totalUnread();
+    if(bb){ bb.textContent = String(total); bb.hidden = !(total > 0); }
+    var bubble = document.getElementById('rcBubble');
+    var anyBox = openOrder.length > 0 || !!sheetMid;
+    var hasActive = !!mostRecentActive();
+    if(bubble) bubble.style.display = (total > 0 || anyBox || hasActive) ? '' : 'none';
+    try { document.body.classList.toggle('rc-bubble-on', total > 0 || anyBox); } catch(e){}
+    /* dock class lifts pop-ups above open boxes on laptop */
+    try { document.body.classList.toggle('rc-dock-on', openOrder.some(function(mid){ var b = boxes[mid]; return b && !b.minimized; })); } catch(e){}
+    renderSwitcher();
+  }
+  function refreshChatBadges(){
+    var me = myUid(); if(!me) return;
+    var ms = (window.holoTurn && typeof window.holoTurn.matches === 'function') ? window.holoTurn.matches() : {};
+    var mids = Object.keys(ms).filter(function(mid){
+      var m = ms[mid];
+      return m && (m.status === 'playing' || m.status === 'waiting') && !isMuted(mid);
+    });
+    if(!mids.length){ syncBadges(); return; }
+    var jobs = mids.map(function(mid){
+      var readP = (readCache[mid] !== undefined)
+        ? Promise.resolve(readCache[mid])
+        : api('GET', '/roomChats/' + encodeURIComponent(mid) + '/read/' + encodeURIComponent(me)).then(function(v){ readCache[mid] = (typeof v === 'number') ? v : 0; return readCache[mid]; });
+      return Promise.all([
+        api('GET', '/roomChats/' + encodeURIComponent(mid) + '/lastMessageAt'),
+        api('GET', '/roomChats/' + encodeURIComponent(mid) + '/lastFrom'),
+        readP
+      ]).then(function(res){
+        var lastAt = (typeof res[0] === 'number') ? res[0] : 0;
+        var lastFrom = res[1] || null;
+        var readAt = (typeof res[2] === 'number') ? res[2] : 0;
+        unreadCache[mid] = (lastAt > readAt && lastFrom && lastFrom !== me) ? 1 : 0;
+      });
+    });
+    Promise.all(jobs).then(function(){ syncBadges(); });
+  }
+
+  /* ---------- message render / load / send (shared by box + sheet) ---------- */
+  function bubbleHtml(m, uid){
+    var mine = m.fromUid === uid;
+    var inner = '';
+    if(m.kind === 'sticker'){ inner = esc('[sticker]'); }
+    else inner = esc(maskText(m.text || ''));
+    var rep = (!mine) ? '<button type="button" class="dm-report" data-rc-report="' + esc(m.id) + '">Report this message</button>' : '';
+    return '<div class="dm-bubble ' + (mine ? 'mine' : 'theirs') + '">' + inner + '<span class="dm-when">' + esc(whenShort(m.createdAt)) + '</span>' + rep + '</div>';
+  }
+  function wireReports(boxEl, mid, msgs){
+    boxEl.querySelectorAll('[data-rc-report]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var id = b.getAttribute('data-rc-report');
+        var m = null; msgs.forEach(function(x){ if(x.id === id) m = x; });
+        if(m) reportRoomMessage(mid, m);
+      });
+    });
+  }
+  function loadMessages(mid){
+    var b = boxes[mid];
+    var uid = myUid(); if(!uid || !mid) return Promise.resolve(false);
+    return api('GET', '/roomChats/' + encodeURIComponent(mid) + '/blockedBy').then(function(bl){
+      if(b){ b.blockedMe = !!(bl && bl[uid]); b.blockedByMe = !!(bl && bl[oppOf(matchOf(mid), uid).uid]); syncBoxMenu(mid); }
+      var q = '?orderBy=' + encodeURIComponent('"$key"') + '&limitToLast=50';
+      return api('GET', '/roomChats/' + encodeURIComponent(mid) + '/messages' + q);
+    }).then(function(data){
+      var msgs = [];
+      if(data && typeof data === 'object'){
+        Object.keys(data).forEach(function(id){ var m = data[id] || {}; m.id = id; msgs.push(m); });
+        msgs.sort(function(x, y){ return (x.createdAt || 0) - (y.createdAt || 0); });
+      }
+      if(b && b.el){
+        var box = b.msgsEl;
+        if(!msgs.length){ box.innerHTML = '<p class="dm-empty">Say hi — only the two of you can see this chat.</p>'; }
+        else {
+          box.innerHTML = msgs.map(function(m){ return bubbleHtml(m, uid); }).join('');
+          wireReports(b.el, mid, msgs);
+        }
+        box.scrollTop = box.scrollHeight;
+        b.lastCount = msgs.length;
+      }
+      if(sheetMid === mid){
+        var s = document.getElementById('rcSheet');
+        var box = s ? s.querySelector('#rcSheetMsgs') : null;
+        if(box){
+          if(!msgs.length){ box.innerHTML = '<p class="dm-empty">Say hi — only the two of you can see this chat.</p>'; }
+          else {
+            box.innerHTML = msgs.map(function(m){ return bubbleHtml(m, uid); }).join('');
+            wireReports(s, mid, msgs);
+          }
+          box.scrollTop = box.scrollHeight;
+        }
+      }
+      /* ROOM-CHAT-2026-11-26 (Holo 20:56): the side-panel chat renders from the same fetch — one source of truth for box, sheet and panel. */
+      if(panelMid === mid && panelBox && panelBox.msgsEl){
+        var pb = panelBox.msgsEl;
+        if(!msgs.length){ pb.innerHTML = '<p class="dm-empty">Say hi — only the two of you can see this chat.</p>'; }
+        else {
+          pb.innerHTML = msgs.map(function(m){ return bubbleHtml(m, uid); }).join('');
+          wireReports(panelBox.el, mid, msgs);
+        }
+        pb.scrollTop = pb.scrollHeight;
+      }
+      if(b || sheetMid === mid || panelMid === mid) markRead(mid);
+      return true;
+    });
+  }
+  function sendMessage(mid, text){
+    var m = matchOf(mid); var me = myUid();
+    if(!m || !me) return;
+    var b = boxes[mid];
+    if(b && (b.blockedMe || b.blockedByMe)){ toast('You cannot message this tester right now.'); return; }
+    if(panelMid === mid && panelBox && (panelBox.blockedMe || panelBox.blockedByMe)){ toast('You cannot message this tester right now.'); return; }
+    if(!rateOk()) return;
+    var bodyText = String(text || '').trim();
+    if(!bodyText){ toast('Type a message first, agent.'); return; }
+    if(bodyText.length > MAX_LEN){ toast('Keep it under 500 characters, agent.'); return; }
+    if(/https?:\/\/|www\./i.test(bodyText)){ toast('Links are not allowed in room chats — type it out instead.'); return; }
+    var opp = oppOf(m, me);
+    var preview = bodyText.slice(0, 80);
+    myCodeName().then(function(n){
+      var body = { fromUid: me, fromName: n, text: bodyText, kind: 'text', createdAt: Date.now() };
+      return api('POST', '/roomChats/' + encodeURIComponent(mid) + '/messages', body);
+    }).then(function(r){
+      if(r === null){
+        failSoftShown[mid] = true;
+        if(b) showFailSoft(mid);
+        if(sheetMid === mid) showSheetFailSoft();
+        if(panelMid === mid) showPanelFailSoft();
+        toast('Room chat needs one more Arcade update — the new rules publish is still pending.');
+        return;
+      }
+      api('PATCH', '/roomChats/' + encodeURIComponent(mid), { lastMessageAt: Date.now(), lastPreview: preview, lastFrom: me });
+      var inp = b ? b.inputEl : null;
+      if(inp) inp.value = '';
+      var sinp = document.getElementById('rcSheetInput');
+      if(sinp && sheetMid === mid) sinp.value = '';
+      if(panelMid === mid && panelBox && panelBox.inputEl){ panelBox.inputEl.value = ''; delete panelDrafts[mid]; }
+      loadMessages(mid);
+      /* room-chat notice to the opponent (Inbox + pop-up; the pop-up suppresses when they are already looking at this room) */
+      myCodeName().then(function(n){
+        try {
+          if(window.holoInbox && typeof window.holoInbox.sendNotice === 'function'){
+            window.holoInbox.sendNotice(opp.uid, { type:'room-chat', title:'New message in ' + gameNameOf(m) + ' vs ' + n, body: bodyText.slice(0, 200), link:'game:' + gameSlugOf(m) + '?match=' + mid + '&chat=1', fromName:n, fromUid:me });
+          }
+        } catch(e){}
+      });
+    });
+  }
+  function showFailSoft(mid){
+    var b = boxes[mid]; if(!b) return;
+    if(b.noteEl){ b.noteEl.hidden = false; b.noteEl.textContent = 'Room chat needs one more Arcade update — the new rules publish is still pending.'; }
+    if(b.inputEl) b.inputEl.disabled = true;
+    if(b.sendEl) b.sendEl.disabled = true;
+  }
+  function showSheetFailSoft(){
+    var s = document.getElementById('rcSheet'); if(!s) return;
+    var note = s.querySelector('#rcSheetNote');
+    if(note){ note.hidden = false; note.textContent = 'Room chat needs one more Arcade update — the new rules publish is still pending.'; }
+    var inp = s.querySelector('#rcSheetInput'); if(inp) inp.disabled = true;
+    var send = s.querySelector('#rcSheetSend'); if(send) send.disabled = true;
+  }
+  function showPanelFailSoft(){
+    /* ROOM-CHAT-2026-11-26 (Holo 20:56): the side-panel chat fails soft exactly like the box and the sheet — note up, input + send disabled until the rules publish. */
+    if(!panelBox || !panelBox.el) return;
+    var note = panelBox.noteEl;
+    if(note){ note.hidden = false; note.textContent = 'Room chat needs one more Arcade update — the new rules publish is still pending.'; }
+    if(panelBox.inputEl) panelBox.inputEl.disabled = true;
+    if(panelBox.sendEl) panelBox.sendEl.disabled = true;
+    if(panelBox.kbBtn) panelBox.kbBtn.disabled = true;
+  }
+  function clearFailSoft(mid){
+    var b = boxes[mid]; if(!b) return;
+    if(b.noteEl) b.noteEl.hidden = true;
+    if(b.inputEl) b.inputEl.disabled = false;
+    if(b.sendEl) b.sendEl.disabled = false;
+  }
+
+  /* ---------- box open / minimize / close ---------- */
+  function roomTitle(mid){
+    var me = myUid(); var m = matchOf(mid);
+    if(!m) return 'Room chat';
+    var opp = oppOf(m, me);
+    return gameNameOf(m) + ' vs ' + opp.name;
+  }
+  function syncBoxMenu(mid){
+    var b = boxes[mid]; if(!b || !b.el) return;
+    var mb = b.el.querySelector('[data-rc-act="mute"]');
+    if(mb) mb.textContent = isMuted(mid) ? 'Unmute' : 'Mute';
+    var dis = !!(b.blockedMe || b.blockedByMe);
+    if(b.noteEl){
+      if(b.blockedMe){ b.noteEl.hidden = false; b.noteEl.textContent = 'You cannot message this tester right now.'; }
+      else if(b.blockedByMe){ b.noteEl.hidden = false; b.noteEl.textContent = 'You blocked this tester — they cannot message you. Unblock to chat again.'; }
+      else if(!failSoftShown[mid]) b.noteEl.hidden = true;
+    }
+    if(b.inputEl) b.inputEl.disabled = dis;
+    if(b.sendEl) b.sendEl.disabled = dis;
+    if(b.kbBtn) b.kbBtn.disabled = dis;
+  }
+  function createBox(mid){
+    var dock = ensureDock();
+    var el = document.createElement('div');
+    el.className = 'rc-box'; el.setAttribute('data-rc-mid', mid);
+    el.innerHTML = '<div class="rc-head"><div class="rc-head-main"><b>' + esc(roomTitle(mid)) + '</b><span class="rc-turn"></span></div><div class="rc-head-btns"><button type="button" data-rc-act-btn="menu" aria-label="More">•••</button><button type="button" data-rc-act-btn="min" aria-label="Minimize">–</button><button type="button" data-rc-act-btn="close" aria-label="Close">×</button></div></div>' +
+      '<div class="rc-menu" hidden><button type="button" data-rc-act="mute">Mute</button><button type="button" data-rc-act="report">Report</button><button type="button" data-rc-act="block">Block</button></div>' +
+      '<div class="rc-msgs"></div>' +
+      '<div class="rc-note" hidden></div>' +
+      '<div class="dm-compose"><input class="rc-input" maxlength="500" placeholder="Type a message…" autocomplete="off"><button class="dm-tool rc-kb-btn" type="button" aria-label="Keyboard">⌨️</button><button class="dm-tool rc-emoji-btn" type="button" aria-label="Emoji">😀</button><button class="dm-tool rc-send-btn" type="button" aria-label="Send">➤</button></div>' +
+      '<div class="hs-name-panel rc-kb" hidden><div class="hs-name-board"></div></div>' +
+      '<div class="dm-emoji-panel rc-emoji-panel" hidden><p class="dm-panel-label">Emoji</p><div class="dm-emoji-grid"></div></div>';
+    dock.appendChild(el);
+    var bar = document.createElement('button');
+    bar.type = 'button'; bar.className = 'rc-bar'; bar.hidden = true;
+    bar.innerHTML = '<span class="rc-bar-main">' + esc(roomTitle(mid)) + '</span><span class="dm-count" hidden>0</span><span class="rc-bar-x" aria-label="Close">×</span>';
+    dock.appendChild(bar);
+    var b = {
+      el:el, bar:bar, mid:mid, minimized:false,
+      msgsEl: el.querySelector('.rc-msgs'),
+      inputEl: el.querySelector('.rc-input'),
+      sendEl: el.querySelector('.rc-send-btn'),
+      noteEl: el.querySelector('.rc-note'),
+      menuEl: el.querySelector('.rc-menu'),
+      pollTimer:null, blockedMe:false, blockedByMe:false, lastCount:0
+    };
+    el.querySelector('[data-rc-act-btn="close"]').addEventListener('click', function(){ closeBox(mid); });
+    el.querySelector('[data-rc-act-btn="min"]').addEventListener('click', function(){ minimizeBox(mid); });
+    el.querySelector('[data-rc-act-btn="menu"]').addEventListener('click', function(){ b.menuEl.hidden = !b.menuEl.hidden; });
+    b.menuEl.addEventListener('click', function(ev){
+      var btn = ev.target && ev.target.closest ? ev.target.closest('[data-rc-act]') : null;
+      if(!btn) return;
+      b.menuEl.hidden = true;
+      var act = btn.getAttribute('data-rc-act');
+      if(act === 'mute') toggleMute(mid);
+      else if(act === 'block') blockRoom(mid);
+      else if(act === 'report') reportRoom(mid);
+    });
+    b.sendEl.addEventListener('click', function(){ sendMessage(mid, b.inputEl.value); });
+    b.inputEl.addEventListener('keydown', function(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); sendMessage(mid, b.inputEl.value); } });
+    el.querySelector('.rc-emoji-btn').addEventListener('click', function(){
+      var p = el.querySelector('.rc-emoji-panel'); if(!p) return;
+      p.hidden = !p.hidden;
+      if(!p.hidden) fillEmojiGrid(el.querySelector('.dm-emoji-grid'), b.inputEl);
+    });
+    /* ROOM-CHAT-2026-11-26 (Holo 20:06): on-screen keyboard, same look as the registration board — the keys ARE hs-key (alphabetical A–Z like the registration board, same panel). Letters insert lowercase (Shift = one-shot uppercase, like a phone keyboard); DEL / Space / Send match the board's keys. Desktop box only — the phone sheet uses the system keyboard. Default open (Holo's 19:57 yellow area shows the keyboard as part of the chat); the ⌨️ toggle hides it and the choice persists (holos-rc-kb). */
+    var kbEl = el.querySelector('.rc-kb');
+    var kbBoard = kbEl ? kbEl.querySelector('.hs-name-board') : null;
+    var kbBtn = el.querySelector('.rc-kb-btn');
+    var shiftOn = false;
+    function kbSetShift(on){
+      shiftOn = !!on;
+      var s = kbEl ? kbEl.querySelector('[data-kb="shift"]') : null;
+      if(s) s.classList.toggle('shift-on', shiftOn);
+    }
+    function kbSet(on){
+      if(!kbEl) return;
+      kbEl.hidden = !on;
+      el.classList.toggle('rc-kb-on', !!on);
+      if(kbBtn) kbBtn.classList.toggle('rc-kb-on', !!on);
+      try { localStorage.setItem('holos-rc-kb', on ? '1' : '0'); } catch(e){}
+    }
+    if(kbBoard){
+      var kbKeys = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(function(ch){
+        return '<button type="button" class="hs-key" data-kb="char" data-ch="' + ch + '">' + ch + '</button>';
+      }).join('');
+      kbKeys += '<button type="button" class="hs-key action" data-kb="shift">Shift</button>';
+      kbKeys += '<button type="button" class="hs-key hs-key-del" data-kb="back">DEL</button>';
+      kbKeys += '<button type="button" class="hs-key space" data-kb="space">Space</button>';
+      kbKeys += '<button type="button" class="hs-key action" data-kb="send">Send</button>';
+      kbBoard.innerHTML = kbKeys;
+      kbBoard.addEventListener('click', function(ev){
+        var k = ev.target && ev.target.closest ? ev.target.closest('[data-kb]') : null;
+        if(!k || !b.inputEl || b.inputEl.disabled) return;
+        var kind = k.getAttribute('data-kb');
+        var inp = b.inputEl;
+        var v = String(inp.value || '');
+        if(kind === 'shift'){ kbSetShift(!shiftOn); try { inp.focus(); } catch(e){} return; }
+        if(kind === 'send'){ sendMessage(mid, v); kbSetShift(false); return; }
+        if(kind === 'back'){ inp.value = v.slice(0, -1); }
+        else if(kind === 'space'){ if(v.length < 500) inp.value = v + ' '; }
+        else if(kind === 'char'){
+          if(v.length >= 500) return;
+          var ch = k.getAttribute('data-ch') || '';
+          inp.value = v + (shiftOn ? ch : ch.toLowerCase());
+          if(shiftOn) kbSetShift(false);
+        }
+        try { inp.focus(); } catch(e){}
+      });
+    }
+    if(kbBtn) kbBtn.addEventListener('click', function(){ kbSet(kbEl ? kbEl.hidden : false); });
+    var kbPref = null; try { kbPref = localStorage.getItem('holos-rc-kb'); } catch(e){}
+    kbSet(kbPref !== '0');
+    b.kbEl = kbEl; b.kbBtn = kbBtn;
+    bar.addEventListener('click', function(ev){
+      if(ev.target && ev.target.closest && ev.target.closest('.rc-bar-x')){ closeBox(mid); return; }
+      restoreBox(mid);
+    });
+    boxes[mid] = b;
+    return b;
+  }
+  function fillEmojiGrid(grid, input){
+    if(!grid || grid.getAttribute('data-rc-filled')) return;
+    grid.setAttribute('data-rc-filled', '1');
+    var list = [];
+    try { if(window.holoDMs && window.holoDMs.emojis && window.holoDMs.emojis.length) list = window.holoDMs.emojis.slice(); } catch(e){}
+    if(!list.length) list = FALLBACK_EMOJIS.slice();
+    grid.innerHTML = list.map(function(e){ return '<button type="button">' + esc(e) + '</button>'; }).join('');
+    grid.querySelectorAll('button').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        if(input){ input.value = (input.value || '') + btn.textContent; try { input.focus(); } catch(e){} }
+      });
+    });
+  }
+  function openBox(mid){
+    var me = myUid();
+    if(!me){ toast('Sign in to chat in a room, agent.'); return; }
+    var m = matchOf(mid);
+    if(!m){
+      /* deep link may land before loadMatches finishes — one retry */
+      setTimeout(function(){ if(matchOf(mid)) openBox(mid); else toast('That room is not open right now.'); }, 1500);
+      return;
+    }
+    if(isPhone()){ openSheet(mid); return; }
+    /* ROOM-CHAT-2026-11-26 (Holo 20:56): on desktop, when the room chat is already showing in the side panel for this match, do NOT open a second floating box — focus the panel chat instead. (Below 1280px the panels are hidden, so the dock still opens there; phone takes the sheet branch above.) */
+    if(panelMid === mid){
+      try {
+        if(window.matchMedia && window.matchMedia('(min-width: 1280px)').matches){
+          var psec = document.querySelector('[data-rc-panel-mid="' + mid + '"]');
+          var pinp = psec ? psec.querySelector('.rc-input') : null;
+          if(psec && pinp){ try { pinp.focus(); } catch(e){} return; }
+        }
+      } catch(e){}
+    }
+    var b = boxes[mid];
+    if(b && !b.minimized){ try { if(b.inputEl) b.inputEl.focus(); } catch(e){} return; }
+    if(b && b.minimized){ restoreBox(mid); return; }
+    /* cap 2 open room chats — opening a 3rd auto-minimizes the oldest */
+    var openNow = openOrder.filter(function(x){ var bx = boxes[x]; return bx && !bx.minimized; });
+    if(openNow.length >= 2){ minimizeBox(openNow[0]); }
+    b = createBox(mid);
+    openOrder.push(mid);
+    if(failSoftShown[mid]) showFailSoft(mid);
+    refreshBoxHeader(mid);
+    markRead(mid);
+    loadMessages(mid);
+    if(b.pollTimer) clearInterval(b.pollTimer);
+    b.pollTimer = setInterval(function(){ if(boxes[mid]) loadMessages(mid); }, 8000);
+    syncBoxMenu(mid);
+    syncBadges(); savePersist();
+    try { if(b.inputEl) b.inputEl.focus(); } catch(e){}
+  }
+  function refreshBoxHeader(mid){
+    var b = boxes[mid]; if(!b || !b.el) return;
+    var me = myUid(); var m = matchOf(mid); if(!m) return;
+    var t = b.el.querySelector('.rc-head-main b');
+    if(t) t.textContent = roomTitle(mid);
+    var turn = b.el.querySelector('.rc-turn');
+    if(turn) turn.textContent = statusLineOf(m, me);
+    var opp = oppOf(m, me);
+    liveName(opp.uid, opp.name).then(function(n){
+      var mm = matchOf(mid); if(!mm) return;
+      var t2 = b.el.querySelector('.rc-head-main b');
+      if(t2) t2.textContent = gameNameOf(mm) + ' vs ' + n;
+      var barMain = b.bar ? b.bar.querySelector('.rc-bar-main') : null;
+      if(barMain) barMain.textContent = gameNameOf(mm) + ' vs ' + n;
+    });
+  }
+  function minimizeBox(mid){
+    var b = boxes[mid]; if(!b) return;
+    b.minimized = true;
+    if(b.pollTimer){ clearInterval(b.pollTimer); b.pollTimer = null; }
+    if(b.el) b.el.style.display = 'none';
+    if(b.bar) b.bar.hidden = false;
+    syncBadges(); savePersist();
+  }
+  function restoreBox(mid){
+    var b = boxes[mid]; if(!b) return;
+    b.minimized = false;
+    if(b.el) b.el.style.display = '';
+    if(b.bar) b.bar.hidden = true;
+    markRead(mid);
+    loadMessages(mid);
+    if(b.pollTimer) clearInterval(b.pollTimer);
+    b.pollTimer = setInterval(function(){ if(boxes[mid]) loadMessages(mid); }, 8000);
+    syncBadges(); savePersist();
+    try { if(b.inputEl) b.inputEl.focus(); } catch(e){}
+  }
+  function closeBox(mid){
+    var b = boxes[mid]; if(!b) return;
+    if(b.pollTimer){ clearInterval(b.pollTimer); b.pollTimer = null; }
+    try { if(b.el && b.el.parentNode) b.el.parentNode.removeChild(b.el); } catch(e){}
+    try { if(b.bar && b.bar.parentNode) b.bar.parentNode.removeChild(b.bar); } catch(e){}
+    delete boxes[mid];
+    openOrder = openOrder.filter(function(x){ return x !== mid; });
+    syncBadges(); savePersist();
+  }
+  function closeAllBoxes(){
+    Object.keys(boxes).forEach(function(mid){ closeBox(mid); });
+    closeSheet();
+  }
+
+  /* ---------- side-panel chat (desktop room views, Holo 20:56) ---------- */
+  var panelDrafts = {}; /* mid -> typed-but-unsent text; the panel rebuilds on every side-panel render, so the draft survives rebinds keyed by match */
+  function panelChat(mid){
+    /* ROOM-CHAT-2026-11-26 (Holo 20:56): in a room/match view on desktop the chat lives IN the side panel slot that held How to play — it replaces the how-to section, it does not sit alongside it. The section HTML comes from the side-panels builder (spChatHTML); this wires it: messages (same loadMessages feed as box + sheet), compose, emoji, and the registration-style keyboard (same hs-key board as the dock box, Holo 20:06). Phone never gets here — the side panels are desktop-only (min-width 1280px) and the phone sheet stays the chat path. */
+    clearPanelChat();
+    var sec = document.querySelector('[data-rc-panel-mid="' + mid + '"]');
+    if(!sec) return false;
+    if(boxes[mid]) closeBox(mid); /* no duplicates: the panel IS the chat now — the floating box goes away */
+    var p = {
+      el:sec, mid:mid,
+      msgsEl: sec.querySelector('.rc-panel-msgs'),
+      inputEl: sec.querySelector('.rc-input'),
+      sendEl: sec.querySelector('.rc-send-btn'),
+      noteEl: sec.querySelector('.rc-note'),
+      kbEl: sec.querySelector('.rc-kb'),
+      kbBtn: sec.querySelector('.rc-kb-btn'),
+      blockedMe:false, blockedByMe:false
+    };
+    panelBox = p; panelMid = mid;
+    if(panelDrafts[mid] && p.inputEl) p.inputEl.value = panelDrafts[mid];
+    if(p.inputEl) p.inputEl.addEventListener('input', function(){ panelDrafts[mid] = p.inputEl.value; });
+    if(p.sendEl) p.sendEl.addEventListener('click', function(){ if(p.inputEl) sendMessage(mid, p.inputEl.value); });
+    if(p.inputEl) p.inputEl.addEventListener('keydown', function(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); sendMessage(mid, p.inputEl.value); } });
+    var emBtn = sec.querySelector('.rc-emoji-btn');
+    if(emBtn) emBtn.addEventListener('click', function(){
+      var ep = sec.querySelector('.rc-emoji-panel'); if(!ep) return;
+      ep.hidden = !ep.hidden;
+      if(!ep.hidden) fillEmojiGrid(sec.querySelector('.dm-emoji-grid'), p.inputEl);
+    });
+    /* Keyboard: same hs-key board as the dock box (Holo 20:06) — A–Z alphabetical, one-shot Shift, DEL / Space / Send. Mirrors createBox's wiring; keep the two in sync. (No rc-kb-on height grow here — the panel is in-flow, the board just shows/hides.) */
+    var kbEl = p.kbEl, kbBoard = kbEl ? kbEl.querySelector('.hs-name-board') : null, kbBtn = p.kbBtn, shiftOn = false;
+    function kbSetShift(on){
+      shiftOn = !!on;
+      var s = kbEl ? kbEl.querySelector('[data-kb="shift"]') : null;
+      if(s) s.classList.toggle('shift-on', shiftOn);
+    }
+    function kbSet(on){
+      if(!kbEl) return;
+      kbEl.hidden = !on;
+      if(kbBtn) kbBtn.classList.toggle('rc-kb-on', !!on);
+      try { localStorage.setItem('holos-rc-kb', on ? '1' : '0'); } catch(e){}
+    }
+    if(kbBoard){
+      var kbKeys = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(function(ch){
+        return '<button type="button" class="hs-key" data-kb="char" data-ch="' + ch + '">' + ch + '</button>';
+      }).join('');
+      kbKeys += '<button type="button" class="hs-key action" data-kb="shift">Shift</button>';
+      kbKeys += '<button type="button" class="hs-key hs-key-del" data-kb="back">DEL</button>';
+      kbKeys += '<button type="button" class="hs-key space" data-kb="space">Space</button>';
+      kbKeys += '<button type="button" class="hs-key action" data-kb="send">Send</button>';
+      kbBoard.innerHTML = kbKeys;
+      kbBoard.addEventListener('click', function(ev){
+        var k = ev.target && ev.target.closest ? ev.target.closest('[data-kb]') : null;
+        if(!k || !p.inputEl || p.inputEl.disabled) return;
+        var kind = k.getAttribute('data-kb');
+        var inp = p.inputEl;
+        var v = String(inp.value || '');
+        if(kind === 'shift'){ kbSetShift(!shiftOn); try { inp.focus(); } catch(e){} return; }
+        if(kind === 'send'){ sendMessage(mid, v); kbSetShift(false); return; }
+        if(kind === 'back'){ inp.value = v.slice(0, -1); }
+        else if(kind === 'space'){ if(v.length < 500) inp.value = v + ' '; }
+        else if(kind === 'char'){
+          if(v.length >= 500) return;
+          var ch = k.getAttribute('data-ch') || '';
+          inp.value = v + (shiftOn ? ch : ch.toLowerCase());
+          if(shiftOn) kbSetShift(false);
+        }
+        panelDrafts[mid] = inp.value;
+        try { inp.focus(); } catch(e){}
+      });
+    }
+    if(kbBtn) kbBtn.addEventListener('click', function(){ kbSet(kbEl ? kbEl.hidden : false); });
+    var kbPref = null; try { kbPref = localStorage.getItem('holos-rc-kb'); } catch(e){}
+    kbSet(kbPref !== '0');
+    if(failSoftShown[mid]) showPanelFailSoft();
+    /* Blocked state (same /blockedBy source as loadMessages) — a blocked panel cannot send. */
+    var uid0 = myUid();
+    api('GET', '/roomChats/' + encodeURIComponent(mid) + '/blockedBy').then(function(bl){
+      if(panelMid !== mid || !panelBox) return;
+      var m0 = matchOf(mid);
+      p.blockedMe = !!(bl && uid0 && bl[uid0]);
+      p.blockedByMe = !!(bl && m0 && bl[oppOf(m0, uid0).uid]);
+      if(p.noteEl){
+        if(p.blockedMe){ p.noteEl.hidden = false; p.noteEl.textContent = 'You cannot message this tester right now.'; }
+        else if(p.blockedByMe){ p.noteEl.hidden = false; p.noteEl.textContent = 'You blocked this tester — they cannot message you. Unblock to chat again.'; }
+        else if(!failSoftShown[mid]) p.noteEl.hidden = true;
+      }
+      if(p.blockedMe || p.blockedByMe){ if(p.inputEl) p.inputEl.disabled = true; if(p.sendEl) p.sendEl.disabled = true; if(p.kbBtn) p.kbBtn.disabled = true; }
+    });
+    loadMessages(mid);
+    panelPollTimer = setInterval(function(){ if(panelMid === mid) loadMessages(mid); }, 8000);
+    return true;
+  }
+  function clearPanelChat(){
+    if(panelPollTimer){ clearInterval(panelPollTimer); panelPollTimer = null; }
+    panelMid = null; panelBox = null;
+  }
+
+  /* ---------- phone sheet ---------- */
+  function openSheet(mid){
+    var me = myUid();
+    if(!me){ toast('Sign in to chat in a room, agent.'); return; }
+    var m = matchOf(mid);
+    if(!m){
+      setTimeout(function(){ if(matchOf(mid)) openSheet(mid); else toast('That room is not open right now.'); }, 1500);
+      return;
+    }
+    sheetMid = mid;
+    var s = ensureSheet();
+    s.classList.add('open');
+    renderSheetHeader(mid);
+    markRead(mid);
+    loadMessages(mid);
+    if(sheetPollTimer) clearInterval(sheetPollTimer);
+    sheetPollTimer = setInterval(function(){ if(sheetMid) loadMessages(sheetMid); }, 8000);
+    renderSwitcher();
+    syncBadges(); savePersist();
+  }
+  function closeSheet(){
+    sheetMid = null;
+    if(sheetPollTimer){ clearInterval(sheetPollTimer); sheetPollTimer = null; }
+    var s = document.getElementById('rcSheet');
+    if(s) s.classList.remove('open');
+    syncBadges(); savePersist();
+  }
+  function sendSheet(){
+    if(!sheetMid) return;
+    var s = document.getElementById('rcSheet'); if(!s) return;
+    var inp = s.querySelector('#rcSheetInput');
+    if(inp) sendMessage(sheetMid, inp.value);
+  }
+  function renderSheetHeader(mid){
+    var s = document.getElementById('rcSheet'); if(!s) return;
+    var me = myUid(); var m = matchOf(mid); if(!m) return;
+    var t = s.querySelector('#rcSheetTitle');
+    if(t) t.textContent = roomTitle(mid);
+    var turn = s.querySelector('#rcSheetTurn');
+    if(turn) turn.textContent = statusLineOf(m, me);
+    var note = s.querySelector('#rcSheetNote');
+    if(note && !failSoftShown[mid]) note.hidden = true;
+    if(failSoftShown[mid]) showSheetFailSoft();
+    var inp = s.querySelector('#rcSheetInput');
+    if(inp){ inp.disabled = false; }
+    var send = s.querySelector('#rcSheetSend');
+    if(send){ send.disabled = false; }
+    var opp = oppOf(m, me);
+    liveName(opp.uid, opp.name).then(function(n){
+      var mm = matchOf(mid); if(!mm) return;
+      var t2 = s.querySelector('#rcSheetTitle');
+      if(t2) t2.textContent = gameNameOf(mm) + ' vs ' + n;
+    });
+  }
+  function renderSwitcher(){
+    var s = document.getElementById('rcSheet'); if(!s || !sheetMid) return;
+    var sw = s.querySelector('#rcSwitcher'); if(!sw) return;
+    var me = myUid(); if(!me){ sw.hidden = true; return; }
+    var ms = (window.holoTurn && typeof window.holoTurn.matches === 'function') ? window.holoTurn.matches() : {};
+    var active = Object.keys(ms).filter(function(mid){
+      var m = ms[mid];
+      return m && (m.status === 'playing' || m.status === 'waiting');
+    }).sort(function(a, b){ return (ms[b].updatedAt || 0) - (ms[a].updatedAt || 0); });
+    if(active.length <= 1){ sw.hidden = true; return; }
+    sw.hidden = false;
+    sw.innerHTML = active.map(function(mid){
+      var m = ms[mid]; var opp = oppOf(m, me);
+      var n = unreadCache[mid] || 0;
+      return '<button type="button" data-rc-switch="' + esc(mid) + '" class="' + (mid === sheetMid ? 'on' : '') + '"><span style="flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(gameNameOf(m)) + ' vs ' + esc(opp.name) + '</span>' + (n > 0 ? '<span class="dm-count">' + esc(String(n)) + '</span>' : '') + '</button>';
+    }).join('');
+    sw.querySelectorAll('[data-rc-switch]').forEach(function(btn){
+      btn.addEventListener('click', function(){ openSheet(btn.getAttribute('data-rc-switch')); });
+    });
+  }
+
+  /* ---------- report / block ---------- */
+  function reportRoomMessage(mid, m){
+    var me = myUid(); if(!me || !m) return;
+    var mm = matchOf(mid);
+    myCodeName().then(function(n){
+      var payload = {
+        username: n, testerName: n, game: mm ? gameNameOf(mm) : 'Room chat', tag: 'Room chat report',
+        comment: 'Reported room-chat message from ' + (m.fromName || 'tester') + ': ' + String(m.text || '').slice(0, 400),
+        threadId: mid || '', msgId: m.id || '', reporterUid: me, reportedUid: m.fromUid || '',
+        timestamp: new Date().toISOString()
+      };
+      return freshToken().then(function(tok){
+        if(!tok) return null;
+        return fetch(FB_RTDB + '/feedback.json?auth=' + encodeURIComponent(tok), { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
+          .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
+      });
+    }).then(function(r){
+      if(r){ toast('Reported — thanks, we will look into it.'); try { if(window.holoInbox && window.holoInbox.notifySelf) window.holoInbox.notifySelf('system', 'Report received', 'Thanks, agent — we got your report and will look into it. Watch this inbox for updates.'); } catch(e){} }
+      else toast('That report did not send — try again in a moment.');
+    });
+  }
+  function reportRoom(mid){
+    /* ••• menu Report: files the latest received message in the room (same tag + snapshot as a per-message report). */
+    var uid = myUid(); if(!uid || !mid) return;
+    api('GET', '/roomChats/' + encodeURIComponent(mid) + '/messages?orderBy=' + encodeURIComponent('"$key"') + '&limitToLast=1').then(function(data){
+      var m = null;
+      if(data && typeof data === 'object'){ Object.keys(data).forEach(function(id){ m = data[id] || {}; m.id = id; }); }
+      if(m && m.fromUid !== uid) reportRoomMessage(mid, m);
+      else {
+        var mm = matchOf(mid);
+        myCodeName().then(function(n){
+          var payload = {
+            username: n, testerName: n, game: mm ? gameNameOf(mm) : 'Room chat', tag: 'Room chat report',
+            comment: 'Reported room chat (match ' + mid + '). No received message to attach.',
+            threadId: mid || '', msgId: '', reporterUid: uid, reportedUid: (mm ? oppOf(mm, uid).uid : '') || '',
+            timestamp: new Date().toISOString()
+          };
+          return freshToken().then(function(tok){
+            if(!tok) return null;
+            return fetch(FB_RTDB + '/feedback.json?auth=' + encodeURIComponent(tok), { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
+              .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
+          });
+        }).then(function(r){ if(r) toast('Reported — thanks, we will look into it.'); else toast('That report did not send — try again in a moment.'); });
+      }
+    });
+  }
+  function blockRoom(mid){
+    try {
+      if(window.holoTurn && typeof window.holoTurn.block === 'function'){ window.holoTurn.block(mid); closeBox(mid); closeSheet(); return; }
+    } catch(e){}
+    toast('Block lives in the match view — open the room and tap Block there.');
+  }
+
+  /* ---------- boot ---------- */
+  function restorePersisted(){
+    if(!myUid()) return;
+    var p = loadPersist();
+    (p.open || []).forEach(function(o){
+      if(o && o.mid && matchOf(o.mid)){
+        if(isPhone()){ if(!sheetMid) sheetMid = o.mid; }
+        else {
+          var b = createBox(o.mid);
+          openOrder.push(o.mid);
+          if(o.min){ b.minimized = true; if(b.el) b.el.style.display = 'none'; if(b.bar) b.bar.hidden = false; }
+          else {
+            refreshBoxHeader(o.mid);
+            markRead(o.mid);
+            loadMessages(o.mid);
+            b.pollTimer = setInterval(function(){ if(boxes[o.mid]) loadMessages(o.mid); }, 8000);
+          }
+        }
+      }
+    });
+    if(isPhone() && sheetMid) openSheet(sheetMid);
+    syncBadges();
+  }
+  function toast(msg){
+    try {
+      if(typeof window.toast === 'function'){ window.toast(msg); return; }
+      var t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#0a0620;color:#fff;border:2px solid #8b5cff;border-radius:12px;padding:10px 16px;z-index:14000;font-size:14px';
+      document.body.appendChild(t);
+      setTimeout(function(){ try { t.remove(); } catch(e){} }, 4000);
+    } catch(e){}
+  }
+
+  buildUI();
+  loadMuted();
+  setInterval(function(){ if(myUid()){ refreshChatBadges(); updateTurnIndicator(); } }, 20000);
+  setInterval(function(){ ensureIndicator(); }, 5000);
+  setTimeout(function(){ buildUI(); refreshChatBadges(); updateTurnIndicator(); restorePersisted(); }, 2500);
+  document.addEventListener('keydown', function(ev){
+    if(ev.key === 'Escape'){
+      if(sheetMid){ closeSheet(); return; }
+      var open = openOrder.filter(function(mid){ var b = boxes[mid]; return b && !b.minimized; });
+      if(open.length) minimizeBox(open[open.length - 1]);
+    }
+  });
+  try {
+    new MutationObserver(function(){
+      var v = document.body.getAttribute('data-view');
+      if(v === 'rooms'){ refreshChatBadges(); updateTurnIndicator(); }
+    }).observe(document.body, { attributes:true, attributeFilter:['data-view'] });
+  } catch(e){}
+
+  window.holoRoomChat = {
+    openBox:openBox, closeBox:closeBox, minimizeBox:minimizeBox, restoreBox:restoreBox,
+    openSheet:openSheet, closeSheet:closeSheet, closeAll:closeAllBoxes,
+    panelChat:panelChat, clearPanelChat:clearPanelChat, panelMid:function(){ return panelMid; },
+    updateTurnIndicator:updateTurnIndicator, refreshChatBadges:refreshChatBadges,
+    turnActionCount:turnActionCount, isMuted:isMuted,
+    isOpen:function(mid){ var b = boxes[mid]; return !!(b && !b.minimized); },
+    unreadCount:function(){ return totalUnread(); },
+    boxes:function(){ return Object.keys(boxes); }
+  };
+})();
+</script>
+<style>
 /* NOTIFY-POPUP-2026-11-25 (Holo 2026-11-25 12:42): bottom-right pop-up notifications — "Make it fun and match our theme." Dark navy card, violet border, neon pink/cyan glow, Press Start 2P title, pixel duck. One card at a time, bottom-right, pointer-events only on the card itself so taps pass through everywhere else. */
-#notifyPopups{position:fixed;right:16px;bottom:16px;z-index:12000;width:min(340px,calc(100vw - 32px));pointer-events:none}
+#notifyPopups{position:fixed;right:16px;bottom:16px;z-index:13000;width:min(340px,calc(100vw - 32px));pointer-events:none}
 #notifyPopups .np-card{pointer-events:auto;background:linear-gradient(160deg,#131a4a,#080b26 70%);border:2px solid #8f7bff;border-radius:14px;box-shadow:0 0 0 2px #05061a,0 8px 30px rgba(0,0,0,.55),0 0 18px rgba(255,45,149,.35);color:#fff;padding:12px 14px 10px;margin-top:10px;animation:npSlideIn .28s ease-out}
 #notifyPopups .np-card.np-hq{border-color:#ffb020;box-shadow:0 0 0 2px #05061a,0 8px 30px rgba(0,0,0,.55),0 0 18px rgba(255,176,32,.4)}
 #notifyPopups .np-head{display:flex;align-items:flex-start;gap:8px}
@@ -29092,6 +30410,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       var rest = link.slice(5); var qi = rest.indexOf('?'); var slug = qi === -1 ? rest : rest.slice(0, qi);
       var mm = rest.match(/match=([A-Za-z0-9_-]+)/);
       if(mm && mm[1] && window.holoTurn && window.holoTurn.openSoon){ try { window.holoTurn.openSoon(mm[1]); } catch(e){} }
+      /* ROOM-CHAT-2026-11-26: a room-chat notice link carries &chat=1 — open the chat box for that room once the match is up. */
+      if(rest.indexOf('chat=1') !== -1 && mm && mm[1]){ setTimeout(function(){ try { if(window.holoRoomChat) window.holoRoomChat.openBox(mm[1]); } catch(e){} }, 900); }
       try { location.hash = '#game/' + slug; } catch(e){}
       var rm = rest.match(/room=([A-Za-z0-9_-]+)/);
       if(rm && rm[1] && window.holoRooms && window.holoRooms.joinRoom){ try { window.holoRooms.joinRoom(rm[1]); } catch(e){} }
@@ -29212,6 +30532,13 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     } else if(pop.kind === 'dm'){
       mkBtn('Accept', true, function(){ try { if(window.holoDMs && window.holoDMs.open) window.holoDMs.open(pop.withUid, pop.name); } catch(e){} });
       mkBtn('Dismiss', false, function(){});
+    } else if(pop.kind === 'roomchat'){
+      mkBtn('Accept', true, function(){ try { followLink(pop.link); } catch(e){} setTimeout(function(){ try { if(window.holoRoomChat) window.holoRoomChat.openBox(pop.mid); } catch(e){} }, 900); });
+      mkBtn('Dismiss', false, function(){});
+    } else if(pop.kind === 'turn'){
+      /* NUDGE-POPUP-2026-11-26 (Holo 21:27): a nudge pop-up opens the match — nothing to accept, the move is the action. */
+      mkBtn('Open match', true, function(){ try { followLink(pop.link); } catch(e){} });
+      mkBtn('Dismiss', false, function(){});
     } else { /* duel */
       mkBtn('Accept', true, function(){ acceptDuel(pop.mid, pop.link); });
       mkBtn('Dismiss', false, function(){});
@@ -29244,6 +30571,23 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           if(isViewingMatch(mid)) return; /* already looking at that exact match */
           var name = duelSenderOf(n);
           enqueue({ key:'duel:' + n.id, kind:'duel', title:'Duel request from ' + name, name:name, mid:mid, link:n.link || '' });
+        } else if(n.type === 'room-chat'){
+          /* ROOM-CHAT-2026-11-26: room-chat notice — pops like a DM (Accept opens the room + chat box). Suppressed when the user is already looking at that match or has the room chat open, or muted it. */
+          var rmid = matchIdOf(n.link);
+          if(isViewingMatch(rmid)) return;
+          try { if(window.holoRoomChat && window.holoRoomChat.isOpen && window.holoRoomChat.isOpen(rmid)) return; } catch(e){}
+          try { if(window.holoRoomChat && window.holoRoomChat.isMuted && window.holoRoomChat.isMuted(rmid)) return; } catch(e){}
+          enqueue({ key:'roomchat:' + n.id, kind:'roomchat', title:n.title || 'New room message', sub:String(n.body || '').slice(0, 90), mid:rmid, link:n.link || '' });
+        } else if(n.type === 'turn'){
+          /* NUDGE-POPUP-2026-11-26 (Holo 21:27, NUDGES): a Nudge (Pool pfNudge / TTT Remind) sends a type-'turn'
+             notice — the receiver sees it as a bottom-right pop-up (this branch) AND as an Inbox entry
+             (the Inbox list already renders 'turn' items; no new channel, no new type, no rules change —
+             'turn' is already in the notifications allowlist). Suppressed when the user is already
+             looking at that exact match. The auto-accept rematch-start notice is also type 'turn', so it
+             pops too — the new first player needs to know a match started. */
+          var tmid = matchIdOf(n.link);
+          if(isViewingMatch(tmid)) return;
+          enqueue({ key:'turn:' + n.id, kind:'turn', title:n.title || 'Your turn', sub:String(n.body || '').slice(0, 90), mid:tmid, link:n.link || '' });
         } else if(isHqType(n)){
           if(isViewingInboxMessage(n)) return; /* already reading that exact HQ message */
           var sub = String(n.title || '');
@@ -29280,6 +30624,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   }
 
   window.holoNotifyPopups = {
+    /* ROOM-CHAT-2026-11-26 (Holo 19:57): the in-room notifications section follows links through this same routing. */
+    followLink:followLink,
     onInboxItems:onInboxItems, onDmThreads:onDmThreads,
     queue:function(){ return queue.slice(); }, current:function(){ return current; },
     show:function(pop){ enqueue(pop); }, dismiss:dismissCurrent,
@@ -30214,7 +31560,7 @@ body.in-game .rff-frame{height:calc(100dvh - 150px)}
 </style>
 
 <style>
-/* PLAY-DROPDOWN-2026-11-25 (Holo 00:24 photo: top-nav buttons overlapped — Friends clipped to "Frien" by the Fullscreen pill). One Play dropdown holds Favourites, Rooms, Categories, Library so the bar fits. The three links stay in #subNav for the phone panel; on desktop (>=1024px, bar context) they hide and the Play button shows. The menu portals to body (position:fixed) so #subNav's overflow-x:auto never clips it. Menu items reuse the links' own click handlers (same destinations); Rooms opens Friends + scrolls to #roomsSection. */
+/* PLAY-DROPDOWN-2026-11-25 (Holo 00:24 photo: top-nav buttons overlapped — Friends clipped to "Frien" by the Fullscreen pill). One Play dropdown holds Favourites, Rooms, Categories, Library so the bar fits. The three links stay in #subNav for the phone panel; on desktop (>=1024px, bar context) they hide and the Play button shows. The menu portals to body (position:fixed) so #subNav's overflow-x:auto never clips it. Menu items reuse the links' own click handlers (same destinations); Rooms opens the Rooms page + scrolls to #roomsSection. */
 #playDropBtn{display:none}
 #playDropMenu{position:fixed;z-index:90;min-width:200px;max-width:calc(100vw - 16px);background:#0a0620;border:2px solid var(--violet);border-radius:12px;padding:6px;box-shadow:0 18px 50px rgba(0,0,0,.55)}
 #playDropMenu[hidden]{display:none}
@@ -30261,8 +31607,8 @@ body.in-game .rff-frame{height:calc(100dvh - 150px)}
     b.addEventListener('click', function(){
       closeMenu();
       if(it.rooms){
-        try { if(window.holoShowView) window.holoShowView('friends'); else location.hash = '#friends'; }
-        catch(e){ location.hash = '#friends'; }
+        try { if(window.holoShowView) window.holoShowView('rooms'); else location.hash = '#rooms'; }
+        catch(e){ location.hash = '#rooms'; }
         setTimeout(function(){
           var r = document.getElementById('roomsSection');
           if(r){ try { r.scrollIntoView({ behavior:'smooth', block:'start' }); } catch(e){} }
@@ -32102,7 +33448,7 @@ body.wt-on.in-game #player .player-bar{flex:0 0 auto;}
 /* POOL-SIZING-2026-11-26 (C2): the in-game bottom pad was dead space under a frame that already ends at the page bottom — reclaim it for the frame. The calc() frame-height rules are left alone: in wt-on mode (always on after boot) the flex rules above override them, so the frame height comes from flex + this padding, not from a magic offset. */
 body.wt-on.in-game #player .player-body{padding-bottom:12px}
 /* POOL-SIZING-2026-11-26 (Holo 19:21 "Turn off the full screen thing" / "Not full screen but the auto fit resolution", confirmed 19:45 by her photo of the top-nav Fullscreen button next to FAQ): the game never goes fullscreen — BOTH fullscreen buttons (in-game #playerFsBtn and top-nav #hubFsBtn) stay off (hidden). Those two buttons are the page's only fullscreen triggers; the game auto-fits its window instead. */
-#playerFsBtn,#hubFsBtn{display:none!important}
+/* FULLSCREEN-RESTORE-2026-11-26 (Holo 22:46, reversal of the 19:21 hide): fullscreen is back as an opt-in button on EVERY device — this display:none rule is gone; the canFs check still hides the buttons where the browser has no fullscreen (e.g. iPhone Safari). The game still auto-fits by default. */
 /* POOL-SIZING-2026-11-26 (C1 phone): the Pool phone summary bar + info view. Desktop (side panels) never shows them. */
 #pane-8-ball-pool .pool-sumbar{display:none;width:100%;text-align:left;background:var(--chip);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-weight:800;font-size:14px;cursor:pointer;margin-bottom:10px}
 #pane-8-ball-pool .pool-info:not([hidden]){display:block;flex:1 1 auto;min-height:0;overflow-y:auto}
