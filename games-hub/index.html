@@ -3719,6 +3719,7 @@ setTimeout(function(){
     <button class="pill" data-filter="strategy" type="button">Strategy</button>
     <button class="pill" data-filter="platformer" type="button">Platformer</button>
     <button class="pill" data-filter="party" type="button">Party</button>
+    <button class="pill" data-filter="multiplayer" type="button">Multiplayer</button>
     <button class="pill" data-filter="party19" type="button">Adults Only (18+)</button>
     <button class="pill" data-filter="fair" type="button">Fair Games</button>
     <button class="pill" data-filter="sim" type="button">Sim &amp; Tycoon</button>
@@ -5890,7 +5891,7 @@ setTimeout(function(){
               <div class="card-foot"><button class="play" data-game="math-quiz" type="button">▶ Play Math Quiz</button></div>
             </article>
 
-      <!-- FRACTION-FRENZY-2026-11-25: dedicated fractions game (Holo 2026-11-25 15:59) — Saskatchewan Math Grades 4–6 core -->
+      <!-- FRACTION-FRENZY-2026-11-25: dedicated fractions game (Holo 2026-11-25 15:59) — Grades 4–6 fractions core -->
       <article class="card game-card learn-kids" data-cat="learning trivia" data-search="fraction frenzy learning fractions math simplify equivalent compare add subtract mixed numbers improper visual shaded pizza ages 8-14 grades 4-6">
               <div class="card-art art-learn-kids art-l-math"><span class="icon"></span><span class="badge">Free • Live • New</span></div>
               <div class="card-body">
@@ -9043,7 +9044,7 @@ setTimeout(function(){
      the account across devices. */
   var RECENT_KEY = 'holos-arcade-recent-plays';
   function loadRecents(){
-    try { var v = JSON.parse(localStorage.getItem(RECENT_KEY)); if(Array.isArray(v)) return v.filter(function(r){ return r && r.slug; }); } catch(e){}
+    try { var _rk = (typeof window.holoHubKey === 'function') ? window.holoHubKey(RECENT_KEY) : RECENT_KEY; var v = JSON.parse(localStorage.getItem(_rk)); if(Array.isArray(v)) return v.filter(function(r){ return r && r.slug; }); } catch(e){} /* SHARED-STATE-FIX-2026-11-27 */
     return [];
   }
   function cardSlugOf(c){ var b = c.querySelector('[data-game]'); return b ? (b.getAttribute('data-game') || '') : ''; }
@@ -9380,7 +9381,7 @@ setTimeout(function(){
          counts from hub state; Newest reads GAME_ADDED. Ties and
          unplayed/undated games fall back to A-Z. */
       var playCounts = {};
-      if(mode === 'played'){ try { var hv = JSON.parse(localStorage.getItem('holoArcade_v1_hub')); if(hv && hv.plays) playCounts = hv.plays; } catch(e){} }
+      if(mode === 'played'){ try { var _hk = (typeof window.holoHubKey === 'function') ? window.holoHubKey('holoArcade_v1_hub') : 'holoArcade_v1_hub'; var hv = JSON.parse(localStorage.getItem(_hk)); if(hv && hv.plays) playCounts = hv.plays; } catch(e){} } /* SHARED-STATE-FIX-2026-11-27 */
       var sorted = cards.slice().sort(function(a, b){
         if(mode === 'played'){
           var pa = playCounts[cardSlugOf(a)] || 0, pb = playCounts[cardSlugOf(b)] || 0;
@@ -9626,7 +9627,13 @@ setTimeout(function(){
       try { var cf = (window.holoFriends && typeof window.holoFriends.cloudFriends === 'function') ? window.holoFriends.cloudFriends() : {}; if(cf[oppUid] && cf[oppUid].name) oppName = cf[oppUid].name; } catch(e){}
       var gn = '';
       try { gn = (window.holoTurn && typeof window.holoTurn.gameName === 'function') ? window.holoTurn.gameName(m.game) : m.game; } catch(e){}
-      return '<div class="sp-matchrow' + (it.mine ? ' your-turn' : '') + '" data-turn-open="' + spEsc(it.mid) + '"><b>' + spEsc(oppName) + '</b><span>' + spEsc(gn) + ' · ' + spEsc(it.st) + '</span><button type="button" class="btn btn-dark dm-mini">Open</button></div>';
+      /* ROOM-NAMES-SETTINGS-2026-11-27: a renamed room shows its custom name in bold, with "Game vs Opponent" as the sub-line. */
+      var rowName = oppName, rowSub = gn + ' · ' + it.st;
+      try {
+        var rs3 = (window.holoRooms && window.holoRooms.roomSettings) ? window.holoRooms.roomSettings : null;
+        if(rs3 && typeof m.name === 'string' && m.name.trim()){ rowName = rs3.cleanName(m.name); rowSub = gn + ' vs ' + oppName + ' · ' + it.st; }
+      } catch(e){}
+      return '<div class="sp-matchrow' + (it.mine ? ' your-turn' : '') + '" data-turn-open="' + spEsc(it.mid) + '"><b>' + spEsc(rowName) + '</b><span>' + spEsc(rowSub) + '</span><button type="button" class="btn btn-dark dm-mini">Open</button></div>';
     }).join('');
     if(list.length > 5) h += '<button type="button" class="btn btn-dark dm-mini sp-showall" data-sp-showall>Show all (' + totalCount + ')</button>';
     return h + '</section>';
@@ -13160,6 +13167,109 @@ window.holoDaily = (function(){
 })();
 </script>
 <script>
+/* SHARED-STATE-FIX-2026-11-27: per-account device state. A fresh account on
+   a shared device was seeing the previous user's name + progress (live UI
+   check 2026-11-26 23:57): the greeting read the device-stored tester
+   session, and ALL progress (points, plays, streak, badges, recents,
+   bests) lived under ONE device key (holoArcade_v1_hub etc.), not per
+   account. These helpers are the single source of truth for "who is signed
+   in right now" and for the per-account device keys. The Firebase
+   credential is the auth truth: a session that disagrees with it is stale
+   (a previous user on this device) and is ignored for identity. Local-only
+   accounts (no Firebase uid) fall back to their email/code/name. Signed
+   out -> owner null (callers fall back to the legacy shared key). The
+   legacy shared keys are NEVER auto-migrated: they may hold another user's
+   progress, and a fresh account must never adopt it (a returning account
+   restores from its own /users/<uid>/cloudSaves instead). The only move
+   allowed is a same-account registration: a local-only account (owner
+   local:<email>) that gains a Firebase uid (owner uid:<uid>) carries its
+   local record into the uid key (see holoClaimLocalProgress). */
+(function(){
+  "use strict";
+  window.holoHubIdentity = function(){
+    try {
+      var sess = null;
+      try { sess = JSON.parse(localStorage.getItem('holos-arcade-tester-login') || 'null'); } catch(e0){}
+      if(!sess){ try { sess = JSON.parse(sessionStorage.getItem('holos-arcade-tester-login') || 'null'); } catch(e1){} }
+      var authUid = '', authEmail = '';
+      try { if(window.holoBetaAuth && window.holoBetaAuth.user && window.holoBetaAuth.user.uid){ authUid = String(window.holoBetaAuth.user.uid); authEmail = String(window.holoBetaAuth.user.email || '').trim().toLowerCase(); } } catch(e2){}
+      if(!authUid){
+        try { var tok = JSON.parse(localStorage.getItem('holos-firebase-auth') || 'null'); if(tok && tok.uid){ authUid = String(tok.uid); authEmail = String(tok.email || '').trim().toLowerCase(); } } catch(e3){}
+      }
+      var email = sess ? String(sess.email || '').trim().toLowerCase() : '';
+      if(authUid) return { owner:'uid:' + authUid, uid:authUid, email: email || authEmail };
+      if(sess){
+        if(sess.uid) return { owner:'uid:' + String(sess.uid), uid:String(sess.uid), email:email };
+        if(email) return { owner:'local:' + email, uid:'', email:email };
+        if(sess.code) return { owner:'local:code:' + String(sess.code).trim().toLowerCase(), uid:'', email:'' };
+        if(sess.name) return { owner:'local:name:' + String(sess.name).trim().toLowerCase(), uid:'', email:'' };
+      }
+      return { owner:null, uid:'', email:'' };
+    } catch(e){ return { owner:null, uid:'', email:'' }; }
+  };
+  window.holoHubOwner = function(){ try { var id = window.holoHubIdentity(); return id ? id.owner : null; } catch(e){ return null; } };
+  window.holoHubKey = function(base){ try { var o = window.holoHubOwner(); return o ? base + ':' + o : base; } catch(e){ return base; } };
+  window.holoHubKeyFor = function(base, suffix){ return suffix ? base + ':' + suffix : base; };
+  window.holoHubPrefix = function(prefix){ try { var o = window.holoHubOwner(); return o ? prefix + o + ':' : prefix; } catch(e){ return prefix; } };
+  window.holoHubPrefixedKey = function(prefix, slug){ try { var o = window.holoHubOwner(); return o ? prefix + o + ':' + slug : prefix + slug; } catch(e){ return prefix + slug; } };
+  /* SHARED-STATE-FIX-2026-11-27: resolve MY display name from my own
+     /users record, using the Firebase credential (the auth truth) — never
+     from a device-stored session that may belong to a previous user.
+     Returns a Promise<name|null>. */
+  window.holoResolveMyName = function(){
+    try {
+      var tok = '', uid = '';
+      try { if(window.holoBetaAuth && window.holoBetaAuth.user && window.holoBetaAuth.user.uid) uid = String(window.holoBetaAuth.user.uid); } catch(e0){}
+      try { var t = JSON.parse(localStorage.getItem('holos-firebase-auth') || 'null'); if(t && t.uid){ if(!uid) uid = String(t.uid); tok = t.idToken || ''; } } catch(e1){}
+      if(!uid || !tok) return Promise.resolve(null);
+      return fetch('https://holos-arcade-default-rtdb.firebaseio.com/users/' + encodeURIComponent(uid) + '.json?auth=' + encodeURIComponent(tok))
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(u){ var n = u && (u.username || u.name) ? String(u.username || u.name).trim() : ''; return n || null; })
+        .catch(function(){ return null; });
+    } catch(e){ return Promise.resolve(null); }
+  };
+  /* SHARED-STATE-FIX-2026-11-27: same-account registration — carry a
+     local-only account's device progress (owner local:<email>) into its
+     new uid key (owner uid:<uid>). Only copies when the destination key
+     is empty, so a uid record is never overwritten. The legacy shared
+     keys are deliberately NOT touched here. Returns true if anything
+     was copied. */
+  window.holoClaimLocalProgress = function(email, newOwner){
+    try {
+      if(!email || !newOwner || newOwner.indexOf('uid:') !== 0) return false;
+      var from = 'local:' + String(email).trim().toLowerCase();
+      var moved = false;
+      function copyKey(base){
+        try {
+          var src = base + ':' + from, dst = base + ':' + newOwner;
+          if(localStorage.getItem(dst) !== null) return false;
+          var v = localStorage.getItem(src);
+          if(v === null) return false;
+          if(base === 'holoArcade_v1_hub'){ try { var o = JSON.parse(v); if(o && typeof o === 'object'){ o._owner = newOwner; v = JSON.stringify(o); } } catch(e){} }
+          localStorage.setItem(dst, v);
+          return true;
+        } catch(e){ return false; }
+      }
+      ['holoArcade_v1_hub','holoArcade_v1_gotd','holoArcade_v1_badges','holos-arcade-recent-plays','holos-arcade-recent-removed'].forEach(function(b){ if(copyKey(b)) moved = true; });
+      try {
+        var keys = [];
+        for(var i = 0; i < localStorage.length; i++){ var k = localStorage.key(i); if(k) keys.push(k); }
+        keys.forEach(function(k){
+          ['holoArcade_v1_best_','holoArcade_v1_streak_'].forEach(function(p){
+            var pre = p + from + ':';
+            if(k.indexOf(pre) === 0){
+              var dst = p + newOwner + ':' + k.slice(pre.length);
+              try { if(localStorage.getItem(dst) === null){ localStorage.setItem(dst, localStorage.getItem(k)); moved = true; } } catch(e){}
+            }
+          });
+        });
+      } catch(e){}
+      return moved;
+    } catch(e){ return false; }
+  };
+})();
+</script>
+<script>
 (function(){
   "use strict";
   function $(id){ return document.getElementById(id); }
@@ -13388,14 +13498,24 @@ window.holoDaily = (function(){
 
   /* Daily streak — saved in this browser only, under the hub's prefix. */
   var LS_KEY = 'holoArcade_v1_gotd';
+  /* SHARED-STATE-FIX-2026-11-27: the GOTD streak is per-account (see the
+     helper block before this script). LS_KEY is the legacy base; the live
+     key is gotdKeyNow(). */
+  function gotdKeyNow(){ try { return (typeof window.holoHubKey === 'function') ? window.holoHubKey(LS_KEY) : LS_KEY; } catch(e){ return LS_KEY; } }
   function loadState(){
     try {
-      var v = JSON.parse(localStorage.getItem(LS_KEY));
+      var v = JSON.parse(localStorage.getItem(gotdKeyNow()));
       if(v && typeof v === 'object') return { lastPlayed: v.lastPlayed || '', streak: v.streak || 0, best: v.best || 0 };
     } catch(e){}
     return { lastPlayed: '', streak: 0, best: 0 };
   }
-  function saveState(){ try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){} }
+  function saveState(){ try { localStorage.setItem(gotdKeyNow(), JSON.stringify(state)); } catch(e){} }
+  /* SHARED-STATE-FIX-2026-11-27: reload the GOTD record for the current
+     account (called from the hub reload hook on sign-in/switch, and at
+     boot after the hub claim runs). */
+  window.holoReloadGotdForAccount = function(){
+    try { state = loadState(); renderGotd(); return true; } catch(e){ return false; }
+  };
   /* CLOUD-SAVES-2026-11-24: apply a merged Game-of-the-Day record to
      the live in-memory GOTD state (same reason as holoApplyCloudHub:
      `state` is IIFE-private; a bare localStorage write would be
@@ -14161,9 +14281,75 @@ window.holoDaily = (function(){
 
   /* ---------- Hub state (points, badges, stats, settings) ---------- */
   var HUB_KEY = 'holoArcade_v1_hub', GOTD_KEY = 'holoArcade_v1_gotd';
-  var H = null;
-  try { var v = JSON.parse(localStorage.getItem(HUB_KEY)); if(v && typeof v === 'object') H = v; } catch(e){}
-  H = H || {};
+  /* SHARED-STATE-FIX-2026-11-27: hub progress is per-account. The live key
+     is HUB_KEY + ':' + owner (see window.holoHubOwner in the helper block
+     before the GOTD script). The legacy shared key is NEVER auto-migrated:
+     it may hold another user's progress, and a fresh account must never
+     adopt it (a returning account restores from its own
+     /users/<uid>/cloudSaves instead). The only move allowed is a
+     same-account registration: a local-only account (owner local:<email>)
+     that gains a Firebase uid (owner uid:<uid>) carries its local record
+     into the uid key. Every save stamps _owner so a record can be
+     validated against the account that wrote it. */
+  function hubKeyNow(){ try { return (typeof window.holoHubKey === 'function') ? window.holoHubKey(HUB_KEY) : HUB_KEY; } catch(e){ return HUB_KEY; } }
+  function hubOwnerNow(){ try { return (typeof window.holoHubOwner === 'function') ? window.holoHubOwner() : null; } catch(e){ return null; } }
+  function readHubAt(key){ try { var v = JSON.parse(localStorage.getItem(key)); return (v && typeof v === 'object') ? v : null; } catch(e){ return null; } }
+  function loadHubForOwner(){
+    var owner = hubOwnerNow();
+    var key = hubKeyNow();
+    var v = readHubAt(key);
+    if(v && owner && v._owner && v._owner !== owner){ try { window.__holoHubKeyConflict = key; } catch(e){} v = null; }
+    if(!v){
+      /* Same-account registration: carry the local record into the uid key. */
+      try {
+        if(owner && owner.indexOf('uid:') === 0){
+          var id = (typeof window.holoHubIdentity === 'function') ? window.holoHubIdentity() : null;
+          var em = id ? String(id.email || '') : '';
+          if(em && (typeof window.holoClaimLocalProgress === 'function')) window.holoClaimLocalProgress(em, owner);
+          v = readHubAt(key);
+          if(v && v._owner && v._owner !== owner){ try { window.__holoHubKeyConflict = key; } catch(e){} v = null; }
+        }
+      } catch(e){}
+    }
+    if(!v) v = {};
+    if(owner) v._owner = owner;
+    return v;
+  }
+  var H = loadHubForOwner();
+  try { window.__holoHubOwner = hubOwnerNow(); } catch(e){}
+  /* SHARED-STATE-FIX-2026-11-27: account-switch reload. Called from
+     renderTesterAuth (every sign-in, sign-out and load) BEFORE anything
+     renders: when the signed-in account changed, reload the hub record,
+     GOTD streak and badge record for THIS account and re-render. A fresh
+     account starts empty (its cloud save restores its own progress); the
+     legacy shared key is never adopted. Returns true when the account
+     changed and the state was reloaded. */
+  window.holoReloadHubForAccount = function(){
+    try {
+      var owner = hubOwnerNow();
+      if(owner === window.__holoHubOwner) return false;
+      window.__holoHubPrevOwner = window.__holoHubOwner;
+      window.__holoHubOwner = owner;
+      try { window.__holoHubKeyConflict = null; } catch(e){}
+      H = loadHubForOwner();
+      H.points = H.points || 0; H.totalEarned = H.totalEarned || 0;
+      H.plays = H.plays || {}; H.totalOpens = H.totalOpens || 0;
+      H.challengeDone = H.challengeDone || {}; H.dayPlays = H.dayPlays || {};
+      H.lastGotdDay = H.lastGotdDay || ''; H.gotdEver = !!H.gotdEver;
+      H.cb = !!H.cb; H.big = !!H.big;
+      H.hap = H.hap !== false;
+      H.scaleFit = H.scaleFit !== false;
+      H.playDays = Array.isArray(H.playDays) ? H.playDays : [];
+      Object.keys(H.dayPlays).forEach(function(k){ if(k !== todayK && k !== yK) delete H.dayPlays[k]; });
+      if(owner) H._owner = owner;
+      saveHub();
+      try { if(typeof window.holoReloadGotdForAccount === 'function') window.holoReloadGotdForAccount(); } catch(e){}
+      try { if(typeof window.holoReloadBadgesForAccount === 'function') window.holoReloadBadgesForAccount(); } catch(e){}
+      try { if(typeof window.holoRefreshLibrary === 'function') window.holoRefreshLibrary(); } catch(e){}
+      renderAll();
+      return true;
+    } catch(e){ return false; }
+  };
   H.points = H.points || 0; H.totalEarned = H.totalEarned || 0;
   H.plays = H.plays || {}; H.totalOpens = H.totalOpens || 0;
   H.challengeDone = H.challengeDone || {}; H.dayPlays = H.dayPlays || {};
@@ -14173,7 +14359,7 @@ window.holoDaily = (function(){
   H.scaleFit = H.scaleFit !== false; /* POOL-SIZING-2026-11-26 (D1): auto-fit on by default. */
   H.playDays = Array.isArray(H.playDays) ? H.playDays : []; /* EASY-ADDS-2026-11-23: play-day history for the Trophy Case calendar */
   Object.keys(H.dayPlays).forEach(function(k){ if(k !== todayK && k !== yK) delete H.dayPlays[k]; });
-  function saveHub(){ try { localStorage.setItem(HUB_KEY, JSON.stringify(H)); } catch(e){} }
+  function saveHub(){ try { var k = hubKeyNow(); if(window.__holoHubKeyConflict && window.__holoHubKeyConflict === k) return; if(hubOwnerNow()) H._owner = hubOwnerNow(); localStorage.setItem(k, JSON.stringify(H)); } catch(e){} } /* SHARED-STATE-FIX-2026-11-27 */
   /* CLOUD-SAVES-2026-11-24: apply a merged cloud save to the live
      in-memory hub state + tell the cloud module whenever hub state
      saves (a real play, a setting, a challenge). H is IIFE-private,
@@ -14196,9 +14382,9 @@ window.holoDaily = (function(){
     saveHub = function(){ var r = _cloudSaveHub.apply(this, arguments); try { if(window.holoCloudSaves && window.holoCloudSaves.pushSoon) window.holoCloudSaves.pushSoon(); } catch(e){} return r; };
   })();
   function gotdState(){
-    try { var s = JSON.parse(localStorage.getItem(GOTD_KEY)); if(s && typeof s === 'object') return { lastPlayed: s.lastPlayed || '', streak: s.streak || 0, best: s.best || 0 }; } catch(e){}
+    try { var _gk = (typeof window.holoHubKey === 'function') ? window.holoHubKey(GOTD_KEY) : GOTD_KEY; var s = JSON.parse(localStorage.getItem(_gk)); if(s && typeof s === 'object') return { lastPlayed: s.lastPlayed || '', streak: s.streak || 0, best: s.best || 0 }; } catch(e){}
     return { lastPlayed: '', streak: 0, best: 0 };
-  }
+  } /* SHARED-STATE-FIX-2026-11-27 */
   function curStreak(){ var s = gotdState(); return (s.lastPlayed === todayK || s.lastPlayed === yK) ? s.streak : 0; }
   function gotdId(){ var b = $('gotdPlay'); return b ? b.getAttribute('data-game') : null; }
 
@@ -14459,11 +14645,27 @@ window.holoDaily = (function(){
   var BADGE_KEY = 'holoArcade_v1_badges';
   var BADGE_XP = { easy:5, medium:15, hard:30 };
   var BADGE_STATE = null;
-  try { var _bv = JSON.parse(localStorage.getItem(BADGE_KEY)); if(_bv && typeof _bv === 'object') BADGE_STATE = _bv; } catch(e){}
+  try { var _bk = (typeof window.holoHubKey === 'function') ? window.holoHubKey(BADGE_KEY) : BADGE_KEY; var _bv = JSON.parse(localStorage.getItem(_bk)); if(_bv && typeof _bv === 'object') BADGE_STATE = _bv; } catch(e){} /* SHARED-STATE-FIX-2026-11-27 */
   BADGE_STATE = BADGE_STATE || {};
   BADGE_STATE.earned = (BADGE_STATE.earned && typeof BADGE_STATE.earned === 'object') ? BADGE_STATE.earned : {};
   BADGE_STATE.finishes = BADGE_STATE.finishes || 0; BADGE_STATE.hardWins = BADGE_STATE.hardWins || 0;
-  function saveBadges(){ try { localStorage.setItem(BADGE_KEY, JSON.stringify(BADGE_STATE)); } catch(e){} }
+  function saveBadges(){ try { var _bk = (typeof window.holoHubKey === 'function') ? window.holoHubKey(BADGE_KEY) : BADGE_KEY; localStorage.setItem(_bk, JSON.stringify(BADGE_STATE)); } catch(e){} } /* SHARED-STATE-FIX-2026-11-27 */
+  /* SHARED-STATE-FIX-2026-11-27: reload the badge record for the current
+     account (called from the hub reload hook on sign-in/switch, and at
+     boot after the hub claim runs). */
+  window.holoReloadBadgesForAccount = function(){
+    try {
+      var k = (typeof window.holoHubKey === 'function') ? window.holoHubKey(BADGE_KEY) : BADGE_KEY;
+      var v = null;
+      try { v = JSON.parse(localStorage.getItem(k)); } catch(e){}
+      BADGE_STATE = (v && typeof v === 'object') ? v : {};
+      BADGE_STATE.earned = (BADGE_STATE.earned && typeof BADGE_STATE.earned === 'object') ? BADGE_STATE.earned : {};
+      BADGE_STATE.finishes = BADGE_STATE.finishes || 0; BADGE_STATE.hardWins = BADGE_STATE.hardWins || 0;
+      if(window.holoBadges) window.holoBadges.key = k;
+      renderBadges();
+      return true;
+    } catch(e){ return false; }
+  };
   function playDayStreak(){
     var set = {}; (H.playDays || []).forEach(function(d){ set[d] = true; });
     var n = dayNumNow(), c = 0;
@@ -14663,7 +14865,13 @@ window.holoDaily = (function(){
   });
 
   function renderAll(){ checkBadges(); renderPoints(); renderChallenge(); renderBadges(); renderStats(); }
-  applySettings(); applyScaleFit(); saveHub(); renderAll(); /* POOL-SIZING-2026-11-26 (D1): apply the saved auto-fit size at boot. */
+  applySettings(); applyScaleFit(); saveHub();
+  /* SHARED-STATE-FIX-2026-11-27: re-read the GOTD + badge records for this
+     account after the boot claim above (the claim may have populated them
+     after their own IIFEs already loaded). */
+  try { if(typeof window.holoReloadGotdForAccount === 'function') window.holoReloadGotdForAccount(); } catch(e){}
+  try { if(typeof window.holoReloadBadgesForAccount === 'function') window.holoReloadBadgesForAccount(); } catch(e){}
+  renderAll(); /* POOL-SIZING-2026-11-26 (D1): apply the saved auto-fit size at boot. */
 
   /* ---------- Feedback + Tester Reviews ---------- */
   var FB_KEY = 'holos-arcade-feedback';
@@ -15319,7 +15527,7 @@ window.holoDaily = (function(){
     var set = {};
     (H.playDays || []).forEach(function(k){ set[k] = 1; });
     Object.keys(H.dayPlays || {}).forEach(function(k){ set[k] = 1; });
-    try { var rp = JSON.parse(localStorage.getItem('holos-arcade-recent-plays')) || []; rp.forEach(function(r){ if(r && r.ts) set[new Date(r.ts).toISOString().slice(0,10)] = 1; }); } catch(e){}
+    try { var _rk = (typeof window.holoHubKey === 'function') ? window.holoHubKey('holos-arcade-recent-plays') : 'holos-arcade-recent-plays'; var rp = JSON.parse(localStorage.getItem(_rk)) || []; rp.forEach(function(r){ if(r && r.ts) set[new Date(r.ts).toISOString().slice(0,10)] = 1; }); } catch(e){} /* SHARED-STATE-FIX-2026-11-27 */
     try { var gs = gotdState(); if(gs.lastPlayed) set[gs.lastPlayed] = 1; } catch(e){}
     return set;
   }
@@ -16458,7 +16666,20 @@ var REVIEWER_BADGES = [
 var OWNER_UIDS = ['wQEvX4fiG6QSDMWaxx20JaQwRPP2'];
 function isOwnerUid(uid){ return OWNER_UIDS.indexOf(String(uid || '')) >= 0; }
 function ownerRoleFor(role, prevRole, uid, prevUid){ var wantOwner = (String(role || '') === 'owner') || (String(prevRole || '') === 'owner') || ((typeof isOwnerMode === 'function' && isOwnerMode())); return (wantOwner && isOwnerUid(uid || prevUid)) ? 'owner' : ''; }
-function isBossTester(t){ return !!(t && t.role === 'owner' && isOwnerUid(t.uid)); }
+function isBossTester(t){
+  if(!(t && t.role === 'owner' && isOwnerUid(t.uid))) return false;
+  /* SHARED-STATE-FIX-2026-11-27: a device-stored session can be stale (a
+     previous user on this device). Never grant owner status from a session
+     whose uid disagrees with the current Firebase credential — a stale
+     owner session must not show the Owner Dash to the next signer-in. */
+  try {
+    if(typeof window.holoHubIdentity === 'function'){
+      var id = window.holoHubIdentity();
+      if(id && id.uid && String(t.uid) !== String(id.uid)) return false;
+    }
+  } catch(e){}
+  return true;
+}
 var REVIEWER_FB_KEY = 'holos-arcade-feedback';
 function reviewerBadgeDef(id){ for(var i = 0; i < REVIEWER_BADGES.length; i++){ if(REVIEWER_BADGES[i].id === id) return REVIEWER_BADGES[i]; } return null; }
 function computeEarnedBadgeIds(){
@@ -16591,6 +16812,10 @@ function renderContinueBanner(){
 }
 
 function renderTesterAuth(){
+  /* SHARED-STATE-FIX-2026-11-27: an account switch (or a stale session from
+     a previous user) must swap the device progress to THIS account's
+     record before anything renders — see window.holoReloadHubForAccount. */
+  try { if(typeof window.holoReloadHubForAccount === 'function') window.holoReloadHubForAccount(); } catch(e){}
   var t = getTester();
   var lv = document.getElementById('loginView');
   var chip = document.getElementById('testerChip');
@@ -16599,23 +16824,39 @@ function renderTesterAuth(){
   var setPanel = document.getElementById('settingsPanel');
   if(setPanel) setPanel.hidden = !t;
   if(t){
+    /* SHARED-STATE-FIX-2026-11-27: is this session's name safe to show? The
+       session is trusted ONLY when its uid matches the current Firebase
+       credential, or for a local-only account (no credential, no uid),
+       where the session is the only record. A stale session (a previous
+       user on this device) is never shown — the greeting stays neutral
+       until the /users record resolves. */
+    var _greetTrusted = false, _greetName = '';
+    try {
+      var _id = (typeof window.holoHubIdentity === 'function') ? window.holoHubIdentity() : null;
+      var _authUid = _id ? String(_id.uid || '') : '';
+      if(_authUid && t.uid && String(t.uid) === _authUid){ _greetTrusted = true; _greetName = t.name; }
+      else if(!_authUid && !t.uid){ _greetTrusted = true; _greetName = t.name; }
+    } catch(e){}
     var who = document.getElementById('accountWho');
-    if(who) who.textContent = 'Signed in as ' + (t.name || 'tester') + '.'; /* SWEEP-FIX3-2026-11-25 (Holo 00:32): account box shows the Code Name, never the email — t.email dropped from the chain (the sweep's one direct never-emails-shown violation). */
+    if(who) who.textContent = _greetTrusted ? ('Signed in as ' + (_greetName || 'tester') + '.') : 'Signed in.'; /* SWEEP-FIX3-2026-11-25 (Holo 00:32): account box shows the Code Name, never the email — t.email dropped from the chain (the sweep's one direct never-emails-shown violation). SHARED-STATE-FIX-2026-11-27: the name is shown only when the session is trusted. */
     if(lv) lv.hidden = true;
     if(chip){
       chip.hidden = false;
       var g = document.getElementById('testerGreeting');
-      if(g) g.textContent = 'Hi, ' + t.name;
-      /* CODE-NAME-LIVE-RESOLVE-2026-11-25: the greeting reads the local
-         account record, which goes stale when the Code Name changes
-         (honeybear -> MamaBear). Re-resolve MY name live from my own
-         /users record — a self-read is allowed under live rules, so
-         this works today — and patch the greeting + account line when
-         it differs. Stored records are untouched. */
+      if(_greetTrusted){ if(g) g.textContent = 'Hi, ' + _greetName; }
+      else if(g){ g.textContent = 'Hi, tester'; }
+      /* SHARED-STATE-FIX-2026-11-27: re-resolve MY name from my own /users
+         record (the Firebase credential is the auth truth — see
+         window.holoResolveMyName) and patch the greeting + account line
+         when it resolves. This replaces the old myName() patch, which
+         could not run when the session disagreed with the credential
+         (it returned 'A tester' and left the stale name in place).
+         It still handles renames: if the /users name differs from the
+         session name, the fresh name wins. Stored records are untouched. */
       try {
-        if(window.holoFriends && typeof window.holoFriends.myName === 'function'){
-          window.holoFriends.myName().then(function(fresh){
-            if(!fresh || fresh === 'A tester' || fresh === t.name) return;
+        if(typeof window.holoResolveMyName === 'function'){
+          window.holoResolveMyName().then(function(fresh){
+            if(!fresh) return;
             var g2 = document.getElementById('testerGreeting'); if(g2) g2.textContent = 'Hi, ' + fresh;
             var who2 = document.getElementById('accountWho'); if(who2) who2.textContent = 'Signed in as ' + fresh + '.';
           }).catch(function(){});
@@ -17219,7 +17460,7 @@ function renderTesterAuth(){
   window.holoBuildDataExport = function(){
     var sess = null;
     try { sess = nlSession(); } catch(e){}
-    var hub = holoReadJSON('holoArcade_v1_hub', {});
+    var hub = holoReadJSON((typeof window.holoHubKey === 'function') ? window.holoHubKey('holoArcade_v1_hub') : 'holoArcade_v1_hub', {}); /* SHARED-STATE-FIX-2026-11-27 */
     var acct = {};
     try { if(typeof loadAccountState === 'function') acct = loadAccountState() || {}; } catch(e){}
     var reports = holoReadJSON('holos-arcade-feedback', []);
@@ -17233,12 +17474,12 @@ function renderTesterAuth(){
       account: { codeName: sess ? String(sess.name || '') : '', email: sess ? String(sess.email || '') : '', code: sess ? String(sess.code || '') : '' },
       glitchXP: { balance: (hub && typeof hub.points === 'number') ? hub.points : 0, totalEarned: (hub && typeof hub.totalEarned === 'number') ? hub.totalEarned : 0 },
       hub: hub,
-      gameOfTheDay: holoReadJSON('holoArcade_v1_gotd', {}),
+      gameOfTheDay: holoReadJSON((typeof window.holoHubKey === 'function') ? window.holoHubKey('holoArcade_v1_gotd') : 'holoArcade_v1_gotd', {}), /* SHARED-STATE-FIX-2026-11-27 */
       progress: { played: acct.played || {}, reviewed: acct.reviewed || {}, tested: acct.tested || {}, badges: acct.badges || {}, lastGame: acct.lastGame || '' },
       favourites: acct.favorites || {},
       friends: acct.friends || {},
       reports: Array.isArray(reports) ? reports : [],
-      recentPlays: holoReadJSON('holos-arcade-recent-plays', []),
+      recentPlays: holoReadJSON((typeof window.holoHubKey === 'function') ? window.holoHubKey('holos-arcade-recent-plays') : 'holos-arcade-recent-plays', []), /* SHARED-STATE-FIX-2026-11-27 */
       settings: { sound: !!window.holoSettings.sound, music: !!window.holoSettings.music, acceptFriendRequests: frCurrent() }
     };
   };
@@ -17277,9 +17518,9 @@ function renderTesterAuth(){
         var fileCode = (data.account && data.account.code) ? String(data.account.code) : '';
         var myCode = (sess && sess.code) ? String(sess.code) : '';
         if(!fileCode || !myCode || fileCode !== myCode) throw new Error('account');
-        if(data.hub && typeof data.hub === 'object'){ try { localStorage.setItem('holoArcade_v1_hub', JSON.stringify(data.hub)); } catch(e3){} }
-        if(data.gameOfTheDay && typeof data.gameOfTheDay === 'object'){ try { localStorage.setItem('holoArcade_v1_gotd', JSON.stringify(data.gameOfTheDay)); } catch(e4){} }
-        if(Array.isArray(data.recentPlays)){ try { localStorage.setItem('holos-arcade-recent-plays', JSON.stringify(data.recentPlays)); } catch(e5){} }
+        if(data.hub && typeof data.hub === 'object'){ try { var _ik = (typeof window.holoHubKey === 'function') ? window.holoHubKey('holoArcade_v1_hub') : 'holoArcade_v1_hub'; localStorage.setItem(_ik, JSON.stringify(data.hub)); } catch(e3){} } /* SHARED-STATE-FIX-2026-11-27 */
+        if(data.gameOfTheDay && typeof data.gameOfTheDay === 'object'){ try { var _gk2 = (typeof window.holoHubKey === 'function') ? window.holoHubKey('holoArcade_v1_gotd') : 'holoArcade_v1_gotd'; localStorage.setItem(_gk2, JSON.stringify(data.gameOfTheDay)); } catch(e4){} } /* SHARED-STATE-FIX-2026-11-27 */
+        if(Array.isArray(data.recentPlays)){ try { var _rk2 = (typeof window.holoHubKey === 'function') ? window.holoHubKey('holos-arcade-recent-plays') : 'holos-arcade-recent-plays'; localStorage.setItem(_rk2, JSON.stringify(data.recentPlays)); } catch(e5){} } /* SHARED-STATE-FIX-2026-11-27 */
         var acct = {}; try { if(typeof loadAccountState === 'function') acct = loadAccountState() || {}; } catch(e6){}
         if(data.progress && typeof data.progress === 'object'){
           ['played','reviewed','tested','badges'].forEach(function(k){ if(data.progress[k] && typeof data.progress[k] === 'object') acct[k] = data.progress[k]; });
@@ -19904,11 +20145,11 @@ function renderTesterAuth(){
     try {
       if(!slug) return;
       var v = [];
-      try { v = JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch(e){ v = []; }
+      try { var _rk = (typeof window.holoHubKey === 'function') ? window.holoHubKey(RECENT_KEY) : RECENT_KEY; v = JSON.parse(localStorage.getItem(_rk)) || []; } catch(e){ v = []; } /* SHARED-STATE-FIX-2026-11-27 */
       if(!Array.isArray(v)) v = [];
       v = v.filter(function(r){ return r && r.slug && r.slug !== slug; });
       v.unshift({ slug: String(slug), ts: Date.now() });
-      localStorage.setItem(RECENT_KEY, JSON.stringify(v.slice(0, CAP)));
+      localStorage.setItem(_rk, JSON.stringify(v.slice(0, CAP))); /* SHARED-STATE-FIX-2026-11-27 */
       try { if(typeof window.holoClearRecentRemoved === 'function') window.holoClearRecentRemoved(String(slug)); } catch(e2){} /* RECENT-REMOVE-2026-11-25: playing a removed game again clears its tombstone, so it comes back to Recently Played */
     } catch(e){}
   }
@@ -19998,6 +20239,17 @@ function renderTesterAuth(){
   var BADGE_KEY = 'holoArcade_v1_badges';
   var PENDING_KEY = 'holos-arcade-cloudsaves-pending';
   var NODE = 'cloudSaves';
+  /* SHARED-STATE-FIX-2026-11-27: per-account device keys (same scheme as
+     the helper block before the GOTD script). HUB_KEY/GOTD_KEY/BADGE_KEY/
+     RECENT_KEY/REMOVED_KEY are the LEGACY bases; the live keys are
+     base + ':' + owner. The legacy shared keys are never auto-migrated. */
+  function hubKeyNow(){ try { return (typeof window.holoHubKey === 'function') ? window.holoHubKey(HUB_KEY) : HUB_KEY; } catch(e){ return HUB_KEY; } }
+  function gotdKeyNow(){ try { return (typeof window.holoHubKey === 'function') ? window.holoHubKey(GOTD_KEY) : GOTD_KEY; } catch(e){ return GOTD_KEY; } }
+  function badgeKeyNow(){ try { return (typeof window.holoHubKey === 'function') ? window.holoHubKey(BADGE_KEY) : BADGE_KEY; } catch(e){ return BADGE_KEY; } }
+  function recentKeyNow(){ try { return (typeof window.holoHubKey === 'function') ? window.holoHubKey(RECENT_KEY) : RECENT_KEY; } catch(e){ return RECENT_KEY; } }
+  function removedKey(){ try { return (typeof window.holoHubKey === 'function') ? window.holoHubKey(REMOVED_KEY) : REMOVED_KEY; } catch(e){ return REMOVED_KEY; } }
+  function bestPrefix(){ try { return (typeof window.holoHubPrefix === 'function') ? window.holoHubPrefix(BEST_PREFIX) : BEST_PREFIX; } catch(e){ return BEST_PREFIX; } }
+  function streakPrefix(){ try { return (typeof window.holoHubPrefix === 'function') ? window.holoHubPrefix(STREAK_PREFIX) : STREAK_PREFIX; } catch(e){ return STREAK_PREFIX; } }
   var RECENT_CAP = 20, SHELF_MAX = 10;
   var _inFlight = false, _pushTimer = null, _lastPushAt = 0, _lastCloudJson = '';
 
@@ -20020,16 +20272,16 @@ function renderTesterAuth(){
      removed game comes back only if you actually play it again. ---- */
   var REMOVED_KEY = 'holos-arcade-recent-removed';
   function loadRemoved(){
-    try { var v = readJSON(REMOVED_KEY, {}); if(isObj(v)){ var out = {}; Object.keys(v).forEach(function(k){ out[String(k)] = num(v[k], 0); }); return out; } } catch(e){}
+    try { var v = readJSON(removedKey(), {}); if(isObj(v)){ var out = {}; Object.keys(v).forEach(function(k){ out[String(k)] = num(v[k], 0); }); return out; } } catch(e){} /* SHARED-STATE-FIX-2026-11-27 */
     return {};
   }
-  function saveRemoved(map){ try { writeJSON(REMOVED_KEY, isObj(map) ? map : {}); } catch(e){} }
+  function saveRemoved(map){ try { writeJSON(removedKey(), isObj(map) ? map : {}); } catch(e){} } /* SHARED-STATE-FIX-2026-11-27 */
   function removeRecent(slug){
     if(!slug) return false;
     slug = String(slug);
     try {
-      var recents = readJSON(RECENT_KEY, []);
-      if(Array.isArray(recents)) writeJSON(RECENT_KEY, recents.filter(function(r){ return r && r.slug !== slug; }));
+      var recents = readJSON(recentKeyNow(), []);
+      if(Array.isArray(recents)) writeJSON(recentKeyNow(), recents.filter(function(r){ return r && r.slug !== slug; })); /* SHARED-STATE-FIX-2026-11-27 */
       var removed = loadRemoved(); removed[slug] = Date.now(); saveRemoved(removed);
     } catch(e){}
     renderShelf();
@@ -20094,9 +20346,9 @@ function renderTesterAuth(){
 
   /* ---- collect local state (fresh read every time) ---- */
   function collectLocal(){
-    var hub = readJSON(HUB_KEY, {}); if(!isObj(hub)) hub = {};
-    var gotd = readJSON(GOTD_KEY, {}); if(!isObj(gotd)) gotd = {};
-    var recents = readJSON(RECENT_KEY, []); if(!Array.isArray(recents)) recents = [];
+    var hub = readJSON(hubKeyNow(), {}); if(!isObj(hub)) hub = {};
+    var gotd = readJSON(gotdKeyNow(), {}); if(!isObj(gotd)) gotd = {}; /* SHARED-STATE-FIX-2026-11-27 */
+    var recents = readJSON(recentKeyNow(), []); if(!Array.isArray(recents)) recents = []; /* SHARED-STATE-FIX-2026-11-27 */
     recents = recents.filter(function(r){ return r && r.slug; }).map(function(r){ return { slug:String(r.slug), ts:num(r.ts, 0) }; });
     var acct = {};
     try { if(typeof loadAccountState === 'function') acct = loadAccountState() || {}; } catch(e){ acct = {}; }
@@ -20104,14 +20356,14 @@ function renderTesterAuth(){
     try {
       for(var i = 0; i < localStorage.length; i++){
         var k = localStorage.key(i); if(!k) continue;
-        if(k.indexOf(BEST_PREFIX) === 0){ var b = readJSON(k, {}); if(isObj(b)) bests[k.slice(BEST_PREFIX.length)] = b; }
-        else if(k.indexOf(STREAK_PREFIX) === 0){ var s = readJSON(k, {}); if(isObj(s)) streaks[k.slice(STREAK_PREFIX.length)] = s; }
+        if(k.indexOf(bestPrefix()) === 0){ var b = readJSON(k, {}); if(isObj(b)) bests[k.slice(bestPrefix().length)] = b; }
+        else if(k.indexOf(streakPrefix()) === 0){ var s = readJSON(k, {}); if(isObj(s)) streaks[k.slice(streakPrefix().length)] = s; } /* SHARED-STATE-FIX-2026-11-27 */
       }
     } catch(e){}
     var plays = {};
     if(isObj(hub.plays)) Object.keys(hub.plays).forEach(function(slug){ var n = num(hub.plays[slug], 0); if(n > 0) plays[slug] = n; });
     var playDays = Array.isArray(hub.playDays) ? hub.playDays.filter(function(d){ return typeof d === 'string'; }) : [];
-    var hubBadges = readJSON(BADGE_KEY, {}); if(!isObj(hubBadges)) hubBadges = {};
+    var hubBadges = readJSON(badgeKeyNow(), {}); if(!isObj(hubBadges)) hubBadges = {}; /* SHARED-STATE-FIX-2026-11-27 */
     var hbEarned = isObj(hubBadges.earned) ? hubBadges.earned : {};
     return {
       v: 1,
@@ -20239,14 +20491,14 @@ function renderTesterAuth(){
       var hubApplied = false;
       try { if(typeof window.holoApplyCloudHub === 'function') hubApplied = !!window.holoApplyCloudHub({ xp: merged.xp, plays: merged.plays, playDays: merged.playDays }); } catch(e){}
       if(!hubApplied){
-        var hub = readJSON(HUB_KEY, {}); if(!isObj(hub)) hub = {};
+        var hub = readJSON(hubKeyNow(), {}); if(!isObj(hub)) hub = {};
         hub.points = merged.xp.points; hub.totalEarned = merged.xp.totalEarned;
         hub.plays = merged.plays; hub.playDays = merged.playDays;
-        writeJSON(HUB_KEY, hub);
+        writeJSON(hubKeyNow(), hub); /* SHARED-STATE-FIX-2026-11-27 */
       }
       var gotdApplied = false;
       try { if(typeof window.holoApplyCloudGotd === 'function') gotdApplied = !!window.holoApplyCloudGotd(merged.gotd); } catch(e){}
-      if(!gotdApplied) writeJSON(GOTD_KEY, merged.gotd);
+      if(!gotdApplied) writeJSON(gotdKeyNow(), merged.gotd); /* SHARED-STATE-FIX-2026-11-27 */
       /* Achievement badges: persist, then update the LIVE badge state
          (window.holoBadges.state() returns the live object, so mutating
          it updates the Trophy Case without a reload). checkBadges()
@@ -20254,7 +20506,7 @@ function renderTesterAuth(){
          double XP), while anything newly satisfied by the merged
          progress unlocks normally, with its XP. */
       try {
-        writeJSON(BADGE_KEY, merged.hubBadges || { earned:{}, finishes:0, hardWins:0 });
+        writeJSON(badgeKeyNow(), merged.hubBadges || { earned:{}, finishes:0, hardWins:0 }); /* SHARED-STATE-FIX-2026-11-27 */
         if(window.holoBadges && typeof window.holoBadges.state === 'function'){
           var bst = window.holoBadges.state();
           if(bst && typeof bst === 'object'){
@@ -20265,8 +20517,8 @@ function renderTesterAuth(){
           if(typeof window.holoBadges.checkBadges === 'function') window.holoBadges.checkBadges();
         }
       } catch(e){}
-      writeJSON(RECENT_KEY, merged.recents);
-      writeJSON(REMOVED_KEY, isObj(merged.removedRecents) ? merged.removedRecents : {}); /* RECENT-REMOVE-2026-11-25: tombstones persist so the merge keeps dropping removed games */
+      writeJSON(recentKeyNow(), merged.recents); /* SHARED-STATE-FIX-2026-11-27 */
+      writeJSON(removedKey(), isObj(merged.removedRecents) ? merged.removedRecents : {}); /* SHARED-STATE-FIX-2026-11-27 */ /* RECENT-REMOVE-2026-11-25: tombstones persist so the merge keeps dropping removed games */
       try {
         if(typeof loadAccountState === 'function'){
           var s = loadAccountState() || {};
@@ -20277,8 +20529,8 @@ function renderTesterAuth(){
           else if(typeof saveAccountState === 'function') saveAccountState(s);
         }
       } catch(e){}
-      Object.keys(merged.bests).forEach(function(g){ writeJSON(BEST_PREFIX + g, merged.bests[g]); });
-      Object.keys(merged.streaks).forEach(function(g){ writeJSON(STREAK_PREFIX + g, merged.streaks[g]); });
+      Object.keys(merged.bests).forEach(function(g){ writeJSON(bestPrefix() + g, merged.bests[g]); }); /* SHARED-STATE-FIX-2026-11-27 */
+      Object.keys(merged.streaks).forEach(function(g){ writeJSON(streakPrefix() + g, merged.streaks[g]); }); /* SHARED-STATE-FIX-2026-11-27 */
     } catch(e){}
     try { if(typeof window.holoRefreshFavourites === 'function') window.holoRefreshFavourites(); } catch(e){}
     try { if(typeof window.holoRefreshLibrary === 'function') window.holoRefreshLibrary(); } catch(e){}
@@ -20327,7 +20579,7 @@ function renderTesterAuth(){
     return NAME_FALLBACK[slug] || String(slug).replace(/-/g, ' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
   }
   function bestOf(slug){
-    try { var v = readJSON(BEST_PREFIX + slug, {}); if(!isObj(v)) return 0; var m = 0; Object.keys(v).forEach(function(k){ m = Math.max(m, num(v[k], 0)); }); return m; } catch(e){ return 0; }
+    try { var v = readJSON(bestPrefix() + slug, {}); if(!isObj(v)) return 0; var m = 0; Object.keys(v).forEach(function(k){ m = Math.max(m, num(v[k], 0)); }); return m; } catch(e){ return 0; } /* SHARED-STATE-FIX-2026-11-27 */
   }
   function whenLabel(ts){
     try {
@@ -20346,8 +20598,8 @@ function renderTesterAuth(){
       var sec = document.getElementById('recentShelf'); if(!sec) return;
       var row = document.getElementById('recentRow'); if(!row) return;
       if(!signedIn()){ sec.hidden = true; return; }
-      var recents = readJSON(RECENT_KEY, []);
-      if(!Array.isArray(recents)) recents = [];
+      var recents = readJSON(recentKeyNow(), []);
+      if(!Array.isArray(recents)) recents = []; /* SHARED-STATE-FIX-2026-11-27 */
       var seen = {}, items = [];
       var removed = loadRemoved(); /* RECENT-REMOVE-2026-11-25: never render an entry its tombstone beats */
       recents.forEach(function(r){
@@ -20691,9 +20943,10 @@ function renderTesterAuth(){
   var EGG_XP = 5;
   function awardEggXp(){
     try {
-      var H = JSON.parse(localStorage.getItem('holoArcade_v1_hub') || '{}') || {};
+      var _hk = (typeof window.holoHubKey === 'function') ? window.holoHubKey('holoArcade_v1_hub') : 'holoArcade_v1_hub';
+      var H = JSON.parse(localStorage.getItem(_hk) || '{}') || {};
       H.points = (H.points || 0) + EGG_XP; H.totalEarned = (H.totalEarned || 0) + EGG_XP;
-      localStorage.setItem('holoArcade_v1_hub', JSON.stringify(H));
+      localStorage.setItem(_hk, JSON.stringify(H)); /* SHARED-STATE-FIX-2026-11-27 */
       var v = H.points.toLocaleString();
       ['pointsBal','chipPointsBal'].forEach(function(id){ var el = document.getElementById(id); if(el) el.textContent = v; });
     } catch(e){}
@@ -22328,6 +22581,18 @@ function renderTesterAuth(){
     var rec = loadAuth();
     if(!rec) return Promise.resolve(null);
     return fetchUser(rec).then(function(u){ return (u && u.settings) ? u.settings : null; });
+  };
+  /* DUEL-MUSIC-2026-11-26: the embed link lives on /users/<uid>/music/embed (RTDB primary; the localStorage mirror is in the music module). Same patchUser/fetchUser pattern as the sound settings. The pending rules doc's /users/$uid .write is self-only for existing records with no child restriction, so a music child is already covered — no new rules line. */
+  window.betaSetMusicEmbed = function(url){
+    var rec = loadAuth();
+    if(!rec) return Promise.resolve(false);
+    if(!url) return patchUser(rec, { music: { embed: null } });
+    return patchUser(rec, { music: { embed: { playlistUrl: String(url), updatedAt: Date.now() } } });
+  };
+  window.betaGetMusicEmbed = function(){
+    var rec = loadAuth();
+    if(!rec) return Promise.resolve(null);
+    return fetchUser(rec).then(function(u){ return (u && u.music && u.music.embed) ? u.music.embed : null; });
   };
   window.betaSetAcceptFriendRequests = function(val){
     var rec = loadAuth();
@@ -26206,6 +26471,564 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   window.holoFriends = { refresh:refresh, syncFriendNames:syncFriendNames, resolveLiveName:resolveLiveName, resolveLiveNameForCode:resolveLiveNameForCode, refreshLiveNames:refreshLiveNames, myName:myName, sendRequest:sendRequest, acceptRequest:acceptRequest, declineRequest:declineRequest, cancelRequest:cancelRequest, removeCloudFriend:removeCloudFriend, searchCloud:searchCloud, incoming:function(){ return incoming; }, cloudFriends:function(){ return cloudFriends; }, outgoing:function(){ return outgoing; } };
 })();
 </script>
+<style>
+/* ENTRY-POINTS-2026-11-26 (Holo 2026-11-26 23:57 live two-account UI check, browser-task:9e1f712a): the room-chat + DM data path is verified live (29/29) but unreachable from the UI. This block styles only the new entry points — the duel banner, the Rooms create button, the friend-picker modal (same card/list classes as #favFriendPanel), the search-row action buttons, and the clickable Pool "Your matches" empty state. */
+#duelFriendPanel{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(6,4,20,.72);padding:16px}
+.duel-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#140b33;border:2px solid var(--violet);border-radius:14px;padding:10px 14px;margin:0 0 12px;color:#f4f1ff;font-size:14px}
+.duel-banner b{color:#fff}
+.duel-banner .btn{margin-left:auto}
+.game-card .card-foot .duel-card-btn{margin-top:8px}
+.rooms-create-btn{margin:0 0 12px}
+.friend-result-actions{display:inline-flex;gap:6px;align-items:center;flex:0 0 auto}
+.friend-result .friend-result-actions .btn{margin-left:0}
+[data-sp="matches"] .sp-empty{cursor:pointer}
+[data-sp="matches"] .sp-empty:hover{text-decoration:underline}
+</style>
+<script>
+/* ENTRY-POINTS-2026-11-26 (Holo 2026-11-26 23:57 live two-account UI
+   check, browser-task:9e1f712a): the room-chat + DM data path is
+   verified live (29/29) but UNREACHABLE from the UI. What this module
+   wires, without editing any other module's code:
+   (1) Duel on friend cards + search rows -> the multiplayer category
+       flow (Holo 22:06+22:10: friend tile Duel opens the multiplayer
+       category, NOT the openPlayMenu dropdown). The turn module's own
+       Duel button (cloud cards only) is re-wired by cloning it — the
+       clone keeps the .turn-challenge-btn class, so that module's
+       injector still skips the card, and cloneNode drops the old
+       listener. Local (device) cards never got buttons at all — the
+       local module renders no .friend-top-actions — so this module
+       adds the container + the buttons, resolving Code Name -> uid
+       from the on-device account record (otherState, same key) with
+       searchCloud as fallback.
+   (2) Message on friend cards + search rows -> window.holoDMs.open.
+   (3) Friend-request accept flow: the flow EXISTS in the friends
+       module (sendRequest writes the row + a side-quest Inbox notice;
+       refresh reads /friendRequests and renders #friendReqPanel +
+       #friendReqInbox with an Accept control; acceptRequest writes
+       both /friends sides + deletes the request). The UI check's
+       failure is the shared-localStorage two-tab artifact: both tabs
+       share 'holos-firebase-auth', so the second sign-in overwrote
+       the first and the receiver's tab read the sender's (empty)
+       requests. This module hardens refresh (one retry when auth is
+       absent at call time) and proves the flow end-to-end in jsdom.
+   (4) Rooms create control: a "Challenge a friend" button at the top
+       of #roomsSection (re-injected after every renderRooms, which
+       wipes innerHTML) opening a friend-picker modal (the
+       #favFriendPanel pattern) -> tap a friend -> startDuel.
+   (5) Friends search defects: reconcile() dedupes the two result
+       boxes (same Code Name in both -> the local row hides, the cloud
+       row is authoritative), hides a stale cloud "No tester..." when
+       the device found the tester, clears the stale cloud message on
+       the next keystroke (capture phase), re-runs both searches after
+       an unfriend (synthetic input), and makes unfriending two-way
+       (local Unfriend also removes the cloud side; cloud Unfriend
+       also clicks the local Unfriend).
+   (6) Fullscreen (report only, NOT fixed here): the "Permissions
+       check failed" rejection is the uncaught requestFullscreen
+       retry — fixed separately and LIVE 2026-11-27 00:06 (commit
+       061be3d3, md5 4fb5c31d); this file is built from those live
+       bytes and preserves that fix. The player bar is already sticky
+       (position:sticky; top:0) — the "header scrolls off-screen"
+       read is an automation artifact.
+   The Pool "Your matches" empty state ("challenge a friend!") is
+   clickable via delegation on .sp-empty in [data-sp="matches"] and
+   opens the same friend-picker. "New match" being AI-only is a Pool
+   game-file follow-up, out of hub scope. */
+(function(){
+  "use strict";
+  var AUTH_KEY = 'holos-firebase-auth';
+  function esc(s){ var d = document.createElement('div'); d.textContent = String(s == null ? '' : s); return d.innerHTML; }
+  function toast(m){ try { if(typeof showBadgeToast === 'function') showBadgeToast(m); } catch(e){} }
+  function normName(s){ return String(s || '').trim().toLowerCase(); }
+  function myUid(){ try { var a = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null'); return (a && a.uid) ? String(a.uid) : null; } catch(e){ return null; } }
+  function uidForCode(code){
+    /* Same read as the local friends module's otherState(): the
+       on-device account record for that Code Name, keyed
+       'holos-arcade-account-' + code. */
+    try { var v = JSON.parse(localStorage.getItem('holos-arcade-account-' + code)); if(v && v.uid) return String(v.uid); } catch(e){}
+    return null;
+  }
+  function resolveUid(code){
+    var u = uidForCode(code);
+    if(u) return Promise.resolve(u);
+    if(window.holoFriends && typeof window.holoFriends.searchCloud === 'function'){
+      return window.holoFriends.searchCloud(code).then(function(found){
+        if(found && found.length) return String(found[0].uid);
+        return null;
+      }).catch(function(){ return null; });
+    }
+    return Promise.resolve(null);
+  }
+  function turnGameSlugs(){
+    try { if(window.holoTurn && typeof window.holoTurn.turnGames === 'function') return window.holoTurn.turnGames().map(function(g){ return g.slug; }); } catch(e){}
+    return ['tic-tac-toe', '8-ball-pool', 'rock-paper-scissors', 'monster-match'];
+  }
+
+  /* ---------- (1) Duel flow: friend -> multiplayer category ---------- */
+  var duelTarget = null; /* { uid, name } — the friend being dueled */
+  function clearDuel(){
+    duelTarget = null;
+    try { sessionStorage.removeItem('holos-duel-target'); } catch(e){}
+    removeDuelBanner();
+    removeCardDuelButtons();
+  }
+  function startDuel(uid, name){
+    if(!uid) return;
+    duelTarget = { uid:String(uid), name:String(name || 'Tester') };
+    try { sessionStorage.setItem('holos-duel-target', JSON.stringify(duelTarget)); } catch(e){}
+    /* Any open Play dropdown goes away — the category is the picker now. */
+    try { document.querySelectorAll('.turn-play-menu').forEach(function(m){ m.remove(); }); } catch(e){}
+    /* The multiplayer category flow, same as tapping the Multiplayer
+       category tile: Library view + the multiplayer pill (which
+       filters the cards by data-cat, generic pill handler) + scroll
+       to the shelf. */
+    try { if(window.holoShowView) window.holoShowView('library', { keepScroll:true }); else location.hash = '#library'; } catch(e){ location.hash = '#library'; }
+    setTimeout(function(){
+      var p = document.querySelector('.pill[data-filter="multiplayer"]');
+      if(p) p.click();
+      var t = document.getElementById('all-games');
+      if(t) setTimeout(function(){ try { t.scrollIntoView({ behavior:'smooth', block:'start' }); } catch(e){} }, 40);
+      showDuelBanner();
+      injectCardDuelButtons();
+    }, 60);
+  }
+  function showDuelBanner(){
+    if(!duelTarget) return;
+    removeDuelBanner();
+    var host = document.getElementById('all-games');
+    if(!host || !host.parentNode) return;
+    var bar = document.createElement('div');
+    bar.id = 'duelBanner'; bar.className = 'duel-banner';
+    bar.innerHTML = '<span>⚔️ Duelling <b></b> — pick a game</span><button type="button" class="btn btn-light dm-mini" data-duel-cancel="1">Cancel</button>';
+    bar.querySelector('b').textContent = duelTarget.name;
+    bar.querySelector('[data-duel-cancel]').addEventListener('click', function(){ clearDuel(); });
+    host.parentNode.insertBefore(bar, host);
+  }
+  function removeDuelBanner(){ var b = document.getElementById('duelBanner'); if(b) b.remove(); }
+  function injectCardDuelButtons(){
+    if(!duelTarget) return;
+    var slugs = turnGameSlugs();
+    document.querySelectorAll('.game-card').forEach(function(card){
+      var play = card.querySelector('[data-game]');
+      if(!play) return;
+      var slug = play.getAttribute('data-game');
+      /* Only the games with turn-based match support can be dueled
+         (TURN_GAMES is the authority — the other multiplayer cards
+         are pass-and-play only). */
+      if(slugs.indexOf(slug) === -1) return;
+      var cats = (card.getAttribute('data-cat') || '').split(/\s+/);
+      if(cats.indexOf('multiplayer') === -1) return;
+      if(card.style.display === 'none') return;
+      if(card.querySelector('.soon')) return;
+      if(card.querySelector('.duel-card-btn')) return;
+      var foot = card.querySelector('.card-foot');
+      if(!foot) return;
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'btn btn-dark dm-mini duel-card-btn';
+      btn.textContent = '⚔️ Duel ' + duelTarget.name;
+      btn.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        var t = duelTarget; if(!t) return;
+        clearDuel();
+        if(window.holoTurn && typeof window.holoTurn.challenge === 'function') window.holoTurn.challenge(t.uid, t.name, slug);
+        else toast('Multiplayer is still loading — try again in a moment.');
+      });
+      foot.appendChild(btn);
+    });
+  }
+  function removeCardDuelButtons(){ document.querySelectorAll('.duel-card-btn').forEach(function(b){ b.remove(); }); }
+
+  /* ---------- (1)(2) friend-card buttons ---------- */
+  function addDuelBtn(actions, uid, name){
+    if(!actions || actions.querySelector('.turn-challenge-btn')) return null;
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn btn-dark dm-mini turn-challenge-btn'; btn.textContent = 'Duel';
+    btn.setAttribute('data-ep-duel', '1');
+    btn.addEventListener('click', function(ev){ ev.stopPropagation(); startDuel(uid, name); });
+    actions.appendChild(btn);
+    return btn;
+  }
+  function addMsgBtn(actions, uid, name){
+    if(!actions || actions.querySelector('.dm-open-btn')) return null;
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn btn-dark dm-mini dm-open-btn'; btn.textContent = 'Message';
+    btn.setAttribute('data-ep-msg', '1');
+    btn.addEventListener('click', function(){
+      if(window.holoDMs && typeof window.holoDMs.open === 'function') window.holoDMs.open(uid, name);
+      else toast('Messages are still loading — try again in a moment.');
+    });
+    actions.appendChild(btn);
+    return btn;
+  }
+  function rewireCloudCards(){
+    /* Cloud cards: the turn module already injected a Duel button
+       (openPlayMenu dropdown). Clone-replace it — cloneNode drops the
+       old listener, the clone keeps .turn-challenge-btn so the turn
+       injector still skips the card, and the clone carries the
+       multiplayer-category handler. The DM module's Message button
+       is already correct and is left alone. */
+    var grid = document.getElementById('cloudFriendGrid');
+    if(!grid) return;
+    grid.querySelectorAll('.friend-card').forEach(function(card){
+      var old = card.querySelector('.turn-challenge-btn');
+      if(!old || old.getAttribute('data-ep-duel') === '1') return;
+      var rem = card.querySelector('[data-freq-remove]');
+      if(!rem) return;
+      var uid = rem.getAttribute('data-freq-remove');
+      var name = 'Tester';
+      try { var b = card.querySelector('.friend-main b'); if(b) name = b.textContent.trim(); } catch(e){}
+      var btn = old.cloneNode(true);
+      btn.setAttribute('data-ep-duel', '1');
+      btn.removeAttribute('aria-haspopup');
+      btn.addEventListener('click', function(ev){ ev.stopPropagation(); startDuel(uid, name); });
+      old.parentNode.replaceChild(btn, old);
+    });
+  }
+  function ensureLocalActions(card){
+    var top = card.querySelector('.friend-top');
+    if(!top) return null;
+    var actions = top.querySelector('.friend-top-actions');
+    if(!actions){
+      /* Local cards render no .friend-top-actions (the turn/DM
+         injectors only target #cloudFriendGrid) — add the container
+         the cloud cards already have, same CSS. */
+      actions = document.createElement('div');
+      actions.className = 'friend-top-actions';
+      top.appendChild(actions);
+    }
+    return actions;
+  }
+  function wireLocalCard(card){
+    var nameEl = card.querySelector('[data-local-code]');
+    if(!nameEl) return;
+    var code = nameEl.getAttribute('data-local-code');
+    var name = nameEl.textContent.trim() || code;
+    var actions = ensureLocalActions(card);
+    if(!actions) return;
+    if(actions.querySelector('.turn-challenge-btn') && actions.querySelector('.dm-open-btn')) return;
+    var uid = uidForCode(code);
+    if(uid){ addDuelBtn(actions, uid, name); addMsgBtn(actions, uid, name); return; }
+    /* No on-device uid yet — resolve across devices, then add the
+       buttons. Device-only friends (no cloud account) get no buttons:
+       Duel + Message both need the cloud uid. */
+    resolveUid(code).then(function(u){
+      if(!u) return;
+      if(!document.body.contains(card)) return;
+      addDuelBtn(actions, u, name);
+      addMsgBtn(actions, u, name);
+    });
+  }
+  function wireLocalCards(){
+    var grid = document.getElementById('friendGrid');
+    if(!grid) return;
+    grid.querySelectorAll('.friend-card').forEach(wireLocalCard);
+  }
+
+  /* ---------- (1)(2) search-row buttons (friends only) ---------- */
+  function wireSearchRows(){
+    var lb = document.getElementById('friendResults');
+    if(lb){
+      lb.querySelectorAll('.friend-result').forEach(function(row){
+        if(row.querySelector('.friend-result-actions')) return;
+        if(!row.querySelector('.already')) return; /* friends only — Duel/Message need the cloud uid */
+        var b = row.querySelector('b'); if(!b) return;
+        var name = b.textContent.trim();
+        var code = null;
+        var grid = document.getElementById('friendGrid');
+        if(grid){
+          grid.querySelectorAll('[data-local-code]').forEach(function(nb){
+            if(nb.textContent.trim() === name) code = nb.getAttribute('data-local-code');
+          });
+        }
+        if(!code) return;
+        var actions = document.createElement('span');
+        actions.className = 'friend-result-actions';
+        row.appendChild(actions);
+        var uid = uidForCode(code);
+        if(uid){ addDuelBtn(actions, uid, name); addMsgBtn(actions, uid, name); return; }
+        resolveUid(code).then(function(u){
+          if(!u || !document.body.contains(row)) return;
+          addDuelBtn(actions, u, name);
+          addMsgBtn(actions, u, name);
+        });
+      });
+    }
+    var cb = document.getElementById('cloudFriendResults');
+    if(cb){
+      cb.querySelectorAll('.friend-result').forEach(function(row){
+        if(row.querySelector('.friend-result-actions')) return;
+        if(!row.querySelector('.already')) return;
+        var b = row.querySelector('b'); if(!b) return;
+        var name = b.textContent.trim();
+        var uid = null;
+        try {
+          var cf = (window.holoFriends && typeof window.holoFriends.cloudFriends === 'function') ? window.holoFriends.cloudFriends() : {};
+          Object.keys(cf).forEach(function(u){ if(((cf[u] && cf[u].name) || '') === name) uid = u; });
+        } catch(e){}
+        if(!uid) return;
+        var actions = document.createElement('span');
+        actions.className = 'friend-result-actions';
+        row.appendChild(actions);
+        addDuelBtn(actions, uid, name);
+        addMsgBtn(actions, uid, name);
+      });
+    }
+  }
+
+  /* ---------- (3) friend-request accept flow: refresh hardening ---------- */
+  function wrapRefresh(){
+    try {
+      var hf = window.holoFriends;
+      if(!hf || typeof hf.refresh !== 'function' || hf.refresh.__epWrapped) return;
+      var orig = hf.refresh;
+      var wrapped = function(){
+        var r = orig.apply(hf, arguments);
+        /* refresh() reads nothing when auth is absent at call time
+           (e.g. the 2.5s boot timeout fires before sign-in restores)
+           — retry once a few seconds later. A genuinely signed-out
+           user just gets a second no-op. */
+        if(!myUid()){
+          setTimeout(function(){ try { orig.call(hf); } catch(e){} }, 3000);
+        }
+        return r;
+      };
+      wrapped.__epWrapped = true;
+      hf.refresh = wrapped;
+    } catch(e){}
+  }
+
+  /* ---------- (5) Friends search defects ---------- */
+  function reconcileSearch(){
+    var localBox = document.getElementById('friendResults');
+    var cloudBox = document.getElementById('cloudFriendResults');
+    if(!localBox || !cloudBox) return;
+    var q = '';
+    try { var inp = document.getElementById('friendInput'); q = inp ? inp.value : ''; } catch(e){}
+    if(!String(q).trim()) return;
+    /* Stale cloud "No tester...": the device found the tester for
+       this query but the cloud box still shows the no-match line
+       (previous query's message, or a lookup that resolved empty
+       before the account existed). Hide the stale line — the local
+       result is the answer. */
+    var localRows = localBox.querySelectorAll('.friend-result');
+    var cloudNoMatch = cloudBox.querySelector('.friend-no-match');
+    if(localRows.length && cloudNoMatch) cloudNoMatch.style.display = 'none';
+    /* Duplicates: the same Code Name in both boxes — hide the LOCAL
+       row. The cloud row is authoritative (it carries the request
+       state + Duel/Message). */
+    var cloudNames = {};
+    cloudBox.querySelectorAll('.friend-result b').forEach(function(b){ cloudNames[normName(b.textContent)] = true; });
+    localBox.querySelectorAll('.friend-result').forEach(function(row){
+      var b = row.querySelector('b');
+      if(b && cloudNames[normName(b.textContent)]) row.style.display = 'none';
+      else row.style.display = '';
+    });
+  }
+
+  /* ---------- (4) Rooms create control + friend-picker ---------- */
+  function listFriends(){
+    var out = []; var seen = {};
+    try {
+      var cf = (window.holoFriends && typeof window.holoFriends.cloudFriends === 'function') ? window.holoFriends.cloudFriends() : {};
+      Object.keys(cf).forEach(function(uid){
+        var name = (cf[uid] && cf[uid].name) || 'Tester';
+        var k = normName(name);
+        if(seen[k]) return; seen[k] = true;
+        out.push({ uid:uid, name:name, code:'' });
+      });
+    } catch(e){}
+    try {
+      var grid = document.getElementById('friendGrid');
+      if(grid){
+        grid.querySelectorAll('[data-local-code]').forEach(function(b){
+          var code = b.getAttribute('data-local-code');
+          var name = b.textContent.trim() || code;
+          var k = normName(name);
+          if(seen[k]) return; seen[k] = true;
+          out.push({ uid:uidForCode(code) || '', name:name, code:code });
+        });
+      }
+    } catch(e){}
+    return out;
+  }
+  function closeDuelPicker(){ var p = document.getElementById('duelFriendPanel'); if(p) p.remove(); }
+  function openDuelPicker(){
+    closeDuelPicker();
+    var friends = listFriends();
+    var panel = document.createElement('div');
+    panel.id = 'duelFriendPanel';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    panel.setAttribute('aria-label', 'Challenge a friend');
+    var h = '<div class="fav-friend-card">';
+    h += '<h3>Challenge a friend</h3>';
+    h += '<p class="fav-friend-sub">Pick a friend, then pick a game to duel them in.</p>';
+    if(!friends.length){
+      h += '<p class="fav-friend-note">No friends yet — add friends first, then challenge one from here.</p>';
+      h += '<div class="fav-friend-list"><button type="button" data-duel-go-friends="1">Go to Friends</button></div>';
+    } else {
+      h += '<div class="fav-friend-list">';
+      friends.forEach(function(f){
+        h += '<button type="button" data-duel-friend-uid="' + esc(f.uid || '') + '" data-duel-friend-code="' + esc(f.code || '') + '" data-duel-friend-name="' + esc(f.name) + '">' + esc(f.name) + '</button>';
+      });
+      h += '</div>';
+      h += '<p class="fav-friend-note">Turn-based — one invite per friend. The room waits in Rooms until they accept, then locks when the game starts.</p>';
+    }
+    h += '<button type="button" class="g-btn" data-duel-close="1">Cancel</button></div>';
+    panel.innerHTML = h;
+    panel.addEventListener('click', function(ev){
+      if(ev.target === panel){ closeDuelPicker(); return; }
+      var closeBtn = ev.target && ev.target.closest ? ev.target.closest('[data-duel-close]') : null;
+      if(closeBtn){ closeDuelPicker(); return; }
+      var goBtn = ev.target && ev.target.closest ? ev.target.closest('[data-duel-go-friends]') : null;
+      if(goBtn){
+        closeDuelPicker();
+        try { if(window.holoShowView) window.holoShowView('friends'); else location.hash = '#friends'; } catch(e){ location.hash = '#friends'; }
+        return;
+      }
+      var fb = ev.target && ev.target.closest ? ev.target.closest('[data-duel-friend-uid],[data-duel-friend-code]') : null;
+      if(!fb) return;
+      var uid = fb.getAttribute('data-duel-friend-uid');
+      var code = fb.getAttribute('data-duel-friend-code');
+      var name = fb.getAttribute('data-duel-friend-name') || 'Tester';
+      closeDuelPicker();
+      if(uid){ startDuel(uid, name); return; }
+      if(code){
+        resolveUid(code).then(function(u){
+          if(u) startDuel(u, name);
+          else toast('That friend is only on this device — add them across devices to duel them.');
+        });
+      }
+    });
+    document.body.appendChild(panel);
+    var first = panel.querySelector('.fav-friend-list button') || panel.querySelector('[data-duel-close]');
+    if(first) first.focus();
+  }
+  function ensureRoomsCreate(){
+    /* renderRooms wipes #roomsSection innerHTML on every refresh, so
+       the button is re-injected after each render (observer +
+       interval). The guard stops the observer re-firing on its own
+       insert. */
+    var sec = document.getElementById('roomsSection');
+    if(!sec) return;
+    if(sec.querySelector('[data-ep-rooms-create]')) return;
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.className = 'btn btn-dark rooms-create-btn'; btn.setAttribute('data-ep-rooms-create', '1');
+    btn.textContent = '⚔️ Challenge a friend';
+    btn.addEventListener('click', function(){ openDuelPicker(); });
+    sec.insertBefore(btn, sec.firstChild);
+  }
+
+  /* ---------- delegated clicks: unfriend two-way, search re-run, Pool empty state ---------- */
+  function bindDelegation(){
+    if(bindDelegation.done) return;
+    bindDelegation.done = true;
+    document.addEventListener('click', function(ev){
+      var t = ev.target && ev.target.closest ? ev.target.closest('[data-friend-remove],[data-freq-remove]') : null;
+      if(t){
+        if(t.hasAttribute('data-friend-remove')){
+          /* Local Unfriend -> also remove the cloud side (both
+             directions), so the other side stops listing them. */
+          var code = t.getAttribute('data-friend-remove');
+          resolveUid(code).then(function(uid){
+            if(!uid) return;
+            if(window.holoFriends && typeof window.holoFriends.removeCloudFriend === 'function'){
+              try { window.holoFriends.removeCloudFriend(uid); } catch(e){}
+            }
+          });
+        } else if(t.hasAttribute('data-freq-remove')){
+          /* Cloud Unfriend -> also remove the local entry (same name). */
+          setTimeout(function(){
+            try {
+              var card = t.closest ? t.closest('.friend-card') : null;
+              var nameEl = card ? card.querySelector('.friend-main b') : null;
+              var name = nameEl ? nameEl.textContent.trim() : '';
+              if(!name) return;
+              var localGrid = document.getElementById('friendGrid');
+              if(!localGrid) return;
+              localGrid.querySelectorAll('.friend-card').forEach(function(lc){
+                var b = lc.querySelector('[data-local-code]');
+                if(b && b.textContent.trim() === name){
+                  var rem = lc.querySelector('[data-friend-remove]');
+                  if(rem) rem.click();
+                }
+              });
+            } catch(e){}
+          }, 200);
+        }
+        /* Either way, the search rows are stale now ("Friends ✓"
+           while the list says "No friends yet") — re-run both
+           searches once the removals + re-renders settle. */
+        setTimeout(function(){
+          var inp = document.getElementById('friendInput');
+          if(inp && inp.value.trim()){
+            try { inp.dispatchEvent(new Event('input', { bubbles:true })); } catch(e){}
+          }
+        }, 350);
+        return;
+      }
+      /* Pool "Your matches" empty state: the "challenge a friend!"
+         line opens the friend-picker (the whole line is the button). */
+      var sp = ev.target && ev.target.closest ? ev.target.closest('.sp-empty') : null;
+      if(sp){
+        var sec = sp.closest ? sp.closest('[data-sp="matches"]') : null;
+        if(sec && /challenge a friend/i.test(sp.textContent || '')) openDuelPicker();
+      }
+    }, false);
+    /* Stale cloud "No tester..." belongs to the previous query — clear
+       it the moment the query changes (capture phase, before the
+       debounced cloud search resolves for the new query). */
+    var inp = document.getElementById('friendInput');
+    if(inp && !inp.__epWired){
+      inp.__epWired = true;
+      inp.addEventListener('input', function(){
+        var cb = document.getElementById('cloudFriendResults');
+        if(cb){ var nm = cb.querySelector('.friend-no-match'); if(nm) nm.style.display = 'none'; }
+      }, true);
+    }
+  }
+
+  /* ---------- observers + intervals ---------- */
+  function init(){
+    wrapRefresh();
+    bindDelegation();
+    try {
+      var cg = document.getElementById('cloudFriendGrid');
+      if(cg) new MutationObserver(function(){ setTimeout(rewireCloudCards, 50); }).observe(cg, { childList:true, subtree:true });
+      var lg = document.getElementById('friendGrid');
+      if(lg) new MutationObserver(function(){ setTimeout(function(){ wireLocalCards(); wireSearchRows(); }, 50); }).observe(lg, { childList:true, subtree:true });
+      var rs = document.getElementById('roomsSection');
+      if(rs) new MutationObserver(function(){ setTimeout(ensureRoomsCreate, 50); }).observe(rs, { childList:true });
+      var rec = function(){ setTimeout(function(){ reconcileSearch(); wireSearchRows(); }, 50); };
+      var fr = document.getElementById('friendResults');
+      if(fr) new MutationObserver(rec).observe(fr, { childList:true, subtree:true });
+      var cr = document.getElementById('cloudFriendResults');
+      if(cr) new MutationObserver(rec).observe(cr, { childList:true, subtree:true });
+      new MutationObserver(function(){
+        var v = document.body.getAttribute('data-view');
+        if(v === 'rooms') ensureRoomsCreate();
+        if(v === 'library' && duelTarget){ showDuelBanner(); injectCardDuelButtons(); }
+        if(v === 'friends'){ rewireCloudCards(); wireLocalCards(); wireSearchRows(); reconcileSearch(); }
+      }).observe(document.body, { attributes:true, attributeFilter:['data-view'] });
+    } catch(e){}
+    setInterval(function(){ rewireCloudCards(); wireLocalCards(); }, 2000);
+    setInterval(function(){ ensureRoomsCreate(); }, 2000);
+    setInterval(function(){ if(duelTarget){ showDuelBanner(); injectCardDuelButtons(); } }, 1500);
+    setTimeout(function(){ wrapRefresh(); bindDelegation(); rewireCloudCards(); wireLocalCards(); wireSearchRows(); ensureRoomsCreate(); reconcileSearch(); }, 800);
+    setTimeout(function(){ rewireCloudCards(); wireLocalCards(); wireSearchRows(); ensureRoomsCreate(); }, 2500);
+    /* A duel pick interrupted by a reload resumes: the target is
+       restored and the banner + card buttons come back on the next
+       library visit (interval above). */
+    try {
+      var saved = JSON.parse(sessionStorage.getItem('holos-duel-target') || 'null');
+      if(saved && saved.uid) duelTarget = { uid:String(saved.uid), name:String(saved.name || 'Tester') };
+    } catch(e){}
+    window.holoEntryPoints = { startDuel:startDuel, clearDuel:clearDuel, openDuelPicker:openDuelPicker, reconcile:reconcileSearch, rewireCloud:rewireCloudCards, wireLocal:wireLocalCards, target:function(){ return duelTarget; } };
+  }
+  init();
+})();
+</script>
+
 <!-- FRIEND-DMS-2026-11-24 (Holo 12:15): friend-only DMs.
      Tap Message on a cloud friend -> chat thread in the Inbox
      (Messages section). One thread per pair, text + Arcade stickers
@@ -27520,6 +28343,37 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
    lists. Usernames only, never emails. */
 #turnPlay{margin:14px 0;padding:14px;border:2px solid var(--violet);border-radius:14px;background:linear-gradient(180deg,#241a3d,#171040)}
 #turnPlay[hidden]{display:none!important}
+/* DUEL-MUSIC-2026-11-26 (Holo 2026-11-26 18:31-18:33): bottom-docked mini player for duel rooms — Spotify embed only (Phase 1). Collapsed bar is 48px, fixed to the viewport bottom, below the pop-up toasts (13000) and the DM/room-chat dock (12500). No body padding — the no-scroll game pages are protected. */
+#duelMusicBar{position:fixed;left:0;right:0;bottom:0;z-index:12000;background:linear-gradient(180deg,#171040,#0e0828 75%);border-top:2px solid var(--violet);box-shadow:0 -4px 18px rgba(0,0,0,.5);color:#fff}
+#duelMusicBar[hidden]{display:none!important}
+.dm-bar-row{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 12px}
+.dm-bar-row .dm-name{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700;font-size:13.5px}
+.dm-bar-row button{background:#241a3d;border:2px solid #453070;border-radius:10px;color:#fff;font-family:inherit;font-weight:700;font-size:13.5px;padding:6px 10px;cursor:pointer}
+.dm-bar-row button:hover{border-color:#ffd43b;color:#ffd43b}
+.dm-paused{color:#ffb3d9;font-size:12.5px;font-weight:700}
+.dm-paused[hidden]{display:none!important}
+#duelMusicExpanded{padding:0 12px 12px}
+#duelMusicExpanded[hidden]{display:none!important}
+#duelMusicFrame{width:100%;height:152px;border:0;border-radius:12px;background:#0a0620}
+.dm-link-row{display:flex;gap:8px;margin-top:8px}
+.dm-link-row input{flex:1 1 auto;min-width:0;background:#0a0620;border:2px solid #453070;border-radius:10px;color:#fff;font-family:inherit;font-size:13.5px;padding:8px 10px}
+.dm-link-row button{background:#241a3d;border:2px solid #453070;border-radius:10px;color:#fff;font-family:inherit;font-weight:700;font-size:13.5px;padding:8px 10px;cursor:pointer}
+.dm-err{color:#ff9db1;font-size:13px;font-weight:700;margin:8px 0 0}
+.dm-err[hidden]{display:none!important}
+.dm-hint{color:#b8f4ff;font-size:12.5px;margin:8px 0 0}
+.dm-vol{display:flex;align-items:center;gap:8px;color:#cfc8ff;font-size:13px;margin:8px 0 0}
+.dm-vol input{flex:1 1 auto}
+.dm-how{background:none;border:0;color:#ffd43b;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;padding:8px 0 0;text-decoration:underline}
+#duelMusicWalk{margin-top:10px;border:2px solid var(--violet);border-radius:12px;background:#241a3d;padding:10px 12px}
+#duelMusicWalk[hidden]{display:none!important}
+#dmWalkKicker{margin:0 0 4px;font-family:var(--pixel);font-size:11px;color:#ffd43b}
+#dmWalkBody{margin:0 0 10px;color:#e9e4ff;font-size:13.5px;line-height:1.5}
+.dm-walk-btns{display:flex;gap:8px}
+.dm-walk-btns button{background:#0a0620;border:2px solid #453070;border-radius:10px;color:#fff;font-family:inherit;font-weight:700;font-size:13.5px;padding:8px 12px;cursor:pointer}
+body.duel-music-on #notifyPopups{bottom:64px}
+body.duel-music-on #chatDock{bottom:64px}
+body.duel-music-on #rcBubble{bottom:64px}
+.turn-nowplaying{margin:0 0 10px;color:#b8f4ff;font-size:13.5px;font-weight:700}
 .turn-head{margin:0 0 4px;font-family:var(--pixel);font-size:13px;color:#ffd43b}
 .turn-sub{margin:0 0 10px;color:#cfc8ff;font-size:13.5px}
 .turn-friends{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
@@ -27569,6 +28423,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 #roomsSection{margin:18px 0 0}
 .rooms-head{margin:0 0 4px;font-family:var(--pixel);font-size:13px;color:#ffd43b}
 .rooms-sub{margin:0 0 12px;color:#cfc8ff;font-size:13.5px}
+/* Grouped Rooms: game heading inside an opponent's rooms (one heading per game, tiles under it). */
+.rooms-game-head{font-weight:800;font-size:14px;color:#ffd43b;margin:8px 2px 0}
 /* ROOM-CHAT-2026-11-26 (Holo 19:44): the room list scrolls UP AND DOWN — tiles stack top-to-bottom in one vertical column. NO horizontal scrolling on Rooms (the old sideways-scrolling strip is gone). */
 .nextmove-row{display:flex;flex-direction:column;gap:10px;padding:6px 2px 10px;overflow-x:hidden}
 .nextmove-tile{flex:1 1 auto;width:100%;display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;background:var(--card);border:1.5px solid var(--gold);border-radius:14px;padding:12px 13px;cursor:pointer;font-family:inherit;color:var(--ink)}
@@ -27763,9 +28619,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(xpDone[mid]) return;
     xpDone[mid] = true; saveXpDone();
     try {
-      var H = JSON.parse(localStorage.getItem('holoArcade_v1_hub') || '{}') || {};
+      var _hk = (typeof window.holoHubKey === 'function') ? window.holoHubKey('holoArcade_v1_hub') : 'holoArcade_v1_hub';
+      var H = JSON.parse(localStorage.getItem(_hk) || '{}') || {};
       H.points = (H.points || 0) + WIN_XP; H.totalEarned = (H.totalEarned || 0) + WIN_XP;
-      localStorage.setItem('holoArcade_v1_hub', JSON.stringify(H));
+      localStorage.setItem(_hk, JSON.stringify(H)); /* SHARED-STATE-FIX-2026-11-27 */
       var v = H.points.toLocaleString();
       ['pointsBal','chipPointsBal'].forEach(function(id){ var el = document.getElementById(id); if(el) el.textContent = v; });
     } catch(e){}
@@ -27834,6 +28691,12 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           : (gSlug === 'rock-paper-scissors')
           ? { game:gSlug, aUid:me, bUid:uid, aName:myN, bName:String(name || friendName(uid)), xUid:me, oUid:uid, board:[], turn:me, status:'waiting', winner:null, lastMoveAt:0, lastMoveBy:'', lastMoveCell:-1, history:[], moves:0, state:{ round:1, first:me, need:3, bestOf:5, wins:wins0, picks:{}, lastResult:null }, createdAt:now, updatedAt:now }
           : { game:gSlug, aUid:me, bUid:uid, aName:myN, bName:String(name || friendName(uid)), xUid:me, oUid:uid, board:['','','','','','','','',''], turn:me, status:'waiting', winner:null, lastMoveAt:0, lastMoveBy:'', lastMoveCell:-1, history:[], moves:0, createdAt:now, updatedAt:now };
+        /* ROOM-NAMES-SETTINGS-2026-11-27: the host names the room at creation (optional) + sets the turn timer. Stored on the match record so both players read it from the same cache. */
+        try {
+          var rs2 = (window.holoRooms && window.holoRooms.roomSettings) ? window.holoRooms.roomSettings : null;
+          if(rs2 && mmOpts.roomName){ var rn2 = rs2.cleanName(mmOpts.roomName); if(rn2) match.name = rn2; }
+          if(mmOpts.turnTimerMin && [15, 60, 360, 1440].indexOf(mmOpts.turnTimerMin) !== -1) match.turnTimerMin = mmOpts.turnTimerMin;
+        } catch(e){}
         api('POST', '/turnMatches', match).then(function(r){
           if(!r || !r.name){ toast('Turn-based needs one more Arcade update — the new rules publish is still pending.'); return; }
           var mid = r.name;
@@ -28133,7 +28996,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     var wins = st.wins || {};
     var myWins = wins[me] || 0, oppWins = wins[opp.uid] || 0;
     var need = st.need || 3, bestOf = st.bestOf || 5, round = st.round || 1;
-    var h = '<div class="turn-board-wrap"><p class="turn-summary">' + esc(matchName(m, m.aUid, m.aName)) + ' vs ' + esc(matchName(m, m.bUid, m.bName)) + ' — Rock Paper Scissors<br>' + esc(statusText(m, me)) + '</p>' +
+    var h = '<div class="turn-board-wrap"><p class="turn-summary">' + esc(matchName(m, m.aUid, m.aName)) + ' vs ' + esc(matchName(m, m.bUid, m.bName)) + ' — Rock Paper Scissors<br>' + esc(statusText(m, me)) + '</p>' + musicChipHtml() +
       '<p class="turn-sub">Best of ' + bestOf + ' — first to ' + need + ' round wins · Round ' + round + '<br>' + esc(matchName(m, m.aUid, m.aName)) + ' ' + myWins + ' — ' + oppWins + ' ' + esc(matchName(m, m.bUid, m.bName)) + '</p>';
     if(st.lastResult && st.lastResult.text) h += '<p class="turn-lastmove">' + esc(st.lastResult.text) + '</p>';
     h += '<p class="turn-sub">Play it in Rock Paper Scissors — your match is listed there under Play with a Friend.</p><div class="turn-actions">';
@@ -28146,12 +29009,14 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(m.status === 'playing' || m.status === 'waiting'){
       h += '<button type="button" class="btn btn-light" data-turn-open-game="rock-paper-scissors">Open in Rock Paper Scissors</button>';
     }
+    /* DUEL-MUSIC-2026-11-26: now-playing chip under the status line + Music button in the action row (your music only, never your opponent's). */
     if(m.status === 'won' || m.status === 'draw'){
       h += '<button type="button" class="btn btn-light" data-turn-rematch="' + esc(mid) + '">Rematch — best of 5 again</button>';
     }
     h += '<button type="button" class="btn btn-dark" data-turn-report="' + esc(mid) + '">Report</button>' +
       '<button type="button" class="btn btn-dark" data-turn-block="' + esc(mid) + '">Block ' + esc(opp.name) + '</button>' +
-      '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>';
+      '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>' +
+      '<button type="button" class="btn btn-light" data-turn-music="' + esc(mid) + '">🎵 Music</button>';
     /* ROOM-CHAT-2026-11-26: per-room chat for this match (only while the match is live — the rules close the chat when the game ends). */
     if(m.status === 'waiting' || m.status === 'playing'){
       h += '<button type="button" class="btn btn-light" data-turn-chat="' + esc(mid) + '">Chat<span class="dm-count rc-tile-badge" hidden>0</span></button>';
@@ -28176,7 +29041,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     } else {
       scoreLine = esc(matchName(m, m.aUid, m.aName)) + ' ' + (st.aScore || 0) + ' - ' + (st.bScore || 0) + ' ' + esc(matchName(m, m.bUid, m.bName));
     }
-    var h = '<div class="turn-board-wrap"><p class="turn-summary">' + esc(matchName(m, m.aUid, m.aName)) + ' vs ' + esc(matchName(m, m.bUid, m.bName)) + ' - Monster Match<br>' + esc(statusText(m, me)) + '</p>' +
+    var h = '<div class="turn-board-wrap"><p class="turn-summary">' + esc(matchName(m, m.aUid, m.aName)) + ' vs ' + esc(matchName(m, m.bUid, m.bName)) + ' - Monster Match<br>' + esc(statusText(m, me)) + '</p>' + musicChipHtml() +
       '<p class="turn-sub">' + esc(modeName) + ' - ' + esc(st.difficulty || 'medium') + '<br>' + scoreLine + '</p>';
     h += '<p class="turn-sub">Play it in Monster Match, your match is listed there under Duel a friend.</p><div class="turn-actions">';
     if(m.status === 'waiting' && m.bUid === me){
@@ -28188,12 +29053,14 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(m.status === 'playing' || m.status === 'waiting'){
       h += '<button type="button" class="btn btn-light" data-turn-open-game="monster-match">Open in Monster Match</button>';
     }
+    /* DUEL-MUSIC-2026-11-26: now-playing chip under the status line + Music button in the action row (your music only, never your opponent's). */
     if(m.status === 'won' || m.status === 'draw'){
       h += '<button type="button" class="btn btn-light" data-turn-rematch="' + esc(mid) + '">Rematch, same mode again</button>';
     }
     h += '<button type="button" class="btn btn-dark" data-turn-report="' + esc(mid) + '">Report</button>' +
       '<button type="button" class="btn btn-dark" data-turn-block="' + esc(mid) + '">Block ' + esc(opp.name) + '</button>' +
-      '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>';
+      '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>' +
+      '<button type="button" class="btn btn-light" data-turn-music="' + esc(mid) + '">🎵 Music</button>';
     /* ROOM-CHAT-2026-11-26: per-room chat for this match (only while the match is live — the rules close the chat when the game ends). */
     if(m.status === 'waiting' || m.status === 'playing'){
       h += '<button type="button" class="btn btn-light" data-turn-chat="' + esc(mid) + '">Chat<span class="dm-count rc-tile-badge" hidden>0</span></button>';
@@ -28224,7 +29091,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       var dis = (!myTurnNow || v) ? ' disabled' : '';
       cells += '<button type="button" class="' + cls + '"' + dis + ' data-turn-cell="' + i + '" aria-label="' + CELL_NAMES[i] + (v ? ' — ' + v : '') + '">' + esc(v) + '</button>';
     }
-    var h = '<div class="turn-board-wrap">' + summaryHtml(m, me) + lastMoveHtml(m) +
+    var h = '<div class="turn-board-wrap">' + summaryHtml(m, me) + lastMoveHtml(m) + musicChipHtml() +
       '<div class="turn-board">' + cells + '</div>' +
       '<div class="turn-actions">';
     if(m.status === 'waiting' && m.bUid === me){
@@ -28233,12 +29100,14 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(m.status === 'waiting' && m.aUid === me){
       h += '<button type="button" class="btn btn-dark" data-turn-decline="' + esc(mid) + '">Cancel challenge</button>';
     }
+    /* DUEL-MUSIC-2026-11-26: now-playing chip under the status line + Music button in the action row (your music only, never your opponent's). */
     if(m.status === 'won' || m.status === 'draw'){
       h += '<button type="button" class="btn btn-light" data-turn-rematch="' + esc(mid) + '">Rematch — swap X and O</button>';
     }
     h += '<button type="button" class="btn btn-dark" data-turn-report="' + esc(mid) + '">Report</button>' +
       '<button type="button" class="btn btn-dark" data-turn-block="' + esc(mid) + '">Block ' + esc(opp.name) + '</button>' +
-      '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>';
+      '<button type="button" class="btn btn-dark" data-turn-mute="' + esc(mid) + '">Mute match</button>' +
+      '<button type="button" class="btn btn-light" data-turn-music="' + esc(mid) + '">🎵 Music</button>';
     /* ROOM-CHAT-2026-11-26: per-room chat for this match (only while the match is live — the rules close the chat when the game ends). */
     if(m.status === 'waiting' || m.status === 'playing'){
       h += '<button type="button" class="btn btn-light" data-turn-chat="' + esc(mid) + '">Chat<span class="dm-count rc-tile-badge" hidden>0</span></button>';
@@ -28288,6 +29157,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     root.querySelectorAll('[data-turn-chat]').forEach(function(b){
       b.addEventListener('click', function(){ if(window.holoRoomChat) window.holoRoomChat.openBox(b.getAttribute('data-turn-chat')); });
     });
+    /* DUEL-MUSIC-2026-11-26: the Music button in the match action row expands the player. */
+    root.querySelectorAll('[data-turn-music]').forEach(function(b){
+      b.addEventListener('click', function(){ if(window.holoMusic) window.holoMusic.expand(); });
+    });
     root.querySelectorAll('[data-turn-cell]').forEach(function(b){
       /* TURN-AUTO-PASS-2026-11-24 (Holo 20:33): all turn-based games pass the turn automatically, pool-style — tapping a square places the mark and passes the turn at once, one move at a time, X then O. NO Send-button step anywhere (the earlier pick+Send design was removed per this rule). The passing itself was unblocked by the rules re-publish (the /turnMatches .validate board bug, POOL-BOARD-BUG-2026-11-24) — verified live 26/27. */
       b.addEventListener('click', function(){ makeMove(openMid, parseInt(b.getAttribute('data-turn-cell'), 10)); });
@@ -28322,6 +29195,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     root.querySelectorAll('[data-turn-reset]').forEach(function(b){
       b.addEventListener('click', function(){ if(window.holoRooms && window.holoRooms.resetMatch) window.holoRooms.resetMatch(b.getAttribute('data-turn-reset')); });
     });
+    /* ROOM-NAMES-SETTINGS-2026-11-27: host-only room settings button + panel, injected into the open match view (the rooms module owns the UI; see roomSettings). */
+    try { if(window.holoRooms && window.holoRooms.roomSettings) window.holoRooms.roomSettings.inject(root); } catch(e){}
   }
   function turnMidFor(uid){
     var me = myUid(); if(!me) return null;
@@ -28444,6 +29319,239 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   window.holoTurn = { challenge:challenge, refresh:loadMatches, matches:function(){ return matches; }, turnGames:function(){ return TURN_GAMES.slice(); }, myTurnCount:myTurnCount, statusText:statusText, gameName:turnGameName, me:function(){ return myUid(); }, isMuted:function(mid){ return !!muted[mid]; }, block:function(mid){ blockOpponent(mid); }, open:function(mid){ openMid = mid; render(); }, openSoon:function(mid){ pendingOpenMid = mid; if(matches[mid] && !muted[mid]){ openMid = mid; render(); } }, accept:accept, openMatch:function(){ return openMid; }, handIntoMM:handIntoMM };
 })();
 </script>
+
+<script>
+/* DUEL-MUSIC-2026-11-26 (Holo 2026-11-26 18:31-18:33): bottom-docked mini player for duel rooms — Spotify embed only (Phase 1). Paste a playlist link, the Arcade loads Spotify's public embed; own music only, never the opponent's. The embed cannot be paused or volume-synced programmatically: pause = unload (stops the audio, loses the position), play = reload from the top; the volume slider stays disabled. The link is stored per user at /users/<uid>/music/embed (RTDB primary, localStorage mirror). pauseForGame(slug) exists for the site-wide auto-pause rule but no game-open call sites are wired in this build. No new Audio, no WebAudio, no tokens. */
+(function(){
+  "use strict";
+  var VERSION = 'DUEL-MUSIC-2026-11-26';
+  var MIRROR_KEY = 'holos-arcade-music-embed';
+  var WALK_SEEN_KEY = 'holos-arcade-music-walk-seen';
+  var playlistUrl = '';
+  var playing = false;
+  var wasPlaying = false;
+  var initDone = false;
+  var walkIdx = 0;
+  /* DUEL-MUSIC-2026-11-26 (Holo 18:37): connect walk-through — one bubble at a time, auto-opens on first expand with no link saved. */
+  var WALK_STEPS = [
+    { title: 'Open Spotify', body: 'Open Spotify on your phone or computer and pick a playlist you love.' },
+    { title: 'Share', body: 'Tap Share on the playlist.' },
+    { title: 'Copy link', body: 'Tap Copy link.' },
+    { title: 'Paste it in the music box', body: 'Paste it in the music box below and tap Save.' },
+    { title: 'Play', body: 'Tap play and duel to your own music.' }
+  ];
+  function $(id){ return document.getElementById(id); }
+  function bar(){ return $('duelMusicBar'); }
+  function frame(){ return $('duelMusicFrame'); }
+  function musicOn(){
+    try { return !(window.holoSettings && window.holoSettings.music === false); } catch(e){ return true; }
+  }
+  function signedIn(){
+    try { return !!(typeof getTester === 'function' && getTester()); } catch(e){ return false; }
+  }
+  function gateClear(){
+    /* DUEL-MUSIC-2026-11-26: the bar hides on gate pages — same gates as TOUR-ONCE-2026-11-26 C5 (sign-in view, Code Name / verify / migrate overlays, the tour). The game player itself is NOT a gate: the music plays while a game is open, so the bar stays up there. */
+    var ids = ['loginView', 'fbOverlay', 'siteTour', 'codeNameOverlay', 'verifyGatePane', 'migrateOverlay'];
+    for(var i = 0; i < ids.length; i++){ var el = document.getElementById(ids[i]); if(el && !el.hidden) return false; }
+    return true;
+  }
+  function parsePlaylistId(url){
+    if(!url) return null;
+    var s = String(url).trim();
+    var m = s.match(/^spotify:playlist:([A-Za-z0-9]+)$/);
+    if(m) return m[1];
+    m = s.match(/^https?:\/\/open\.spotify\.com\/embed\/playlist\/([A-Za-z0-9]+)/);
+    if(m) return m[1];
+    m = s.match(/^https?:\/\/open\.spotify\.com\/playlist\/([A-Za-z0-9]+)/);
+    if(m) return m[1];
+    return null;
+  }
+  function embedSrc(id){ return 'https://open.spotify.com/embed/playlist/' + id + '?utm_source=generator&theme=0'; }
+  function setPlayLabel(){
+    var b = $('duelMusicPlay');
+    if(b) b.textContent = playing ? '\u23F8 Pause' : '\u25B6 Play';
+  }
+  function load(){
+    var id = parsePlaylistId(playlistUrl);
+    var fr = frame();
+    if(!id || !fr) return false;
+    fr.setAttribute('src', embedSrc(id));
+    playing = true;
+    setPlayLabel();
+    var pf = $('duelMusicPausedFor');
+    if(pf) pf.hidden = true;
+    return true;
+  }
+  function unload(){
+    var fr = frame();
+    if(fr) fr.setAttribute('src', 'about:blank');
+    playing = false;
+    setPlayLabel();
+  }
+  function persist(){
+    try { localStorage.setItem(MIRROR_KEY, playlistUrl); } catch(e){}
+    try { if(window.betaSetMusicEmbed) window.betaSetMusicEmbed(playlistUrl); } catch(e){}
+  }
+  function saveLink(url){
+    var id = parsePlaylistId(url);
+    var err = $('duelMusicErr');
+    if(!id){
+      if(err){ err.textContent = "That link doesn't look like a Spotify playlist \u2014 paste the playlist link from Spotify."; err.hidden = false; }
+      return false;
+    }
+    if(err) err.hidden = true;
+    playlistUrl = String(url).trim();
+    var input = $('duelMusicLink');
+    if(input) input.value = playlistUrl;
+    load();
+    persist();
+    return true;
+  }
+  function removeLink(){
+    playlistUrl = '';
+    var input = $('duelMusicLink');
+    if(input) input.value = '';
+    unload();
+    try { localStorage.removeItem(MIRROR_KEY); } catch(e){}
+    try { if(window.betaSetMusicEmbed) window.betaSetMusicEmbed(null); } catch(e){}
+  }
+  function setLink(url){
+    playlistUrl = String(url);
+    var input = $('duelMusicLink');
+    if(input) input.value = playlistUrl;
+    try { localStorage.setItem(MIRROR_KEY, playlistUrl); } catch(e){}
+  }
+  function restore(){
+    var mirror = null;
+    try { mirror = localStorage.getItem(MIRROR_KEY); } catch(e){}
+    if(mirror) setLink(mirror);
+    try {
+      if(window.betaGetMusicEmbed) window.betaGetMusicEmbed().then(function(embed){
+        if(embed && embed.playlistUrl) setLink(embed.playlistUrl);
+      }).catch(function(){});
+    } catch(e){}
+  }
+  function walkSeen(){
+    try { return localStorage.getItem(WALK_SEEN_KEY) === '1'; } catch(e){ return false; }
+  }
+  function closeWalk(markSeen){
+    var wk = $('duelMusicWalk');
+    if(wk) wk.hidden = true;
+    if(markSeen){ try { localStorage.setItem(WALK_SEEN_KEY, '1'); } catch(e){} }
+  }
+  function showWalk(idx){
+    walkIdx = Math.max(0, Math.min(idx, WALK_STEPS.length - 1));
+    var wk = $('duelMusicWalk');
+    if(!wk) return;
+    wk.hidden = false;
+    var k = $('dmWalkKicker'), b = $('dmWalkBody'), nx = $('dmWalkNext'), bk = $('dmWalkBack');
+    if(k) k.textContent = 'Step ' + (walkIdx + 1) + ' of ' + WALK_STEPS.length;
+    if(b) b.textContent = WALK_STEPS[walkIdx].title + ' \u2014 ' + WALK_STEPS[walkIdx].body;
+    if(nx) nx.textContent = (walkIdx === WALK_STEPS.length - 1) ? 'Done \u2713' : 'Next';
+    if(bk) bk.disabled = (walkIdx === 0);
+  }
+  function maybeOpenWalk(){
+    if(playlistUrl || walkSeen()) return;
+    showWalk(0);
+  }
+  function expand(){
+    var ex = $('duelMusicExpanded');
+    if(ex) ex.hidden = false;
+    maybeOpenWalk();
+  }
+  function collapse(){
+    var ex = $('duelMusicExpanded');
+    if(ex) ex.hidden = true;
+    var wk = $('duelMusicWalk');
+    if(wk) wk.hidden = true;
+  }
+  function sync(){
+    var b = bar();
+    if(!b) return;
+    if(!(signedIn() && musicOn() && gateClear())){
+      unload();
+      b.hidden = true;
+      document.body.classList.remove('duel-music-on');
+      return;
+    }
+    b.hidden = false;
+    document.body.classList.add('duel-music-on');
+  }
+  function applyMusicPref(){
+    if(!musicOn()){
+      wasPlaying = playing;
+      unload();
+    } else if(wasPlaying){
+      wasPlaying = false;
+      load();
+    }
+    sync();
+  }
+  /* DUEL-MUSIC-2026-11-26: auto-pause hook for music games — unloads the embed and shows a "Paused for [game]" chip. No game-open call sites are wired in this build (duel rooms are never music games); the site-wide build wires the calls. Safe with no game open. */
+  function pauseForGame(slug){
+    unload();
+    var pf = $('duelMusicPausedFor');
+    if(pf){ pf.textContent = 'Paused for ' + slug; pf.hidden = false; }
+    return true;
+  }
+  window.musicChipHtml = function(){
+    return '<p class="turn-nowplaying">\uD83C\uDFB5 Now playing: Spotify playlist</p>';
+  };
+  window.holoMusic = {
+    version: VERSION,
+    parsePlaylistId: parsePlaylistId,
+    saveLink: saveLink,
+    load: load,
+    unload: unload,
+    expand: expand,
+    collapse: collapse,
+    sync: sync,
+    removeLink: removeLink,
+    pauseForGame: pauseForGame
+  };
+  function init(){
+    if(initDone) return;
+    initDone = true;
+    var save = $('duelMusicSave');
+    if(save) save.addEventListener('click', function(){ var input = $('duelMusicLink'); saveLink(input ? input.value : ''); });
+    var rem = $('duelMusicRemove');
+    if(rem) rem.addEventListener('click', function(){ removeLink(); });
+    var play = $('duelMusicPlay');
+    if(play) play.addEventListener('click', function(){ if(playing) unload(); else load(); });
+    var exp = $('duelMusicExpand');
+    if(exp) exp.addEventListener('click', function(){ var ex = $('duelMusicExpanded'); if(ex && ex.hidden) expand(); else collapse(); });
+    var how = $('duelMusicHow');
+    if(how) how.addEventListener('click', function(){ showWalk(0); });
+    var nx = $('dmWalkNext');
+    if(nx) nx.addEventListener('click', function(){ if(walkIdx >= WALK_STEPS.length - 1) closeWalk(true); else showWalk(walkIdx + 1); });
+    var bk = $('dmWalkBack');
+    if(bk) bk.addEventListener('click', function(){ if(walkIdx > 0) showWalk(walkIdx - 1); });
+    var sk = $('dmWalkSkip');
+    if(sk) sk.addEventListener('click', function(){ closeWalk(true); });
+    /* DUEL-MUSIC-2026-11-26: the Settings Music toggle flips window.holoSettings.music in its own handler first — this listener runs after it (attached later, plus a 0ms defer) and applies the new pref. */
+    var tgl = document.querySelector('[data-sound-pref="music"]');
+    if(tgl && !tgl.__duelMusicBound){
+      tgl.__duelMusicBound = true;
+      tgl.addEventListener('click', function(){ setTimeout(applyMusicPref, 0); });
+    }
+    /* DUEL-MUSIC-2026-11-26: the holo-settings broadcast carries the pref itself — apply it locally first (the broadcast does not flip window.holoSettings.music, so reading it would still say "on"). */
+    window.addEventListener('message', function(e){
+      try {
+        if(e && e.data && e.data.type === 'holo-settings'){
+          if(e.data.music !== undefined) window.holoSettings.music = !!e.data.music;
+          applyMusicPref();
+        }
+      } catch(err){}
+    });
+    restore();
+    sync();
+  }
+  /* The shell HTML sits after this script, so init waits for DOMContentLoaded (init.done guard); window.holoMusic is exposed at once above. */
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+
 
 <script>
 /* CHALLENGE-ROOM-2026-11-24 (Holo 2026-11-24 19:33-21:37): private
@@ -28589,7 +29697,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   try { registry = JSON.parse(localStorage.getItem(ROOMS_KEY) || '{}') || {}; } catch(e){ registry = {}; }
   function saveRegistry(){ try { localStorage.setItem(ROOMS_KEY, JSON.stringify(registry)); } catch(e){} }
   function registerRoom(code, room, role){
-    registry[code] = { game:room.game || '8-ball-pool', hostUid:room.hostUid, hostName:room.hostName || '', guestUid:room.guestUid || '', guestName:room.guestName || '', createdAt:room.createdAt || Date.now(), pendingFriend:!!room.pendingFriend, matchId:room.matchId || null, role:role || 'host', withdrawn:false, closed:false, ended:false };
+    registry[code] = { game:room.game || '8-ball-pool', hostUid:room.hostUid, hostName:room.hostName || '', guestUid:room.guestUid || '', guestName:room.guestName || '', createdAt:room.createdAt || Date.now(), pendingFriend:!!room.pendingFriend, matchId:room.matchId || null, role:role || 'host', name:room.name || '', turnTimerMin:(typeof room.turnTimerMin === 'number' ? room.turnTimerMin : 0), withdrawn:false, closed:false, ended:false };
     saveRegistry();
   }
   function roomExpired(entry){
@@ -28631,7 +29739,10 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   }
 
   /* ---------- challenge: room + match ---------- */
-  function challengePool(uid, name, reuseCode){
+  function challengePool(uid, name, reuseCode, firstUidOrOpts, optsArg){
+    /* CONSOLIDATION 2026-11-27 (POOL-H1H5 + ROOM-NAMES merge): the 4th argument is polymorphic — a string uid is the rematch firstUid (H4 passes the finished match's oUid); an object is the room-settings opts {roomName, turnTimerMin} (changeRoomGame passes its carry object). A 5th argument carries opts when the 4th is a firstUid. */
+    var firstUid = (typeof firstUidOrOpts === 'string') ? firstUidOrOpts : undefined;
+    var opts = (firstUidOrOpts && typeof firstUidOrOpts === 'object') ? firstUidOrOpts : (optsArg || {});
     var me = myUid();
     if(!me){ toast('Sign in first to challenge a friend.'); return; }
     if(!uid || uid === me) return;
@@ -28648,6 +29759,11 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           var now = Date.now();
           var pendingFriend = !isMutualFriend(uid);
           var room = { game:'8-ball-pool', hostUid:me, hostName:myN, guestUid:uid, guestName:String(name || friendName(uid)), status:'waiting', createdAt:now };
+          /* ROOM-NAMES-SETTINGS-2026-11-27: the host names the room at creation (optional) + sets the turn timer. Both ride on the room + match records so both players read them from the same store. */
+          var poolOpts = opts || {};
+          var poolRoomName = cleanRoomName(poolOpts.roomName || '');
+          if(poolRoomName) room.name = poolRoomName;
+          if(poolOpts.turnTimerMin && ROOM_TIMER_CHOICES.indexOf(poolOpts.turnTimerMin) !== -1) room.turnTimerMin = poolOpts.turnTimerMin;
           if(pendingFriend) room.pendingFriend = true;
           api('PUT', '/challengeRooms/' + encodeURIComponent(code), room).then(function(r){
             if(r === null){ toast('Room did not save — try again in a moment.'); return; }
@@ -28658,9 +29774,15 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
                match (see the pool file). The room create above satisfies
                the match-create rule's room branch: room exists, no
                matchId yet, host/guest match. The match carries no table
-               state — the host breaks first and the first shot syncs
+               state — the accepter breaks first and the first shot syncs
                the table (the pool file tolerates a missing state). */
-            var match = { game:'8-ball-pool', aUid:me, bUid:uid, aName:myN, bName:String(name || friendName(uid)), xUid:me, oUid:uid, board:[], turn:me, status:'waiting', winner:null, roomCode:code, lastMoveAt:0, lastMoveBy:'', lastMoveCell:-1, history:[], moves:0, createdAt:now, updatedAt:now };
+            /* POOL-H1H5-2026-11-26 (H1 accepter-first + H4 rematch alternation): the first player is the challenged friend by default (they break first when they accept); a rematch passes the finished match's second player as firstUid. */
+            var first = firstUid || uid;
+            var second = (first === me) ? uid : me;
+            var match = { game:'8-ball-pool', aUid:me, bUid:uid, aName:myN, bName:String(name || friendName(uid)), xUid:first, oUid:second, board:[], turn:first, status:'waiting', winner:null, roomCode:code, lastMoveAt:0, lastMoveBy:'', lastMoveCell:-1, history:[], moves:0, createdAt:now, updatedAt:now };
+            /* Room-names build: the host's room name + turn timer ride on the match record too (same store both players read). */
+            if(poolRoomName) match.name = poolRoomName;
+            if(poolOpts.turnTimerMin && ROOM_TIMER_CHOICES.indexOf(poolOpts.turnTimerMin) !== -1) match.turnTimerMin = poolOpts.turnTimerMin;
             api('POST', '/turnMatches', match).then(function(mr){
               if(!mr || !mr.name){ toast('Pool match did not save — the new rules publish is still pending.'); renderRooms(); return; }
               var mid = mr.name;
@@ -28752,10 +29874,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     function go(){
       api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'playing', updatedAt:Date.now() }).then(function(r){
         if(r === null){ toast('That did not save — the new rules publish is still pending.'); return; }
-        myName().then(function(myN){
+        /* POOL-H1H5-2026-11-26 (H2 accept notices REMOVED 2026-11-27, Holo 00:23 "Take them out"): the accept notices ("Your break" / "accepted — their break first") are gone — the 19:25 turn-notice stop applies here too. The top-nav "Your turn" indicator tells each player when it is their turn. */
 /* ROOM-CHAT-2026-11-26 (Holo 19:25): automatic turn notices STOP — the top-nav "Your turn" indicator replaces them (the other player sees it on their own client when their matches poll). */
-          try { if(window.holoRoomChat) window.holoRoomChat.updateTurnIndicator(); } catch(e){}
-        });
+        try { if(window.holoRoomChat) window.holoRoomChat.updateTurnIndicator(); } catch(e){}
         if(window.holoTurn) window.holoTurn.refresh();
         renderRooms();
       });
@@ -28817,7 +29938,419 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     return false;
   }
 
+  /* ---------- ROOM-NAMES-SETTINGS-2026-11-27 (Holo 2026-11-27 01:36) ----------
+     Host-only room settings: (1) a customizable room name, (2) pick/change
+     the game + mode while the match is waiting, (3) a turn timer (a visible
+     countdown + a nudge PROMPT when it lapses — never an automatic message,
+     per the 2026-11-26 19:25 no-auto-notices decision), (4) close the room.
+     STORE: the name + timer live on the turnMatch record (name /
+     turnTimerMin) so both players read them from the same matches cache —
+     no extra fetch, no device-local state. They are set at creation via
+     challenge()/challengePool() opts (works NOW — the create branch allows
+     extra children). Renaming / re-timing an EXISTING match needs a rules
+     publish (exact line in the build report): the current turnMatches
+     .write has no metadata-only branch, so a rename PATCH is denied until
+     that line lands. The UI attempts the PATCH and toasts the standard
+     rules-pending message when it is denied. The timer ALSO mirrors into
+     the host's local registry, so the host's own countdown still works
+     pre-publish (the guest sees it once the value is on the shared
+     record). The grouped Rooms build should call roomDisplayName() for
+     the tile title inside its groups. */
+  var ROOM_NAME_MAX = 30;
+  var ROOM_TIMER_CHOICES = [0, 15, 60, 360, 1440];
+  var ROOM_TIMER_LABELS = { 0:'Off', 15:'15 minutes', 60:'1 hour', 360:'6 hours', 1440:'24 hours' };
+  var lastRoomNudgeAt = {};
+  var roomTimerIv = null;
+  var openSettingsMid = null;
+  var settingsOpen = {};
+  var closeArmed = {};
+  var promptedForTurn = {};
+  function cleanRoomName(s){
+    var t = String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f]/g, '').trim();
+    t = t.replace(/https?:\/\/\S+/gi, '').replace(/www\.\S+/gi, '').trim();
+    if(t.length > ROOM_NAME_MAX) t = t.slice(0, ROOM_NAME_MAX).trim();
+    return t;
+  }
+  function roomDisplayName(m, me){
+    if(m && typeof m.name === 'string' && m.name.trim()) return m.name.trim();
+    var oppUid = (m.aUid === me) ? m.bUid : m.aUid;
+    var opp = friendName(oppUid);
+    if(!opp || opp === 'Tester') opp = (m.aUid === me) ? m.bName : m.aName;
+    return gameTitle(m.game) + ' vs ' + opp;
+  }
+  function roomSubName(m, me){
+    if(!(m && typeof m.name === 'string' && m.name.trim())) return '';
+    var oppUid = (m.aUid === me) ? m.bUid : m.aUid;
+    var opp = friendName(oppUid);
+    if(!opp || opp === 'Tester') opp = (m.aUid === me) ? m.bName : m.aName;
+    return gameTitle(m.game) + ' vs ' + opp;
+  }
+  function isRoomHost(m, me){
+    return !!(m && me && m.aUid === me);
+  }
+  function roomTimerMin(m){
+    var v = (m && typeof m.turnTimerMin === 'number') ? m.turnTimerMin : 0;
+    return ROOM_TIMER_CHOICES.indexOf(v) !== -1 ? v : 0;
+  }
+  function turnTimerState(m, now){
+    var mins = roomTimerMin(m);
+    if(!mins || !m || (m.status !== 'playing' && m.status !== 'waiting')) return { off:true, mins:0, remainingMs:0, lapsed:false, deadlineAt:0 };
+    var base = m.lastMoveAt || m.updatedAt || m.createdAt || 0;
+    if(!base) return { off:false, mins:mins, remainingMs:mins * 60000, lapsed:false, deadlineAt:0 };
+    var deadline = base + mins * 60000;
+    var rem = deadline - (now || Date.now());
+    return { off:false, mins:mins, remainingMs:rem, lapsed:rem <= 0, deadlineAt:deadline };
+  }
+  function turnTimerText(st, who){
+    if(st.off) return '';
+    if(st.lapsed) return 'Time is up — ' + who + ' took too long.';
+    var ms = Math.max(0, st.remainingMs);
+    var min = Math.floor(ms / 60000);
+    var h = Math.floor(min / 60);
+    var mm = min % 60;
+    var label = h ? (h + 'h ' + mm + 'm') : (min + 'm');
+    return 'Turn timer: ' + label + ' left for ' + who;
+  }
+  function sendRoomNudge(mid){
+    var me = myUid(); if(!me) return Promise.resolve(false);
+    var m = matchesCache()[mid]; if(!m) return Promise.resolve(false);
+    var now = Date.now();
+    if(now - (lastRoomNudgeAt[mid] || 0) < 5 * 60 * 1000){ toast('Already nudged — give them a few minutes.'); return Promise.resolve(false); }
+    var opp = (m.aUid === me) ? { uid:m.bUid, name:m.bName } : { uid:m.aUid, name:m.aName };
+    lastRoomNudgeAt[mid] = now;
+    return myName().then(function(myN){
+      return sendNotice(opp.uid, { type:'turn', title:'Your turn in ' + gameTitle(m.game), body:myN + ' nudged you — it is your turn in ' + gameTitle(m.game) + '.', link:'game:' + m.game + '?match=' + mid, fromName:myN, fromUid:me });
+    }).then(function(){ toast('Nudge sent to ' + opp.name + '.'); return true; });
+  }
+  function saveRoomName(mid, raw){
+    var me = myUid(); if(!me) return Promise.resolve(false);
+    var m = matchesCache()[mid]; if(!m || !isRoomHost(m, me)) return Promise.resolve(false);
+    var name = cleanRoomName(raw);
+    if(!name){ toast('Give the room a name first.'); return Promise.resolve(false); }
+    return api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { name:name, updatedAt:Date.now() }).then(function(r){
+      if(r === null){ toast('Renaming needs one more Arcade update — the rules publish is still pending.'); return false; }
+      try { var mm = matchesCache()[mid]; if(mm) mm.name = name; } catch(e){}
+      try { if(m.roomCode && registry[m.roomCode]){ registry[m.roomCode].name = name; saveRegistry(); } } catch(e){}
+      toast('Room renamed to "' + name + '".');
+      if(window.holoTurn) window.holoTurn.refresh();
+      renderRooms();
+      return true;
+    });
+  }
+  function saveRoomTimer(mid, mins){
+    var me = myUid(); if(!me) return Promise.resolve(false);
+    var m = matchesCache()[mid]; if(!m || !isRoomHost(m, me)) return Promise.resolve(false);
+    mins = parseInt(mins, 10) || 0;
+    if(ROOM_TIMER_CHOICES.indexOf(mins) === -1) mins = 0;
+    return api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { turnTimerMin:mins, updatedAt:Date.now() }).then(function(r){
+      if(r === null){
+        /* Pre-rules-publish fallback: the timer lives in the host's own
+           registry, so this device still counts down. The guest sees it
+           once the value syncs (after the rules publish). */
+        try { if(m.roomCode && registry[m.roomCode]){ registry[m.roomCode].turnTimerMin = mins; saveRegistry(); } } catch(e){}
+        toast(mins ? 'Timer set on this device — it will sync to both players after the next Arcade update.' : 'Timer off on this device.');
+        return false;
+      }
+      try { var mm = matchesCache()[mid]; if(mm) mm.turnTimerMin = mins; } catch(e){}
+      try { if(m.roomCode && registry[m.roomCode]){ registry[m.roomCode].turnTimerMin = mins; saveRegistry(); } } catch(e){}
+      toast(mins ? 'Turn timer set: ' + ROOM_TIMER_LABELS[mins] + '.' : 'Turn timer off.');
+      if(window.holoTurn) window.holoTurn.refresh();
+      renderRooms();
+      return true;
+    });
+  }
+  function changeRoomGame(mid, gameSlug, mmMode, mmDiff){
+    var me = myUid(); if(!me) return Promise.resolve(false);
+    var m = matchesCache()[mid]; if(!m || !isRoomHost(m, me)) return Promise.resolve(false);
+    if(m.status !== 'waiting'){ toast('The game is locked once the match starts.'); return Promise.resolve(false); }
+    var games = ['tic-tac-toe', '8-ball-pool', 'rock-paper-scissors', 'monster-match'];
+    if(games.indexOf(gameSlug) === -1) return Promise.resolve(false);
+    if(gameSlug === m.game && gameSlug !== 'monster-match'){ toast('That is already the game for this room.'); return Promise.resolve(false); }
+    if(gameSlug === 'monster-match' && m.game === 'monster-match'){
+      var st = m.state || {};
+      if(st.mode === (mmMode || 'same-board') && st.difficulty === (mmDiff || 'medium')){ toast('That is already the game for this room.'); return Promise.resolve(false); }
+    }
+    var opp = (m.aUid === me) ? { uid:m.bUid, name:m.bName } : { uid:m.aUid, name:m.aName };
+    var gName = gameTitle(gameSlug);
+    /* Decline the old match first (waiting -> declined is allowed for
+       either player), then create a fresh match with the new game. The
+       old match drops off the active list as 'declined' — it is never
+       deleted, so the history stays. The room name + timer carry over
+       to the new match. */
+    return api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'declined', updatedAt:Date.now() }).then(function(r){
+      if(r === null){ toast('Changing the game needs one more Arcade update — the rules publish is still pending.'); return false; }
+      try { if(m.roomCode && registry[m.roomCode]){ registry[m.roomCode].withdrawn = true; saveRegistry(); } } catch(e){}
+      myName().then(function(myN){
+        sendNotice(opp.uid, { type:'turn', title:'Game changed to ' + gName, body:myN + ' changed your room to ' + gName + ' — the old challenge was replaced.', link:'friends', fromName:myN, fromUid:me });
+      });
+      var carry = { roomName:(m.name || ''), turnTimerMin:roomTimerMin(m) };
+      if(gameSlug === '8-ball-pool'){
+        if(window.holoRooms && window.holoRooms.challengePool){ window.holoRooms.challengePool(opp.uid, opp.name, null, carry); }
+      } else {
+        var opts = { roomName:carry.roomName, turnTimerMin:carry.turnTimerMin };
+        if(gameSlug === 'monster-match'){ opts.mode = mmMode || 'same-board'; opts.difficulty = mmDiff || 'medium'; }
+        if(window.holoTurn && window.holoTurn.challenge){ window.holoTurn.challenge(opp.uid, opp.name, gameSlug, opts); }
+      }
+      toast('Game changed to ' + gName + ' — a fresh challenge was sent.');
+      if(window.holoTurn) window.holoTurn.refresh();
+      renderRooms();
+      return true;
+    });
+  }
+  function closeRoomHost(mid){
+    var me = myUid(); if(!me) return Promise.resolve(false);
+    var m = matchesCache()[mid]; if(!m || !isRoomHost(m, me)) return Promise.resolve(false);
+    if(m.status !== 'waiting' && m.status !== 'playing'){ toast('That match already ended — nothing to close.'); return Promise.resolve(false); }
+    if(!closeArmed[mid]){
+      closeArmed[mid] = true;
+      toast('Tap Close room again to end it for both players.');
+      setTimeout(function(){ closeArmed[mid] = false; }, 8000);
+      return Promise.resolve(false);
+    }
+    closeArmed[mid] = false;
+    var opp = (m.aUid === me) ? { uid:m.bUid, name:m.bName } : { uid:m.aUid, name:m.aName };
+    if(m.status === 'waiting'){
+      /* Waiting: decline it (either player may decline a waiting match),
+         withdraw the Pool room so its tile drops, and tell the guest. */
+      return api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'declined', updatedAt:Date.now() }).then(function(r){
+        if(r === null){ toast('Closing did not save — try again in a moment.'); return false; }
+        try { if(m.roomCode && registry[m.roomCode]){ registry[m.roomCode].withdrawn = true; saveRegistry(); } } catch(e){}
+        myName().then(function(myN){
+          sendNotice(opp.uid, { type:'turn', title:'Room closed', body:myN + ' closed your ' + gameTitle(m.game) + ' room before it started.', link:'friends', fromName:myN, fromUid:me });
+        });
+        toast('Room closed.');
+        if(window.holoTurn) window.holoTurn.refresh();
+        renderRooms();
+        return true;
+      });
+    }
+    /* Playing: end it cleanly (status 'left' — the same path as Reset
+       match, so the other player sees it ended, not a broken room).
+       Per the live rules the 'left' write only lands on the host's
+       turn (the move branch); otherwise the PATCH is denied and the
+       room stays open until the turn comes back. */
+    return api('PATCH', '/turnMatches/' + encodeURIComponent(mid), { status:'left', updatedAt:Date.now() }).then(function(r){
+      if(r === null){ toast('Closing works on your turn — the room stays open until then.'); return false; }
+      try { if(m.roomCode && registry[m.roomCode]){ registry[m.roomCode].ended = true; saveRegistry(); } } catch(e){}
+      myName().then(function(myN){
+        sendNotice(opp.uid, { type:'turn', title:gameTitle(m.game) + ' room closed', body:myN + ' closed your ' + gameTitle(m.game) + ' room — the match ended.', link:'game:' + m.game, fromName:myN, fromUid:me });
+      });
+      toast('Room closed — the match ended.');
+      if(window.holoTurn) window.holoTurn.refresh();
+      renderRooms();
+      return true;
+    });
+  }
+  function roomSettingsButtonHtml(mid, m, me){
+    if(!m || !isRoomHost(m, me)) return '';
+    if(m.status !== 'waiting' && m.status !== 'playing') return '';
+    return '<button type="button" class="btn btn-dark" data-rs-toggle="' + esc(mid) + '">Room settings</button>';
+  }
+  function roomSettingsPanelHtml(mid, m, me){
+    if(!m || !isRoomHost(m, me)) return '';
+    if(m.status !== 'waiting' && m.status !== 'playing') return '';
+    var cur = (typeof m.name === 'string' && m.name.trim()) ? m.name.trim() : '';
+    var timer = roomTimerMin(m);
+    var locked = m.status === 'playing';
+    var st = m.state || {};
+    var h = '<div class="room-settings" data-rs-panel="' + esc(mid) + '" hidden>' +
+      '<h4>Room settings — only you (the host) can change these</h4>' +
+      '<label>Room name<input type="text" data-rs-name="' + esc(mid) + '" maxlength="30" value="' + esc(cur) + '" placeholder="e.g. Friday Finals" aria-label="Room name"></label>' +
+      '<div class="rs-row"><button type="button" class="btn btn-light" data-rs-save-name="' + esc(mid) + '">Save name</button>' +
+      '<p class="rs-note">Plain text, 30 characters max. A 1v1 room shows the opponent\u2019s name unless you rename it.</p></div>';
+    if(!locked){
+      h += '<label>Game<select data-rs-game="' + esc(mid) + '" aria-label="Game">' +
+        ['tic-tac-toe', '8-ball-pool', 'rock-paper-scissors', 'monster-match'].map(function(g){
+          return '<option value="' + g + '"' + (m.game === g ? ' selected' : '') + '>' + esc(gameTitle(g)) + '</option>';
+        }).join('') + '</select></label>' +
+        '<div class="rs-row" data-rs-mm-row="' + esc(mid) + '"' + (m.game === 'monster-match' ? '' : ' hidden') + '>' +
+        '<label>Monster Match mode<select data-rs-mm-mode="' + esc(mid) + '" aria-label="Monster Match mode">' +
+        '<option value="same-board"' + ((st.mode || 'same-board') === 'same-board' ? ' selected' : '') + '>Same board</option>' +
+        '<option value="take-turns"' + (st.mode === 'take-turns' ? ' selected' : '') + '>Take turns</option></select></label>' +
+        '<label>Difficulty<select data-rs-mm-diff="' + esc(mid) + '" aria-label="Monster Match difficulty">' +
+        '<option value="easy"' + (st.difficulty === 'easy' ? ' selected' : '') + '>Easy</option>' +
+        '<option value="medium"' + ((st.difficulty || 'medium') === 'medium' ? ' selected' : '') + '>Medium</option>' +
+        '<option value="hard"' + (st.difficulty === 'hard' ? ' selected' : '') + '>Hard</option></select></label></div>' +
+        '<div class="rs-row"><button type="button" class="btn btn-light" data-rs-change-game="' + esc(mid) + '">Change game</button>' +
+        '<p class="rs-note">Changes the game while the room is waiting — the old challenge is declined and a fresh one is sent.</p></div>';
+    } else {
+      h += '<p class="rs-note">The game is locked once the match starts.</p>';
+    }
+    h += '<label>Turn timer<select data-rs-timer="' + esc(mid) + '" aria-label="Turn timer">' +
+      ROOM_TIMER_CHOICES.map(function(v){ return '<option value="' + v + '"' + (timer === v ? ' selected' : '') + '>' + ROOM_TIMER_LABELS[v] + '</option>'; }).join('') + '</select></label>' +
+      '<div class="rs-row"><button type="button" class="btn btn-light" data-rs-save-timer="' + esc(mid) + '">Save timer</button>' +
+      '<p class="rs-note">How long a player has before the other side gets a nudge prompt. Default off — manual Nudge only. Never an automatic message.</p></div>' +
+      '<div class="rs-row"><button type="button" class="btn btn-dark rs-danger" data-rs-close="' + esc(mid) + '">Close room</button>' +
+      '<p class="rs-note">Ends the match for both players. Tap twice to confirm.</p></div>' +
+      '</div>';
+    return h;
+  }
+  function roomNudgePromptHtml(mid, m, me){
+    if(!m || !isRoomHost(m, me)) return '';
+    if(m.status !== 'waiting' && m.status !== 'playing') return '';
+    return '<div class="rs-prompt" data-rs-nudge-prompt="' + esc(mid) + '" hidden><p class="rs-note" data-rs-nudge-text="' + esc(mid) + '"></p>' +
+      '<div class="rs-row"><button type="button" class="btn btn-light" data-rs-nudge="' + esc(mid) + '">Nudge them</button>' +
+      '<button type="button" class="btn btn-dark" data-rs-nudge-later="' + esc(mid) + '">Not now</button></div></div>';
+  }
+  function bindRoomSettings(root){
+    if(!root) return;
+    root.querySelectorAll('[data-rs-toggle]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var mid = b.getAttribute('data-rs-toggle');
+        var p = root.querySelector('[data-rs-panel="' + mid + '"]');
+        if(p){ p.hidden = !p.hidden; if(p.hidden) delete settingsOpen[mid]; else settingsOpen[mid] = true; }
+      });
+    });
+    root.querySelectorAll('[data-rs-game]').forEach(function(sel){
+      var mid = sel.getAttribute('data-rs-game');
+      var row = root.querySelector('[data-rs-mm-row="' + mid + '"]');
+      function sync(){ if(row) row.hidden = (sel.value !== 'monster-match'); }
+      sel.addEventListener('change', sync);
+      sync();
+    });
+    root.querySelectorAll('[data-rs-save-name]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var mid = b.getAttribute('data-rs-save-name');
+        var inp = root.querySelector('[data-rs-name="' + mid + '"]');
+        saveRoomName(mid, inp ? inp.value : '');
+      });
+    });
+    root.querySelectorAll('[data-rs-change-game]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var mid = b.getAttribute('data-rs-change-game');
+        var sel = root.querySelector('[data-rs-game="' + mid + '"]');
+        var modeSel = root.querySelector('[data-rs-mm-mode="' + mid + '"]');
+        var diffSel = root.querySelector('[data-rs-mm-diff="' + mid + '"]');
+        changeRoomGame(mid, sel ? sel.value : '', modeSel ? modeSel.value : null, diffSel ? diffSel.value : null);
+      });
+    });
+    root.querySelectorAll('[data-rs-save-timer]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var mid = b.getAttribute('data-rs-save-timer');
+        var sel = root.querySelector('[data-rs-timer="' + mid + '"]');
+        saveRoomTimer(mid, sel ? sel.value : 0);
+      });
+    });
+    root.querySelectorAll('[data-rs-close]').forEach(function(b){
+      b.addEventListener('click', function(){ closeRoomHost(b.getAttribute('data-rs-close')); });
+    });
+    root.querySelectorAll('[data-rs-nudge]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var mid = b.getAttribute('data-rs-nudge');
+        sendRoomNudge(mid).then(function(){
+          var p = root.querySelector('[data-rs-nudge-prompt="' + mid + '"]');
+          if(p) p.hidden = true;
+        });
+      });
+    });
+    root.querySelectorAll('[data-rs-nudge-later]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var mid = b.getAttribute('data-rs-nudge-later');
+        var p = root.querySelector('[data-rs-nudge-prompt="' + mid + '"]');
+        if(p) p.hidden = true;
+        try { if(window.sessionStorage) window.sessionStorage.setItem('rsPrompted:' + mid, String(Date.now())); } catch(e){}
+      });
+    });
+  }
+  function roomTimerTick(mid, now){
+    var m = matchesCache()[mid]; if(!m) return;
+    var me = myUid(); if(!me) return;
+    var st = turnTimerState(m, now);
+    var line = document.querySelector('[data-rs-timer-line="' + mid + '"]');
+    var prompt = document.querySelector('[data-rs-nudge-prompt="' + mid + '"]');
+    if(st.off){
+      if(line){ line.hidden = true; line.textContent = ''; }
+      if(prompt) prompt.hidden = true;
+      return;
+    }
+    var turnName = (m.turn === me) ? 'you' : ((m.turn === m.aUid) ? m.aName : m.bName);
+    if(line){
+      line.hidden = false;
+      line.textContent = turnTimerText(st, turnName);
+    }
+    if(!st.lapsed) return;
+    if(m.turn === me) return;
+    var opp = (m.turn === m.aUid) ? { uid:m.aUid, name:m.aName } : { uid:m.bUid, name:m.bName };
+    var key = (m.lastMoveAt || m.updatedAt || m.createdAt || 0) + ':' + m.turn;
+    if(promptedForTurn[mid] === key) return;
+    promptedForTurn[mid] = key;
+    if(prompt){
+      var txt = prompt.querySelector('[data-rs-nudge-text="' + mid + '"]');
+      if(txt) txt.textContent = 'It has been ' + ROOM_TIMER_LABELS[st.mins] + ' since ' + opp.name + ' got the turn — nudge them to move?';
+      prompt.hidden = false;
+    }
+  }
+  function startRoomTimer(){
+    try { if(roomTimerIv){ clearInterval(roomTimerIv); roomTimerIv = null; } } catch(e){}
+    var mid = null;
+    try { mid = (window.holoTurn && typeof window.holoTurn.openMatch === 'function') ? window.holoTurn.openMatch() : null; } catch(e){}
+    if(!mid) return;
+    roomTimerTick(mid, Date.now());
+    roomTimerIv = setInterval(function(){ roomTimerTick(mid, Date.now()); }, 30000);
+  }
+  function injectRoomSettings(root){
+    if(!root) return;
+    var wrap = root.querySelector('.turn-board-wrap');
+    if(!wrap) return;
+    var mid = null;
+    try { mid = (window.holoTurn && typeof window.holoTurn.openMatch === 'function') ? window.holoTurn.openMatch() : null; } catch(e){}
+    if(!mid) return;
+    var m = matchesCache()[mid]; if(!m) return;
+    var me = myUid(); if(!me) return;
+    if(wrap.querySelector('[data-rs-toggle]')) return;
+    var acts = wrap.querySelector('.turn-actions');
+    if(!acts) return;
+    var btn = roomSettingsButtonHtml(mid, m, me);
+    if(!btn) return;
+    var tmp = document.createElement('div');
+    tmp.innerHTML = btn + '<span class="rs-timer" data-rs-timer-line="' + esc(mid) + '" hidden></span>';
+    while(tmp.firstChild) acts.appendChild(tmp.firstChild);
+    var ptmp = document.createElement('div');
+    ptmp.innerHTML = roomSettingsPanelHtml(mid, m, me);
+    if(ptmp.firstChild){
+      wrap.appendChild(ptmp.firstChild);
+      var p = wrap.querySelector('[data-rs-panel="' + mid + '"]');
+      if(p && (settingsOpen[mid] || openSettingsMid === mid)){ p.hidden = false; settingsOpen[mid] = true; }
+      if(openSettingsMid === mid) openSettingsMid = null;
+    }
+    var ntmp = document.createElement('div');
+    ntmp.innerHTML = roomNudgePromptHtml(mid, m, me);
+    if(ntmp.firstChild) wrap.appendChild(ntmp.firstChild);
+    bindRoomSettings(root);
+    startRoomTimer();
+  }
+  function openInTurnView(mid){
+    openSettingsMid = mid;
+    if(window.holoTurn && window.holoTurn.open){ window.holoTurn.open(mid); }
+    try { location.hash = '#game/tic-tac-toe'; } catch(e){}
+    setTimeout(function(){
+      var el = document.getElementById('turnPlay');
+      if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+    }, 300);
+  }
+  var roomSettings = {
+    cleanName:cleanRoomName, displayName:roomDisplayName, subName:roomSubName,
+    isHost:isRoomHost, timerMin:roomTimerMin, timerState:turnTimerState,
+    buttonHtml:roomSettingsButtonHtml, panelHtml:roomSettingsPanelHtml,
+    inject:injectRoomSettings, bind:bindRoomSettings, startTimer:startRoomTimer,
+    tick:roomTimerTick, saveName:saveRoomName, saveTimer:saveRoomTimer,
+    changeGame:changeRoomGame, closeRoom:closeRoomHost, sendNudge:sendRoomNudge,
+    openInTurnView:openInTurnView
+  };
+
   /* ---------- opening a game room ---------- */
+  /* POOL-H1H5-2026-11-26 (H3 ready-handshake): the pool frame posts {type:'holo-pool-ready'} once its room listener is installed (game file C5, live). The first send (load event / 2 s fallback) can land before that listener exists, so the hub re-sends the pending room/match on ready. poolHand holds the pending handoff; clearCurrentMatch clears it when the game closes, so a later solo boot can never be handed a stale room. */
+  var poolHand = { room:null, mid:null, sent:false, bound:false, gen:0 };
+  function poolHandPost(){
+    var fr = document.getElementById('8-ball-poolFrame');
+    if(!fr || !fr.contentWindow) return false;
+    try {
+      if(poolHand.room) fr.contentWindow.postMessage({ type:'holo-room-join', room:poolHand.room, game:'8-ball-pool' }, '*');
+      else if(poolHand.mid) fr.contentWindow.postMessage({ type:'holo-pool-match', mid:poolHand.mid }, '*');
+      else return false;
+    } catch(e){ return false; }
+    return true;
+  }
   function handIntoPool(opts){
     /* The hub opens games in an iframe, so ?room= would be lost from
        the hash — hand the room in by postMessage once the pool frame
@@ -28827,16 +30360,16 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     /* ROOM-CHAT-2026-11-26 (Holo 20:56): remember which match was handed in, so the side panels can show the room chat instead of How to play while a Pool match is open. A room code resolves through the registry's matchId; a solo open never calls handIntoPool, so the slot stays null and solo keeps the how-to. */
     try { currentPoolMid = (opts && opts.mid) || (opts && opts.room && registry[opts.room] ? registry[opts.room].matchId : null) || null; } catch(e){ currentPoolMid = null; }
     try { location.hash = '#game/8-ball-pool'; } catch(e){}
-    var sent = false;
+    poolHand.room = (opts && opts.room) || null;
+    poolHand.mid = (opts && opts.mid) || null;
+    poolHand.sent = false;
+    poolHand.gen++;
+    var myGen = poolHand.gen;
     function send(){
-      if(sent) return;
-      var fr = document.getElementById('8-ball-poolFrame');
-      if(!fr || !fr.contentWindow) return;
-      sent = true;
-      try {
-        if(opts.room) fr.contentWindow.postMessage({ type:'holo-room-join', room:opts.room, game:'8-ball-pool' }, '*');
-        else if(opts.mid) fr.contentWindow.postMessage({ type:'holo-pool-match', mid:opts.mid }, '*');
-      } catch(e){}
+      if(myGen !== poolHand.gen) return;
+      if(poolHand.sent) return;
+      if(!poolHand.room && !poolHand.mid) return;
+      if(poolHandPost()) poolHand.sent = true;
     }
     function arm(){
       var fr = document.getElementById('8-ball-poolFrame');
@@ -28850,6 +30383,18 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(!arm()){
       var iv = setInterval(function(){ if(arm()) clearInterval(iv); }, 400);
       setTimeout(function(){ clearInterval(iv); }, 10000);
+    }
+    if(!poolHand.bound){
+      poolHand.bound = true;
+      window.addEventListener('message', function(e){
+        if(!e || !e.data || e.data.type !== 'holo-pool-ready' || e.data.game !== '8-ball-pool') return;
+        if(!poolHand.room && !poolHand.mid) return;
+        if(poolHand.room && registry[poolHand.room] && registry[poolHand.room].closed) return;
+        /* The ready post carries the game's mid once it has one — only honour it when it matches the handed-in match (a room handoff has no mid yet, so any mid is fine there). */
+        if(e.data.mid && poolHand.mid && e.data.mid !== poolHand.mid) return;
+        if(e.data.mid && poolHand.room && registry[poolHand.room] && registry[poolHand.room].matchId && e.data.mid !== registry[poolHand.room].matchId) return;
+        if(poolHandPost()) poolHand.sent = true;
+      });
     }
   }
   function openMatch(mid){
@@ -28901,6 +30446,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   function poolStatusLine(m, me){
     if(m.status === 'waiting') return (m.bUid === me) ? 'Challenge from ' + poolMatchName(m, m.aUid, m.aName) + ' — accept?' : 'Waiting for ' + poolMatchName(m, m.bUid, m.bName) + ' to accept';
     if(m.status === 'declined') return 'Declined';
+    /* POOL-H1H5-2026-11-26 (H5 expired status): the canonical expired wording — the tile shows the same text (see poolRoomTileHtml). The TTT bundle's statusText has no expired branch, so this is the one canonical text. */
+    if(m.status === 'expired') return 'Expired — challenge again any time';
     if(m.status === 'draw') return 'Draw';
     if(m.status === 'left') return poolMatchName(m, m.aUid === me ? m.bUid : m.aUid, (m.aUid === me) ? m.bName : m.aName) + ' left the match';
     if(m.status === 'won'){
@@ -28913,6 +30460,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   function poolMatchHtml(mid, m, me){
     var h = '<div class="turn-board-wrap">';
     h += '<p class="turn-summary">' + esc(poolMatchName(m, m.aUid, m.aName)) + ' vs ' + esc(poolMatchName(m, m.bUid, m.bName)) + ' — 8-Ball Pool<br><span class="turn-you">' + esc(poolStatusLine(m, me)) + '</span></p>';
+    /* DUEL-MUSIC-2026-11-26: now-playing chip under the status line + Music button in the action row (your music only, never your opponent's). */
+    h += musicChipHtml();
     if(m.lastMoveAt) h += '<p class="turn-lastmove">Last move at ' + timeShort(m.lastMoveAt) + (m.moves ? ' · ' + m.moves + ' shot' + (m.moves === 1 ? '' : 's') : '') + '</p>';
     if(isStuck(m)) h += '<p class="turn-lastmove">Looks stuck — Reset?</p>';
     h += '<div class="turn-actions">';
@@ -28925,14 +30474,15 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(m.status === 'playing'){
       h += '<button type="button" class="btn btn-light" data-room-open="' + esc(mid) + '">Open in 8-Ball Pool</button>';
     }
-    if(m.status === 'won' || m.status === 'draw' || m.status === 'left'){
+    /* POOL-H1H5-2026-11-26 (H5 expired status): an expired match gets the endgame row too, so "challenge again any time" is actionable (Rematch). */
+    if(m.status === 'won' || m.status === 'draw' || m.status === 'left' || m.status === 'expired'){
       h += '<button type="button" class="btn btn-light" data-room-rematch="' + esc(mid) + '">Rematch</button>';
       h += '<button type="button" class="btn btn-dark" data-room-diffgame="' + esc(mid) + '">Play a different game</button>';
     }
     if(m.status === 'waiting' || m.status === 'playing'){
       h += '<button type="button" class="btn btn-dark" data-room-reset="' + esc(mid) + '">Reset match</button>';
     }
-    h += '<button type="button" class="btn btn-dark" data-room-report="' + esc(mid) + '">Report</button>';
+    h += '<button type="button" class="btn btn-dark" data-room-report="' + esc(mid) + '">Report</button>' + '<button type="button" class="btn btn-light" data-room-music="' + esc(mid) + '">🎵 Music</button>';
     /* ROOM-CHAT-2026-11-26: per-room chat (only while the match is live — the rules close the chat when the game ends). */
     if(m.status === 'waiting' || m.status === 'playing') h += '<button type="button" class="btn btn-light" data-room-chat="' + esc(mid) + '">Chat<span class="dm-count rc-tile-badge" hidden>0</span></button>';
     h += '</div></div>';
@@ -28974,27 +30524,86 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     if(!ts) return '';
     try { return new Date(ts).toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ' · ' + timeShort(ts); } catch(e){ return ''; }
   }
-  function activeGameTiles(ms, me){
-    var mids = Object.keys(ms).sort(function(a, b){ return (ms[b].updatedAt || 0) - (ms[a].updatedAt || 0); });
-    var active = mids.filter(function(mid){
-      var m = ms[mid];
-      return m && (m.status === 'playing' || m.status === 'waiting');
-    });
-    if(!active.length) return '';
-    /* ROOM-CHAT-2026-11-26 (Holo 19:45): returns the tile ITEMS only — renderRooms wraps them with the pool-room tiles in ONE vertical .nextmove-row. */
-    var h = '';
-    active.forEach(function(mid){
-      var m = ms[mid];
-      var oppUid = (m.aUid === me) ? m.bUid : m.aUid;
-      var opp = friendName(oppUid);
-      if(!opp || opp === 'Tester') opp = (m.aUid === me) ? m.bName : m.aName;
-      var mine = (m.status === 'playing' && m.turn === me) || (m.status === 'waiting' && m.bUid === me);
-      var status = mine ? 'Your turn' : 'Waiting on other player';
-      h += '<div class="nextmove-tile-wrap"><button type="button" class="nextmove-tile' + (mine ? ' your-turn' : '') + '" role="listitem" data-room-open="' + esc(mid) + '"><b>' + esc(gameTitle(m.game)) + ' vs ' + esc(opp) + '</b><span class="nextmove-status' + (mine ? ' mine' : '') + '">' + status + '</span><span class="nextmove-play">▶ Open room</span></button>';
-      /* ROOM-CHAT-2026-11-26: per-room chat — the Chat button is a SIBLING of the tile button (a tile is a single <button>, so a button cannot nest inside it). */
-      h += '<button type="button" class="pill dm-act dm-linkbtn rc-tile-chat" data-room-chat="' + esc(mid) + '">Chat<span class="dm-count rc-tile-badge" hidden>0</span></button></div>';
-    });
+  /* ROOMS-GROUPED-2026-11-27 (Holo 2026-11-27 01:31 "Yes, build the grouped Rooms"): Rooms groups by OPPONENT — one tile per person, tap it to see their rooms grouped by game. INCLUDES the your-turn-first sorting (Holo 2026-11-27 01:27): opponents with a your-turn game sort first (then latest activity), your-turn tiles first inside each game group (then updatedAt desc). Replaces the flat one-tile-per-game list (activeGameTiles) — the flat list is gone, but the match tiles themselves are byte-identical (same gold your-turn highlight, same status text, same per-room Chat button). The in-room "Your matches" list + the top-nav "Your turn" indicator are UNCHANGED (they still take you straight to a match). COMPOSITION SEAM for the room-names build: the opponent tile's name comes from group.name (one place); a renamed room's tile title is built in matchTileHtml / poolRoomTileHtml (same as before). A future 2+ person room has no single opponent UID — it groups under its own key ('group:' + mid/code) named from the match's name field, else "Group room" — so it never drops out of the list. */
+  var roomsOpenOpp = null; /* uid key of the opponent whose rooms are open, or null for the opponent list */
+  function oppName(uid, fb){
+    var n = '';
+    try { n = friendName(uid); } catch(e){ n = ''; }
+    if(!n || n === 'Tester') n = fb || 'Tester';
+    return n;
+  }
+  function matchMine(m, me){
+    return !!m && ((m.status === 'playing' && m.turn === me) || (m.status === 'waiting' && m.bUid === me));
+  }
+  function matchOpp(m, me){
+    /* 1v1: the opponent is the other player. A future group match (neither side is me) returns uid '' — the grouper keys it separately. */
+    if(m.aUid === me) return { uid: m.bUid || '', name: oppName(m.bUid, m.bName) };
+    if(m.bUid === me) return { uid: m.aUid || '', name: oppName(m.aUid, m.aName) };
+    return { uid: '', name: (m.name || 'Group room') };
+  }
+  function matchTileHtml(mid, m, me){
+    var o = matchOpp(m, me);
+    var mine = matchMine(m, me);
+    var status = mine ? 'Your turn' : 'Waiting on other player';
+    /* CONSOLIDATION 2026-11-27 (grouped Rooms + room-names composition rule): the tile title comes from roomDisplayName() — a renamed room shows its custom name, with roomSubName() ("Game vs Opponent") as the sub-line; an unrenamed room shows "Game vs Opponent" exactly as before. */
+    var h = '<div class="nextmove-tile-wrap"><button type="button" class="nextmove-tile' + (mine ? ' your-turn' : '') + '" role="listitem" data-room-open="' + esc(mid) + '"><b>' + esc(roomDisplayName(m, me)) + '</b>' + (roomSubName(m, me) ? '<span class="nextmove-game">' + esc(roomSubName(m, me)) + '</span>' : '') + '<span class="nextmove-status' + (mine ? ' mine' : '') + '">' + status + '</span><span class="nextmove-play">▶ Open room</span></button>';
+    /* ROOM-CHAT-2026-11-26: per-room chat — the Chat button is a SIBLING of the tile button (a tile is a single <button>, so a button cannot nest inside it). */
+    h += '<button type="button" class="pill dm-act dm-linkbtn rc-tile-chat" data-room-chat="' + esc(mid) + '">Chat<span class="dm-count rc-tile-badge" hidden>0</span></button>';
+    /* ROOM-NAMES-SETTINGS-2026-11-27: host-only Room settings, reachable from the tile — opens the match view with the panel expanded. */
+    if(isRoomHost(m, me) && (m.status === 'waiting' || m.status === 'playing')){
+      h += '<button type="button" class="pill dm-act dm-linkbtn rc-tile-chat" data-room-settings="' + esc(mid) + '">Settings</button>';
+    }
+    h += '</div>';
     return h;
+  }
+  function poolOpp(entry, me){
+    /* Pool-room opponent: host sees the guest, guest sees the host. Same resolution as poolRoomTileHtml's title. */
+    if(entry.role === 'host') return { uid: entry.guestUid || '', name: entry.guestName || friendName(entry.guestUid) || '' };
+    return { uid: entry.hostUid || '', name: entry.hostName || friendName(entry.hostUid) || '' };
+  }
+  /* ROOM-CHAT-2026-11-26 (Holo 19:45): the grouper returns tile ITEMS only — renderRooms wraps them in ONE vertical .nextmove-row (opponent tiles in the list view; game headings + tiles in the detail view). */
+  function roomsOpponentGroups(ms, me){
+    /* Returns [{ key, uid, name, mine, latest, games:[{ slug, title, tiles:[{ html, mine, at }] }] }]. Opponents sort mine-first then latest; games sort mine-first then latest; tiles sort mine-first then updatedAt desc. */
+    var byKey = {}, order = [];
+    function grp(key, uid, name){
+      if(!byKey[key]){ byKey[key] = { key:key, uid:uid, name:name, mine:false, latest:0, games:{} }; order.push(byKey[key]); }
+      return byKey[key];
+    }
+    function addTile(g, slug, html, mine, at){
+      g.mine = g.mine || mine;
+      if(at > g.latest) g.latest = at;
+      var gg = g.games[slug];
+      if(!gg){ gg = { slug:slug, title:gameTitle(slug), tiles:[], mine:false, latest:0 }; g.games[slug] = gg; }
+      gg.tiles.push({ html:html, mine:mine, at:at });
+      gg.mine = gg.mine || mine;
+      if(at > gg.latest) gg.latest = at;
+    }
+    var mids = Object.keys(ms || {});
+    mids.forEach(function(mid){
+      var m = ms[mid];
+      if(!m || (m.status !== 'playing' && m.status !== 'waiting')) return;
+      var o = matchOpp(m, me);
+      var key = o.uid ? ('uid:' + o.uid) : ('group:' + mid);
+      addTile(grp(key, o.uid, o.name), m.game || 'tic-tac-toe', matchTileHtml(mid, m, me), matchMine(m, me), m.updatedAt || 0);
+    });
+    Object.keys(registry).forEach(function(code){
+      var e = registry[code];
+      if(!e || e.closed) return;
+      var html = poolRoomTileHtml(code, e, ms, me);
+      if(!html) return; /* deduped (playing/waiting match already tiled) or closed */
+      var o2 = poolOpp(e, me);
+      var m2 = e.matchId ? ms[e.matchId] : null;
+      if((!o2.uid || !o2.name) && m2){ var mo = matchOpp(m2, me); if(mo.uid) o2 = mo; }
+      var key2 = o2.uid ? ('uid:' + o2.uid) : ('group:' + code);
+      addTile(grp(key2, o2.uid, o2.name || 'Group room'), '8-ball-pool', html, false, e.createdAt || 0);
+    });
+    function byMineLatest(a, b){ return ((b.mine ? 1 : 0) - (a.mine ? 1 : 0)) || ((b.latest || 0) - (a.latest || 0)); }
+    order.forEach(function(g){
+      g.games = Object.keys(g.games).map(function(k){ return g.games[k]; }).sort(byMineLatest);
+      g.games.forEach(function(gg){ gg.tiles.sort(function(a, b){ return ((b.mine ? 1 : 0) - (a.mine ? 1 : 0)) || ((b.at || 0) - (a.at || 0)); }); });
+    });
+    order.sort(byMineLatest);
+    return order;
   }
   /* ROOM-CHAT-2026-11-26 (Holo 19:45, photo): the Pool room is a TILE in
      the same vertical list as the turn-match tiles — one tile per active
@@ -29030,6 +30639,12 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       acts += '<button type="button" class="btn btn-light dm-mini" data-room-rematch="' + esc(entry.matchId) + '">Rematch</button>';
       acts += '<button type="button" class="btn btn-dark dm-mini" data-room-diffgame="' + esc(entry.matchId) + '">Play a different game</button>';
       acts += '<button type="button" class="btn btn-dark dm-mini" data-room-close="' + esc(code) + '">Close room</button>';
+    } else if(m && m.status === 'expired'){
+      /* POOL-H1H5-2026-11-26 (H5 expired status): the tile shows the same canonical wording as the match view (poolStatusLine). */
+      status = 'Expired — challenge again any time';
+      acts += '<button type="button" class="btn btn-light dm-mini" data-room-rematch="' + esc(entry.matchId) + '">Rematch</button>';
+      acts += '<button type="button" class="btn btn-dark dm-mini" data-room-diffgame="' + esc(entry.matchId) + '">Play a different game</button>';
+      acts += '<button type="button" class="btn btn-dark dm-mini" data-room-close="' + esc(code) + '">Close room</button>';
     } else if(roomExpired(entry)){
       status = 'Invite expired (24h) — unjoined rooms only last a day'; tone = ' needs';
       acts += '<button type="button" class="btn btn-light dm-mini" data-room-rechallenge="' + esc(code) + '">Challenge again</button>';
@@ -29058,7 +30673,12 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
     }
     var dateLine = createdShort(entry.createdAt);
     dateLine = dateLine ? (dateLine + ' · Room ' + code) : ('Room ' + code);
-    var h = '<div class="nextmove-tile-wrap"><button type="button" class="nextmove-tile" role="listitem" data-room-tile="' + esc(code) + '"><b>8-Ball Pool vs ' + esc(oppName) + '</b><span class="nextmove-status' + tone + '">' + esc(status) + '</span><span class="nextmove-date">' + esc(dateLine) + '</span><span class="nextmove-play">▶ Open room</span></button>';
+    /* ROOM-NAMES-SETTINGS-2026-11-27: a Pool room shows its custom name when the host set one (from the match, else the registry entry); otherwise "8-Ball Pool vs Opponent". */
+    var poolTitle = '8-Ball Pool vs ' + oppName;
+    var poolSub = '';
+    var poolNamed = (m && typeof m.name === 'string' && m.name.trim()) ? m.name.trim() : ((entry && typeof entry.name === 'string' && entry.name.trim()) ? entry.name.trim() : '');
+    if(poolNamed){ poolTitle = poolNamed; poolSub = '8-Ball Pool vs ' + oppName; }
+    var h = '<div class="nextmove-tile-wrap"><button type="button" class="nextmove-tile" role="listitem" data-room-tile="' + esc(code) + '"><b>' + esc(poolTitle) + '</b>' + (poolSub ? '<span class="nextmove-game">' + esc(poolSub) + '</span>' : '') + '<span class="nextmove-status' + tone + '">' + esc(status) + '</span><span class="nextmove-date">' + esc(dateLine) + '</span><span class="nextmove-play">▶ Open room</span></button>';
     if(shareBtn || acts) h += '<div class="room-actions">' + shareBtn + acts + '</div>';
     h += sharePanel;
     return h + '</div>';
@@ -29085,20 +30705,40 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
       return;
     }
     var ms = matchesCache();
-    var codes = Object.keys(registry).sort(function(a, b){ return (registry[b].createdAt || 0) - (registry[a].createdAt || 0); });
-    var h = '<p class="rooms-sub">One tile per active game — tap a tile to open it. Your game rooms stay open until the game completes.</p>';
-    /* ROOM-CHAT-2026-11-26 (Holo 19:44 + 19:45): ONE vertical list — the turn-match tiles AND the pool-room tiles stack top-to-bottom in the same .nextmove-row. The separate pool-card list below the strip is gone; a room whose match already has a tile is deduped inside poolRoomTileHtml. TTT-FIXES-2026-11-26: the empty-state line showed UNDER the tiles — it shows only when BOTH sources are empty. */
-    var items = activeGameTiles(ms, me);
-    codes.forEach(function(code){
-      var e = registry[code];
-      if(!e || e.closed) return;
-      items += poolRoomTileHtml(code, e, ms, me);
-    });
-    if(items){
-      h += '<div class="nextmove-row" role="list" aria-label="Your games — one tile per game">' + items + '</div>';
+    var groups = roomsOpponentGroups(ms, me);
+    /* ROOM-CHAT-2026-11-26 (Holo 19:44 + 19:45): ONE vertical list — the opponent tiles AND the detail-view tiles stack top-to-bottom in the same .nextmove-row. The separate pool-card list is gone; a room whose match already has a tile is deduped inside poolRoomTileHtml. */
+    /* Detail view: roomsOpenOpp points at an opponent whose rooms are open. If they have no rooms left (all closed/ended since the last render), fall back to the list. */
+    var open = null;
+    if(roomsOpenOpp){
+      for(var gi = 0; gi < groups.length; gi++){ if(groups[gi].key === roomsOpenOpp){ open = groups[gi]; break; } }
+      if(!open) roomsOpenOpp = null;
     }
-    if(!items){
-      h += '<p class="rooms-sub">No rooms yet — challenge a friend from their card (Duel) or from inside 8-Ball Pool.</p>';
+    var h = '';
+    if(open){
+      h += '<p class="rooms-sub"><button type="button" class="btn btn-dark dm-mini" data-rooms-back="1">← All rooms</button> <b>' + esc(open.name) + '</b></p>';
+      var inner = '';
+      open.games.forEach(function(gg){
+        inner += '<div class="rooms-game-head">' + esc(gg.title) + '</div>';
+        gg.tiles.forEach(function(t){ inner += t.html; });
+      });
+      h += '<div class="nextmove-row" role="list" aria-label="' + esc(open.name) + ' — rooms by game">' + inner + '</div>';
+    } else {
+      h += '<p class="rooms-sub">One tile per person — tap a name to see their games. Your game rooms stay open until the game completes.</p>';
+      var items = '';
+      groups.forEach(function(g){
+        var n = 0, names = [];
+        g.games.forEach(function(gg){ n += gg.tiles.length; if(names.indexOf(gg.title) === -1) names.push(gg.title); });
+        var label = n + (n === 1 ? ' game' : ' games') + (names.length ? ' · ' + names.join(', ') : '');
+        var status = g.mine ? 'Your turn' : 'Waiting on other player';
+        items += '<div class="nextmove-tile-wrap"><button type="button" class="nextmove-tile' + (g.mine ? ' your-turn' : '') + '" role="listitem" data-rooms-opp="' + esc(g.key) + '"><b>' + esc(g.name) + '</b><span class="nextmove-status' + (g.mine ? ' mine' : '') + '">' + status + '</span><span class="nextmove-date">' + esc(label) + '</span><span class="nextmove-play">▶ See games</span></button></div>';
+      });
+      if(items){
+        h += '<div class="nextmove-row" role="list" aria-label="Your games — one tile per person">' + items + '</div>';
+      }
+      if(!items){
+        /* TTT-FIXES-2026-11-26: the empty-state line showed UNDER the tiles — it shows only when BOTH sources are empty. */
+        h += '<p class="rooms-sub">No rooms yet — challenge a friend from their card (Duel) or from inside 8-Ball Pool.</p>';
+      }
     }
     sec.innerHTML = h;
     /* ROOM-CHAT-2026-11-26: tiles/cards were just rebuilt — refill the chat badges. */
@@ -29140,14 +30780,19 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 
   /* ---------- click delegation (survives re-renders) ---------- */
   document.addEventListener('click', function(ev){
-    var t = ev.target && ev.target.closest ? ev.target.closest('[data-room-accept],[data-room-decline],[data-room-open],[data-room-rematch],[data-room-diffgame],[data-room-reset],[data-room-report],[data-room-cancel],[data-room-close],[data-room-share],[data-room-copy],[data-room-share-send],[data-room-rechallenge],[data-room-pickgame],[data-room-chat],[data-room-tile]') : null;
+    var t = ev.target && ev.target.closest ? ev.target.closest('[data-room-accept],[data-room-decline],[data-room-open],[data-room-rematch],[data-room-diffgame],[data-room-reset],[data-room-report],[data-room-cancel],[data-room-close],[data-room-share],[data-room-copy],[data-room-share-send],[data-room-rechallenge],[data-room-pickgame],[data-room-chat],[data-room-settings],[data-room-music],[data-room-tile],[data-rooms-opp],[data-rooms-back]') : null;
     if(!t) return;
     var mid, code, m, me;
     if(t.hasAttribute('data-room-accept')){ acceptMatch(t.getAttribute('data-room-accept')); return; }
     if(t.hasAttribute('data-room-decline')){ declineMatch(t.getAttribute('data-room-decline')); return; }
     if(t.hasAttribute('data-room-open')){ openMatch(t.getAttribute('data-room-open')); return; }
     if(t.hasAttribute('data-room-chat')){ if(window.holoRoomChat) window.holoRoomChat.openBox(t.getAttribute('data-room-chat')); return; }
+    /* DUEL-MUSIC-2026-11-26: the Music button in the Pool match view expands the player. */
+    if(t.hasAttribute('data-room-music')){ if(window.holoMusic) window.holoMusic.expand(); return; }
+    if(t.hasAttribute('data-room-settings')){ openInTurnView(t.getAttribute('data-room-settings')); return; }
     if(t.hasAttribute('data-room-tile')){ openRoomTile(t.getAttribute('data-room-tile')); return; }
+    if(t.hasAttribute('data-rooms-opp')){ roomsOpenOpp = t.getAttribute('data-rooms-opp'); renderRooms(); return; }
+    if(t.hasAttribute('data-rooms-back')){ roomsOpenOpp = null; renderRooms(); return; }
     if(t.hasAttribute('data-room-reset')){ resetMatch(t.getAttribute('data-room-reset')); return; }
     if(t.hasAttribute('data-room-report')){
       if(typeof fbOpen === 'function'){ try { fbOpen('8-ball-pool'); } catch(e){ toast('Report is in the game view — open 8-Ball Pool first.'); } }
@@ -29182,7 +30827,8 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
          challenge carries the room on (same friend, same game). The
          old share link stays dead — the new match gets a fresh one. */
       if(m.roomCode && registry[m.roomCode]){ registry[m.roomCode].closed = true; saveRegistry(); }
-      challengePool(opp.uid, opp.name);
+      /* POOL-H1H5-2026-11-26 (H4 rematch alternation): the finished match's second player (oUid) goes first in the rematch, whoever taps Rematch. A fresh challenge or re-challenge passes nothing (accepter-first). */
+      challengePool(opp.uid, opp.name, undefined, m.oUid);
       return;
     }
     if(t.hasAttribute('data-room-diffgame')){
@@ -29224,7 +30870,7 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 
   /* ---------- boot ---------- */
   try {
-    new MutationObserver(function(){ if(document.body.getAttribute('data-view') === 'rooms') renderRooms(); }).observe(document.body, { attributes:true, attributeFilter:['data-view'] });
+    new MutationObserver(function(){ if(document.body.getAttribute('data-view') === 'rooms'){ roomsOpenOpp = null; renderRooms(); } }).observe(document.body, { attributes:true, attributeFilter:['data-view'] });
   } catch(e){}
   setInterval(function(){ if(myUid()) refreshRooms(); }, 20000);
   setTimeout(function(){ renderRooms(); refreshRooms(); }, 2500);
@@ -29232,9 +30878,12 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   window.holoRooms = {
     challengePool:challengePool, joinRoom:joinRoom, openMatch:openMatch, resetMatch:resetMatch,
     acceptMatch:acceptMatch, declineMatch:declineMatch, cancelRoom:cancelRoom,
-    currentMatch:function(){ return currentPoolMid; }, clearCurrentMatch:function(){ currentPoolMid = null; },
+    currentMatch:function(){ return currentPoolMid; }, clearCurrentMatch:function(){ currentPoolMid = null; poolHand.room = null; poolHand.mid = null; poolHand.sent = false; },
     poolMatchHtml:poolMatchHtml, isStuck:isStuck, roomPendingFriend:roomPendingFriend,
     renderRooms:renderRooms, refresh:refreshRooms, roomLink:roomLink,
+    openOpponent:function(key){ roomsOpenOpp = key || null; renderRooms(); },
+    currentOpponent:function(){ return roomsOpenOpp; },
+    roomSettings:roomSettings,
     rooms:function(){ return JSON.parse(JSON.stringify(registry)); }
   };
 })();
@@ -29315,6 +30964,17 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
   #rcSheet{display:none!important}
 }
 body.rc-dock-on #notifyPopups{bottom:448px}
+/* ROOM-NAMES-SETTINGS-2026-11-27 (Holo 2026-11-27 01:36): host-only room settings — name, game/mode, turn timer, close. The panel opens inside the match view (same .turn-play-menu shell as "Play a different game"). */
+.room-settings{margin:10px 0 0;border:2px solid var(--violet);border-radius:12px;background:#241a3d;padding:10px;display:flex;flex-direction:column;gap:8px}
+.room-settings h4{margin:0;color:#ffd43b;font-size:15px}
+.room-settings label{color:#cfc8ff;font-size:13px;font-weight:700;display:flex;flex-direction:column;gap:4px}
+.room-settings input[type=text],.room-settings select{background:#171040;color:#fff;border:1px solid var(--violet);border-radius:8px;padding:8px 10px;font-family:inherit;font-size:14px}
+.room-settings .rs-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.room-settings .rs-note{color:#cfc8ff;font-size:12.5px;margin:0}
+.room-settings .rs-timer{color:#ffd43b;font-size:13.5px;font-weight:700;margin:0}
+.room-settings .rs-danger{border-color:#ff2e9a}
+.room-settings .rs-prompt{border:2px solid #ffd43b;border-radius:10px;background:#2a1e4d;padding:8px;display:flex;flex-direction:column;gap:6px}
+.nextmove-game{display:block;font-size:12px;color:#cfc8ff}
 </style>
 <script>
 /* ROOM-CHAT-2026-11-26 (Holo 2026-11-26 17:58 + 19:25): per-match room
@@ -34482,5 +36142,35 @@ window.holoWalk={stages:stages,activate:activate,showStep:showStep,guardOverflow
 })();
 </script>
 
+<!-- DUEL-MUSIC-2026-11-26: bottom-docked mini player (Spotify embed, Phase 1). The shell sits AFTER the music script, so the module waits for DOMContentLoaded before wiring the buttons. -->
+<div id="duelMusicBar" hidden>
+  <div class="dm-bar-row">
+    <button type="button" id="duelMusicPlay">&#9654; Play</button>
+    <span class="dm-name" id="duelMusicName">Spotify playlist</span>
+    <span class="dm-paused" id="duelMusicPausedFor" hidden></span>
+    <button type="button" id="duelMusicExpand">&#127925; Music</button>
+  </div>
+  <div id="duelMusicExpanded" hidden>
+    <iframe id="duelMusicFrame" src="about:blank" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" title="Duel room music"></iframe>
+    <div class="dm-link-row">
+      <input id="duelMusicLink" type="url" placeholder="Paste a Spotify playlist link" autocomplete="off">
+      <button type="button" id="duelMusicSave">Save</button>
+      <button type="button" id="duelMusicRemove">Remove link</button>
+    </div>
+    <p class="dm-err" id="duelMusicErr" hidden></p>
+    <p class="dm-hint">Pause stops the track &mdash; play restarts the playlist.</p>
+    <div class="dm-vol"><label for="duelMusicVol">Volume</label><input id="duelMusicVol" type="range" min="0" max="100" value="80" disabled><span>Volume lives in the Spotify player</span></div>
+    <button type="button" class="dm-how" id="duelMusicHow">How to connect Spotify</button>
+  </div>
+  <div id="duelMusicWalk" hidden>
+    <p id="dmWalkKicker"></p>
+    <p id="dmWalkBody"></p>
+    <div class="dm-walk-btns">
+      <button type="button" id="dmWalkBack">Back</button>
+      <button type="button" id="dmWalkSkip">Skip</button>
+      <button type="button" id="dmWalkNext">Next</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
