@@ -417,8 +417,20 @@ var BONUS={"Verdania":3,"Solmara":2,"Kragoria":4,"Lunaris Isles":2};
 var CONT={}; TERR.forEach(function(t){(CONT[t[4]]=CONT[t[4]]||[]).push(t[0])});
 var PCOLORS=["#0e7c6b","#c0392b","#2563eb","#d97706"];
 var PNAMES=["You","General Zara","Commander Rex","Admiral Nova"];
-var difficulty=localStorage.getItem("wc_difficulty")||"Normal";
-var opponents=3, practice=false, rating=0;
+/* WORLD-CONQUEST-POPUP-2026-11-27 (Holo 2026-11-27 17:29): the hub's game-start pop-up
+   carries this game's settings (difficulty + opponents) and START loads
+   the frame with hubstart=1, so the game skips its own setup view
+   (Holo's "ONLY ONE START" rule — settings live in the pop-up, only
+   there). Difficulty comes from the hub's key
+   (holoArcade_v1_diff_world-conquest, the same key the pop-up writes),
+   falling back to this game's own wc_difficulty; opponents from
+   wc_opponents (the same key the pop-up writes), default 3. Practice
+   comes from ?practice=1 / the HOLO-PRACTICE guard. */
+var __wcHub = (function(){ try { var q = new URLSearchParams(window.location.search); return { hubstart: (q.get('hubstart') === '1'), practice: (q.get('practice') === '1' || q.get('practice') === 'true') }; } catch(e){ return { hubstart:false, practice:false }; } })();
+var __wcHubStart = __wcHub.hubstart;
+var difficulty=(function(){ try { var h = localStorage.getItem("holoArcade_v1_diff_world-conquest"); if(h){ var v = JSON.parse(h); if(v==="Easy"||v==="Normal"||v==="Hard") return v; } } catch(e){} return localStorage.getItem("wc_difficulty")||"Normal"; })();
+var opponents=(function(){ try { var o = parseInt(localStorage.getItem("wc_opponents"), 10); if(o===2||o===3) return o; } catch(e){} return 3; })();
+var practice = (__wcHub.practice || (typeof window.__holoPractice !== 'undefined' && !!window.__holoPractice)), rating=0;
 var G=null;
 
 function $(id){return document.getElementById(id)}
@@ -433,10 +445,12 @@ function alive(p){return G.owner.some(function(o){return o===p})}
 function selectSeg(id,attr,cb){document.querySelectorAll("#"+id+" button").forEach(function(b){b.addEventListener("click",function(){document.querySelectorAll("#"+id+" button").forEach(function(x){x.setAttribute("aria-pressed","false")});b.setAttribute("aria-pressed","true");cb(b.getAttribute(attr))})})}
 function markSeg(id,attr,val){document.querySelectorAll("#"+id+" button").forEach(function(b){b.setAttribute("aria-pressed",b.getAttribute(attr)===String(val)?"true":"false")})}
 function diffDesc(){$("diffDesc").textContent={Easy:"Rivals are cautious — great for learning.",Normal:"Balanced rivals who punish weak borders.",Hard:"Ruthless rivals: more attacks, smarter targets."}[difficulty]}
-markSeg("diffSeg","data-d",difficulty);diffDesc();markSeg("oppSeg","data-o",3);markSeg("modeSeg","data-m","standard");
-selectSeg("diffSeg","data-d",function(v){difficulty=v;localStorage.setItem("wc_difficulty",v);diffDesc()});
-selectSeg("oppSeg","data-o",function(v){opponents=+v});
+markSeg("diffSeg","data-d",difficulty);diffDesc();markSeg("oppSeg","data-o",opponents);markSeg("modeSeg","data-m",practice?"practice":"standard"); /* WORLD-CONQUEST-POPUP-2026-11-27: reflect the loaded settings, not hardcoded defaults. */
+selectSeg("diffSeg","data-d",function(v){difficulty=v;localStorage.setItem("wc_difficulty",v);try{localStorage.setItem("holoArcade_v1_diff_world-conquest",JSON.stringify(v))}catch(e){} /* WORLD-CONQUEST-POPUP-2026-11-27: keep the pop-up's key in sync so it pre-selects this pick next time. */ diffDesc()});
+selectSeg("oppSeg","data-o",function(v){opponents=+v;try{localStorage.setItem("wc_opponents",String(opponents))}catch(e){} /* WORLD-CONQUEST-POPUP-2026-11-27: save so the pop-up pre-selects it next time. */});
 selectSeg("modeSeg","data-m",function(v){practice=(v==="practice")});
+/* WORLD-CONQUEST-POPUP-2026-11-27: practice can also arrive by postMessage after load (hub Practice toggle) — the HOLO-PRACTICE guard dispatches holo-practice-on; keep this game's practice flag + mode buttons in step. */
+try { window.addEventListener('holo-practice-on', function(){ practice=true; markSeg("modeSeg","data-m","practice"); }); } catch(e){}
 function showBest(){var b=localStorage.getItem("wc_best_turns");$("bestBox").innerHTML=b?'<span class="chip">🏆 Fastest win: '+b+' turns ('+(localStorage.getItem("wc_best_diff")||"")+")</span>":'<span class="chip">🏆 No win saved yet — finish a Standard game!</span>'}
 showBest();
 
@@ -582,6 +596,8 @@ async function runAI(){
   G.turn=0;startHumanTurn();
 }
 function borderScore(id,p){return ADJ[id].filter(function(n){return G.owner[n]!==p}).length}
+/* WORLD-CONQUEST-POPUP-2026-11-27: hubstart=1 means the hub pop-up already collected the settings — skip the setup view and start straight into the board. Direct opens (no hubstart) still land on the setup view. */
+if(__wcHubStart){ try { startGame(); } catch(e){} }
 </script>
 
 <script>
