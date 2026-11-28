@@ -10004,14 +10004,19 @@ setTimeout(function(){
     if(!val) return '';
     return '<section class="sp-section sp-est" data-sp="infotime"><p class="sp-est-line">EST TIME: ' + spEsc(val) + '</p></section>';
   }
-  var SECTION_BUILDERS = { scores: spScoresHTML, howto: spHowtoHTML, yourturn: spYourTurnHTML, infotime: spInfoTimeHTML }; /* SIDEBAR-YOUR-TURN-2026-11-27: 'matches' ("Your matches"), 'challenge' ("Challenge a friend"), 'notifications' ("Game notifications") and 'infoplay' ("About this game") are removed — the sidebar holds just the "Your turn" button (yourturn) plus scores / how-to / estimated-time. The room chat is a pop-up panel (ROOM-CHAT-POPUP-2026-11-27), not a side section. */ /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27: 'infotime' (est-line, left) is the info that moved out of the middle column. */
+  function spDiceScoreHTML(g, slug){
+    if(slug !== 'dice-duel') return '';
+    /* DICE-DUEL-SCORE-SIDEBAR (Holo 2026-11-28 11:39 "In the hub sidebar, below EST TIME"): the Dice Duel score chart, in the panel directly below EST TIME. The body is filled live from the game's #scoreTable by diceScoreSync (same-origin mirror); until the Dice Duel frame loads (on START) it shows a placeholder. */
+    return '<section class="sp-section sp-dicescore" data-sp="dicescore"><h3>🎲 Score chart</h3><div class="sp-dice-body" id="spDiceScoreBody"><p class="sp-dice-empty">Score chart loads with the game…</p></div></section>';
+  }
+  var SECTION_BUILDERS = { scores: spScoresHTML, howto: spHowtoHTML, yourturn: spYourTurnHTML, infotime: spInfoTimeHTML, dicescore: spDiceScoreHTML }; /* SIDEBAR-YOUR-TURN-2026-11-27: 'matches' ("Your matches"), 'challenge' ("Challenge a friend"), 'notifications' ("Game notifications") and 'infoplay' ("About this game") are removed — the sidebar holds just the "Your turn" button (yourturn) plus scores / how-to / estimated-time. The room chat is a pop-up panel (ROOM-CHAT-POPUP-2026-11-27), not a side section. */ /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27: 'infotime' (est-line, left) is the info that moved out of the middle column. */
   var sidePanelSlug = null; /* the game the panels are showing right now (null = hidden) */
   function renderSidePanels(slug){
     var L = $('sidePanelL'), R = $('sidePanelR');
     if(!L || !R) return;
     var g = (slug && SIDE_PANEL_GAMES[slug]) || null;
     /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27 (Holo 2026-11-27 17:36, "Desktop - game play - Should only be gameplay box in middle. Info on left and right."): the side panels now render for EVERY game, not just the three with scores/howto data - a game with no entry still gets its info sections (est-line left, g-note right), read from the pane itself. A game with no info at all (8-ball-pool, cops-and-robbers) still shows no panels. */
-    if(!slug){ sidePanelSlug = null; L.hidden = true; R.hidden = true; document.body.classList.remove('sp-info-on'); document.body.classList.remove('sp-ttt-match'); var pi0 = document.getElementById('poolPhoneInfo'); if(pi0) pi0.innerHTML = ''; try { if(window.holoRooms && window.holoRooms.clearCurrentMatch) window.holoRooms.clearCurrentMatch(); } catch(e){} try { syncRoomChatFab(); } catch(e){} /* ROOM-CHAT-POPUP-2026-11-27: no panel chat to clear any more; hide the floating Chat button too. HUB-ROOM-CHAT-FIX-2026-11-27: the null path hides it via the single sync point (syncRoomChatFab hides it when there is no open room for the current game — currentGame is already null here, in closePlayer). */ return; }
+    if(!slug){ try { diceScoreTeardown(); } catch(e){} sidePanelSlug = null; L.hidden = true; R.hidden = true; document.body.classList.remove('sp-info-on'); document.body.classList.remove('sp-ttt-match'); var pi0 = document.getElementById('poolPhoneInfo'); if(pi0) pi0.innerHTML = ''; try { if(window.holoRooms && window.holoRooms.clearCurrentMatch) window.holoRooms.clearCurrentMatch(); } catch(e){} try { syncRoomChatFab(); } catch(e){} /* ROOM-CHAT-POPUP-2026-11-27: no panel chat to clear any more; hide the floating Chat button too. HUB-ROOM-CHAT-FIX-2026-11-27: the null path hides it via the single sync point (syncRoomChatFab hides it when there is no open room for the current game — currentGame is already null here, in closePlayer). */ return; }
     /* TTT-FIXES-2026-11-26: per-game `sections` override the global SIDE_PANEL_SECTIONS when present. */
     var secs = (g && g.sections) || (g ? SIDE_PANEL_SECTIONS : { left: ['infotime'], right: [] }); /* SIDEBAR-EST-TIME-2026-11-27: 'infoplay' was removed by the sidebar redesign (its builder is gone) - the fallback must not list it, or renderSidePanels throws for every game without a SIDE_PANEL_GAMES entry. */
     /* ROOM-CHAT-POPUP-2026-11-27 (Holo 2026-11-27 12:14, revises the Nov 26 docked-desktop-chat call): in a room/match view the chat is a POP-UP PANEL, not the side slot — so the how-to section is DROPPED for room games (not replaced with a chat section): the side slot is empty and the game gets the full space. Solo views keep how-to (roomMid is null there). The chat opens from the room's Chat button (data-turn-chat / data-room-chat) in the match view, or the floating Chat button (below). SIDEBAR-YOUR-TURN-2026-11-27: 'challenge' is gone entirely, so the filter drops only 'howto' — the "Your turn" button stays in a room (it goes to Rooms). */
@@ -10023,6 +10028,8 @@ setTimeout(function(){
     }
     /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27: the est-line rides along on the left (with scores/records) on every game. It is NOT dropped for room games (it is info, not how-to), and it is appended after a game's own sections so the established order never changes. SIDEBAR-YOUR-TURN-2026-11-27: the g-note ("About this game") no longer rides the right panel — removed (Holo 2026-11-27 18:42). */
     if(L2.indexOf('infotime') < 0) L2.push('infotime');
+    /* DICE-DUEL-SCORE-SIDEBAR: the Dice Duel score chart rides the LEFT panel directly BELOW EST TIME (infotime) — appended after infotime so the order is EST TIME, then score chart. Other games are untouched (dicescore only renders for dice-duel). */
+    if(slug === 'dice-duel' && L2.indexOf('dicescore') < 0) L2.push('dicescore');
     var lHtml = L2.map(function(id){ return SECTION_BUILDERS[id](g, slug); }).join('');
     var rHtml = R2.map(function(id){ return SECTION_BUILDERS[id](g, slug); }).join('');
     L.innerHTML = lHtml;
@@ -10041,6 +10048,8 @@ setTimeout(function(){
     var _spHasGnote = !!(_spPane && _spPane.querySelector(':scope > .g-note'));
     document.body.classList.toggle('sp-info-on', (lHtml.indexOf('data-sp="infotime"') >= 0 || _spHasGnote));
     sidePanelSlug = (lHtml.trim() || rHtml.trim()) ? slug : null;
+    /* DICE-DUEL-SCORE-SIDEBAR: when Dice Duel is open, (re)sync the sidebar score chart (sets up the live mirror; arms the frame-load listener if the game has not started yet). Any other game disconnects the Dice Duel observer. */
+    try { if(slug === 'dice-duel') diceScoreSync(); else diceScoreTeardown(); } catch(e){}
     /* HUB-ROOM-CHAT-FIX-2026-11-27 (replaces the ROOM-CHAT-POPUP-2026-11-27 inline block): the floating Chat button is synced by syncRoomChatFab (label + mid + visibility) — it is also called from the turn module's render() (openMid changes) and from handIntoPool/clearCurrentMatch, so the button follows the room without a game re-open. */
     try { syncRoomChatFab(); } catch(e){}
   }
@@ -10052,6 +10061,100 @@ setTimeout(function(){
     var g = SIDE_PANEL_GAMES[sidePanelSlug];
     if(g && g.scores && g.scores.prefix && e.key.indexOf(g.scores.prefix) === 0) renderSidePanels(sidePanelSlug);
   });
+  /* HUB-DICE-DUEL-SCORE-SIDEBAR-2026-11-28 (Holo 2026-11-28 11:39 "In the hub sidebar, below EST TIME"): live mirror of the Dice Duel score chart into the hub sidebar. The game owns all scoring state and logic (its #scoreTable is rebuilt on every render); the hub only READS that table (same-origin) and forwards taps. How it works: (1) once the Dice Duel frame loads, a MutationObserver on the game's #scoreTable re-mirrors on every game render (roll, hold, lock-in, turn change, restart); (2) the mirror clones the game's table HTML, so labels, locked scores, blue pickable cells, current-player highlight and totals are always verbatim; (3) tapping a blue cell in the sidebar clicks the game's own pickable cell for that category, so scoring works exactly as in the game; (4) the game's own left-rail scorecard is hidden (injected CSS into the frame) while the game is open in the hub — standalone visits to ../dice-duel/ keep their own scorecard, since the hub is not there. No game-file change. If the frame has not loaded yet (the game only loads on START), the panel shows a placeholder and a one-time load listener syncs the moment it loads. */
+  var __ddScoreObs = null, __ddScoreObsTable = null, __ddScoreLoadArmed = false;
+  function diceScoreFrame(){ try { return document.getElementById('DiceDuelFrame'); } catch(e){ return null; } }
+  function diceScoreDoc(){ try { var fr = diceScoreFrame(); return fr ? (fr.contentDocument || (fr.contentWindow && fr.contentWindow.document) || null) : null; } catch(e){ return null; } }
+  function diceScoreHideOn(){ try { return window.matchMedia ? window.matchMedia('(min-width:1280px)').matches : (window.innerWidth >= 1280); } catch(e){ return true; } }
+  function diceScoreApplyHide(){
+    /* The hub sidebar only exists at >=1280px (below that it is display:none by design and the game fills the screen). The game's own scorecard is hidden ONLY where the sidebar exists (desktop); on phone/tablet the injected style is disabled so the game keeps its own chart and stays playable. Without this gate the chart would vanish on phones (sidebar hidden + game rail hidden). */
+    try {
+      var doc = diceScoreDoc();
+      var st = doc ? doc.getElementById('holo-dd-hide-score') : null;
+      if(st) st.disabled = !diceScoreHideOn();
+    } catch(e){}
+  }
+  function diceScoreInjectHide(doc){
+    try {
+      if(!doc || !doc.head) return;
+      if(doc.getElementById('holo-dd-hide-score')){ diceScoreApplyHide(); return; }
+      var st = doc.createElement('style');
+      st.id = 'holo-dd-hide-score';
+      /* Hide the game's left-rail scorecard (it now lives in the hub sidebar). On desktop the right rail is capped so the dice stay centred without the left rail. Disabled below 1280px (see diceScoreApplyHide) so the game keeps its own chart where the sidebar does not exist. */
+      st.textContent = '#gameView .gv-left{display:none!important}@media (min-width:700px){#gameView .gv-right{flex:0 0 250px!important}}';
+      doc.head.appendChild(st);
+      diceScoreApplyHide();
+      if(!window.__ddScoreResizeArmed){
+        window.__ddScoreResizeArmed = true;
+        window.addEventListener('resize', function(){ try { diceScoreApplyHide(); } catch(e){} });
+      }
+    } catch(e){}
+  }
+  function diceScoreAttachObs(t){
+    try {
+      if(__ddScoreObsTable === t) return;
+      if(__ddScoreObs){ try { __ddScoreObs.disconnect(); } catch(e){} __ddScoreObs = null; }
+      __ddScoreObsTable = t;
+      var Obs = (window.MutationObserver || window.WebKitMutationObserver);
+      if(!Obs) return;
+      __ddScoreObs = new Obs(function(){ try { diceScoreSync(); } catch(e){} });
+      __ddScoreObs.observe(t, { childList:true, subtree:true, characterData:true });
+    } catch(e){}
+  }
+  function diceScoreSync(){
+    var body = null;
+    try { body = document.getElementById('spDiceScoreBody'); } catch(e){}
+    if(!body){ diceScoreTeardown(); return; }
+    var doc = diceScoreDoc();
+    var t = null;
+    try { t = doc ? doc.getElementById('scoreTable') : null; } catch(e){}
+    if(!t){
+      body.innerHTML = '<p class="sp-dice-empty">Score chart loads with the game…</p>';
+      try {
+        var fr = diceScoreFrame();
+        if(fr && !__ddScoreLoadArmed){
+          __ddScoreLoadArmed = true;
+          var __ddOnLoad = function(){ __ddScoreLoadArmed = false; try { fr.removeEventListener('load', __ddOnLoad); } catch(e){} try { diceScoreSync(); } catch(e){} };
+          fr.addEventListener('load', __ddOnLoad);
+        }
+      } catch(e){}
+      return;
+    }
+    diceScoreInjectHide(doc);
+    var html = '';
+    try { html = t.innerHTML || ''; } catch(e){}
+    if(!html.trim()){
+      body.innerHTML = '<p class="sp-dice-empty">Score chart loads with the game…</p>';
+      diceScoreAttachObs(t);
+      return;
+    }
+    var allTime = '';
+    try { var at = doc.getElementById('allTimeLine'); if(at) allTime = at.textContent || ''; } catch(e){}
+    body.innerHTML = '<table class="sp-dice-table">' + html + '</table>'
+      + '<p class="sp-dice-hint">Blue cells show what you would score now. Tap one to lock it in.</p>'
+      + (allTime ? '<p class="sp-dice-alltime">' + String(allTime).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</p>' : '');
+    try {
+      var cells = body.querySelectorAll('td.pickable[data-cat]');
+      for(var i = 0; i < cells.length; i++){
+        (function(td){
+          td.addEventListener('click', function(){
+            try {
+              var cat = td.getAttribute('data-cat');
+              var d2 = diceScoreDoc();
+              var gc = d2 ? d2.querySelector('#scoreTable td.pickable[data-cat="' + cat + '"]') : null;
+              if(gc) gc.click();
+              else diceScoreSync();
+            } catch(e){}
+          });
+        })(cells[i]);
+      }
+    } catch(e){}
+    diceScoreAttachObs(t);
+  }
+  function diceScoreTeardown(){
+    try { if(__ddScoreObs){ __ddScoreObs.disconnect(); } } catch(e){}
+    __ddScoreObs = null; __ddScoreObsTable = null;
+  }
   /* HUB-ROOM-CHAT-FIX-2026-11-27 (Holo 2026-11-27 19:01 + 19:57): the floating Chat button is a BIGGER labelled button — "Chat with <opponent>" — at the BOTTOM RIGHT on desktop. syncRoomChatFab is its SINGLE sync point: it reads the open room for the game currently in the player (spRoomMid(currentGame)), sets the button's mid + label, and shows/hides it. Called from renderSidePanels, from the turn module's render() (openMid changes), and from handIntoPool/clearCurrentMatch — so the button follows the room without a game re-open. The label uses the match's stored Code Names (the chat box header live-resolves renames; the button does not need to). */
   function spRoomOppName(mid, slug){
     try {
@@ -10148,6 +10251,8 @@ setTimeout(function(){
     var pbl = $('playerBarLogo'), pgl = $('playerGameLogo');
     if(pbl) pbl.hidden = false;
     if(pgl) pgl.hidden = true;
+    /* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28: leaving the game leaves fullscreen too — otherwise the (now hidden) player would stay the fullscreen element. Only when actually fullscreen (a bare exitFullscreen() call rejects). */
+    try { if((document.fullscreenElement || document.webkitFullscreenElement) && window.holoExitGameFullscreen) window.holoExitGameFullscreen(); } catch(e){}
     player.hidden = true;
     document.body.style.overflow = '';
   }
@@ -14585,12 +14690,27 @@ window.holoDaily = (function(){
     <textarea id="fbText" rows="4" placeholder="Spill it! Fun bits, broken bits, wild ideas — Holo reads every word. 🐾"></textarea>
     <!-- FB-SCREENSHOT-2026-11-23 (Holo 08:36): attach a screenshot to the report -->
     <div class="fb-shot">
-      <input type="file" id="fbShotFile" accept="image/*" hidden>
-      <button class="g-btn" id="fbShotBtn" type="button">📷 Add a screenshot</button>
+      <!-- HUB-SCREENSHOT-CIRCLE-FOLDIN-2026-11-28: take a screenshot of the game + circle it, ported from FB-CAPTURE-2026-11-26. Upload stays as-is (capture="environment" offers the camera on phones). -->
+      <input type="file" id="fbShotFile" accept="image/*" capture="environment" hidden>
+      <div class="fb-shot-btns">
+        <button class="g-btn" id="fbShotCaptureBtn" type="button">📷 Take a screenshot</button>
+        <button class="g-btn" id="fbShotBtn" type="button">📸 Upload a file</button>
+      </div>
       <div class="fb-shot-prev" id="fbShotPrev" hidden>
         <img id="fbShotImg" alt="Your screenshot">
+        <canvas id="fbCircleCanvas" hidden></canvas>
         <button class="pop-x fb-shot-x" id="fbShotRemove" type="button" aria-label="Remove screenshot">×</button>
       </div>
+      <div class="fb-circle-bar" id="fbCircleBar" hidden>
+        <p class="g-note" style="margin:0">Drag on the picture to circle the problem. Tap a circle to pick it, then Delete.</p>
+        <div class="fb-circle-btns">
+          <button class="g-btn fb-cbtn" id="fbCircleUndo" type="button">↩ Undo</button>
+          <button class="g-btn fb-cbtn" id="fbCircleDelete" type="button">Delete circle</button>
+          <button class="g-btn fb-cbtn" id="fbCircleClear" type="button">Clear all</button>
+          <button class="g-btn primary fb-cbtn" id="fbCircleDone" type="button">Done ✓</button>
+        </div>
+      </div>
+      <button class="g-btn fb-circle-open" id="fbCircleOpen" type="button" hidden>⭕ Circle the problem</button>
       <p class="g-note fb-shot-note" id="fbShotNote" style="margin:6px 0 0">Optional — a picture of the bug helps a lot. It gets shrunk before sending.</p>
     </div>
     <p class="fb-meta" id="fbMetaLine"></p>
@@ -15586,9 +15706,18 @@ window.holoDaily = (function(){
     var prev = $('fbShotPrev'), img = $('fbShotImg'), btn = $('fbShotBtn');
     if(prev) prev.hidden = !fbShot;
     if(img && fbShot) img.src = fbShot;
-    if(btn) btn.textContent = fbShot ? '📷 Change screenshot' : '📷 Add a screenshot';
+    if(btn) btn.textContent = fbShot ? '📸 Change file' : '📸 Upload a file';
+    var cap = $('fbShotCaptureBtn');
+    if(cap) cap.textContent = fbShot ? '📷 Retake screenshot' : '📷 Take a screenshot';
+    if(!fbShot) fbCircleCloseEditor();
+    fbCircleSyncUI();
   }
-  function fbSetShot(dataUrl){ fbShot = dataUrl || ''; fbPaintShot(); persistDraft(); }
+  function fbSetShot(dataUrl, openEditor){
+    fbShot = dataUrl || '';
+    fbPaintShot();
+    persistDraft();
+    if(fbShot && openEditor) fbCircleOpenEditor();
+  }
   function fbProcessShot(file){
     if(!file) return;
     if(file.type && file.type.indexOf('image/') !== 0){ fbShotSay('That file is not a picture — pick a screenshot or photo.'); return; }
@@ -15598,31 +15727,338 @@ window.holoDaily = (function(){
       var img = new Image();
       img.onerror = function(){ fbShotSay('Hmm, that picture would not load. Try another one.'); };
       img.onload = function(){
-        try {
-          var maxDim = 1280;
-          var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
-          if(!w || !h) throw new Error('no size');
-          var scale = Math.min(1, maxDim / Math.max(w, h));
-          var cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
-          var canvas = document.createElement('canvas'); canvas.width = cw; canvas.height = ch;
-          var ctx = canvas.getContext('2d');
-          if(!ctx) throw new Error('no canvas');
-          ctx.drawImage(img, 0, 0, cw, ch);
-          var q = 0.82, url = canvas.toDataURL('image/jpeg', q);
-          while(url.length > FB_SHOT_MAX && q > 0.35){ q -= 0.12; url = canvas.toDataURL('image/jpeg', q); }
-          if(url.length > FB_SHOT_MAX){
-            var c2 = document.createElement('canvas'); c2.width = Math.max(1, Math.round(cw / 2)); c2.height = Math.max(1, Math.round(ch / 2));
-            var x2 = c2.getContext('2d'); x2.drawImage(canvas, 0, 0, c2.width, c2.height);
-            url = c2.toDataURL('image/jpeg', 0.6);
-          }
-          if(url.length > FB_SHOT_MAX){ fbShotSay('That picture is too big even after shrinking — try a smaller screenshot.'); return; }
-          fbSetShot(url);
-          fbShotSay('Screenshot attached ✓ It will travel with your report.');
-        } catch(e){ fbShotSay('Hmm, that picture would not shrink. Try another one.'); }
+        var url = fbShrinkImage(img);
+        if(!url) return;
+        fbSetShot(url, true);
+        fbShotSay('Screenshot attached ✓ It will travel with your report.');
       };
       img.src = reader.result;
     };
     reader.readAsDataURL(file);
+  }
+  /* HUB-SCREENSHOT-CIRCLE-FOLDIN-2026-11-28: FB-CAPTURE-2026-11-26 ported into this hub (base 87fccba2). */
+  /* ---------- FB-CAPTURE-2026-11-26 (Holo 17:46): take a screenshot of
+     the open game + circle the problem, inside the Report popup.
+     - Capture: canvas fast-path (Mad Cow's mcCanvas) -> exact pixels;
+       otherwise serialize the pane (hub-native DOM or same-origin
+       iframe document) into an SVG foreignObject and draw it to a
+       canvas. Feeds the existing shrink pipeline (fbShrinkImage).
+       Any failure says so plainly and points at Upload — a failed
+       capture never blocks the report.
+     - Circles: transparent canvas over the preview, drag from the
+       centre out (pointer events = mouse + touch), neon pink
+       #ff2e9a with a white outer ring, as many as needed, tap to
+       select + Delete, Undo / Clear / Done. Done bakes the circles
+       into the image pixels before submit — nothing downstream
+       changes. Circles ride the draft (unbaked) so closing the
+       popup does not lose them. */
+  var fbCircles = [];
+  var fbCircleSel = -1;
+  var fbCircleEditing = false;
+  var fbCircleDrag = null;
+  var FB_CIRCLE_COLOR = '#ff2e9a';
+  /* Shared shrink: a LOADED image -> JPEG data URL under FB_SHOT_MAX,
+     or '' (with a friendly note). Used by upload + capture alike. */
+  function fbShrinkImage(img){
+    try {
+      var maxDim = 1280;
+      var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      if(!w || !h) throw new Error('no size');
+      var scale = Math.min(1, maxDim / Math.max(w, h));
+      var cw = Math.max(1, Math.round(w * scale)), ch = Math.max(1, Math.round(h * scale));
+      var canvas = document.createElement('canvas'); canvas.width = cw; canvas.height = ch;
+      var ctx = canvas.getContext('2d');
+      if(!ctx) throw new Error('no canvas');
+      ctx.drawImage(img, 0, 0, cw, ch);
+      var q = 0.82, url = canvas.toDataURL('image/jpeg', q);
+      while(url.length > FB_SHOT_MAX && q > 0.35){ q -= 0.12; url = canvas.toDataURL('image/jpeg', q); }
+      if(url.length > FB_SHOT_MAX){
+        var c2 = document.createElement('canvas'); c2.width = Math.max(1, Math.round(cw / 2)); c2.height = Math.max(1, Math.round(ch / 2));
+        var x2 = c2.getContext('2d'); x2.drawImage(canvas, 0, 0, c2.width, c2.height);
+        url = c2.toDataURL('image/jpeg', 0.6);
+      }
+      if(url.length > FB_SHOT_MAX){ fbShotSay('That picture is too big even after shrinking — try a smaller screenshot.'); return ''; }
+      return url;
+    } catch(e){ fbShotSay('Hmm, that picture would not shrink. Try another one.'); return ''; }
+  }
+  /* Best-effort inlining for the capture: an SVG loaded as an image
+     cannot load ANY external subresource, so same-origin <img>
+     sources and url()s in the embedded CSS are fetched and rewritten
+     as data URLs. Anything that fails stays as-is (renders blank) —
+     the capture never fails for it. Whole step capped at ~4s. */
+  function fbInlineResources(doc, clone, cssText){
+    var base = '';
+    try { base = doc.baseURI || doc.URL || ''; } catch(e){}
+    function abs(u){
+      try { return new URL(u, base || window.location.href).href; } catch(e){ return ''; }
+    }
+    function sameOrigin(u){
+      try { return new URL(u, window.location.href).origin === window.location.origin; } catch(e){ return false; }
+    }
+    var cache = {};
+    function fetchAsDataUrl(u){
+      if(cache[u]) return cache[u];
+      var p = Promise.race([
+        fetch(u).then(function(r){ if(!r.ok) throw new Error('http'); return r.blob(); }).then(function(b){
+          return new Promise(function(res, rej){
+            var fr = new FileReader();
+            fr.onload = function(){ res(fr.result); };
+            fr.onerror = function(){ rej(new Error('read')); };
+            fr.readAsDataURL(b);
+          });
+        }),
+        new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('timeout')); }, 2500); })
+      ]).catch(function(){ return ''; });
+      cache[u] = p;
+      return p;
+    }
+    var imgJobs = [];
+    var imgs = clone.querySelectorAll('img');
+    for(var i = 0; i < imgs.length; i++){
+      (function(im){
+        var s = im.getAttribute('src') || '';
+        if(!s || s.indexOf('data:') === 0) return;
+        var a = abs(s);
+        if(!a || !sameOrigin(a)) return;
+        imgJobs.push(fetchAsDataUrl(a).then(function(du){ if(du){ try { im.setAttribute('src', du); } catch(e){} } }));
+      })(imgs[i]);
+    }
+    var rawMap = {};
+    var re = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g, m;
+    while((m = re.exec(cssText)) !== null){
+      var u = m[2];
+      if(!u || u.indexOf('data:') === 0) continue;
+      var au = abs(u);
+      if(au && sameOrigin(au)) rawMap[u] = au;
+    }
+    var raws = Object.keys(rawMap);
+    var cssJob = Promise.all(raws.map(function(raw){
+      return fetchAsDataUrl(rawMap[raw]).then(function(du){ return { raw: raw, du: du }; });
+    })).then(function(pairs){
+      var out = cssText;
+      pairs.forEach(function(pr){
+        if(!pr.du) return;
+        out = out.replace(/url\(\s*(['"]?)([^'")]+)\1\s*\)/g, function(match, q, raw){
+          return raw === pr.raw ? 'url("' + pr.du + '")' : match;
+        });
+      });
+      return out;
+    });
+    var all = Promise.all(imgJobs.concat([cssJob])).then(function(results){
+      return { css: results[results.length - 1] };
+    });
+    return Promise.race([
+      all,
+      new Promise(function(res){ setTimeout(function(){ res({ css: cssText }); }, 4000); })
+    ]);
+  }
+  /* Serialize a DOM node (same document, or a same-origin iframe
+     document) to a PNG data URL via SVG foreignObject. The source
+     document's <style> blocks are embedded (XML-escaped) so the
+     capture looks like the game. External fonts fall back; that is
+     the plan's honest limit. */
+  function fbSerializeToDataUrl(doc, node, w, h){
+    w = Math.max(50, Math.round(w || 920)); h = Math.max(50, Math.round(h || 560));
+    var clone = node.cloneNode(true);
+    var scripts = clone.querySelectorAll('script');
+    for(var j = scripts.length - 1; j >= 0; j--){ scripts[j].parentNode.removeChild(scripts[j]); }
+    clone.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    try { clone.style.width = w + 'px'; clone.style.height = h + 'px'; clone.style.overflow = 'hidden'; clone.style.margin = '0'; } catch(e){}
+    var css = '';
+    var styles = doc.querySelectorAll('style');
+    for(var i = 0; i < styles.length; i++){ css += styles[i].textContent + '\n'; }
+    return fbInlineResources(doc, clone, css).then(function(res){
+      var cssText = (res.css || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+        '<foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">' +
+        '<style>' + cssText + '</style>' +
+        new XMLSerializer().serializeToString(clone) +
+        '</div></foreignObject></svg>';
+      return new Promise(function(resolve, reject){
+        var img = new Image();
+        img.onload = function(){
+          try {
+            var canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            if(!ctx){ reject(new Error('no canvas')); return; }
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/png'));
+          } catch(e){ reject(e); }
+        };
+        img.onerror = function(){ reject(new Error('svg image failed')); };
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      });
+    });
+  }
+  function fbBiggestCanvas(root){
+    var best = null, bestArea = 0;
+    var list = root.querySelectorAll('canvas');
+    for(var i = 0; i < list.length; i++){
+      var c = list[i];
+      if(c.width >= 200 && c.height >= 200 && c.width * c.height > bestArea){ best = c; bestArea = c.width * c.height; }
+    }
+    return best;
+  }
+  function fbCaptureGame(){
+    var slug = playerSlug();
+    if(!slug || slug === 'games-hub'){ fbShotSay('No game open to snap — close this, open the game, then tap Report.'); return; }
+    var pane = document.getElementById('pane-' + slug);
+    if(!pane){ fbShotSay('Could not snap this game — try Upload a file instead.'); return; }
+    fbShotSay('Snapping the game…');
+    var done = false;
+    function finish(dataUrl){
+      if(done) return; done = true;
+      if(!dataUrl){ fbShotSay('Could not snap this game — try Upload a file instead.'); return; }
+      var img = new Image();
+      img.onload = function(){
+        var url = fbShrinkImage(img);
+        if(!url) return;
+        fbSetShot(url, true);
+        fbShotSay('Screenshot snapped ✓ Drag to circle the problem, then Done.');
+      };
+      img.onerror = function(){ fbShotSay('Could not snap this game — try Upload a file instead.'); };
+      img.src = dataUrl;
+    }
+    try {
+      /* Canvas fast-path: the game renders to a canvas (Mad Cow). */
+      var cv = fbBiggestCanvas(pane);
+      if(cv){
+        var cc = document.createElement('canvas'); cc.width = cv.width; cc.height = cv.height;
+        var cx = cc.getContext('2d');
+        if(cx){ cx.drawImage(cv, 0, 0); finish(cc.toDataURL('image/png')); return; }
+      }
+      var fr = null;
+      try { if(typeof frameFor === 'function') fr = frameFor(slug); } catch(e){}
+      if(!fr) fr = pane.querySelector('iframe');
+      if(fr){
+        var idoc = null;
+        try { idoc = fr.contentDocument || (fr.contentWindow && fr.contentWindow.document); } catch(e){}
+        if(!idoc){ fbShotSay('Could not snap this game — try Upload a file instead.'); return; }
+        var root = idoc.body || idoc.documentElement;
+        var icv = null;
+        try { icv = fbBiggestCanvas(root); } catch(e){}
+        if(icv){
+          var cc2 = document.createElement('canvas'); cc2.width = icv.width; cc2.height = icv.height;
+          var cx2 = cc2.getContext('2d');
+          if(cx2){ cx2.drawImage(icv, 0, 0); finish(cc2.toDataURL('image/png')); return; }
+        }
+        var r = null;
+        try { r = fr.getBoundingClientRect(); } catch(e){}
+        fbSerializeToDataUrl(idoc, root, (r && r.width) || fr.clientWidth || 920, (r && r.height) || fr.clientHeight || 560).then(finish, function(){ finish(''); });
+        return;
+      }
+      var pr = null;
+      try { pr = pane.getBoundingClientRect(); } catch(e){}
+      fbSerializeToDataUrl(document, pane, (pr && pr.width) || pane.clientWidth || 920, (pr && pr.height) || pane.clientHeight || 560).then(finish, function(){ finish(''); });
+    } catch(e){ finish(''); }
+  }
+  /* ---------- Circle editor ---------- */
+  function fbCircleSyncUI(){
+    var prev = $('fbShotPrev'), cv = $('fbCircleCanvas'), bar = $('fbCircleBar'), openBtn = $('fbCircleOpen'), del = $('fbCircleDelete');
+    if(prev) prev.classList.toggle('editing', !!fbCircleEditing && !!fbShot);
+    if(cv) cv.hidden = !fbCircleEditing || !fbShot;
+    if(bar) bar.hidden = !fbCircleEditing || !fbShot;
+    if(openBtn) openBtn.hidden = !fbShot || fbCircleEditing;
+    if(del) del.disabled = fbCircleSel < 0;
+  }
+  function fbCircleOpenEditor(){
+    if(!fbShot) return;
+    fbCircleEditing = true;
+    fbCircleSyncUI();
+    fbCircleLayout();
+  }
+  function fbCircleCloseEditor(){
+    fbCircleEditing = false;
+    fbCircleSyncUI();
+  }
+  function fbCircleLayout(){
+    var img = $('fbShotImg'), cv = $('fbCircleCanvas');
+    if(!img || !cv || !fbShot) return;
+    var r = null;
+    try { r = img.getBoundingClientRect(); } catch(e){}
+    var dw = (r && r.width) || img.clientWidth || img.naturalWidth || 0;
+    var dh = (r && r.height) || img.clientHeight || img.naturalHeight || 0;
+    if(!dw || !dh) return;
+    var dpr = Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+    cv.width = Math.max(1, Math.round(dw * dpr));
+    cv.height = Math.max(1, Math.round(dh * dpr));
+    cv.style.width = dw + 'px';
+    cv.style.height = dh + 'px';
+    fbCircleRedraw();
+  }
+  function fbCircleRedraw(){
+    var img = $('fbShotImg'), cv = $('fbCircleCanvas');
+    if(!img || !cv) return;
+    var ctx = null;
+    try { ctx = cv.getContext('2d'); } catch(e){}
+    if(!ctx) return;
+    var dpr = Math.min(2, (typeof window !== 'undefined' && window.devicePixelRatio) || 1);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    var sx = cv.width / (img.naturalWidth || 1), sy = cv.height / (img.naturalHeight || 1);
+    function draw(c, selected){
+      var x = c.cx * sx, y = c.cy * sy, r = c.r * sx;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.lineWidth = (selected ? 7 : 5) * dpr;
+      ctx.strokeStyle = '#ffffff'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.lineWidth = (selected ? 4.5 : 3) * dpr;
+      ctx.strokeStyle = FB_CIRCLE_COLOR; ctx.stroke();
+    }
+    fbCircles.forEach(function(c, i){ draw(c, i === fbCircleSel); });
+    if(fbCircleDrag && fbCircleDrag.preview) draw(fbCircleDrag.preview, false);
+    var del = $('fbCircleDelete');
+    if(del) del.disabled = fbCircleSel < 0;
+  }
+  function fbCirclePoint(e){
+    var img = $('fbShotImg');
+    var r = null;
+    try { r = img.getBoundingClientRect(); } catch(e){}
+    var nw = img.naturalWidth || (r && r.width) || 1;
+    var nh = img.naturalHeight || (r && r.height) || 1;
+    var rw = (r && r.width) || img.clientWidth || nw;
+    var rh = (r && r.height) || img.clientHeight || nh;
+    return { x: (e.clientX - (r ? r.left : 0)) * nw / rw, y: (e.clientY - (r ? r.top : 0)) * nh / rh };
+  }
+  function fbCircleHit(p){
+    var img = $('fbShotImg');
+    var dw = (img && img.clientWidth) || (img && img.naturalWidth) || 1;
+    var tol = 12 * ((img && img.naturalWidth) || 1) / dw;
+    for(var i = fbCircles.length - 1; i >= 0; i--){
+      var c = fbCircles[i];
+      if(Math.hypot(p.x - c.cx, p.y - c.cy) <= c.r + tol) return i;
+    }
+    return -1;
+  }
+  function fbCircleDone(){
+    if(!fbCircles.length){ fbCircleCloseEditor(); fbShotSay('Screenshot attached ✓ It will travel with your report.'); return; }
+    var img = $('fbShotImg');
+    if(!img || !img.naturalWidth){ fbCircleCloseEditor(); return; }
+    var src = new Image();
+    src.onload = function(){
+      try {
+        var canvas = document.createElement('canvas');
+        canvas.width = src.naturalWidth; canvas.height = src.naturalHeight;
+        var ctx = canvas.getContext('2d');
+        if(!ctx) throw new Error('no canvas');
+        ctx.drawImage(src, 0, 0);
+        var scale = src.naturalWidth / (img.clientWidth || src.naturalWidth);
+        fbCircles.forEach(function(c){
+          ctx.beginPath(); ctx.arc(c.cx, c.cy, c.r, 0, Math.PI * 2);
+          ctx.lineWidth = Math.max(5, Math.round(7 * scale)); ctx.strokeStyle = '#ffffff'; ctx.stroke();
+          ctx.beginPath(); ctx.arc(c.cx, c.cy, c.r, 0, Math.PI * 2);
+          ctx.lineWidth = Math.max(3, Math.round(4.5 * scale)); ctx.strokeStyle = FB_CIRCLE_COLOR; ctx.stroke();
+        });
+        var q = 0.82, url = canvas.toDataURL('image/jpeg', q);
+        while(url.length > FB_SHOT_MAX && q > 0.35){ q -= 0.12; url = canvas.toDataURL('image/jpeg', q); }
+        if(url.length > FB_SHOT_MAX){ fbShotSay('Circles baked in, but the picture is too big — try fewer circles.'); fbCircleCloseEditor(); return; }
+        fbCircles = []; fbCircleSel = -1;
+        fbSetShot(url, false);
+        fbCircleCloseEditor();
+        fbShotSay('Circles baked in ✓ It will travel with your report.');
+      } catch(e){ fbShotSay('Could not bake the circles in — the plain screenshot is still attached.'); fbCircleCloseEditor(); }
+    };
+    src.onerror = function(){ fbShotSay('Could not bake the circles in — the plain screenshot is still attached.'); fbCircleCloseEditor(); };
+    src.src = fbShot;
   }
   function fbKindNow(){
     var brokeText = $('fbBrokeText') ? $('fbBrokeText').value.trim() : '';
@@ -15634,9 +16070,22 @@ window.holoDaily = (function(){
     return 'review';
   }
   window.openFeedbackForm = function(game){ fbOpen(game); };
+  /* FB-CAPTURE-2026-11-26 (decision 1): the turn-based match Report button
+     opens this popup prefilled (game + match + opponent) instead of posting
+     instantly — the tester can attach a circled screenshot of the match.
+     fbMatchId/fbMatchOppUid ride the normal record on submit. */
+  var fbMatchId = '', fbMatchOppUid = '';
+  window.holoPrefillMatchReport = function(game, mid, oppUid, oppName, prefill){
+    fbOpen(game);
+    fbMatchId = mid || ''; fbMatchOppUid = oppUid || '';
+    var t = $('fbText');
+    if(t){ t.value = prefill || ''; try { t.focus(); } catch(e){} persistDraft(); }
+    fbShotSay('Reporting a match — snap it or upload a shot, circle the problem, then send.');
+  };
   function fbOpen(game){
     fbGame = normalizeSlug(game || playerSlug() || 'games-hub');
     fbRating = 0; fbTag = ''; fbQuick = {}; fbMark = {mode:'', difficulty:'', level:'', options:''};
+    fbMatchId = ''; fbMatchOppUid = ''; fbCircles = []; fbCircleSel = -1; fbCircleEditing = false;
     $('fbGameLine').textContent = 'You played ' + gameTitle(fbGame) + ' — how was it? Stars, one line, anything helps!';
     $('fbText').value = '';
     fbShot = ''; fbPaintShot(); fbShotSay('Optional — a picture of the bug helps a lot. It gets shrunk before sending.');
@@ -15657,6 +16106,7 @@ window.holoDaily = (function(){
       if($('fbBroken')) $('fbBroken').checked = !!draft.broken;
       if($('fbBrokeText')) $('fbBrokeText').value = draft.brokeText || '';
       if(draft.screenshot){ fbShot = draft.screenshot; fbPaintShot(); fbShotSay('Screenshot attached ✓ It will travel with your report.'); }
+      if(draft.circles && draft.circles.length){ fbCircles = draft.circles.filter(function(c){ return c && isFinite(c.cx) && isFinite(c.cy) && isFinite(c.r) && c.r > 0; }).slice(0, 20); }
       fbPaintBroken();
       document.querySelectorAll('.fb-tags .pill[data-fb-tag]').forEach(function(x){ x.classList.toggle('active', x.getAttribute('data-fb-tag') === fbTag); });
       document.querySelectorAll('.fb-tags .pill[data-fb-quick]').forEach(function(x){ x.classList.toggle('active', !!fbQuick[x.getAttribute('data-fb-quick')]); });
@@ -15752,7 +16202,52 @@ window.holoDaily = (function(){
   /* FB-SCREENSHOT-2026-11-23: attach button, file picker, remove × */
   if($('fbShotBtn')) $('fbShotBtn').addEventListener('click', function(){ var f = $('fbShotFile'); if(f) f.click(); });
   if($('fbShotFile')) $('fbShotFile').addEventListener('change', function(){ var f = this.files && this.files[0]; fbProcessShot(f); this.value = ''; });
-  if($('fbShotRemove')) $('fbShotRemove').addEventListener('click', function(){ fbSetShot(''); fbShotSay('Screenshot removed.'); });
+  if($('fbShotRemove')) $('fbShotRemove').addEventListener('click', function(){ fbCircles = []; fbCircleSel = -1; fbSetShot(''); fbShotSay('Screenshot removed.'); });
+  /* FB-CAPTURE-2026-11-26: take a screenshot of the open game + circle it. */
+  if($('fbShotCaptureBtn')) $('fbShotCaptureBtn').addEventListener('click', function(){ fbCaptureGame(); });
+  if($('fbCircleOpen')) $('fbCircleOpen').addEventListener('click', function(){ fbCircleOpenEditor(); });
+  if($('fbCircleUndo')) $('fbCircleUndo').addEventListener('click', function(){ if(fbCircles.length){ fbCircles.pop(); fbCircleSel = -1; fbCircleRedraw(); persistDraft(); } });
+  if($('fbCircleDelete')) $('fbCircleDelete').addEventListener('click', function(){ if(fbCircleSel >= 0){ fbCircles.splice(fbCircleSel, 1); fbCircleSel = -1; fbCircleRedraw(); persistDraft(); } });
+  if($('fbCircleClear')) $('fbCircleClear').addEventListener('click', function(){ fbCircles = []; fbCircleSel = -1; fbCircleRedraw(); persistDraft(); });
+  if($('fbCircleDone')) $('fbCircleDone').addEventListener('click', function(){ fbCircleDone(); });
+  var _fbShotImg = $('fbShotImg');
+  if(_fbShotImg) _fbShotImg.addEventListener('load', function(){ if(fbCircleEditing) fbCircleLayout(); });
+  (function(){
+    var cv = $('fbCircleCanvas');
+    if(!cv) return;
+    cv.addEventListener('pointerdown', function(e){
+      if(!fbCircleEditing || !fbShot) return;
+      try { if(e.preventDefault) e.preventDefault(); } catch(err){}
+      try { if(cv.setPointerCapture && e.pointerId !== undefined) cv.setPointerCapture(e.pointerId); } catch(err){}
+      var p = fbCirclePoint(e);
+      fbCircleDrag = { x0: p.x, y0: p.y, moved: false, preview: null };
+    });
+    cv.addEventListener('pointermove', function(e){
+      if(!fbCircleDrag) return;
+      var p = fbCirclePoint(e);
+      var r = Math.hypot(p.x - fbCircleDrag.x0, p.y - fbCircleDrag.y0);
+      if(r > 3) fbCircleDrag.moved = true;
+      fbCircleDrag.preview = { cx: fbCircleDrag.x0, cy: fbCircleDrag.y0, r: Math.max(1, r) };
+      fbCircleRedraw();
+    });
+    function endDrag(e){
+      if(!fbCircleDrag) return;
+      var d = fbCircleDrag; fbCircleDrag = null;
+      if(d.moved && d.preview){
+        var img = $('fbShotImg');
+        var dw = (img && img.clientWidth) || (img && img.naturalWidth) || 1;
+        var minR = 24 * ((img && img.naturalWidth) || 1) / dw;
+        fbCircles.push({ cx: d.preview.cx, cy: d.preview.cy, r: Math.max(d.preview.r, minR) });
+        fbCircleSel = fbCircles.length - 1;
+        persistDraft();
+      } else {
+        fbCircleSel = fbCircleHit(fbCirclePoint(e));
+      }
+      fbCircleRedraw();
+    }
+    cv.addEventListener('pointerup', endDrag);
+    cv.addEventListener('pointercancel', function(){ fbCircleDrag = null; fbCircleRedraw(); });
+  })();
   overlay.addEventListener('click', function(e){ if(e.target === overlay) fbClose(); });
   document.addEventListener('keydown', function(e){ if(e.key === 'Escape' && !overlay.hidden) fbClose(); });
   function loadFeedback(){
@@ -15797,6 +16292,7 @@ window.holoDaily = (function(){
     try { holoMergeContext(newRec, ['game', 'gameTitle', 'testerName']); } catch(e){}
     try { newRec.gameTitle = gameTitle(slug); } catch(e){ newRec.gameTitle = slug; }
     if(fbShot) newRec.screenshot = fbShot; /* FB-SCREENSHOT-2026-11-23 */
+    if(fbMatchId){ newRec.matchId = fbMatchId; if(fbMatchOppUid) newRec.reportedUid = fbMatchOppUid; } /* HUB-SCREENSHOT-CIRCLE-FOLDIN-2026-11-28: match Report prefill rides the normal record */
     fbEnsureId(newRec);
     arr.push(newRec);
     try { localStorage.setItem(FB_KEY, JSON.stringify(arr)); } catch(e){}
@@ -15833,7 +16329,7 @@ window.holoDaily = (function(){
       var brokeOn = !!($('fbBroken') && $('fbBroken').checked);
       var brokeTxt = $('fbBrokeText') ? $('fbBrokeText').value : '';
       if(!fbRating && !fbTag && !Object.keys(fbQuick).length && !text.trim() && !brokeOn && !brokeTxt.trim() && !fbShot && !fbMark.mode && !fbMark.difficulty && !fbMark.level && !fbMark.options){ clearDraft(slug); return; }
-      saveDraft(slug, { rating: fbRating, tag: fbTag, quick: Object.keys(fbQuick), text: text, broken: brokeOn, brokeText: brokeTxt, screenshot: fbShot || '', marks: {mode: fbMark.mode, difficulty: fbMark.difficulty, level: fbMark.level, options: fbMark.options} });
+      saveDraft(slug, { rating: fbRating, tag: fbTag, quick: Object.keys(fbQuick), text: text, broken: brokeOn, brokeText: brokeTxt, screenshot: fbShot || '', circles: fbCircles || [], marks: {mode: fbMark.mode, difficulty: fbMark.difficulty, level: fbMark.level, options: fbMark.options} });
     } catch(e){}
   }
   $('fbText').addEventListener('input', persistDraft);
@@ -25186,6 +25682,8 @@ function renderTesterAuth(){
     gmPractice.setAttribute('aria-pressed', on ? 'true' : 'false');
   }
   function startGame(){
+    /* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28: auto-fullscreen on START (Holo 2026-11-28 11:58) — first, while this is still the real tap gesture. Best-effort, never blocks the start. */
+    try { if(window.holoRequestGameFullscreen) window.holoRequestGameFullscreen(); } catch(e){}
     var btn = currentBtn;
     closeMenu();
     /* START-POPUP-FIX-2026-11-27 (Holo 12:16): the mode was picked in the pop-up — if the frame is already loaded with the old mode, reload it so the new mode takes effect (the game reads its mode key only on load). A mode change starts a new game, same as the game's own mode buttons. The frame is reloaded by lazyFrame with hubstart=1, so START still opens straight into the board. */
@@ -25510,7 +26008,23 @@ function renderTesterAuth(){
   if(hubFsBtn && !canFs) hubFsBtn.hidden = true;
   function fsActive(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
   function syncFsBtn(){ var t = fsActive() ? '✕ Exit fullscreen' : '⛶ Fullscreen'; if(fsBtn) fsBtn.textContent = t; if(hubFsBtn) hubFsBtn.textContent = t; }
-  function fsExit(){ try { if(document.exitFullscreen) document.exitFullscreen(); else if(document.webkitExitFullscreen) document.webkitExitFullscreen(); } catch(e){} }
+  function fsExit(){ try { var __xp = null; if(document.exitFullscreen) __xp = document.exitFullscreen(); else if(document.webkitExitFullscreen) document.webkitExitFullscreen(); if(__xp && __xp.catch) __xp.catch(function(){}); } catch(e){} } /* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28: exit promise caught — calling it with nothing fullscreen rejected as an unhandled rejection (seen in verification). */
+  /* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28 (Holo 2026-11-28 11:58 "Can it auto to full screen when hitting play?"): START auto-fullscreens the game — called from startGame() on the real START tap gesture, so the request carries user activation. Best-effort only: unsupported (canFs false, e.g. iOS Safari — no element fullscreen there) or denied means the game just starts windowed — no error, no alert, nothing thrown. Same promise-catch retry as the buttons (FULLSCREEN-FIX-2026-11-26). Exit path is unchanged: #playerFsBtn (label syncs to "Exit fullscreen"), Esc / the standard gesture, or leaving the game (closePlayer calls holoExitGameFullscreen). Phone is the priority but desktop gets the same call — identical pattern, desktop flow otherwise untouched. NOTE on the 2026-11-26 "turn off the full screen thing": the buttons were restored as opt-in 2026-11-26 22:46 (FULLSCREEN-RESTORE — the hide rule is gone), so #playerFsBtn / #hubFsBtn are visible where supported; this auto-fullscreen does NOT un-hide anything and does NOT touch the top nav. */
+  function requestGameFullscreen(){
+    try {
+      if(fsActive()) return true;
+      if(!canFs) return false;
+      var el = document.getElementById('player');
+      if(!el) return false;
+      if(el.requestFullscreen){
+        var p = el.requestFullscreen({ navigationUI:'hide' });
+        if(p && p.catch) p.catch(function(){ try { var p2 = el.requestFullscreen(); if(p2 && p2.catch) p2.catch(function(){}); } catch(e){} });
+      } else if(el.webkitRequestFullscreen){ el.webkitRequestFullscreen(); }
+      return true;
+    } catch(e){ return false; }
+  }
+  window.holoRequestGameFullscreen = requestGameFullscreen;
+  window.holoExitGameFullscreen = fsExit;
   /* FULLSCREEN-FIX-2026-11-26: the options-call retry used to fire a second requestFullscreen() whose promise was never caught — a gesture-less call (automation click, or any programmatic click) rejected with Chrome's "Permissions check failed" TypeError, which escaped as an unhandled rejection and got filed as a beta error report (3 reports, ChatAlpha, 2026-11-26 23:52-23:53). The retry now catches its own promise too, so a failed fullscreen attempt stays silent (best-effort: the player just stays windowed). Applies to both buttons below. */
   if(fsBtn){
     fsBtn.addEventListener('click', function(){
@@ -29409,12 +29923,11 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 #duelMusicBar{position:fixed;left:12px;bottom:12px;width:min(420px,calc(100vw - 24px));z-index:12000;background:linear-gradient(180deg,#171040,#0e0828 75%);border:2px solid var(--violet);border-radius:16px;box-shadow:0 8px 28px rgba(0,0,0,.55);color:#fff;overflow:hidden}
 #duelMusicBar[hidden]{display:none!important}
 .dm-bar-row{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 12px}
-.dm-bar-row .dm-name{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700;font-size:13.5px}
+/* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28: .dm-bar-row .dm-name rule removed with the name span (2026-11-28). */
 .dm-bar-row button{background:#241a3d;border:2px solid #453070;border-radius:10px;color:#fff;font-family:inherit;font-weight:700;font-size:13.5px;padding:6px 10px;cursor:pointer}
 .dm-bar-row button:hover{border-color:#ffd43b;color:#ffd43b}
-/* MUSIC-MINIMIZE-2026-11-27 (Holo 2026-11-27 11:51 + 11:53 urgent): minimize control for the music section. When minimized the bar is just the 48px row (Play + name + expand); the minimize button hides itself and the name becomes the tap-to-expand target. */
+/* MUSIC-MINIMIZE-2026-11-27 (Holo 2026-11-27 11:51 + 11:53 urgent): minimize control for the music section. When minimized the bar is just the 48px row (HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28 2026-11-28: the row is now the Music button alone — Play + name removed); the minimize button hides itself. */
 #duelMusicBar.dm-min #duelMusicMin{display:none}
-#duelMusicBar.dm-min .dm-name{cursor:pointer}
 /* FOOTER-PLAY-2026-11-27 (Holo 2026-11-27 12:12 "Footer taking up too much room" + "I can't play", Tic Tac Toe). REPRO: the footer is 205px tall on desktop and 281px on a 390px phone, and the "Compact phone footer" rules never applied -- they are scoped to body.wt-shell, a class the hub never sets (body is "auth-ready wt-on duel-music-on"). In the game the pane stacks est-line + g-note + #turnPlay above the iframe, so the frame is only 461px (desktop) / 358px (phone) tall while the game inside is 746-782px tall -- the board's bottom row sat at screen y 938 / 1030, below the fold and behind the music bar. Fix: (a) compact footer both viewports, (b) in-game the game frame goes FIRST in the pane so the board starts at the pane top, (c) on a narrow phone the decorative INSERT COIN light hides and the player-bar title ellipsises so Back fits. Nothing is removed: every footer link, logo, panel and control stays. */
 footer{padding:8px 0 10px;margin-top:12px}
 .footer-hp-logo{width:48px;height:48px}
@@ -29955,22 +30468,23 @@ body.duel-music-on #rcBubble{bottom:64px}
     }
     challenge(opp.uid, opp.name, m.game);   /* RPS-TURN-GAMES-2026-11-25: a rematch re-challenges the SAME game (was Tic Tac Toe always). */
   }
+  /* FB-CAPTURE-2026-11-26 (decision 1): the match Report button opens the
+     Feedback popup prefilled (game + match + opponent) instead of posting
+     instantly — the tester can attach a circled screenshot of the match.
+     The old instant post (and its inbox "Report received" notice) is gone;
+     the popup's own thanks + the normal /feedback queue cover the report. */
   function reportMatch(mid){
     var m = matches[mid], me = myUid();
     if(!m || !me) return;
     var opp = oppOf(m, me);
-    myName().then(function(n){
-      var payload = { username:n, testerName:n, game:turnGameName(m.game), tag:'Turn-based report', comment:'Turn-based report on match ' + mid + ' vs ' + opp.name + ': ' + 'please review this match.', matchId:mid, reporterUid:me, reportedUid:opp.uid, timestamp:new Date().toISOString() };
-      freshToken().then(function(tok){
-        if(!tok) return null;
-        return fetch(FB_RTDB + '/feedback.json?auth=' + encodeURIComponent(tok), { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })
-          .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
-      }).then(function(r){
-        if(r){ toast('Reported — thanks, we will look into it.'); try { if(window.holoInbox && window.holoInbox.notifySelf) window.holoInbox.notifySelf('system', 'Report received', 'Thanks, agent — we got your report and will look into it. Watch this inbox for updates.'); } catch(e){} }
-        else toast('That report did not send — try again in a moment.');
-      });
-    });
+    var prefill = 'Turn-based report on match vs ' + opp.name + ' (match ' + mid + '): ';
+    if(typeof window.holoPrefillMatchReport === 'function'){
+      window.holoPrefillMatchReport(m.game, mid, opp.uid, opp.name, prefill);
+    } else if(typeof window.openFeedbackForm === 'function'){
+      window.openFeedbackForm(m.game);
+    }
   }
+
   function blockOpponent(mid){
     var m = matches[mid], me = myUid();
     if(!m || !me) return;
@@ -30845,7 +31359,7 @@ body.duel-music-on #rcBubble{bottom:64px}
     { title: 'Share', body: 'Tap Share on the playlist.' },
     { title: 'Copy link', body: 'Tap Copy link.' },
     { title: 'Paste it in the music box', body: 'Paste it in the music box below and tap Save.' },
-    { title: 'Play', body: 'Tap play and duel to your own music.' }
+    { title: 'Play', body: 'Tap play in the Spotify player and duel to your own music.' }
   ];
   function $(id){ return document.getElementById(id); }
   function bar(){ return $('duelMusicBar'); }
@@ -30875,8 +31389,7 @@ body.duel-music-on #rcBubble{bottom:64px}
   }
   function embedSrc(id){ return 'https://open.spotify.com/embed/playlist/' + id + '?utm_source=generator&theme=0'; }
   function setPlayLabel(){
-    var b = $('duelMusicPlay');
-    if(b) b.textContent = playing ? '\u23F8 Pause' : '\u25B6 Play';
+    /* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28: the bar's Play button is gone (Holo 2026-11-28 11:54) — there is no label to sync. Play/pause is the Spotify embed's own control now. Kept as a no-op so load()/unload() call sites are untouched. */
   }
   function load(){
     var id = parsePlaylistId(playlistUrl);
@@ -30992,6 +31505,8 @@ body.duel-music-on #rcBubble{bottom:64px}
     var mb = $('duelMusicMin'); if(mb) mb.hidden = min;
     var pl = $('player');
     if(b.hidden || (pl && !pl.hidden)){ document.body.style.paddingBottom = ''; return; }
+    /* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28 (Holo 2026-11-28 11:58): on phone the bar is a see-through overlay — it must not reserve page space. The bottom padding below was shifting the page during play, so phone never gets it; desktop keeps the measured padding. */
+    if(window.matchMedia && window.matchMedia('(max-width:1279px)').matches){ document.body.style.paddingBottom = ''; return; }
     /* SITE-FIT-2026-11-27: the bar sits at bottom:12px, so body padding must clear its TOP edge (height + the gap below it), not just its height — otherwise the footer links sit under the bar on phone (audit: Legal/Contact/About/FAQ covered on 8/10 views). Measured, not assumed. */
     var gapBelowBar = Math.max(0, window.innerHeight - b.getBoundingClientRect().bottom);
     document.body.style.paddingBottom = (b.offsetHeight + gapBelowBar) + 'px';
@@ -31055,17 +31570,15 @@ body.duel-music-on #rcBubble{bottom:64px}
     if(save) save.addEventListener('click', function(){ var input = $('duelMusicLink'); saveLink(input ? input.value : ''); });
     var rem = $('duelMusicRemove');
     if(rem) rem.addEventListener('click', function(){ removeLink(); });
-    var play = $('duelMusicPlay');
-    if(play) play.addEventListener('click', function(){ if(playing) unload(); else load(); });
+    /* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28: the bar Play button was removed (Holo 2026-11-28 11:54) — no wiring. load()/unload() still run from saveLink / applyMusicPref / pauseForGame, and the Spotify embed has its own play control. */
     var exp = $('duelMusicExpand');
     if(exp) exp.addEventListener('click', function(){ var ex = $('duelMusicExpanded'); if(ex && ex.hidden) expand(); else minimize(); });
     var how = $('duelMusicHow');
     if(how) how.addEventListener('click', function(){ showWalk(0); });
     var minBtn = $('duelMusicMin');
     if(minBtn) minBtn.addEventListener('click', function(){ minimize(); });
-    var nm = $('duelMusicName');
-    if(nm) nm.addEventListener('click', function(){ var ex = $('duelMusicExpanded'); if(ex && ex.hidden) expand(); });
-    /* MUSIC-MINIMIZE-2026-11-27 (refinement, Holo 11:51): tapping anywhere outside the music bar collapses it. Clicks inside the bar (link input, volume, Play, How, walk buttons) are untouched, so typing a link never collapses it. Capture phase so no other handler can swallow the click first. Only TRUSTED (real user) clicks count: the hub's hash router programmatically clicks the nav link on load (handleShortUrl -> libraryNavLink.click(), isTrusted false) and that must never collapse the panel. */
+    /* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28: the bar name span was removed (Holo 2026-11-28 11:54) — the Music button is the tap-to-expand target now. */
+    /* MUSIC-MINIMIZE-2026-11-27 (refinement, Holo 11:51): tapping anywhere outside the music bar collapses it. Clicks inside the bar (link input, volume, How, walk buttons) are untouched, so typing a link never collapses it. Capture phase so no other handler can swallow the click first. Only TRUSTED (real user) clicks count: the hub's hash router programmatically clicks the nav link on load (handleShortUrl -> libraryNavLink.click(), isTrusted false) and that must never collapse the panel. */
     document.addEventListener('click', function(e){
       if(!e.isTrusted) return;
       var b = bar(); if(!b || b.hidden) return;
@@ -35359,8 +35872,14 @@ footer .fb-open small{display:none}
           var row = p.closest('[data-mark]');
           if(row) marks[row.getAttribute('data-mark')] = p.getAttribute('data-v');
         });
+        /* FB-CAPTURE-2026-11-26: keep the circled-annotation circles in
+           this snapshot, or it overwrites the draft persistDraft just
+           saved and drops them (same trap the marks fix above guards
+           against). Circles live in the draft persistDraft saved. */
+        var prevCircles = [];
+        try { var allD = JSON.parse(localStorage.getItem(window.draftStorageKey()) || '{}'); if(allD && allD[lastGame] && Array.isArray(allD[lastGame].circles)) prevCircles = allD[lastGame].circles; } catch(e){}
         if(rating || tag || quick.length || text.trim() || brokeOn || brokeTxt.trim() || shot || marks.mode || marks.difficulty || marks.level || marks.options){
-          window.saveDraft(lastGame, { rating: rating, tag: tag, quick: quick, text: text, broken: brokeOn, brokeText: brokeTxt, screenshot: shot, marks: marks });
+          window.saveDraft(lastGame, { rating: rating, tag: tag, quick: quick, text: text, broken: brokeOn, brokeText: brokeTxt, screenshot: shot, circles: prevCircles, marks: marks });
         }
       } catch(e){}
     });
@@ -35384,6 +35903,16 @@ footer .fb-open small{display:none}
 .fb-shot-prev{position:relative;display:inline-block;margin-top:8px}
 .fb-shot-prev img{max-width:180px;max-height:140px;border-radius:10px;border:2px solid #8b5cff;display:block}
 .fb-shot-x{position:absolute;top:-8px;right:-8px}
+/* HUB-SCREENSHOT-CIRCLE-FOLDIN-2026-11-28: screenshot capture + circle editor (ported from FB-CAPTURE-2026-11-26). */
+.fb-shot-btns{display:flex;gap:8px;flex-wrap:wrap}
+.fb-shot-btns .g-btn{flex:1 1 auto}
+.fb-shot-prev.editing{display:block}
+.fb-shot-prev.editing img{max-width:100%;max-height:none;width:100%}
+#fbCircleCanvas{position:absolute;left:0;top:0;touch-action:none;cursor:crosshair}
+.fb-circle-bar{margin-top:8px}
+.fb-circle-btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.fb-cbtn{min-height:44px;flex:1 1 auto}
+.fb-circle-open{margin-top:8px}
 </style>
 <style>
 /* FB-PIXEL-ICONS-2026-11-22 (Holo 23:40): pixel SVG icons on Report back chips */
@@ -36919,6 +37448,18 @@ body.wt-on.in-game #player .player-body{padding-bottom:12px}
 /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27 (Holo 2026-11-27 17:36, "Desktop - game play - Should only be gameplay box in middle. Info on left and right."): the info that used to sit above the gameplay box in the middle column (the estimate line + the "playing right here" blurb) now lives in the side panels - est-line left, g-note right. On desktop the middle column's own pane copy hides, but ONLY while body.sp-info-on is set (renderSidePanels sets it when the info actually rendered into a panel); without the gate a game whose panels failed would lose its info entirely. Phone keeps the pane copy - the side panels don't exist below 1280px, so the hide never applies there. */
 /* SIDEBAR-EST-TIME-2026-11-27 (Holo 2026-11-27 19:00, label shortened 19:13 "We could use EST TIME:"): the Estimated time is ONE blue line - label + time share one font and size, on a single line, no bubble/card. It uses the 11px pixel font (var(--pixel), Press Start 2P) like the old heading: Holo's shorter "EST TIME:" label + her 19:33 "Remove 'a game'" (the trailing " a game" is stripped from the sidebar value) make it fit — the line is "EST TIME: ~2-5 min." (20 chars x 11px = 220px, 66px spare in the 286px panel text width), no truncation. letter-spacing is 0 (the heading's 1px would push the old line to 312px, truncated) and the ⏱ icon is dropped (it would push it to 308px, truncated). A value too long for the panel is clipped with an ellipsis, never wrapped. */
 .side-panel .sp-est-line{font-family:var(--pixel);font-size:11px;line-height:1.7;letter-spacing:0;color:var(--cyan);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* DICE-DUEL-SCORE-SIDEBAR (Holo 2026-11-28 11:39 "In the hub sidebar, below EST TIME"): the Dice Duel score chart lives in the hub sidebar, in the panel directly below EST TIME — NOT in the game's left rail. The hub mirrors the game's live #scoreTable here (same-origin) and hides the game's own left-rail scorecard while the game is open in the hub. Standalone visits to ../dice-duel/ keep their own scorecard. The mirror is interactive: tapping a blue cell forwards the tap to the game's own pickable cell. Table styling mirrors the game's own #scoreTable (dark card, purple current-player column, pink grand total, blue pickable cells). */
+.side-panel .sp-dice-table{width:100%;border-collapse:collapse;font-size:11px;line-height:1.35}
+.side-panel .sp-dice-table th,.side-panel .sp-dice-table td{border:1px solid #3a2554;padding:3px 4px;text-align:center}
+.side-panel .sp-dice-table th{background:#2a1a42;color:#fff;font-weight:800}
+.side-panel .sp-dice-table th.hl{background:#9b5de5;color:#fff}
+.side-panel .sp-dice-table td.cat{text-align:left;color:#e9e4ff}
+.side-panel .sp-dice-table td.pickable{background:#3a2554;cursor:pointer;color:#4cc9f0;font-weight:800}
+.side-panel .sp-dice-table td.pickable:hover{background:#4a2f6e}
+.side-panel .sp-dice-table tr.tot td{font-weight:800;color:#ff6ec7}
+.side-panel .sp-dice-hint{color:var(--muted);font-size:12px;line-height:1.5;margin:10px 0 0}
+.side-panel .sp-dice-alltime{color:var(--muted);font-size:12px;line-height:1.5;margin:8px 0 0}
+.side-panel .sp-dice-empty{font-weight:800;font-size:14px;margin:4px 0 10px}
 @media (min-width:1280px){
   body.wt-on.in-game.sp-info-on #player .player-body .game-pane > .est-line,
   body.wt-on.in-game.sp-info-on #player .player-body .game-pane > .g-note{display:none}
@@ -38043,8 +38584,7 @@ window.holoWalk={stages:stages,activate:activate,showStep:showStep,guardOverflow
 <!-- DUEL-MUSIC-2026-11-26: bottom-docked mini player (Spotify embed, Phase 1). The shell sits AFTER the music script, so the module waits for DOMContentLoaded before wiring the buttons. -->
 <div id="duelMusicBar" hidden>
   <div class="dm-bar-row">
-    <button type="button" id="duelMusicPlay">&#9654; Play</button>
-    <span class="dm-name" id="duelMusicName">Spotify playlist</span>
+    <!-- HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28 (Holo 2026-11-28 11:54): the bar is JUST the Music button (+ minimize when expanded) — the Play button and the "Spotify playlist" name are gone. #duelMusicPausedFor stays (hidden, no space): pauseForGame() still writes it. The panel below is unchanged. -->
     <span class="dm-paused" id="duelMusicPausedFor" hidden></span>
     <button type="button" id="duelMusicExpand">&#127925; Music</button>
     <!-- MUSIC-MINIMIZE-2026-11-27: minimize control (&mdash;), Gmail-style like the DM chat boxes -->
@@ -38110,6 +38650,32 @@ body.wt-on.in-game #player:fullscreen .rff-frame,body.wt-on.in-game #player:-web
   :root:fullscreen #player .player-body .game-pane,:root:-webkit-full-screen #player .player-body .game-pane{flex:1 1 auto;min-height:0}
   :root:fullscreen #player .rff-frame,:root:-webkit-full-screen #player .rff-frame{flex:1 1 auto!important;height:auto!important;min-height:0}
 </style>
+<style>
+/* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28 (Holo 2026-11-28 11:58 "Move all phone buttons to see thru over the game play box. The page is causing issues with game play."): on phone (<1280px — the breakpoint the sidebar vanishes at) the hub-level buttons that sat around/below the gameplay box become translucent overlays ON the gameplay box: they take no layout space, never push the game or shift the page, and stay tappable. Overlay containers are pointer-events:none — only the buttons themselves take taps, so the game beneath stays playable. Desktop is untouched (every rule here is inside max-width:1279px). Top nav untouched. */
+@media (max-width:1279px){
+  /* (1) Player bar — Back / Fullscreen / Report back — floats over the top of the game instead of taking a row above it. Title / logo / coin stay visible but let taps through. */
+  body.wt-on.in-game #player .player-bar{position:absolute;top:0;left:0;right:0;z-index:6;background:linear-gradient(180deg,rgba(10,6,32,.62),rgba(10,6,32,.38));backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-bottom:1px solid rgba(139,92,255,.35);pointer-events:none}
+  body.wt-on.in-game #player .player-bar .back-btn{pointer-events:auto;background:rgba(255,255,255,.10);border-color:rgba(139,92,255,.55)}
+  body.wt-on.in-game #player .player-bar h2,body.wt-on.in-game #player .player-bar .player-coin,body.wt-on.in-game #player .player-bar img,body.wt-on.in-game #player .player-bar svg{pointer-events:none}
+  /* (2) Music bar — minimized row is just [Music] (+ minimize when expanded); see-through on phone. Drag still works (touch-action:none untouched). */
+  #duelMusicBar{background:linear-gradient(180deg,rgba(23,16,64,.72),rgba(14,8,40,.72));backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border-color:rgba(139,92,255,.55)}
+  #duelMusicBar .dm-bar-row button{background:rgba(36,26,61,.55);border-color:rgba(69,48,112,.8)}
+  /* (3) Room-chat bubble (phone) + floating Chat button (769-1279px tablet) — already fixed overlays; now see-through. */
+  #rcBubble{background:linear-gradient(135deg,rgba(139,92,255,.78),rgba(255,46,154,.78));border-color:rgba(255,255,255,.75)}
+  #roomChatFab{background:rgba(255,255,255,.10);border-color:rgba(139,92,255,.55)}
+  /* (4) Notify toasts — already fixed overlays with pointer-events only on the cards; see-through on phone. Transient only. */
+  #notifyPopups .np-card{background:linear-gradient(160deg,rgba(19,26,74,.82),rgba(8,11,38,.82))}
+  /* (5) Rotate prompt (phone portrait — in-flow above the game before, pushing the frame down) — floats below the player bar instead. The pill lets taps through; only its dismiss button takes taps. */
+  body.wt-on.in-game #player .rotate-prompt{position:absolute;top:60px;left:50%;transform:translateX(-50%);max-width:calc(100% - 24px);width:max-content;margin-bottom:0;z-index:8;background:rgba(10,6,32,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);pointer-events:none}
+  body.wt-on.in-game #player .rotate-prompt button{pointer-events:auto}
+  /* (6) Practice banner — same treatment: floats over the game instead of taking a row above it; its two buttons stay tappable. (Caveat: if the rotate prompt is also up, the banner sits above it at the same spot — the prompt's dismiss waits until practice ends.) */
+  body.wt-on.in-game #player #practiceBanner{position:absolute;top:60px;left:8px;right:8px;z-index:7;margin:0;background:rgba(43,28,86,.78);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);pointer-events:none}
+  body.wt-on.in-game #player #practiceBanner button{pointer-events:auto}
+  /* (7) Pool phone summary bar — floats over the top of the Pool frame instead of taking a row above it. */
+  #pane-8-ball-pool{position:relative}
+  #pane-8-ball-pool .pool-sumbar{position:absolute;top:60px;left:0;right:0;width:auto;z-index:6;margin-bottom:0;background:rgba(10,6,32,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)} /* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28: top:60px, not 0 — at top:0 the bar sat over the player-bar overlay and covered the Back button (found in verification). It now floats over the frame below the player bar, like the rotate prompt. */
+}
+</style>
 <script>
 /* Pool session fixes (Holo 2026-11-28 09:17): the music bar is movable — drag it anywhere (mouse + touch), like the minimized chat. The spot is remembered per device (localStorage) and restored on load; a tap still works (a drag suppresses the click that would follow it). */
 (function(){
@@ -38140,12 +38706,13 @@ body.wt-on.in-game #player:fullscreen .rff-frame,body.wt-on.in-game #player:-web
     var r = bar.getBoundingClientRect();
     startX = ev.clientX; startY = ev.clientY; baseX = r.left; baseY = r.top;
     dragging = true; moved = false;
-    try { row.setPointerCapture(ev.pointerId); } catch(e){}
+    /* HUB-PHONE-BUTTONS-FULLSCREEN-2026-11-28: NO setPointerCapture here. The old code captured the pointer on pointerdown on the ROW — that retargeted the whole tap (pointerup/mouseup/click) to the row, so a real tap on the Music / minimize buttons never reached the button and the panel never opened (verified in headless Chromium on the base file: button got pointerdown/mousedown, the ROW got pointerup/mouseup/click). Capture is now taken only once a real drag starts (below), so a plain tap still clicks the button. The room-chat drag (rcDragWire) does not need this: it captures on the button itself, so its taps still land on the button. */
   });
   row.addEventListener('pointermove', function(ev){
     if(!dragging) return;
     var dx = ev.clientX - startX, dy = ev.clientY - startY;
     if(!moved && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+    if(!moved){ try { row.setPointerCapture(ev.pointerId); } catch(e){} }
     moved = true;
     var w = bar.offsetWidth || 0, h = bar.offsetHeight || 0;
     var vw = window.innerWidth || 0, vh = window.innerHeight || 0;
