@@ -9710,19 +9710,14 @@ setTimeout(function(){
         more: 'Full rules live in the game — tap 📜 Rules in the game.'
       }
     },
-    /* TTT-FIXES-2026-11-26: Tic Tac Toe uses the side panels for the
-       match list (left) + challenge (right) instead of the in-pane
-       challenge block — the board alone lives in the center column,
-       so the view fits with zero scroll. Per-game `sections` override
-       the global SIDE_PANEL_SECTIONS (see renderSidePanels). */
+    /* SIDEBAR-YOUR-TURN-2026-11-27 (Holo 2026-11-27 18:41-18:42): Tic Tac Toe uses the side panels for just the "Your turn" button (left) — the "Your matches" list, "Game notifications" and "Challenge a friend" are removed. Per-game `sections` override the global SIDE_PANEL_SECTIONS (see renderSidePanels). */
     'tic-tac-toe': {
-      /* ROOM-CHAT-2026-11-26 (Holo 19:57): notifications ride the left panel under the matches list. */
-      sections: { left: ['matches', 'notifications'], right: ['challenge'] }
+      sections: { left: ['yourturn'], right: [] }
     },
     /* POOL-SIZING-2026-11-26 (C1): Pool joins the live side-panel pattern (Ghost Hunt pilot). Pool stores ONE JSON object (pool8_bests) — not one key per row — so scores use .json; how-to steps are verbatim from the live game text; the "open in its own page" fallback line is verbatim from the pane's g-note. */
-    /* ROOM-CHAT-2026-11-26 (Holo 2026-11-26 19:57, desktop layout — MERGED with the sizing half in the rebase onto live 403a0e35): Pool rooms get the "Your matches" side list too (the 18:39 side list, placed) + game notifications under it. Final Pool sections: left ['matches','notifications','scores'], right ['howto'] — the rooms-chat half (matches + notifications) + the sizing half (scores + howto). */
+    /* SIDEBAR-YOUR-TURN-2026-11-27 (Holo 2026-11-27 18:41-18:42): Pool's left panel is the "Your turn" button + scores — the "Your matches" list and game notifications are removed. Final Pool sections: left ['yourturn','scores'], right ['howto']. */
     '8-ball-pool': {
-      sections: { left: ['matches', 'notifications', 'scores'], right: ['howto'] },
+      sections: { left: ['yourturn', 'scores'], right: ['howto'] },
       scores: {
         json: 'pool8_bests',
         prefix: 'pool8_bests',
@@ -9781,74 +9776,9 @@ setTimeout(function(){
       + '<p class="sp-note">' + g.howto.more + '</p></section>';
   }
   function spEsc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-  function spTttMatchesHTML(g){
-    /* TTT-FIXES-2026-11-26: "Your matches" — live from the turn module (window.holoTurn). Capped at 5 rows + "Show all (n)" (switches the pane to list view; n = all active matches, what the list view shows). The rows live outside #turnPlay, so the turn module's delegated click handler covers them. Holo 2026-11-26 18:39: inside a room this lists her OTHER active games (the open match is excluded) so she can bounce between games — "Your turn" rows sort first and are gold-highlighted; the whole row is tappable (data-turn-open on the row) and opens the match in place. Status is the same canonical statusText() as the tile and the match view. */
-    var h = '<section class="sp-section" data-sp="matches"><h3>🎮 Your matches</h3>';
-    var list = [], me = null, totalCount = 0, openMidNow = null;
-    try {
-      me = (window.holoTurn && typeof window.holoTurn.me === 'function') ? window.holoTurn.me() : null;
-      var ms = (window.holoTurn && typeof window.holoTurn.matches === 'function') ? window.holoTurn.matches() : {};
-      Object.keys(ms || {}).forEach(function(mid){ var m = ms[mid]; if(m && (m.status === 'playing' || m.status === 'waiting')) list.push({ mid:mid, m:m }); });
-      totalCount = list.length;
-      openMidNow = (window.holoTurn && typeof window.holoTurn.openMatch === 'function') ? window.holoTurn.openMatch() : null;
-      list = list.filter(function(it){ return it.mid !== openMidNow; });
-      list.forEach(function(it){
-        try { it.st = (window.holoTurn && typeof window.holoTurn.statusText === 'function') ? window.holoTurn.statusText(it.m, me) : ''; } catch(e){ it.st = ''; }
-        it.mine = (it.st === 'Your turn');
-      });
-      list.sort(function(a, b){ return ((a.mine ? 0 : 1) - (b.mine ? 0 : 1)) || ((b.m.updatedAt || 0) - (a.m.updatedAt || 0)); });
-    } catch(e){ list = []; }
-    if(!totalCount){ return h + '<p class="sp-empty">No matches yet — challenge a friend!</p></section>'; }
-    if(!list.length){ return h + '<p class="sp-empty">No other matches right now — challenge a friend!</p></section>'; }
-    var shown = list.slice(0, 5);
-    h += shown.map(function(it){
-      var m = it.m;
-      var oppUid = (m.aUid === me) ? m.bUid : m.aUid;
-      var oppName = (m.aUid === me) ? m.bName : m.aName;
-      try { var cf = (window.holoFriends && typeof window.holoFriends.cloudFriends === 'function') ? window.holoFriends.cloudFriends() : {}; if(cf[oppUid] && cf[oppUid].name) oppName = cf[oppUid].name; } catch(e){}
-      var gn = '';
-      try { gn = (window.holoTurn && typeof window.holoTurn.gameName === 'function') ? window.holoTurn.gameName(m.game) : m.game; } catch(e){}
-      /* START-POPUP-FIX-2026-11-27 (Holo 11:39): "Your matches" mirrors the game-room tile — same three fields, same order: title = the room name (the custom name when renamed, else "Game vs Opponent", exactly roomDisplayName), sub = "Game vs Opponent" only when renamed (exactly roomSubName), and the canonical statusText as its own status span (same wording as the match view). The opponent is inside the room name, as on the tile. The text stacks vertically (sp-matchrow-text) with Open kept on the right. */
-      var rowTitle = gn + ' vs ' + oppName, rowSub = '';
-      try {
-        var rs3 = (window.holoRooms && window.holoRooms.roomSettings) ? window.holoRooms.roomSettings : null;
-        if(rs3 && typeof m.name === 'string' && m.name.trim()){ rowTitle = rs3.cleanName(m.name); rowSub = gn + ' vs ' + oppName; }
-      } catch(e){}
-      return '<div class="sp-matchrow' + (it.mine ? ' your-turn' : '') + '" data-turn-open="' + spEsc(it.mid) + '"><div class="sp-matchrow-text"><b>' + spEsc(rowTitle) + '</b>' + (rowSub ? '<span class="nextmove-game">' + spEsc(rowSub) + '</span>' : '') + '<span class="nextmove-status' + (it.mine ? ' mine' : '') + '">' + spEsc(it.st) + '</span></div><button type="button" class="btn btn-dark dm-mini">Open</button></div>';
-    }).join('');
-    if(list.length > 5) h += '<button type="button" class="btn btn-dark dm-mini sp-showall" data-sp-showall>Show all (' + totalCount + ')</button>';
-    return h + '</section>';
-  }
-  function spTttChallengeHTML(g){
-    /* TTT-FIXES-2026-11-26: "Challenge a friend" — friend chips with Challenge buttons (same source as the pane's challenge block). Capped at 5 chips + "Show all (n)". */
-    var h = '<section class="sp-section" data-sp="challenge"><h3>🤝 Challenge a friend</h3>';
-    var friends = [];
-    try { var cf = (window.holoFriends && typeof window.holoFriends.cloudFriends === 'function') ? window.holoFriends.cloudFriends() : {}; Object.keys(cf).forEach(function(uid){ friends.push({ uid:uid, name:(cf[uid] && cf[uid].name) || 'Tester' }); }); } catch(e){}
-    if(!friends.length){ return h + '<p class="sp-empty">No friends yet — add a friend first, then challenge them here.</p></section>'; }
-    var shown = friends.slice(0, 5);
-    h += '<div class="turn-friends">' + shown.map(function(f){
-      return '<span class="turn-friend-chip">' + spEsc(f.name) + ' <button type="button" class="btn btn-dark dm-mini" data-turn-challenge="' + spEsc(f.uid) + '" data-turn-name="' + spEsc(f.name) + '">Challenge</button></span>';
-    }).join('') + '</div>';
-    if(friends.length > 5) h += '<button type="button" class="btn btn-dark dm-mini sp-showall" data-sp-showall>Show all (' + friends.length + ')</button>';
-    return h + '</section>';
-  }
-  function spNotificationsHTML(g){
-    /* ROOM-CHAT-2026-11-26 (Holo 2026-11-26 19:57, desktop layout): "Game notifications" in the empty space beside the game — the same feed as the Inbox, game types only (turn / turn-invite / room-chat), newest first, capped at 5. Tap a row to open it (same routing as the pop-up Accept); unread rows are gold-highlighted. Read from the inbox cache (holoInbox.items) — no new poll, no new node. */
-    var h = '<section class="sp-section" data-sp="notifications"><h3>🔔 Game notifications</h3>';
-    var list = [];
-    try {
-      var all = (window.holoInbox && typeof window.holoInbox.items === 'function') ? window.holoInbox.items() : [];
-      list = all.filter(function(n){ return n && (n.type === 'turn' || n.type === 'turn-invite' || n.type === 'room-chat'); });
-    } catch(e){ list = []; }
-    if(!list.length){ return h + '<p class="sp-empty">No game notifications yet — challenges and turns show up here.</p></section>'; }
-    var shown = list.slice(0, 5);
-    h += shown.map(function(it){
-      var t = '';
-      try { if(it.createdAt) t = new Date(it.createdAt).toLocaleDateString(undefined, { month:'short', day:'numeric' }) + ' · ' + new Date(it.createdAt).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' }); } catch(e){}
-      return '<div class="sp-matchrow' + (it.read ? '' : ' your-turn') + '" data-sp-notif="' + spEsc(it.link || '') + '" data-sp-notif-id="' + spEsc(it.id || '') + '"><b>' + spEsc(it.title || 'Game notification') + '</b><span>' + spEsc(t) + '</span></div>';
-    }).join('');
-    if(list.length > 5) h += '<button type="button" class="btn btn-dark dm-mini sp-showall" data-sp-notif-all>Show all (' + list.length + ')</button>';
-    return h + '</section>';
+  function spYourTurnHTML(g){
+    /* SIDEBAR-YOUR-TURN-2026-11-27 (Holo 2026-11-27 18:41): the sidebar "Your matches" list is gone — the sidebar holds just the "Your turn" button, the same yellow round button as the top nav (same look: solid yellow count circle + "Your turn" label). Tap it to go to Rooms, where each room shows its players and whose turn it is. The count + hidden state are synced by updateTurnIndicator() (same source as the nav button) and by renderSidePanels() after each render. */
+    return '<section class="sp-section" data-sp="yourturn"><button type="button" id="spTurnBtn" class="nav-actbtn" aria-label="Your turn — open Rooms" title="Your turn — open Rooms"><span id="spTurnBadge" hidden>0</span><span class="ti-label">Your turn</span></button></section>';
   }
   function spRoomMid(slug){
     /* ROOM-CHAT-2026-11-26 (Holo 20:56) + ROOM-CHAT-POPUP-2026-11-27: the match currently open for this game — a room open drops the how-to / challenge section for room games (the chat is a pop-up panel now, not the side slot). Solo keeps the how-to (roomMid is null there). Turn games (TTT/MM/RPS) via the turn module's open match (the same signal the matches list already uses to exclude the open match); Pool via the rooms module (handIntoPool tracks it — the turn module never opens Pool matches). */
@@ -9889,14 +9819,28 @@ setTimeout(function(){
   function spInfoTimeHTML(g, slug){
     var h = spPaneInfoHTML(slug, 'est-line');
     if(!h) return '';
-    return '<section class="sp-section" data-sp="infotime"><h3>\u23f1 Estimated time</h3>' + h + '</section>';
+    /* SIDEBAR-EST-TIME-2026-11-27 (Holo 2026-11-27 19:00, label shortened 19:13 "We could use EST TIME:"): the Estimated time is ONE single blue line - label + time on the same line, same font and same size, no bubble/card. The pane stays the single source of truth: the time value is read from the pane's own .est-line (the text after "Estimated completion time:"), never hardcoded. A value too long for the panel is clipped with an ellipsis, never wrapped. Label is "EST TIME:" (Holo's shorter label) so the line fits in the 11px pixel font. Holo 19:33 "Remove 'a game'" — the trailing " a game" is stripped from the sidebar value, so the line is "EST TIME: ~2-5 min." (20 chars x 11px = 220px, 66px spare in the 286px panel text width, letter-spacing 0), no truncation. The ⏱ icon is dropped and letter-spacing is 0 (the icon would push the old line to 308px, the heading's 1px letter-spacing to 312px, both truncated). */
+    var val = '';
+    try {
+      var d = document.createElement('div');
+      d.innerHTML = h;
+      var st = d.querySelector('strong');
+      if(st){
+        var par = st.parentNode, txt = '', after = false;
+        for(var i = 0; i < par.childNodes.length; i++){
+          var n = par.childNodes[i];
+          if(n === st){ after = true; continue; }
+          if(after) txt += (n.textContent || '');
+        }
+        val = txt.replace(/^\s+/, '').replace(/\s+$/, '');
+      }
+      if(!val) val = d.textContent.replace(/^\s*⏱\s*/, '').replace(/^Estimated completion time:\s*/i, '').replace(/^\s+/, '').replace(/\s+$/, '');
+    } catch(e){}
+    val = val.replace(/\s+a game\.?$/i, '.'); /* SIDEBAR-EST-TIME-2026-11-27 (Holo 2026-11-27 19:33 "Remove 'a game'"): the sidebar line drops a trailing " a game" — "EST TIME: ~2-5 min." (20 chars x 11px = 220px, 66px spare in the 286px panel). The pane's est-line stays the source, unchanged. */
+    if(!val) return '';
+    return '<section class="sp-section sp-est" data-sp="infotime"><p class="sp-est-line">EST TIME: ' + spEsc(val) + '</p></section>';
   }
-  function spInfoPlayHTML(g, slug){
-    var h = spPaneInfoHTML(slug, 'g-note');
-    if(!h) return '';
-    return '<section class="sp-section" data-sp="infoplay"><h3>\u2139\ufe0f About this game</h3>' + h + '</section>';
-  }
-  var SECTION_BUILDERS = { scores: spScoresHTML, howto: spHowtoHTML, matches: spTttMatchesHTML, challenge: spTttChallengeHTML, notifications: spNotificationsHTML, infotime: spInfoTimeHTML, infoplay: spInfoPlayHTML }; /* ROOM-CHAT-POPUP-2026-11-27: no 'chat' section any more — the room chat is a pop-up panel, not a side section. */ /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27: 'infotime' (est-line, left) + 'infoplay' (g-note, right) — the info that moved out of the middle column. */
+  var SECTION_BUILDERS = { scores: spScoresHTML, howto: spHowtoHTML, yourturn: spYourTurnHTML, infotime: spInfoTimeHTML }; /* SIDEBAR-YOUR-TURN-2026-11-27: 'matches' ("Your matches"), 'challenge' ("Challenge a friend"), 'notifications' ("Game notifications") and 'infoplay' ("About this game") are removed — the sidebar holds just the "Your turn" button (yourturn) plus scores / how-to / estimated-time. The room chat is a pop-up panel (ROOM-CHAT-POPUP-2026-11-27), not a side section. */ /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27: 'infotime' (est-line, left) is the info that moved out of the middle column. */
   var sidePanelSlug = null; /* the game the panels are showing right now (null = hidden) */
   function renderSidePanels(slug){
     var L = $('sidePanelL'), R = $('sidePanelR');
@@ -9905,21 +9849,22 @@ setTimeout(function(){
     /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27 (Holo 2026-11-27 17:36, "Desktop - game play - Should only be gameplay box in middle. Info on left and right."): the side panels now render for EVERY game, not just the three with scores/howto data - a game with no entry still gets its info sections (est-line left, g-note right), read from the pane itself. A game with no info at all (8-ball-pool, cops-and-robbers) still shows no panels. */
     if(!slug){ sidePanelSlug = null; L.hidden = true; R.hidden = true; document.body.classList.remove('sp-info-on'); document.body.classList.remove('sp-ttt-match'); var pi0 = document.getElementById('poolPhoneInfo'); if(pi0) pi0.innerHTML = ''; try { if(window.holoRooms && window.holoRooms.clearCurrentMatch) window.holoRooms.clearCurrentMatch(); } catch(e){} var _fab0 = document.getElementById('roomChatFab'); if(_fab0){ _fab0.hidden = true; _fab0.removeAttribute('data-rc-mid'); } /* ROOM-CHAT-POPUP-2026-11-27: no panel chat to clear any more; hide the floating Chat button too. */ return; }
     /* TTT-FIXES-2026-11-26: per-game `sections` override the global SIDE_PANEL_SECTIONS when present. */
-    var secs = (g && g.sections) || (g ? SIDE_PANEL_SECTIONS : { left: ['infotime'], right: ['infoplay'] });
-    /* ROOM-CHAT-POPUP-2026-11-27 (Holo 2026-11-27 12:14, revises the Nov 26 docked-desktop-chat call): in a room/match view the chat is a POP-UP PANEL, not the side slot — so the how-to / challenge section is DROPPED for room games (not replaced with a chat section): the side slot is empty and the game gets the full space. Solo views keep how-to / challenge (roomMid is null there). The chat opens from the room's Chat button (data-turn-chat / data-room-chat) in the match view, or the floating Chat button (below). */
+    var secs = (g && g.sections) || (g ? SIDE_PANEL_SECTIONS : { left: ['infotime'], right: [] }); /* SIDEBAR-EST-TIME-2026-11-27: 'infoplay' was removed by the sidebar redesign (its builder is gone) - the fallback must not list it, or renderSidePanels throws for every game without a SIDE_PANEL_GAMES entry. */
+    /* ROOM-CHAT-POPUP-2026-11-27 (Holo 2026-11-27 12:14, revises the Nov 26 docked-desktop-chat call): in a room/match view the chat is a POP-UP PANEL, not the side slot — so the how-to section is DROPPED for room games (not replaced with a chat section): the side slot is empty and the game gets the full space. Solo views keep how-to (roomMid is null there). The chat opens from the room's Chat button (data-turn-chat / data-room-chat) in the match view, or the floating Chat button (below). SIDEBAR-YOUR-TURN-2026-11-27: 'challenge' is gone entirely, so the filter drops only 'howto' — the "Your turn" button stays in a room (it goes to Rooms). */
     var roomMid = spRoomMid(slug);
     var L2 = secs.left.slice(), R2 = secs.right.slice();
     if(roomMid){
-      L2 = L2.filter(function(id){ return id !== 'howto' && id !== 'challenge'; });
-      R2 = R2.filter(function(id){ return id !== 'howto' && id !== 'challenge'; });
+      L2 = L2.filter(function(id){ return id !== 'howto'; });
+      R2 = R2.filter(function(id){ return id !== 'howto'; });
     }
-    /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27: the info sections ride along on every game - est-line on the left (with scores/records), g-note on the right (with how-to). They are NOT dropped for room games (they are info, not how-to/challenge), and they are appended after a game's own sections so the established order never changes. */
+    /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27: the est-line rides along on the left (with scores/records) on every game. It is NOT dropped for room games (it is info, not how-to), and it is appended after a game's own sections so the established order never changes. SIDEBAR-YOUR-TURN-2026-11-27: the g-note ("About this game") no longer rides the right panel — removed (Holo 2026-11-27 18:42). */
     if(L2.indexOf('infotime') < 0) L2.push('infotime');
-    if(R2.indexOf('infoplay') < 0) R2.push('infoplay');
     var lHtml = L2.map(function(id){ return SECTION_BUILDERS[id](g, slug); }).join('');
     var rHtml = R2.map(function(id){ return SECTION_BUILDERS[id](g, slug); }).join('');
     L.innerHTML = lHtml;
     R.innerHTML = rHtml;
+    /* SIDEBAR-YOUR-TURN-2026-11-27: a freshly-rendered sidebar "Your turn" button gets the current count now (updateTurnIndicator also re-syncs it whenever matches change). */
+    try { if(window.holoRoomChat && typeof window.holoRoomChat.updateTurnIndicator === 'function') window.holoRoomChat.updateTurnIndicator(); } catch(e){}
     /* POOL-SIZING-2026-11-26 (C1 phone): the phone info view gets the same left + right content for the view swap. (Merged rebase: for Pool that now includes the matches + notifications sections too, since they ride the same panels — the phone summary bar shows the full side-panel content.) Built from the UNSWAPPED sections: the phone info view is scores + how-to (+ matches/notifications), never the chat — on phone the chat is the popup bubble. */
     var pi = document.getElementById('poolPhoneInfo');
     if(pi) pi.innerHTML = (slug === '8-ball-pool') ? (secs.left.map(function(id){ return SECTION_BUILDERS[id](g, slug); }).join('') + secs.right.map(function(id){ return SECTION_BUILDERS[id](g, slug); }).join('')) : '';
@@ -9927,8 +9872,10 @@ setTimeout(function(){
     /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27: hidden is now decided by the RENDERED html, not the section count - a game whose info sections render empty (no est-line / no g-note) hides that panel, so 8-ball-pool and cops-and-robbers still show no panels at all. */
     L.hidden = !lHtml.trim();
     R.hidden = !rHtml.trim();
-    /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27: the middle column hides its own pane copy of the info ONLY when the info actually rendered into a side panel (see the .sp-info-on CSS rule) - without the gate, a game whose panels failed to render would lose its info entirely. */
-    document.body.classList.toggle('sp-info-on', (lHtml.indexOf('data-sp="infotime"') >= 0 || rHtml.indexOf('data-sp="infoplay"') >= 0));
+    /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27: the middle column hides its own pane copy of the info ONLY when the info actually rendered into a side panel (see the .sp-info-on CSS rule) - without the gate, a game whose panels failed to render would lose its info entirely. SIDEBAR-YOUR-TURN-2026-11-27: 'infoplay' is removed, so the g-note never rides a panel — but it must still stay out of the middle column (the 17:36 "middle holds ONLY the gameplay box" call), so the gate is also set when the pane has a g-note at all. */
+    var _spPane = document.getElementById('pane-' + slug);
+    var _spHasGnote = !!(_spPane && _spPane.querySelector(':scope > .g-note'));
+    document.body.classList.toggle('sp-info-on', (lHtml.indexOf('data-sp="infotime"') >= 0 || _spHasGnote));
     sidePanelSlug = (lHtml.trim() || rHtml.trim()) ? slug : null;
     /* ROOM-CHAT-POPUP-2026-11-27: show the floating Chat button while a room is open for this game (it opens the pop-up chat panel mid-game); hide it for solo / no room. The button's data-rc-mid is the room to open. */
     try {
@@ -9975,25 +9922,11 @@ setTimeout(function(){
       try { sessionStorage.setItem('holos-arcade-rotate-dismissed', '1'); } catch(e){}
     });
   })();
-  /* ROOM-CHAT-2026-11-26 (Holo 19:57): notification rows follow their link (same routing as the pop-up Accept) and mark the notice read; "Show all" opens the Inbox. */
+  /* SIDEBAR-YOUR-TURN-2026-11-27 (Holo 2026-11-27 18:41): the sidebar "Your turn" button goes to Rooms (same as the nav button). (Replaces the ROOM-CHAT-2026-11-26 game-notifications click handler, removed with the notifications section.) */
   document.addEventListener('click', function(ev){
-    var t = ev.target && ev.target.closest ? ev.target.closest('[data-sp-notif],[data-sp-notif-all]') : null;
+    var t = ev.target && ev.target.closest ? ev.target.closest('#spTurnBtn') : null;
     if(!t) return;
-    if(t.hasAttribute('data-sp-notif-all')){ try { if(window.holoShowView) window.holoShowView('inbox'); } catch(e){} return; }
-    var link = t.getAttribute('data-sp-notif');
-    var nid = t.getAttribute('data-sp-notif-id');
-    if(nid){
-      try {
-        if(window.holoInbox && typeof window.holoInbox.markRead === 'function'){
-          window.holoInbox.markRead(nid).then(function(){ try { if(sidePanelSlug) renderSidePanels(sidePanelSlug); } catch(e){} }).catch(function(){});
-        }
-      } catch(e){}
-    }
-    if(!link) return;
-    try {
-      if(window.holoNotifyPopups && typeof window.holoNotifyPopups.followLink === 'function'){ window.holoNotifyPopups.followLink(link); return; }
-    } catch(e){}
-    try { if(link.indexOf('game:') === 0) location.hash = '#game/' + link.slice(5).split('?')[0]; else if(window.holoShowView) window.holoShowView(link); } catch(e){}
+    try { if(window.holoShowView) window.holoShowView('rooms'); } catch(e){}
   });
   function closePlayer(){
     if(currentGame && stoppers[currentGame]) stoppers[currentGame]();
@@ -14652,11 +14585,11 @@ window.holoDaily = (function(){
      for the least-played difficulty — Hard first). A mode challenge
      completes when the target game is played; the mode itself is
      confirmed by the tester's feedback, which records it. */
-  /* NO_MODE_GAMES: the 21 games with no difficulty setting at all
+  /* NO_MODE_GAMES: the 22 games with no difficulty setting at all (physics-playground-2 added 2026-11-27, audit)
      (difficulty audit 2026-11-24) — learning games use grade bands,
      duels have a human opponent. They can still be challenge targets
      as untested games, just never as "Play X on Hard". */
-  var NO_MODE_GAMES = ['abc-fun','algebra-quest-2','biology-explorer-2','character-creator','chemistry-lab','colours-and-shapes','counting-stars','geometry-lab-2','history-quest','math-mountain-2','science-facts-quiz','typing-adventure','vocab-exam-prep-2','world-explorer-2','dice-duel','dots-and-boxes','gomoku','guess-the-number-duel','rock-paper-scissors','tic-tac-toe','word-chain-duel'];
+  var NO_MODE_GAMES = ['abc-fun','algebra-quest-2','biology-explorer-2','character-creator','chemistry-lab','colours-and-shapes','counting-stars','geometry-lab-2','history-quest','math-mountain-2','science-facts-quiz','typing-adventure','vocab-exam-prep-2','world-explorer-2','dice-duel','dots-and-boxes','gomoku','guess-the-number-duel','rock-paper-scissors','tic-tac-toe','word-chain-duel','physics-playground-2']; /* DIFFICULTY-POPUP-2026-11-27: physics-playground-2 is the 22nd no-difficulty game (audit 2026-11-27). */
   var DIFF_MODES = ['Hard','Normal','Easy']; /* hardest untested first; matches the tracker capture vocabulary */
   function allGameSlugs(){
     var slugs = Object.keys(catOf);
@@ -24261,7 +24194,181 @@ function renderTesterAuth(){
     madcow:  { attr:'data-mcdiff', def:'classic',  opts:[['gentle','🌼 Gentle Pasture','4 hearts · slower cows'],['classic','🐮 Classic Field','3 hearts · normal speed'],['stampede','🔥 Stampede','3 lives · fastest cows · mud puddles']] },
     dj:      { attr:'data-djdiff', def:'club',     opts:[['bedroom','🛏️ Bedroom DJ','±1.8 BPM lock · easy timing'],['club','🎧 Club Night','±0.6 BPM lock'],['mainstage','🔥 Main Stage','±0.25 BPM lock · ×1.5 points']] },
     /* WORLD-CONQUEST-POPUP-2026-11-27 (Holo 2026-11-27 17:29): World Conquest's difficulty lives in the pop-up now (was only in its own setup view, skipped by hubstart). The pop-up writes holoArcade_v1_diff_world-conquest; the game reads that key on hubstart (falls back to wc_difficulty). attr data-d matches the game's own difficulty buttons (applyPendingDiff is a no-op in the hub doc — no [data-d] there). */
-    'world-conquest': { attr:'data-d', def:'Normal', opts:[['Easy','🌱 Easy','Rivals are cautious — great for learning.'],['Normal','⚔️ Normal','Balanced rivals who punish weak borders.'],['Hard','🔥 Hard','Ruthless rivals: more attacks, smarter targets.']] }
+    'world-conquest': { attr:'data-d', def:'Normal', opts:[['Easy','🌱 Easy','Rivals are cautious — great for learning.'],['Normal','⚔️ Normal','Balanced rivals who punish weak borders.'],['Hard','🔥 Hard','Ruthless rivals: more attacks, smarter targets.']] },
+    /* DIFFICULTY-POPUP-2026-11-27 (Holo 2026-11-27 18:50 + 19:18): 173 games added from the audit registry (popup-difficulty-registry-2026-11-27.json). Each entry carries the game's own native localStorage key + encoding (raw/json/prefs) so the pop-up writes the key the game reads on load. opts use each game's own values/labels/default — do not normalise them (several games use capitalised values or non-standard option sets). The 5 hub-native games above keep the legacy holoArcade_v1_diff_<slug> key. The 15 games with difficulty but no persisted key are NOT here (bingo, breakout, crazy-eights, edm, flags-quiz, gizmo, mahjong-solitaire, math-quiz, nim, poker, rhythm, simon, solitaire, whack-a-mole, word-scramble) — they need a game-file change first. */
+    "8-ball-pool": { key:"pool8_difficulty", enc:"raw", def:"normal", opts:[["easy","Easy","Rack will take it easy on you"],["normal","Normal","A fair, friendly game"],["hard","Hard","Rack is sharp: accurate pots, smart position"]] },
+    "air-hockey": { key:"airHockey_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "archery": { key:"archery_difficulty", enc:"json", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "arrow-tap-puzzle": { key:"arrowTap.settings.v1", enc:"prefs", defaults:{"difficulty":"normal","sound":true,"practice":false}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "backgammon": { key:"backgammon_difficulty_v1", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "ball-sort-bay": { key:"ball-sort-bay_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "balloon-pop": { key:"rff_arcade_balloon-pop_diff_v1", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "basketball-shootout": { key:"bs_diff", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "battleship": { key:"rff-battleship-settings-v1", enc:"prefs", defaults:{"difficulty":"normal","sound":true}, def:"normal", opts:[["easy","Ensign"],["normal","Captain"],["hard","Admiral"]] },
+    "beat-tapper-2": { key:"beat-tapper:difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "blackjack": { key:"rff-blackjack-settings-v1", enc:"prefs", defaults:{"difficulty":"normal","hints":true,"practice":false}, def:"normal", opts:[["easy","Casual table"],["normal","Standard table"],["hard","High roller"]] },
+    "blob-arena": { key:"blobArena.difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "block-blast-cove": { key:"block-blast-cove_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "block-drop": { key:"blockdrop_diff", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "block-fit": { key:"blockfit_difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "bolt-and-box": { key:"bolt-and-box_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "bowling": { key:"bowling.difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "boxing-bout": { key:"boxing-bout-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "bpm-guess-2": { key:"bpm-guess:difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "brain-puzzle-pack-4f688927681d411da4f0da5c76a359bb": { key:"bpp_diff", enc:"raw", def:"Normal", opts:[["Easy","Easy"],["Normal","Normal"],["Hard","Hard"]] },
+    "breathe-with-me": { key:"breathe-with-me-difficulty", enc:"raw", def:"normal", opts:[["gentle","Gentle"],["normal","Normal"],["challenge","Challenge"]] },
+    "bubble-pop-bay": { key:"bubble-pop-bay_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "bubble-race": { key:"bubbleRace_difficulty", enc:"raw", def:"medium", opts:[["easy","Easy","chill"],["medium","Medium","a real race"],["hard","Hard","ruthless bubblers"]] },
+    "burger-builder": { key:"burger-builder-settings-v1", enc:"prefs", defaults:{"difficulty":"normal","sound":true}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "candy-trail": { key:"candyTrail_diff", enc:"raw", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "canoe-rapids": { key:"canoe-rapids-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "carnival-fps": { key:"carnivalFps_difficulty", enc:"json", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "cat-and-mouse": { key:"catmouse_settings", enc:"prefs", defaults:{"side":"gizmo","mode":"gentle","difficulty":"classic","practice":false,"sound":true}, def:"classic", opts:[["cozy","Cozy"],["classic","Classic"],["wild","Wild"]] },
+    "charades-party-2": { key:"charadesParty_v1_difficulty", enc:"json", def:"classic", opts:[["easy","Easy"],["classic","Classic"],["hard","Party Hard"]] },
+    "checkers": { key:"checkers_difficulty_v1", enc:"raw", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "chess": { key:"chess_difficulty_v1", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "claw-machine": { key:"claw-machine-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "code-words": { key:"codewords.settings.v1", enc:"prefs", defaults:{"difficulty":"normal","practice":false}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "colouring-calm": { key:"colouring-calm:difficulty", enc:"json", def:"gentle", opts:[["gentle","Gentle"],["normal","Normal"],["challenge","Challenge"]] },
+    "connect-four": { key:"connect-four-prefs-v1", enc:"prefs", defaults:{"mode":"ai","difficulty":"medium","firstMove":"player","soundOn":true}, def:"medium", opts:[["easy","Easy","learning the ropes"],["medium","Medium","a real game"],["hard","Hard","thinks 7 moves deep"]] },
+    "connect-the-dots-art": { key:"connect-dots-art:difficulty", enc:"raw", def:"easy", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "cops-and-robbers": { key:"copsAndRobbers_difficulty", enc:"json", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "cribbage": { key:"cribbage_diff", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "cup-toss-party": { key:"cup-toss-party-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "daily-crosswords": { key:"daily-crosswords_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "darts": { key:"darts501.difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "dash-runner": { key:"dash-runner:difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "dice-kings": { key:"diceKings.settings.v1", enc:"prefs", defaults:{"mode":"solo","difficulty":"normal","practice":false}, def:"normal", opts:[["easy","Chill"],["normal","Standard"],["hard","Sharp"]] },
+    "dice-roll": { key:"dice-roll-difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "diner-rush": { key:"diner-rush-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "dominoes": { key:"dominoes-difficulty-v1", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "draw-and-guess-party-2": { key:"dgp_difficulty", enc:"raw", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "duck-pond-2": { key:"duck-pond:difficulty", enc:"json", def:"easy", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "dungeon-crawler": { key:"dungeon-crawler-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "ear-training-2": { key:"ear-training-difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "empire-builder": { key:"eb_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "escape-kitchen": { key:"escapeKitchen_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "euchre": { key:"euchre_diff_v1", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "fashion-boutique": { key:"fashion-boutique_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "flappy-fox": { key:"flappy-fox_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "focus-flow-2": { key:"focus-flow-difficulty", enc:"raw", def:"normal", opts:[["gentle","Gentle"],["normal","Normal"],["challenge","Challenge"]] },
+    "foosball": { key:"foosball_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "football-kickoff": { key:"football-kickoff-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "fraction-frenzy": { key:"fractionFrenzyDiff.v1", enc:"raw", def:"easy", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "fruit-drop-merge": { key:"fruitDropMerge_difficulty", enc:"raw", def:"Normal", opts:[["Easy","Easy"],["Normal","Normal"],["Hard","Hard"]] },
+    "fruit-slice": { key:"fruitSlice_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "fun-socks": { key:"funsocks_settings", enc:"prefs", defaults:{"difficulty":"classic","pace":"timer","mode":"match","practice":false,"sound":true}, def:"classic", opts:[["cozy","Cozy"],["classic","Classic"],["wild","Wild"]] },
+    "galaxy-invaders": { key:"galaxy-invaders-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "ghost-hunt": { key:"ghosthunt_difficulty", enc:"raw", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "gin-rummy-2": { key:"ginRummy2.diff", enc:"json", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "go-board-game": { key:"go.settings.v1", enc:"prefs", defaults:{"size":9,"difficulty":"medium","practice":false}, def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "go-fish": { key:"gofish.settings.v1", enc:"prefs", defaults:{"difficulty":"normal","numAI":3,"practiceMode":false}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "gratitude-garden": { key:"gratitude-garden-difficulty-v1", enc:"json", def:"normal", opts:[["gentle","Gentle"],["normal","Normal"],["challenge","Challenge"]] },
+    "graveyard-shift": { key:"graveyardShift.difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "grid-tactics": { key:"gridTactics_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "guess-the-genre-2": { key:"guess-the-genre:diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "hangman": { key:"rff-hangman-settings-v1", enc:"prefs", defaults:{"category":"mixed","difficulty":"normal","mode":"ai","practice":false}, def:"normal", opts:[["easy","Chill"],["normal","Classic"],["hard","Expert"]] },
+    "haunted-house-escape": { key:"hhe-settings-v1", enc:"prefs", defaults:{"difficulty":"easy","practice":false}, def:"easy", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "hearts": { key:"hearts_difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "hidden-generals": { key:"hg_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "hockey-shootout": { key:"hs_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "home-run-derby": { key:"hrd_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "i-spy-hunt": { key:"i-spy-hunt-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "idle-clicker": { key:"idle-clicker-settings-v1", enc:"prefs", defaults:{"difficulty":"normal","sound":true}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "instrument-match-2": { key:"instrumentMatchDiff", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "jigsaw-journey": { key:"jigsaw-journey_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "jump-quest": { key:"jq_diff", enc:"raw", def:"Normal", opts:[["Easy","Easy"],["Normal","Normal"],["Hard","Hard"]] },
+    "kart-racing": { key:"kartRacingDifficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "key-tiles-2": { key:"key-tiles-difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "kings-cup-party": { key:"kings-cup-party-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "kitchen-rush": { key:"kr_difficulty", enc:"json", def:"Normal", opts:[["Easy","Easy"],["Normal","Normal"],["Hard","Hard"]] },
+    "life-path": { key:"lifepath-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "lucky-lantern-slots": { key:"lucky-lantern-slots_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "ludo": { key:"ludo_diff", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "mancala": { key:"mancala_diff", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "mandala-maker": { key:"mandala-maker:difficulty", enc:"raw", def:"easy", opts:[["easy","Easy · 6 slices"],["normal","Normal · 10 slices"],["hard","Hard · 16 slices"]] },
+    "match-3": { key:"match3_diff_v1", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "maze-chase": { key:"maze-chase-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "memory-match": { key:"memoryMatch_settings", enc:"prefs", field:"diff", defaults:{"size":"classic","diff":"normal"}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "memory-trainer-2": { key:"memory-trainer-difficulty", enc:"raw", def:"normal", opts:[["gentle","Gentle"],["normal","Normal"],["challenge","Challenge"]] },
+    "merge-garden": { key:"merge-garden-settings", enc:"prefs", defaults:{"difficulty":"normal","sound":true}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "minesweeper": { key:"minesweeper_v1_difficulty", enc:"json", def:"easy", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "mini-game-mashup": { key:"mini-game-mashup-difficulty", enc:"raw", def:"Normal", opts:[["Easy","Easy"],["Normal","Normal"],["Hard","Hard"]] },
+    "mini-golf": { key:"miniGolfDifficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "monster-match": { key:"mm_difficulty", enc:"raw", def:"medium", opts:[["easy","Easy","6 pairs · cosy"],["medium","Medium","8 pairs · classic"],["hard","Hard","12 pairs · brainy"]] },
+    "moto-stunts": { key:"motoStunts.difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "motorcycle-racer": { key:"motorcycle-racer_difficulty_v1", enc:"json", def:"normal", opts:[["easy","Easy","chill cruise"],["normal","Normal","real traffic"],["hard","Hard","rush hour"]] },
+    "mystery-manor": { key:"mm_settings", enc:"prefs", defaults:{"difficulty":"normal","mode":"case"}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "never-have-i-ever-party": { key:"never-have-i-ever-party-difficulty", enc:"json", def:"normal", opts:[["easy","Light"],["normal","Silly"],["hard","Spicy but clean"]] },
+    "nonogram": { key:"nonogram-diff-v1", enc:"raw", def:"normal", opts:[["easy","Easy · 5×5"],["normal","Normal · 10×10"],["hard","Hard · 15×15"]] },
+    "note-memory-2": { key:"noteMemory_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "paint-studio": { key:"paint-studio:difficulty", enc:"raw", def:"easy", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "parking-panic": { key:"parking-panic_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "party-board": { key:"party-board-settings", enc:"prefs", defaults:{"difficulty":"normal","total":4,"humans":1,"rounds":10,"practice":false}, def:"normal", opts:[["easy","Easy","gentle AI, slower games"],["normal","Normal","fair fight"],["hard","Hard","sharp AI, faster games"]] },
+    "pinball-pier": { key:"pinball-pier_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "pirates-plunder": { key:"piratesPlunderSettings", enc:"prefs", defaults:{"difficulty":"normal","practice":false}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "pixel-art-maker": { key:"pixel-art-maker:difficulty", enc:"raw", def:"easy", opts:[["easy","Easy 8×8"],["normal","Normal 16×16"],["hard","Hard 24×24"]] },
+    "pizza-maker": { key:"pizzaMaker.settings.v1", enc:"prefs", defaults:{"difficulty":"normal","sound":true}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "pocket-pet": { key:"pocketPet_state_v1", enc:"prefs", noWriteIfAbsent:1, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "prairie-buck-hunt": { key:"prairie-buck-hunt-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "property-tycoon": { key:"pt-settings", enc:"prefs", defaults:{"ai":2,"difficulty":"normal","mode":"standard"}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "pumpkin-patch": { key:"pp_difficulty", enc:"raw", def:"classic", opts:[["cozy","Cozy"],["classic","Classic"],["spooky","Spooky"]] },
+    "pyramid-pairs": { key:"pyramid-pairs_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "race-home": { key:"racehome_difficulty", enc:"raw", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "rainbow-pour": { key:"rainbow-pour_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "reel-relax-fishing": { key:"reel-relax-fishing_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "resource-island": { key:"ri-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "reversi": { key:"rff-reversi-settings-v1", enc:"prefs", defaults:{"difficulty":"normal","hints":true,"mode":"real"}, def:"normal", opts:[["easy","Casual AI"],["normal","Club AI"],["hard","Master AI"]] },
+    "ring-toss": { key:"ring-toss-difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "road-crossing": { key:"roadCrossing_difficulty", enc:"json", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "roulette-reef": { key:"roulette-reef_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "sailboat-slalom": { key:"sailboat-slalom-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "scratch-and-shine": { key:"scratch-and-shine_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "seaside-seekers": { key:"seaside-seekers_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "seven-letter-hive": { key:"seven-letter-hive_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "shooting-gallery": { key:"shooting-gallery-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "skateboard-tricks": { key:"skateboard-tricks-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "skee-ball": { key:"sb_diff", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "sky-climber": { key:"skyClimber_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "slingshot": { key:"slingshot_difficulty", enc:"json", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "snack-stand": { key:"snackstand_diff", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "snake": { key:"snake-prefs-v1", enc:"prefs", defaults:{"difficulty":"classic","edges":"solid","soundOn":true,"mode":"scored"}, def:"classic", opts:[["chill","Chill"],["classic","Classic"],["turbo","Turbo"]] },
+    "snakes-ladders": { key:"rff-snakes-ladders-settings-v1", enc:"prefs", defaults:{"mode":"ai","difficulty":"normal"}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "snowboard-slalom": { key:"snowboard-slalom-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "soccer-penalty-kicks": { key:"spk_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "sound-effects-quiz-2": { key:"soundEffectsQuizDiff", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "soundscape-mixer": { key:"soundscape-mixer-difficulty", enc:"raw", def:"gentle", opts:[["gentle","Gentle"],["normal","Normal"],["challenge","Challenge"]] },
+    "spades": { key:"spades_difficulty_v1", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "spot-the-difference": { key:"spot-the-difference_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "star-hopper": { key:"star-hopper-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "sudoku": { key:"sudoku_diff", enc:"raw", def:"easy", opts:[["easy","Easy","40 givens"],["medium","Medium","32 givens"],["hard","Hard","28 givens"],["expert","Expert","~24 givens"]] },
+    "sumo-slam": { key:"sumo-slam-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "sunny-acres-farm": { key:"sunny-acres-farm_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "surfing-waves": { key:"surfing-waves-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "sushi-roll": { key:"sushiRoll.settings.v1", enc:"prefs", defaults:{"difficulty":"normal"}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "table-tennis": { key:"tableTennis_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "tempo-trainer-2": { key:"tempo-trainer.difficulty.v1", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "tennis": { key:"tennis_difficulty", enc:"raw", def:"Normal", opts:[["Easy","Easy"],["Normal","Normal"],["Hard","Hard"]] },
+    "tile-2048": { key:"tile2048-difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "top-down-racer": { key:"topDownRacer_difficulty", enc:"json", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "tower-defense": { key:"tower-defense-diff", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "tower-stacker": { key:"tower-stacker_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "tripeaks-trail": { key:"tripeaks-trail_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "triple-tile-tidy": { key:"triple-tile-tidy_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "trivia-party": { key:"trivia-party-difficulty", enc:"json", def:"classic", opts:[["chill","Chill"],["classic","Classic"],["expert","Expert"]] },
+    "vending-machine": { key:"vendingMachine_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "volleyball-rally": { key:"volleyball-rally-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "war": { key:"war-difficulty-v1", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "water-gun-race": { key:"watergunrace_diff", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "where-am-i": { key:"wai_difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "wind-down": { key:"wind-down-difficulty", enc:"json", def:"normal", opts:[["gentle","Gentle"],["normal","Normal"],["challenge","Challenge"]] },
+    "word-board": { key:"wb_difficulty", enc:"raw", def:"medium", opts:[["easy","Easy"],["medium","Medium"],["hard","Hard"]] },
+    "word-groups": { key:"wordgroups.settings.v1", enc:"prefs", defaults:{"difficulty":"normal","mode":"scored"}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "word-guess-daily-3": { key:"wgd3_settings", enc:"prefs", field:"diff", defaults:{"diff":"normal"}, def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "word-ladder-lane": { key:"word-ladder-lane_diff", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "word-search": { key:"rff-wordsearch-settings-v1", enc:"prefs", field:"diff", defaults:{"theme":"animals","diff":"medium","mode":"solo"}, def:"medium", opts:[["easy","Easy · 10 × 10"],["medium","Medium · 12 × 12"],["hard","Hard · 15 × 15"]] },
+    "wrestling-bout": { key:"wrestling-bout-difficulty", enc:"json", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] },
+    "zombie-outrun": { key:"zombieOutrun.difficulty", enc:"raw", def:"normal", opts:[["easy","Easy"],["normal","Normal"],["hard","Hard"]] }
   };
   var pendingDiff = null;
   /* Practice: every live game. Hub-native 4 switch on their real
@@ -24302,12 +24409,54 @@ function renderTesterAuth(){
     'war':1,'water-gun-race':1,'whack-a-mole':1,'where-am-i':1,'wind-down':1,'word-board':1,
     'word-chain-duel':1,'word-groups':1,'word-guess-daily-3':1,'word-ladder-lane':1,'word-scramble':1,'word-search':1,
     'world-conquest':1,'world-explorer-2':1,'zombie-outrun':1 };
+  /* DIFFICULTY-POPUP-2026-11-27 (Holo 2026-11-27 18:50 + 19:18): the pop-up writes each game's OWN native localStorage key, with that game's encoding (raw/json/prefs), so the pick takes effect when the game reads its key on load. Entries without a key (the 5 hub-native games) keep the legacy holoArcade_v1_diff_<slug> key, JSON-encoded, exactly as before. For prefs entries the read-modify-write touches ONLY the difficulty field; when no stored object exists yet it starts from the game's own defaults (several games replace the whole settings object on load, and loadJSON/store.get do NOT merge, so a bare {field:value} would lose sound/hints/mode). Pocket Pet is the exception: its difficulty lives inside the whole pet state object, so with no pet (no state) the write is skipped rather than creating a phantom pet — the adopt screen's own select is the fallback. */
+  function gmDiffRead(cfg){
+    var key = cfg.key || ('holoArcade_v1_diff_' + currentSlug);
+    var enc = cfg.enc || 'json';
+    var raw = null;
+    try { raw = localStorage.getItem(key); } catch(e){ raw = null; }
+    if(raw === null || raw === undefined) return cfg.def;
+    try {
+      if(enc === 'raw') return raw;
+      if(enc === 'json') return JSON.parse(raw);
+      if(enc === 'prefs'){
+        var obj = JSON.parse(raw);
+        if(!obj || typeof obj !== 'object') return cfg.def;
+        var v = obj[cfg.field || 'difficulty'];
+        return (v === undefined || v === null) ? cfg.def : v;
+      }
+    } catch(e){ return cfg.def; }
+    return cfg.def;
+  }
+  function gmDiffWrite(cfg, val){
+    var key = cfg.key || ('holoArcade_v1_diff_' + currentSlug);
+    var enc = cfg.enc || 'json';
+    try {
+      if(enc === 'raw'){ localStorage.setItem(key, val); }
+      else if(enc === 'json'){ localStorage.setItem(key, JSON.stringify(val)); }
+      else if(enc === 'prefs'){
+        if(cfg.noWriteIfAbsent){
+          var _ex = null;
+          try { _ex = localStorage.getItem(key); } catch(e){}
+          if(!_ex) return;
+        }
+        var obj = null;
+        try { var _s = localStorage.getItem(key); if(_s){ var _o = JSON.parse(_s); if(_o && typeof _o === 'object') obj = _o; } } catch(e){}
+        if(!obj){
+          obj = {};
+          if(cfg.defaults){ for(var _k in cfg.defaults){ if(Object.prototype.hasOwnProperty.call(cfg.defaults, _k)) obj[_k] = cfg.defaults[_k]; } }
+        }
+        obj[cfg.field || 'difficulty'] = val;
+        localStorage.setItem(key, JSON.stringify(obj));
+      }
+    } catch(e){}
+  }
   function renderGmSettings(){
     var cfg = GM_DIFFS[currentSlug];
-    if(!cfg || !gmSettings){ if(gmSettings) gmSettings.hidden = true; pendingDiff = null; return; }
+    if(!cfg || !gmSettings){ if(gmSettings) gmSettings.hidden = true; if(gmDiffRow) gmDiffRow.innerHTML = ''; pendingDiff = null; return; } /* DIFFICULTY-POPUP-2026-11-27: clear the row when hiding, so stale buttons from the previous game do not linger in the hidden DOM. */
     gmSettings.hidden = false;
     var cur = null;
-    try { var _cv = localStorage.getItem('holoArcade_v1_diff_' + currentSlug); cur = _cv === null ? cfg.def : JSON.parse(_cv); } catch(e){ cur = cfg.def; } /* MADCOW-DIFF-FIX-2026-11-24: menu reads the same prefixed key the games' store uses (store is scoped to the games IIFE) */
+    cur = gmDiffRead(cfg); /* DIFFICULTY-POPUP-2026-11-27: reads the game's own native key with its encoding (raw/json/prefs); the 5 hub-native games still read the legacy prefixed key, JSON-encoded (MADCOW-DIFF-FIX-2026-11-24). */
     if(!cur || !cfg.opts.some(function(o){ return o[0] === cur; })) cur = cfg.def;
     pendingDiff = cur;
     gmDiffRow.innerHTML = '';
@@ -24319,7 +24468,7 @@ function renderTesterAuth(){
       b.setAttribute('aria-pressed', o[0] === cur ? 'true' : 'false');
       b.addEventListener('click', function(){
         pendingDiff = o[0];
-        try { localStorage.setItem('holoArcade_v1_diff_' + currentSlug, JSON.stringify(o[0])); } catch(e){} /* MADCOW-DIFF-FIX-2026-11-24: menu writes the same prefixed key the games' store uses */
+        gmDiffWrite(cfg, o[0]); /* DIFFICULTY-POPUP-2026-11-27: writes the game's own native key with its encoding (raw/json/prefs); the 5 hub-native games still write the legacy prefixed key, JSON-encoded. */
         gmDiffRow.querySelectorAll('.gm-diff-btn').forEach(function(x){
           var on = x === b; x.classList.toggle('active', on); x.setAttribute('aria-pressed', on ? 'true' : 'false');
         });
@@ -24336,7 +24485,7 @@ function renderTesterAuth(){
   var gmModeChanged = false;
   function renderGmModes(){
     var cfg = GM_MODES[currentSlug];
-    if(!cfg || !gmModeSettings){ if(gmModeSettings) gmModeSettings.hidden = true; return; }
+    if(!cfg || !gmModeSettings){ if(gmModeSettings) gmModeSettings.hidden = true; if(gmModeRow) gmModeRow.innerHTML = ''; return; } /* DIFFICULTY-POPUP-2026-11-27: clear the row when hiding, so stale buttons from the previous game do not linger in the hidden DOM. */
     gmModeSettings.hidden = false;
     /* WORLD-CONQUEST-POPUP-2026-11-27: the mode row's heading follows the game — "who is playing" fits Tic Tac Toe; World Conquest's row is opponents. Always set (resets when the next game has no label). */
     try { var _gmLb = gmModeSettings.querySelector('.gm-settings-label'); var _lbTxt = cfg.label || 'Settings — who is playing'; if(_gmLb) _gmLb.textContent = _lbTxt; var _gmRow = document.getElementById('gmModeRow'); if(_gmRow){ var _al = _lbTxt.replace(/^Settings\s*[—-]\s*/, ''); _gmRow.setAttribute('aria-label', _al.charAt(0).toUpperCase() + _al.slice(1)); } } catch(e){}
@@ -24363,6 +24512,7 @@ function renderTesterAuth(){
   function applyPendingDiff(){
     var cfg = GM_DIFFS[currentSlug];
     if(!cfg || !pendingDiff) return;
+    if(!cfg.attr) return; /* DIFFICULTY-POPUP-2026-11-27: only the hub-native games have a hub-doc button to click (attr); iframe games read their native key on load, so there is nothing to click. */
     /* WEREWOLF-BOX3-2026-11-24: do NOT auto-click the werewolf difficulty while a saved hunt waits for Continue / Start over — this click is the menu, not the player choosing, and a difficulty tap now starts a fresh hunt, which would silently discard the save the bar is asking about. */
     if(currentSlug === 'werewolf' && window.__wTest && window.__wTest.awaitingChoice && window.__wTest.awaitingChoice()) return;
     setTimeout(function(){
@@ -26830,8 +26980,6 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
 .rooms-create-btn{margin:0 0 12px}
 .friend-result-actions{display:inline-flex;gap:6px;align-items:center;flex:0 0 auto}
 .friend-result .friend-result-actions .btn{margin-left:0}
-[data-sp="matches"] .sp-empty{cursor:pointer}
-[data-sp="matches"] .sp-empty:hover{text-decoration:underline}
 </style>
 <script>
 /* ENTRY-POINTS-2026-11-26 (Holo 2026-11-26 23:57 live two-account UI
@@ -26879,9 +27027,9 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
        bytes and preserves that fix. The player bar is already sticky
        (position:sticky; top:0) — the "header scrolls off-screen"
        read is an automation artifact.
-   The Pool "Your matches" empty state ("challenge a friend!") is
-   clickable via delegation on .sp-empty in [data-sp="matches"] and
-   opens the same friend-picker. "New match" being AI-only is a Pool
+   SIDEBAR-YOUR-TURN-2026-11-27: the Pool "Your matches" empty state
+   ("challenge a friend!") and its .sp-empty delegation are removed
+   with the matches section. "New match" being AI-only is a Pool
    game-file follow-up, out of hub scope. */
 (function(){
   "use strict";
@@ -27315,13 +27463,6 @@ body[data-view="inbox"] .view-main,body[data-view="inbox"] .view-library,body[da
           }
         }, 350);
         return;
-      }
-      /* Pool "Your matches" empty state: the "challenge a friend!"
-         line opens the friend-picker (the whole line is the button). */
-      var sp = ev.target && ev.target.closest ? ev.target.closest('.sp-empty') : null;
-      if(sp){
-        var sec = sp.closest ? sp.closest('[data-sp="matches"]') : null;
-        if(sec && /challenge a friend/i.test(sp.textContent || '')) openDuelPicker();
       }
     }, false);
     /* Stale cloud "No tester..." belongs to the previous query — clear
@@ -28790,25 +28931,12 @@ body.duel-music-on #rcBubble{bottom:64px}
 /* OPP-LAST-MOVE-VISUAL-2026-11-27: .turn-history CSS removed — the written move history list is gone from the match view. */
 .turn-empty{color:#cfc8ff;font-size:14px;margin:6px 0}
 .turn-muted-head{margin:10px 0 0;color:#cfc8ff;font-size:13px;font-weight:700}
-.side-panel .sp-matchrow{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;padding:7px 0;border-bottom:1px dashed var(--line)}
-.side-panel .sp-matchrow:last-of-type{border-bottom:none}
-.side-panel .sp-matchrow b{color:#fff}
-.side-panel .sp-matchrow span{color:var(--muted);font-size:12.5px}
-.side-panel .sp-matchrow .btn{margin-left:auto}
-.side-panel .sp-matchrow{cursor:pointer}
-/* START-POPUP-FIX-2026-11-27 (Holo 11:39): "Your matches" rows mirror the game-room tile — the row's text stacks vertically (room title, "Game vs Opponent" sub when renamed, status on its own line) with Open kept on the right; your-turn rows get the tile's gold (title + status), since .sp-matchrow had no your-turn rule before. */
-.side-panel .sp-matchrow .sp-matchrow-text{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
-.side-panel .sp-matchrow .sp-matchrow-text b{overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;white-space:normal}
-.side-panel .sp-matchrow .sp-matchrow-text .nextmove-game{color:#cfc8ff;font-size:12px}
-.side-panel .sp-matchrow .sp-matchrow-text .nextmove-status.mine{color:#ffd43b}
-.side-panel .sp-matchrow.your-turn .sp-matchrow-text b{color:#ffd43b}
+
 /* START-POPUP-FIX-2026-11-27 (Holo 12:16): the mode/difficulty pill buttons share .gm-diff-btn, whose inline-flex row jams the label and its sublabel together ("2 PlayersPass and play…"). The sublabel belongs UNDER the label (the DIFFICULTY-SCALE-2026-11-25 intent), so it takes its own line — this fixes the mode buttons and the pre-existing difficulty buttons alike. */
 #gameMenu .gm-diff-btn{flex-wrap:wrap}
 #gameMenu .gm-diff-btn small{flex-basis:100%}
 .side-panel .sp-showall{margin-top:10px}
-/* ROOM-CHAT-2026-11-26 (Holo 19:57): notification titles can run long — the title ellipsizes, the time stays put. */
-.side-panel .sp-matchrow[data-sp-notif] b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.side-panel .sp-matchrow[data-sp-notif] span{flex:0 0 auto}
+
 /* CHALLENGE-ROOM-2026-11-24: Rooms live on the Friends page — the
    next-move tiles row (Recently Played tile style, horizontal) plus
    one card per room. ROOM-PRIVACY-2026-11-24: beta is PRIVATE-ONLY —
@@ -31366,18 +31494,21 @@ body.duel-music-on #rcBubble{bottom:64px}
    (#ffd43b, the existing gold), with the "Your turn" label beside it.
    One tap target, still opens Rooms. Hidden when nothing needs her move
    (same as before — btn.hidden = n<=0 in updateTurnIndicator). */
-#turnIndicatorBtn{display:inline-flex;align-items:center;gap:8px;padding:3px 14px 3px 3px;min-height:42px;background:#0a0620;border:2px solid #ffd43b!important;border-radius:999px;color:#ffd43b;font-weight:700;box-shadow:0 0 10px rgba(255,212,59,.35)}
-#turnIndicatorBtn:hover{background:#171040;color:#fff}
-#turnIndicatorBtn[hidden]{display:none!important}
+/* SIDEBAR-YOUR-TURN-2026-11-27 (Holo 2026-11-27 18:41): the sidebar "Your turn" button is the same yellow round button as the top nav — the #turnIndicatorBtn / #turnBadge rules below now cover the sidebar #spTurnBtn / #spTurnBadge too (one rule, same look and sizing). The sidebar section holds just the button, centred; it hides when the button does (no your-turn matches), so an empty box never shows. */
+#turnIndicatorBtn,#spTurnBtn{display:inline-flex;align-items:center;gap:8px;padding:3px 14px 3px 3px;min-height:42px;background:#0a0620;border:2px solid #ffd43b!important;border-radius:999px;color:#ffd43b;font-weight:700;box-shadow:0 0 10px rgba(255,212,59,.35)}
+#turnIndicatorBtn:hover,#spTurnBtn:hover{background:#171040;color:#fff}
+#turnIndicatorBtn[hidden],#spTurnBtn[hidden]{display:none!important}
 .nav-line-btns #turnIndicatorBtn{order:7}
-#turnBadge{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:34px;height:34px;min-width:34px;padding:0;border-radius:50%;background:#ffd43b;color:#0a0620;font-size:16px;font-weight:800;line-height:1;text-align:center;box-shadow:0 0 8px rgba(255,212,59,.55)}
-#turnBadge[hidden]{display:none!important}
+#turnBadge,#spTurnBadge{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:34px;height:34px;min-width:34px;padding:0;border-radius:50%;background:#ffd43b;color:#0a0620;font-size:16px;font-weight:800;line-height:1;text-align:center;box-shadow:0 0 8px rgba(255,212,59,.55)}
+#turnBadge[hidden],#spTurnBadge[hidden]{display:none!important}
 .ti-label{white-space:nowrap}
-body.in-game #turnIndicatorBtn{min-height:34px;padding:2px 10px 2px 2px;gap:6px}
-body.in-game #turnBadge{width:28px;height:28px;min-width:28px;font-size:13px}
+.sp-section[data-sp="yourturn"]{text-align:center}
+.sp-section[data-sp="yourturn"][hidden]{display:none!important}
+body.in-game #turnIndicatorBtn,body.in-game #spTurnBtn{min-height:34px;padding:2px 10px 2px 2px;gap:6px}
+body.in-game #turnBadge,body.in-game #spTurnBadge{width:28px;height:28px;min-width:28px;font-size:13px}
 @media (max-width:640px){
-  #turnIndicatorBtn{min-height:36px;padding:2px 10px 2px 2px;gap:6px}
-  #turnBadge{width:28px;height:28px;min-width:28px;font-size:13px}
+  #turnIndicatorBtn,#spTurnBtn{min-height:36px;padding:2px 10px 2px 2px;gap:6px}
+  #turnBadge,#spTurnBadge{width:28px;height:28px;min-width:28px;font-size:13px}
   .ti-label{font-size:12px}
 }
 /* ROOM-CHAT-POPUP-2026-11-27: floating Chat button (desktop, room games only) — fixed bottom-left, above the player (z 60) and the top nav (z 69) so it is always tappable, below the chat dock (z 12500). Rides up above the duel-music mini player when it is showing (same as the chat dock). Hidden on phone (the bubble opens the sheet there). */
@@ -31637,6 +31768,18 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     if(badge){ badge.textContent = String(n); badge.hidden = n <= 0; }
     btn.hidden = n <= 0;
     btn.setAttribute('aria-label', n > 0 ? ('Your turn in ' + n + (n === 1 ? ' game' : ' games') + ' — open Rooms') : 'Your turn');
+    /* SIDEBAR-YOUR-TURN-2026-11-27: the sidebar "Your turn" button mirrors the nav button (same count, same hide-when-zero rule). The section hides with it, so an empty box never shows. */
+    try {
+      var sb = document.getElementById('spTurnBtn');
+      if(sb){
+        var sbg = document.getElementById('spTurnBadge');
+        if(sbg){ sbg.textContent = String(n); sbg.hidden = n <= 0; }
+        sb.hidden = n <= 0;
+        sb.setAttribute('aria-label', n > 0 ? ('Your turn in ' + n + (n === 1 ? ' game' : ' games') + ' — open Rooms') : 'Your turn');
+        var ssec = sb.closest ? sb.closest('[data-sp="yourturn"]') : null;
+        if(ssec) ssec.hidden = n <= 0;
+      }
+    } catch(e){}
   }
 
   /* ---------- dock / bubble / sheet shell ---------- */
@@ -35509,11 +35652,8 @@ body.wt-on.in-game #player .player-body{padding-bottom:12px}
 .side-panel .sp-ghosts{font-size:13px;line-height:1.5;background:var(--chip);border-radius:10px;padding:10px 12px;margin:12px 0 0}
 .side-panel .sp-ghosts b{color:var(--gold)}
 /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27 (Holo 2026-11-27 17:36, "Desktop - game play - Should only be gameplay box in middle. Info on left and right."): the info that used to sit above the gameplay box in the middle column (the estimate line + the "playing right here" blurb) now lives in the side panels - est-line left, g-note right. On desktop the middle column's own pane copy hides, but ONLY while body.sp-info-on is set (renderSidePanels sets it when the info actually rendered into a panel); without the gate a game whose panels failed would lose its info entirely. Phone keeps the pane copy - the side panels don't exist below 1280px, so the hide never applies there. */
-.side-panel .sp-section[data-sp="infotime"] .est-line{margin:0}
-.side-panel .sp-section[data-sp="infotime"] .est-line strong{white-space:normal} /* DESKTOP-GAMEPLAY-LAYOUT-2026-11-27: the panel is ~190px of content at 1366px — the chip's nowrap "Estimated completion time:" label overflowed and clipped ("Estimated completion ti…"); it wraps here instead. Same text, just wrapped. */
-.side-panel .sp-section[data-sp="infoplay"] .g-note{margin:0 0 10px;color:var(--ink)}
-.side-panel .sp-section[data-sp="infoplay"] .g-note:last-child{margin-bottom:0}
-.side-panel .sp-section[data-sp="infoplay"] .g-note a{color:var(--cyan)}
+/* SIDEBAR-EST-TIME-2026-11-27 (Holo 2026-11-27 19:00, label shortened 19:13 "We could use EST TIME:"): the Estimated time is ONE blue line - label + time share one font and size, on a single line, no bubble/card. It uses the 11px pixel font (var(--pixel), Press Start 2P) like the old heading: Holo's shorter "EST TIME:" label + her 19:33 "Remove 'a game'" (the trailing " a game" is stripped from the sidebar value) make it fit — the line is "EST TIME: ~2-5 min." (20 chars x 11px = 220px, 66px spare in the 286px panel text width), no truncation. letter-spacing is 0 (the heading's 1px would push the old line to 312px, truncated) and the ⏱ icon is dropped (it would push it to 308px, truncated). A value too long for the panel is clipped with an ellipsis, never wrapped. */
+.side-panel .sp-est-line{font-family:var(--pixel);font-size:11px;line-height:1.7;letter-spacing:0;color:var(--cyan);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (min-width:1280px){
   body.wt-on.in-game.sp-info-on #player .player-body .game-pane > .est-line,
   body.wt-on.in-game.sp-info-on #player .player-body .game-pane > .g-note{display:none}
