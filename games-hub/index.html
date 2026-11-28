@@ -10077,10 +10077,23 @@ setTimeout(function(){
     if(mid){
       var label = 'Chat';
       try { var nm = spRoomOppName(mid, currentGame); if(nm) label = 'Chat with ' + nm; } catch(e){}
-      fab.hidden = false;
-      fab.setAttribute('data-rc-mid', mid);
-      fab.textContent = '\uD83D\uDCAC ' + label;
-      fab.setAttribute('aria-label', label + ' \u2014 open the room chat');
+      /* Pool session fixes (2026-11-28): the minimized bar IS the chat entry point
+         when the box is minimized — it docks bottom-right on top of this button, so
+         the button hides while its room's bar is up (the bar's click restores the
+         box). Otherwise the two overlap and the button can neither be tapped nor
+         dragged. */
+      var barUp = false;
+      try { barUp = !!(window.holoRoomChat && typeof window.holoRoomChat.barVisible === 'function' && window.holoRoomChat.barVisible(mid)); } catch(e){ barUp = false; }
+      if(barUp){
+        fab.hidden = true;
+        fab.removeAttribute('data-rc-mid');
+      } else {
+        fab.hidden = false;
+        fab.setAttribute('data-rc-mid', mid);
+        fab.textContent = '\uD83D\uDCAC ' + label;
+        fab.setAttribute('aria-label', label + ' \u2014 open the room chat');
+      }
+      try { if(window.holoRoomChat && window.holoRoomChat.syncTurnBadges) window.holoRoomChat.syncTurnBadges(); } catch(e){} /* Pool session fixes: setting textContent wipes the turn badge — re-sync it. */
     } else {
       fab.hidden = true;
       fab.removeAttribute('data-rc-mid');
@@ -32658,6 +32671,36 @@ body.rc-dock-on #notifyPopups{bottom:448px}
   var sheetMid = null, sheetPollTimer = null;
   var mutedCache = {}; /* mid -> true (own-record /users/<uid>/roomChatsMuted) */
   var readCache = {}; /* mid -> timestamp of my last read (server /roomChats/<mid>/read/<uid>) */
+  /* Pool session fixes (Holo 2026-11-28 09:15-09:21): room-chat text size, message reactions, and the in-game your-turn badge. */
+  var RC_FONT_KEY = 'holos-rc-font-size';
+  var RC_FONT_SIZES = [12, 14, 16, 18, 20];
+  var RC_REACT_EMOJIS = ['\u2764\uFE0F','\uD83D\uDE02','\uD83D\uDC4D','\uD83C\uDF89','\uD83D\uDD25','\uD83D\uDE2E','\uD83D\uDC4F'];
+  var pendingTurn = {}; /* mid -> count of in-game your-turn alerts not yet seen */
+  var lastReactMap = {}; /* target msg id -> { uid -> {emoji, at} } (latest reaction wins) */
+  var openReactPickerFor = null; /* msg id whose reaction picker is open — the 8s poll re-renders the list, so the open picker is restored after each render instead of vanishing mid-tap */
+  function rcFontSize(){
+    try { var v = parseInt(localStorage.getItem(RC_FONT_KEY) || '', 10); if(RC_FONT_SIZES.indexOf(v) !== -1) return v; } catch(e){}
+    return null; /* null = default 14.5px from CSS */
+  }
+  function rcFontStep(dir){
+    var cur = rcFontSize();
+    var i = (cur === null) ? 1 : RC_FONT_SIZES.indexOf(cur);
+    i = Math.max(0, Math.min(RC_FONT_SIZES.length - 1, i + dir));
+    var v = RC_FONT_SIZES[i];
+    try { localStorage.setItem(RC_FONT_KEY, String(v)); } catch(e){}
+    applyRcFontSize();
+    return v;
+  }
+  function applyRcFontSize(){
+    var v = rcFontSize();
+    function setOn(el){
+      if(!el) return;
+      try { if(v === null) el.style.removeProperty('--rc-font-size'); else el.style.setProperty('--rc-font-size', v + 'px'); } catch(e){}
+      var val = el.querySelector('.rc-font-val'); if(val) val.textContent = String(v === null ? 14 : v);
+    }
+    Object.keys(boxes).forEach(function(mid){ var b = boxes[mid]; if(b && b.el) setOn(b.el); });
+    setOn(document.getElementById('rcSheet'));
+  }
   var unreadCache = {}; /* mid -> unread count (0 = none) */
   var sentTimes = [];
   var failSoftShown = {}; /* mid -> true once the "needs one more update" note is up */
@@ -32758,7 +32801,7 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     var b = document.getElementById('rcBubble');
     if(!b){
       b = document.createElement('button'); b.type = 'button'; b.id = 'rcBubble'; b.setAttribute('aria-label', 'Room chats'); b.title = 'Room chats';
-      b.innerHTML = '💬<span class="dm-count" id="rcBubbleBadge" hidden>0</span>';
+      b.innerHTML = '💬<span class="dm-count" id="rcBubbleBadge" hidden>0</span><span class="rc-turn-badge" id="rcBubbleTurnBadge" hidden>0</span>';
       b.addEventListener('click', function(){
         /* HUB-ROOM-CHAT-FIX-2026-11-27: the bubble opens the room you are PLAYING first (the spRoomMid signal — the open match for the game currently open), not the most-recently-updated room. While a Pool room was open on phone, the bubble used to open the TTT room instead. Unread / already-open / most-recent stay as the fallbacks, in that order. */
         var mid = currentRoomMid() || mostRecentUnread() || sheetMid || mostRecentActive();
@@ -32773,7 +32816,7 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     if(!s){
       s = document.createElement('div'); s.id = 'rcSheet';
       s.innerHTML = '<div class="rc-head"><div class="rc-head-main"><b id="rcSheetTitle">Room chat</b><span class="rc-turn" id="rcSheetTurn"></span></div><div class="rc-head-btns"><button type="button" id="rcSheetMenuBtn" aria-label="More">•••</button><button type="button" id="rcSheetClose" aria-label="Close">×</button></div></div>' +
-        '<div class="rc-menu" id="rcSheetMenu" hidden><button type="button" data-rc-sheet-act="mute">Mute</button><button type="button" data-rc-sheet-act="report">Report</button><button type="button" data-rc-sheet-act="block">Block</button></div>' +
+        '<div class="rc-menu" id="rcSheetMenu" hidden><button type="button" data-rc-sheet-act="mute">Mute</button><button type="button" data-rc-sheet-act="report">Report</button><button type="button" data-rc-sheet-act="block">Block</button><div class="rc-font-row"><span class="rc-font-label">Text size</span><button type="button" data-rc-font="-" aria-label="Smaller text">A\u2212</button><span class="rc-font-val">14</span><button type="button" data-rc-font="+" aria-label="Bigger text">A+</button></div></div>' +
         '<div class="rc-switcher" id="rcSwitcher" hidden></div>' +
         '<div class="rc-msgs" id="rcSheetMsgs"></div>' +
         '<div class="rc-note" id="rcSheetNote" hidden></div>' +
@@ -32791,6 +32834,10 @@ body.rc-dock-on #notifyPopups{bottom:448px}
         else if(act === 'block') blockRoom(sheetMid);
         else if(act === 'report') reportRoom(sheetMid);
       });
+      s.querySelectorAll('[data-rc-font]').forEach(function(btn){
+        btn.addEventListener('click', function(ev){ ev.stopPropagation(); rcFontStep(btn.getAttribute('data-rc-font') === '+' ? 1 : -1); });
+      });
+      applyRcFontSize();
       s.querySelector('#rcSheetSend').addEventListener('click', function(){ sendSheet(); });
       s.querySelector('#rcSheetInput').addEventListener('keydown', function(ev){ if(ev.key === 'Enter'){ ev.preventDefault(); sendSheet(); } });
       s.querySelector('#rcSheetEmojiBtn').addEventListener('click', function(){
@@ -32960,7 +33007,43 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     try { document.body.classList.toggle('rc-bubble-on', total > 0 || anyBox); } catch(e){}
     /* dock class lifts pop-ups above open boxes on laptop */
     try { document.body.classList.toggle('rc-dock-on', openOrder.some(function(mid){ var b = boxes[mid]; return b && !b.minimized; })); } catch(e){}
+    syncTurnBadges();
     renderSwitcher();
+  }
+  /* Pool session fixes (Holo 2026-11-28 09:19): the in-game your-turn badge — a YELLOW number (matching the "Your turn" badge) on the minimized chat: the minimized bar, the floating Chat button, and the phone bubble. */
+  function syncTurnBadges(){
+    var total = 0;
+    Object.keys(pendingTurn).forEach(function(k){ total += (pendingTurn[k] || 0); });
+    Object.keys(boxes).forEach(function(mid){
+      var b = boxes[mid]; if(!b || !b.bar) return;
+      var badge = b.bar.querySelector('.rc-turn-badge');
+      if(!badge) return;
+      var n = pendingTurn[mid] || 0;
+      badge.textContent = String(n);
+      badge.hidden = !(n > 0);
+    });
+    var fab = document.getElementById('roomChatFab');
+    if(fab){
+      var fmid = fab.getAttribute('data-rc-mid');
+      var fn = (fmid && pendingTurn[fmid]) || 0;
+      var fb = fab.querySelector('.rc-turn-badge');
+      if(fn > 0){
+        if(!fb){ fb = document.createElement('span'); fb.className = 'rc-turn-badge'; fab.appendChild(fb); }
+        fb.textContent = String(fn);
+        fb.hidden = false;
+      } else if(fb){ fb.hidden = true; }
+    }
+    var bb = document.getElementById('rcBubbleTurnBadge');
+    if(bb){ bb.textContent = String(total); bb.hidden = !(total > 0); }
+  }
+  function showTurnBadge(mid){
+    if(!mid) return;
+    pendingTurn[mid] = (pendingTurn[mid] || 0) + 1;
+    syncTurnBadges();
+  }
+  function clearTurnBadge(mid){
+    if(!mid) return;
+    if(pendingTurn[mid]){ delete pendingTurn[mid]; syncTurnBadges(); }
   }
   function refreshChatBadges(){
     var me = myUid(); if(!me) return;
@@ -32989,13 +33072,104 @@ body.rc-dock-on #notifyPopups{bottom:448px}
   }
 
   /* ---------- message render / load / send (shared by box + sheet) ---------- */
-  function bubbleHtml(m, uid){
+  function reactionMap(reactMsgs){
+    /* Latest reaction per (target message, user) wins; an empty text clears it (the rules allow creating a message but not deleting one, so a removal is a new empty reaction). */
+    var map = {};
+    (reactMsgs || []).forEach(function(m){
+      if(!m || !m.reactTo || !m.fromUid) return;
+      var t = map[m.reactTo] || (map[m.reactTo] = {});
+      var prev = t[m.fromUid];
+      if(!prev || (m.createdAt || 0) >= (prev.at || 0)){
+        var em = String(m.text || '').trim();
+        if(em) t[m.fromUid] = { emoji: em, at: m.createdAt || 0 };
+        else delete t[m.fromUid];
+      }
+    });
+    return map;
+  }
+  function myReaction(map, targetId, uid){
+    var t = (map && map[targetId]) || {};
+    var r = t[uid];
+    return r ? r.emoji : '';
+  }
+  function bubbleHtml(m, uid, reacts){
     var mine = m.fromUid === uid;
     var inner = '';
     if(m.kind === 'sticker'){ inner = esc('[sticker]'); }
     else inner = esc(maskText(m.text || ''));
     var rep = (!mine) ? '<button type="button" class="dm-report" data-rc-report="' + esc(m.id) + '">Report this message</button>' : '';
-    return '<div class="dm-bubble ' + (mine ? 'mine' : 'theirs') + '">' + inner + '<span class="dm-when">' + esc(whenShort(m.createdAt)) + '</span>' + rep + '</div>';
+    var reactHtml = '';
+    var t = (reacts && reacts[m.id]) || {};
+    var byEmoji = {};
+    Object.keys(t).forEach(function(u){ var e = t[u].emoji; if(!byEmoji[e]) byEmoji[e] = { emoji:e, count:0, mine:false }; byEmoji[e].count++; if(u === uid) byEmoji[e].mine = true; });
+    var chips = Object.keys(byEmoji).map(function(e){ var c = byEmoji[e]; return '<span class="rc-react-chip' + (c.mine ? ' rc-react-mine' : '') + '">' + esc(c.emoji) + (c.count > 1 ? '<span class="rc-react-n">' + c.count + '</span>' : '') + '</span>'; }).join('');
+    if(chips) reactHtml += '<span class="rc-react-row">' + chips + '</span>';
+    var picker = '<span class="rc-react-picker" hidden>' + RC_REACT_EMOJIS.map(function(e){ return '<button type="button" data-rc-react="' + esc(e) + '" aria-label="React ' + esc(e) + '">' + esc(e) + '</button>'; }).join('') + '</span>';
+    return '<div class="dm-bubble ' + (mine ? 'mine' : 'theirs') + '" data-rc-msg="' + esc(m.id) + '">' + inner + '<span class="dm-when">' + esc(whenShort(m.createdAt)) + '</span>' + rep + reactHtml + picker + '</div>';
+  }
+  function wireReactions(boxEl, mid, msgs, reacts){
+    var uid = myUid();
+    boxEl.querySelectorAll('.dm-bubble[data-rc-msg]').forEach(function(bub){
+      var targetId = bub.getAttribute('data-rc-msg');
+      var picker = bub.querySelector('.rc-react-picker');
+      if(!picker) return;
+      var longTimer = null, longFired = false;
+      function openPicker(){
+        boxEl.querySelectorAll('.rc-react-picker').forEach(function(p){ if(p !== picker) p.hidden = true; });
+        var mine = myReaction(reacts, targetId, uid);
+        picker.querySelectorAll('[data-rc-react]').forEach(function(btn){
+          btn.classList.toggle('rc-react-picked', !!mine && btn.getAttribute('data-rc-react') === mine);
+        });
+        picker.hidden = false;
+        openReactPickerFor = targetId;
+      }
+      bub.addEventListener('pointerdown', function(){
+        longFired = false;
+        if(longTimer) clearTimeout(longTimer);
+        longTimer = setTimeout(function(){ longFired = true; openPicker(); }, 500);
+      });
+      ['pointerup','pointerleave','pointercancel'].forEach(function(evName){
+        bub.addEventListener(evName, function(){ if(longTimer){ clearTimeout(longTimer); longTimer = null; } });
+      });
+      bub.addEventListener('click', function(ev){
+        if(longFired){ longFired = false; return; }
+        if(ev.target && ev.target.closest && (ev.target.closest('.dm-report') || ev.target.closest('.rc-react-picker'))) return;
+        if(picker.hidden) openPicker(); else { picker.hidden = true; openReactPickerFor = null; }
+      });
+      picker.querySelectorAll('[data-rc-react]').forEach(function(btn){
+        btn.addEventListener('click', function(ev){
+          ev.stopPropagation();
+          picker.hidden = true;
+          openReactPickerFor = null;
+          sendReaction(mid, targetId, btn.getAttribute('data-rc-react'));
+        });
+      });
+    });
+  }
+  function restoreReactPicker(boxEl, reacts, uid){
+    if(!openReactPickerFor || !boxEl) return;
+    var picker = boxEl.querySelector('.dm-bubble[data-rc-msg="' + openReactPickerFor + '"] .rc-react-picker');
+    if(!picker) return;
+    boxEl.querySelectorAll('.rc-react-picker').forEach(function(p){ if(p !== picker) p.hidden = true; });
+    var mine = myReaction(reacts, openReactPickerFor, uid);
+    picker.querySelectorAll('[data-rc-react]').forEach(function(btn){
+      btn.classList.toggle('rc-react-picked', !!mine && btn.getAttribute('data-rc-react') === mine);
+    });
+    picker.hidden = false;
+  }
+  function sendReaction(mid, targetId, emoji){
+    var me = myUid(); if(!me || !mid || !targetId) return;
+    if(!matchOf(mid)) return;
+    if(!rateOk()) return;
+    var cur = myReaction(lastReactMap, targetId, me);
+    var text = (cur === emoji) ? '' : emoji; /* same emoji again removes it */
+    myCodeName().then(function(n){
+      var body = { fromUid: me, fromName: n, text: text, kind: 'text', createdAt: Date.now(), reactTo: targetId };
+      return api('POST', '/roomChats/' + encodeURIComponent(mid) + '/messages', body);
+    }).then(function(r){
+      if(r === null){ toast('That reaction did not send \u2014 try again in a moment.'); return; }
+      loadMessages(mid);
+    });
   }
   function wireReports(boxEl, mid, msgs){
     boxEl.querySelectorAll('[data-rc-report]').forEach(function(b){
@@ -33019,24 +33193,31 @@ body.rc-dock-on #notifyPopups{bottom:448px}
         Object.keys(data).forEach(function(id){ var m = data[id] || {}; m.id = id; msgs.push(m); });
         msgs.sort(function(x, y){ return (x.createdAt || 0) - (y.createdAt || 0); });
       }
+      var reactMsgs = msgs.filter(function(m){ return !!m.reactTo; });
+      var chatMsgs = msgs.filter(function(m){ return !m.reactTo; });
+      lastReactMap = reactionMap(reactMsgs);
       if(b && b.el){
         var box = b.msgsEl;
-        if(!msgs.length){ box.innerHTML = '<p class="dm-empty">Say hi — only the two of you can see this chat.</p>'; }
+        if(!chatMsgs.length){ box.innerHTML = '<p class="dm-empty">Say hi — only the two of you can see this chat.</p>'; }
         else {
-          box.innerHTML = msgs.map(function(m){ return bubbleHtml(m, uid); }).join('');
-          wireReports(b.el, mid, msgs);
+          box.innerHTML = chatMsgs.map(function(m){ return bubbleHtml(m, uid, lastReactMap); }).join('');
+          wireReports(b.el, mid, chatMsgs);
+          wireReactions(b.el, mid, chatMsgs, lastReactMap);
+          restoreReactPicker(b.el, lastReactMap, uid);
         }
         box.scrollTop = box.scrollHeight;
-        b.lastCount = msgs.length;
+        b.lastCount = chatMsgs.length;
       }
       if(sheetMid === mid){
         var s = document.getElementById('rcSheet');
         var box = s ? s.querySelector('#rcSheetMsgs') : null;
         if(box){
-          if(!msgs.length){ box.innerHTML = '<p class="dm-empty">Say hi — only the two of you can see this chat.</p>'; }
+          if(!chatMsgs.length){ box.innerHTML = '<p class="dm-empty">Say hi — only the two of you can see this chat.</p>'; }
           else {
-            box.innerHTML = msgs.map(function(m){ return bubbleHtml(m, uid); }).join('');
-            wireReports(s, mid, msgs);
+            box.innerHTML = chatMsgs.map(function(m){ return bubbleHtml(m, uid, lastReactMap); }).join('');
+            wireReports(s, mid, chatMsgs);
+            wireReactions(s, mid, chatMsgs, lastReactMap);
+            restoreReactPicker(s, lastReactMap, uid);
           }
           box.scrollTop = box.scrollHeight;
         }
@@ -33132,7 +33313,7 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     /* ROOM-CHAT-POPUP-2026-11-27: the pop-up panel header reads "Chat with <opponent>" (the same header the docked side-panel chat had) — the game + opponent stay on the minimized bar (roomTitle). */
     var _opp0 = oppOf(matchOf(mid), myUid());
     el.innerHTML = '<div class="rc-head"><div class="rc-head-main"><b>Chat with ' + esc(_opp0.name) + '</b><span class="rc-turn"></span></div><div class="rc-head-btns"><button type="button" data-rc-act-btn="menu" aria-label="More">•••</button><button type="button" data-rc-act-btn="min" aria-label="Minimize">–</button><button type="button" data-rc-act-btn="close" aria-label="Close">×</button></div></div>' +
-      '<div class="rc-menu" hidden><button type="button" data-rc-act="mute">Mute</button><button type="button" data-rc-act="report">Report</button><button type="button" data-rc-act="block">Block</button></div>' +
+      '<div class="rc-menu" hidden><button type="button" data-rc-act="mute">Mute</button><button type="button" data-rc-act="report">Report</button><button type="button" data-rc-act="block">Block</button><div class="rc-font-row"><span class="rc-font-label">Text size</span><button type="button" data-rc-font="-" aria-label="Smaller text">A\u2212</button><span class="rc-font-val">14</span><button type="button" data-rc-font="+" aria-label="Bigger text">A+</button></div></div>' +
       '<div class="rc-msgs"></div>' +
       '<div class="rc-note" hidden></div>' +
       '<div class="dm-compose"><input class="rc-input" maxlength="500" placeholder="Type a message…" autocomplete="off"><button class="dm-tool rc-kb-btn" type="button" aria-label="Keyboard">⌨️</button><button class="dm-tool rc-emoji-btn" type="button" aria-label="Emoji">😀</button><button class="dm-tool rc-send-btn" type="button" aria-label="Send">➤</button></div>' +
@@ -33141,7 +33322,7 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     dock.appendChild(el);
     var bar = document.createElement('button');
     bar.type = 'button'; bar.className = 'rc-bar'; bar.hidden = true;
-    bar.innerHTML = '<span class="rc-bar-main">' + esc(roomTitle(mid)) + '</span><span class="dm-count" hidden>0</span><span class="rc-bar-x" aria-label="Close">×</span>';
+    bar.innerHTML = '<span class="rc-bar-main">' + esc(roomTitle(mid)) + '</span><span class="rc-turn-badge" hidden>0</span><span class="dm-count" hidden>0</span><span class="rc-bar-x" aria-label="Close">×</span>';
     dock.appendChild(bar);
     var b = {
       el:el, bar:bar, mid:mid, minimized:false,
@@ -33155,6 +33336,10 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     el.querySelector('[data-rc-act-btn="close"]').addEventListener('click', function(){ closeBox(mid); });
     el.querySelector('[data-rc-act-btn="min"]').addEventListener('click', function(){ minimizeBox(mid); });
     el.querySelector('[data-rc-act-btn="menu"]').addEventListener('click', function(){ b.menuEl.hidden = !b.menuEl.hidden; });
+    el.querySelectorAll('[data-rc-font]').forEach(function(btn){
+      btn.addEventListener('click', function(ev){ ev.stopPropagation(); rcFontStep(btn.getAttribute('data-rc-font') === '+' ? 1 : -1); });
+    });
+    applyRcFontSize();
     b.menuEl.addEventListener('click', function(ev){
       var btn = ev.target && ev.target.closest ? ev.target.closest('[data-rc-act]') : null;
       if(!btn) return;
@@ -33251,8 +33436,9 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     }
     if(isPhone()){ openSheet(mid); return; }
     /* ROOM-CHAT-POPUP-2026-11-27 (Holo 2026-11-27 12:14, revises the Nov 26 docked-desktop-chat call): the room chat is a pop-up panel on desktop too — the side-panel dock is gone, so openBox always opens the floating box here (no "focus the panel" branch). Phone takes the sheet branch above. */
+    clearTurnBadge(mid);
     var b = boxes[mid];
-    if(b && !b.minimized){ try { if(b.inputEl) b.inputEl.focus(); } catch(e){} return; }
+    if(b && !b.minimized){ return; } /* Pool session fixes: do NOT auto-focus the input on open — the keyboard stays closed until the user taps the input. */
     if(b && b.minimized){ restoreBox(mid); return; }
     /* cap 2 open room chats — opening a 3rd auto-minimizes the oldest */
     var openNow = openOrder.filter(function(x){ var bx = boxes[x]; return bx && !bx.minimized; });
@@ -33267,7 +33453,7 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     b.pollTimer = setInterval(function(){ if(boxes[mid]) loadMessages(mid); }, 8000);
     syncBoxMenu(mid);
     syncBadges(); savePersist();
-    try { if(b.inputEl) b.inputEl.focus(); } catch(e){}
+    /* Pool session fixes: no auto-focus on open (see above). */
   }
   function refreshBoxHeader(mid){
     var b = boxes[mid]; if(!b || !b.el) return;
@@ -33293,9 +33479,11 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     if(b.el) b.el.style.display = 'none';
     if(b.bar) b.bar.hidden = false;
     syncBadges(); savePersist();
+    try { if(window.holoSidePanels && typeof window.holoSidePanels.syncFab === 'function') window.holoSidePanels.syncFab(); } catch(e){} /* Pool session fixes: the bar is up now, so the floating Chat button hides (it sits under the bar). */
   }
   function restoreBox(mid){
     var b = boxes[mid]; if(!b) return;
+    clearTurnBadge(mid);
     b.minimized = false;
     if(b.el) b.el.style.display = '';
     if(b.bar) b.bar.hidden = true;
@@ -33304,7 +33492,8 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     if(b.pollTimer) clearInterval(b.pollTimer);
     b.pollTimer = setInterval(function(){ if(boxes[mid]) loadMessages(mid); }, 8000);
     syncBadges(); savePersist();
-    try { if(b.inputEl) b.inputEl.focus(); } catch(e){}
+    try { if(window.holoSidePanels && typeof window.holoSidePanels.syncFab === 'function') window.holoSidePanels.syncFab(); } catch(e){} /* Pool session fixes: the bar is down now, so the floating Chat button shows again. */
+    /* Pool session fixes: no auto-focus on restore (see openBox). */
   }
   function closeBox(mid){
     var b = boxes[mid]; if(!b) return;
@@ -33314,6 +33503,7 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     delete boxes[mid];
     openOrder = openOrder.filter(function(x){ return x !== mid; });
     syncBadges(); savePersist();
+    try { if(window.holoSidePanels && typeof window.holoSidePanels.syncFab === 'function') window.holoSidePanels.syncFab(); } catch(e){} /* Pool session fixes: the bar is gone, so the floating Chat button shows again (it is the way back into the chat). */
   }
   function closeAllBoxes(){
     Object.keys(boxes).forEach(function(mid){ closeBox(mid); });
@@ -33331,6 +33521,7 @@ body.rc-dock-on #notifyPopups{bottom:448px}
       return;
     }
     sheetMid = mid;
+    clearTurnBadge(mid);
     var s = ensureSheet();
     s.classList.add('open');
     renderSheetHeader(mid);
@@ -33502,11 +33693,20 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     }).observe(document.body, { attributes:true, attributeFilter:['data-view'] });
   } catch(e){}
 
+  function barVisible(mid){
+    /* Pool session fixes (2026-11-28): is this room's minimized bar showing? The bar
+       docks bottom-right on top of the floating Chat button, so the button hides while
+       its room's bar is up — otherwise the two overlap and the button can neither be
+       tapped nor dragged. */
+    var b = boxes[mid]; return !!(b && b.minimized && b.bar && !b.bar.hidden);
+  }
   window.holoRoomChat = {
     openBox:openBox, closeBox:closeBox, minimizeBox:minimizeBox, restoreBox:restoreBox,
+    barVisible:barVisible,
     openSheet:openSheet, closeSheet:closeSheet, closeAll:closeAllBoxes,
     updateTurnIndicator:updateTurnIndicator, refreshChatBadges:refreshChatBadges,
     turnActionCount:turnActionCount, isMuted:isMuted,
+    showTurnBadge:showTurnBadge, clearTurnBadge:clearTurnBadge, syncTurnBadges:syncTurnBadges,
     isOpen:function(mid){ var b = boxes[mid]; return !!(b && !b.minimized); },
     unreadCount:function(){ return totalUnread(); },
     boxes:function(){ return Object.keys(boxes); }
@@ -33648,16 +33848,27 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     o.connect(g); g.connect(ctx.destination);
     o.start(t0); o.stop(t0 + dur + 0.05);
   }
-  function playAlertSound(){
+  function playAlertSound(kindOverride){
     try {
       var p = soundPrefs();
-      if(p.muted || !p.kind) return; /* muted, or no sound picked yet (Holo listens first) — silent */
+      if(p.muted) return;
+      var kind = kindOverride || p.kind;
+      if(!kind) return; /* muted, or no sound picked yet (Holo listens first) — silent */
       var ctx = getCtx(); if(!ctx) return; /* no Web Audio (jsdom / old browser) — silent, never throws */
       var t = ctx.currentTime + 0.02;
-      if(p.kind === 'chime'){ tone(ctx, 1318.5, t, 0.22, 'sine', 0.16); tone(ctx, 1760, t + 0.12, 0.3, 'sine', 0.16); tone(ctx, 2637, t + 0.12, 0.18, 'triangle', 0.05); }
-      else if(p.kind === 'quack'){ tone(ctx, 320, t, 0.18, 'sawtooth', 0.12, 140); tone(ctx, 300, t + 0.24, 0.18, 'sawtooth', 0.12, 130); }
-      else if(p.kind === 'beep'){ tone(ctx, 880, t, 0.09, 'square', 0.07); tone(ctx, 1174.7, t + 0.1, 0.09, 'square', 0.07); tone(ctx, 1568, t + 0.2, 0.14, 'square', 0.07); }
+      if(kind === 'chime'){ tone(ctx, 1318.5, t, 0.22, 'sine', 0.16); tone(ctx, 1760, t + 0.12, 0.3, 'sine', 0.16); tone(ctx, 2637, t + 0.12, 0.18, 'triangle', 0.05); }
+      else if(kind === 'quack'){ tone(ctx, 320, t, 0.18, 'sawtooth', 0.12, 140); tone(ctx, 300, t + 0.24, 0.18, 'sawtooth', 0.12, 130); }
+      else if(kind === 'beep'){ tone(ctx, 880, t, 0.09, 'square', 0.07); tone(ctx, 1174.7, t + 0.1, 0.09, 'square', 0.07); tone(ctx, 1568, t + 0.2, 0.14, 'square', 0.07); }
     } catch(e){}
+  }
+  /* Pool session fixes (Holo 2026-11-28 09:19): when the player is already inside the game and it becomes their turn, there is no pop-up — just this short chime (the picked alert sound, or the chime when none is picked yet) plus a yellow number badge on the minimized chat. */
+  function playTurnChime(){
+    try { var p = soundPrefs(); if(p.muted) return; playAlertSound(p.kind || 'chime'); } catch(e){}
+  }
+  function isInGameWithMatch(mid){
+    if(!mid) return false;
+    try { var sp = window.holoSidePanels; if(sp && typeof sp.roomMid === 'function') return sp.roomMid() === mid; } catch(e){}
+    return false;
   }
 
   /* ---- queue: one pop-up at a time, rest wait their turn ---- */
@@ -33787,6 +33998,12 @@ body.rc-dock-on #notifyPopups{bottom:448px}
              pops too — the new first player needs to know a match started. */
           var tmid = matchIdOf(n.link);
           if(isViewingMatch(tmid)) return;
+          if(isInGameWithMatch(tmid)){
+            /* Pool session fixes: already inside this game — no "Your turn" pop-up. A chime + a yellow number badge on the minimized chat instead. */
+            try { if(window.holoRoomChat && window.holoRoomChat.showTurnBadge) window.holoRoomChat.showTurnBadge(tmid); } catch(e){}
+            playTurnChime();
+            return;
+          }
           enqueue({ key:'turn:' + n.id, kind:'turn', title:n.title || 'Your turn', sub:String(n.body || '').slice(0, 90), mid:tmid, link:n.link || '' });
         } else if(isHqType(n)){
           if(isViewingInboxMessage(n)) return; /* already reading that exact HQ message */
@@ -33833,6 +34050,7 @@ body.rc-dock-on #notifyPopups{bottom:448px}
     setMuted:function(m){ var p = soundPrefs(); p.muted = !!m; saveSoundPrefs(p); },
     sound:function(){ return soundPrefs(); },
     playSound:playAlertSound,
+    playTurnChime:playTurnChime,
     AUTO_DISMISS_MS:AUTO_DISMISS_MS, SNOOZE_MS:SNOOZE_MS
   };
 })();
@@ -37854,5 +38072,110 @@ window.holoWalk={stages:stages,activate:activate,showStep:showStep,guardOverflow
     </div>
   </div>
 </div>
+<style>
+/* HUB-POOL-SESSION-FIXES-2026-11-28 (Holo 2026-11-28 09:15-09:21, while playing Pool with Papa): (1) room chat resizes (drag the corner), has a text-size control, and message reactions; (2) the music bar drags like the minimized chat; (3) an in-game your-turn shows a chime + a YELLOW number badge on the minimized chat instead of a pop-up; (4) fullscreen opens the gamebox all the way; (5) opening chat never auto-focuses the input (no auto keyboard). */
+.rc-box{resize:both;min-width:280px;min-height:260px;max-width:min(560px,calc(100vw - 24px))}
+.rc-msgs .dm-bubble{font-size:var(--rc-font-size,14.5px)}
+.rc-font-row{display:flex;align-items:center;gap:6px;padding:8px 10px;border-top:1px solid #453070}
+.rc-font-row .rc-font-label{flex:1 1 auto;color:#e9e4ff;font-size:13.5px;font-weight:700}
+.rc-font-row button{flex:0 0 auto;min-width:34px;min-height:34px;background:#0a0620;border:2px solid #453070;border-radius:8px;color:#fff;font-family:inherit;font-size:15px;font-weight:800;cursor:pointer}
+.rc-font-row button:hover{border-color:#ffd43b;color:#ffd43b}
+.rc-font-row .rc-font-val{min-width:30px;text-align:center;color:#ffd43b;font-size:13.5px;font-weight:800}
+.rc-msgs .dm-bubble{cursor:pointer}
+.rc-react-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+.rc-react-chip{display:inline-flex;align-items:center;gap:3px;background:#241a3d;border:1px solid #453070;border-radius:999px;color:#fff;font-size:13px;font-weight:700;padding:2px 8px}
+.rc-react-chip.rc-react-mine{border-color:#ffd43b;box-shadow:0 0 6px rgba(255,212,59,.4)}
+.rc-react-chip .rc-react-n{font-size:11px;color:#b8f4ff}
+.rc-react-picker{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;padding:6px;background:#241a3d;border:2px solid var(--violet);border-radius:12px}
+.rc-react-picker[hidden]{display:none!important}
+.rc-react-picker button{background:none;border:2px solid transparent;border-radius:8px;font-size:20px;line-height:1;cursor:pointer;padding:4px 6px}
+.rc-react-picker button:hover{border-color:#ffd43b}
+.rc-react-picker button.rc-react-picked{border-color:#ffd43b;background:#ffd43b22}
+.rc-turn-badge{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:#ffd43b;color:#0a0620;font-size:13px;font-weight:800;line-height:1;box-shadow:0 0 8px rgba(255,212,59,.55)}
+.rc-turn-badge[hidden]{display:none!important}
+#roomChatFab .rc-turn-badge{margin-left:6px;vertical-align:middle}
+#rcBubble .rc-turn-badge{position:absolute;top:-4px;left:-4px}
+#duelMusicBar .dm-bar-row{cursor:grab;touch-action:none}
+#duelMusicBar.dm-dragging{cursor:grabbing}
+#duelMusicBar.dm-dragging .dm-bar-row{cursor:grabbing}
+body.wt-on.in-game #player:fullscreen .player-bar-inner,body.wt-on.in-game #player:-webkit-full-screen .player-bar-inner{max-width:none}
+body.wt-on.in-game #player:fullscreen .side-panel,body.wt-on.in-game #player:-webkit-full-screen .side-panel{display:none!important}
+body.wt-on.in-game #player:fullscreen .player-body,body.wt-on.in-game #player:-webkit-full-screen .player-body{flex:1 1 auto!important;max-width:none!important;width:100%!important;margin:0!important;padding:12px 16px!important;min-height:0}
+body.wt-on.in-game #player:fullscreen .player-body .game-pane,body.wt-on.in-game #player:-webkit-full-screen .player-body .game-pane{flex:1 1 auto;min-height:0}
+body.wt-on.in-game #player:fullscreen .rff-frame,body.wt-on.in-game #player:-webkit-full-screen .rff-frame{flex:1 1 auto!important;height:auto!important;min-height:0}
+  /* Pool session fixes (same item, the other button): when the whole PAGE goes fullscreen via the top-bar button (#hubFsBtn, documentElement), the player already fills the viewport but the gamebox is still capped at 920px — so it needs the same fill. The in-game player-bar button (#playerFsBtn) fullscreens #player itself (rules above); the top-bar button fullscreens the document (rules here). */
+  :root:fullscreen #player .player-bar-inner,:root:-webkit-full-screen #player .player-bar-inner{max-width:none}
+  :root:fullscreen #player .side-panel,:root:-webkit-full-screen #player .side-panel{display:none!important}
+  :root:fullscreen #player .player-body,:root:-webkit-full-screen #player .player-body{flex:1 1 auto!important;max-width:none!important;width:100%!important;margin:0!important;padding:12px 16px!important;min-height:0}
+  :root:fullscreen #player .player-body .game-pane,:root:-webkit-full-screen #player .player-body .game-pane{flex:1 1 auto;min-height:0}
+  :root:fullscreen #player .rff-frame,:root:-webkit-full-screen #player .rff-frame{flex:1 1 auto!important;height:auto!important;min-height:0}
+</style>
+<script>
+/* Pool session fixes (Holo 2026-11-28 09:17): the music bar is movable — drag it anywhere (mouse + touch), like the minimized chat. The spot is remembered per device (localStorage) and restored on load; a tap still works (a drag suppresses the click that would follow it). */
+(function(){
+  var KEY = 'holos-music-bar-pos';
+  var bar = document.getElementById('duelMusicBar');
+  if(!bar) return;
+  var row = bar.querySelector('.dm-bar-row');
+  if(!row) return;
+  var suppressUntil = 0;
+  function applyPos(){
+    var pos = null;
+    try { pos = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch(e){ pos = null; }
+    if(!pos || typeof pos.x !== 'number' || typeof pos.y !== 'number') return;
+    var w = bar.offsetWidth || 0, h = bar.offsetHeight || 0;
+    var vw = window.innerWidth || 0, vh = window.innerHeight || 0;
+    var x = Math.max(0, Math.min(pos.x, Math.max(0, vw - Math.min(w, 64))));
+    var y = Math.max(0, Math.min(pos.y, Math.max(0, vh - Math.min(h, 64))));
+    bar.style.left = x + 'px'; bar.style.top = y + 'px';
+    bar.style.right = 'auto'; bar.style.bottom = 'auto';
+  }
+  function savePos(){
+    try { var r = bar.getBoundingClientRect(); localStorage.setItem(KEY, JSON.stringify({ x:Math.round(r.left), y:Math.round(r.top) })); } catch(e){}
+  }
+  applyPos();
+  var startX = 0, startY = 0, baseX = 0, baseY = 0, dragging = false, moved = false;
+  row.addEventListener('pointerdown', function(ev){
+    if(ev.button !== undefined && ev.button !== 0) return;
+    var r = bar.getBoundingClientRect();
+    startX = ev.clientX; startY = ev.clientY; baseX = r.left; baseY = r.top;
+    dragging = true; moved = false;
+    try { row.setPointerCapture(ev.pointerId); } catch(e){}
+  });
+  row.addEventListener('pointermove', function(ev){
+    if(!dragging) return;
+    var dx = ev.clientX - startX, dy = ev.clientY - startY;
+    if(!moved && Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+    moved = true;
+    var w = bar.offsetWidth || 0, h = bar.offsetHeight || 0;
+    var vw = window.innerWidth || 0, vh = window.innerHeight || 0;
+    var x = Math.max(0, Math.min(baseX + dx, Math.max(0, vw - Math.min(w, 64))));
+    var y = Math.max(0, Math.min(baseY + dy, Math.max(0, vh - Math.min(h, 64))));
+    bar.style.left = x + 'px'; bar.style.top = y + 'px';
+    bar.style.right = 'auto'; bar.style.bottom = 'auto';
+    bar.classList.add('dm-dragging');
+    try { ev.preventDefault(); } catch(e){}
+  });
+  function endDrag(){
+    if(!dragging) return;
+    dragging = false;
+    bar.classList.remove('dm-dragging');
+    if(moved){ savePos(); suppressUntil = Date.now() + 150; }
+  }
+  row.addEventListener('pointerup', endDrag);
+  row.addEventListener('pointercancel', endDrag);
+  document.addEventListener('click', function(ev){
+    if(Date.now() < suppressUntil){
+      var t = ev.target && ev.target.closest ? ev.target.closest('#duelMusicBar .dm-bar-row') : null;
+      if(t){ try { ev.preventDefault(); ev.stopPropagation(); } catch(e){} }
+    }
+  }, true);
+  window.addEventListener('resize', applyPos);
+  try {
+    new MutationObserver(function(){ if(!bar.hidden) applyPos(); }).observe(bar, { attributes:true, attributeFilter:['hidden'] });
+  } catch(e){}
+  window.holoMusicBar = { applyPos:applyPos, savePos:savePos };
+})();
+</script>
 </body>
 </html>
