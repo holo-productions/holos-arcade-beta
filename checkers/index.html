@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <!-- GATE-GUARD-2026-11-24 -->
+<!-- CHECKERS-FIT-FIX-2026-11-27 -->
 <script src="../shared/gate-guard.js"></script>
 <script>
 /* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
@@ -509,77 +510,157 @@ a{color:var(--ha-cyan)}
 @keyframes haCoinBlink{50%{opacity:.25}}
 .insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
 @media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+
+/* ================= CHECKERS-FIT-FIX-2026-11-27 =================
+   Tester review: "see the whole screen, the game and the bottom where you
+   can change the difficulty" — the difficulty controls were below the fold
+   (desktop: #selDiff at y=1093 in a 768px viewport; phone: y=968 in 844px).
+   Root cause (measured, NOT the Nov 26 end-menu follow-up — this file has no
+   compact/in-play layout): plain document flow stacked ~320px of chrome above
+   a full-width square board, pushing the controls below the fold.
+   Fix: the gameplay (header..controls) is a 100dvh flex column (.game); the
+   board flexes to the remaining space, so the board + difficulty controls
+   always fit with NO scroll. Desktop (>=760px): board in the middle + info in
+   a 300px side panel (Arcade layout standard). Phone: stacked, board sized to
+   the remaining height. Stats / rules / footer stay below .game (reference
+   info, reachable by scrolling). No JS logic changes; only the mode-note
+   strings were shortened. */
+.game{display:flex;flex-direction:column;height:100dvh;padding:10px 0}
+.layout{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.board-col{flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column}
+.board-frame{flex:1 1 auto;min-height:180px;container-type:size;display:flex;align-items:center;justify-content:center;padding:8px}
+.board{grid-template-rows:repeat(8,1fr)}
+@supports (width:1cqmin){
+  .board{width:100cqmin;height:100cqmin;aspect-ratio:auto}
+}
+/* condensed chrome (frees height for the board) */
+.wrap{padding:0 16px 24px}
+header{padding:2px 0 0}
+h1{line-height:1.4}
+.sub{margin:2px 0 0;font-size:.92rem}
+.insert-coin{margin:4px 0 2px}
+.scorebar{margin:10px 0 8px}
+.side-card{padding:6px 10px}
+.side-card .who{font-size:.92rem}
+.side-card .count{font-size:.82rem}
+.dot{width:26px;height:26px}
+.modebar{margin:0 0 8px}
+.seg button{padding:8px 10px;font-size:.9rem}
+.turn-banner{margin-bottom:8px;padding:7px 10px}
+.hint{padding:6px 8px 6px 12px;font-size:.88rem}
+.captured-row{margin-top:6px}
+.result-banner{margin-top:8px}
+.controls{margin-top:10px;gap:6px}
+.btn{padding:8px 10px;font-size:.92rem}
+label.diff select{padding:8px 8px}
+@media (max-width:520px){
+  .mode-note{display:none}
+  /* narrow screens (phone + phone in-hub): the mode label + button widths
+     are what push the modebar/controls to extra rows; condense them so the
+     board keeps its height. The seg buttons ("Scored game" / "Practice
+     round") are self-explanatory without the "Round type" label. Buttons
+     keep the 44px min-height touch target (global button rule). */
+  .mode-label{display:none}
+  .btn{padding:8px 6px;font-size:.85rem}
+  label.diff{font-size:.85rem}
+  label.diff select{padding:8px 4px;font-size:.85rem}
+  .seg button{padding:8px 8px;font-size:.85rem}
+  .hint{font-size:.85rem;padding:5px 8px 5px 10px}
+  /* the flex spacer between the left/right button groups makes the narrow
+     row wrap one item early (it grows to fill the row, then the next item
+     no longer fits); drop it on narrow screens so the two rows pack. */
+  .controls .spacer{display:none}
+}
+@media (min-width:760px){
+  .wrap{max-width:960px}
+  .layout{flex-direction:row;gap:16px}
+  .side{flex:0 0 300px;min-height:0;display:flex;flex-direction:column;gap:10px;overflow-y:auto}
+  .side .scorebar,.side .modebar,.side .turn-banner,.side .captured-row,.side .controls{margin:0}
+}
+@media (max-width:759px){
+  .side{display:contents}
+  .scorebar{order:1}.modebar{order:2}.turn-banner{order:3}
+  .board-col{order:4}
+  .captured-row{order:5}.controls{order:6}
+}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <h1>Checkers</h1>
-    <p class="sub">You play <strong>red</strong>. Jump, chain, and crown your way across the board.</p>
-  </header>
+  <div class="game">
+      <header>
+        <h1>Checkers</h1>
+        <p class="sub">You play <strong>red</strong> &mdash; jump, chain, and crown.</p>
+      </header>
 
-  <div class="scorebar" aria-live="polite">
-    <div class="side-card" id="cardRed">
-      <span class="dot red" aria-hidden="true"></span>
-      <span><span class="who">You · Red</span><br><span class="count" id="countRed">12 pieces</span></span>
+    <div class="layout">
+      <div class="board-col">
+          <div class="coach" id="coachPanel" hidden>
+            <span class="coach-tag">Coach</span>
+            <span id="coachText">Practice is on: no score, no timer, and hints whenever you want them. Tap <strong>Hint</strong> below and the best move found will light up green — the piece to move and the square to land on.</span>
+          </div>
+
+          <div class="hint" id="newHint" hidden>
+            <span>New here? Tap <strong>How to play</strong> for a quick tutorial, or <strong>Rules</strong> for the full rulebook.</span>
+            <button type="button" id="hintDismiss" aria-label="Dismiss hint">✕</button>
+          </div>
+
+          <div class="board-frame">
+            <div class="board" id="board" role="grid" aria-label="Checkers board"></div>
+          </div>
+
+          <div class="result-banner" id="resultBanner"></div>
+
+      </div>
+      <div class="side">
+          <div class="scorebar" aria-live="polite">
+            <div class="side-card" id="cardRed">
+              <span class="dot red" aria-hidden="true"></span>
+              <span><span class="who">You</span><br><span class="count" id="countRed">12 pieces</span></span>
+            </div>
+            <div class="vs">vs</div>
+            <div class="side-card right" id="cardBlack">
+              <span class="dot black" aria-hidden="true"></span>
+              <span><span class="who">Computer</span><br><span class="count" id="countBlack">12 pieces</span></span>
+            </div>
+          </div>
+
+          <div class="modebar">
+            <span class="mode-label" id="modeLabel">Round type</span>
+            <div class="seg" role="group" aria-labelledby="modeLabel">
+              <button type="button" id="modeScored" aria-pressed="true">Scored game</button>
+              <button type="button" id="modePractice" aria-pressed="false">Practice round</button>
+            </div>
+            <span class="mode-note" id="modeNote">Counts toward Your Record below. Switching starts a fresh round.</span>
+          </div>
+
+          <div class="turn-banner" id="turnBanner">Your move — pick a red piece.</div>
+
+          <div class="captured-row">
+            <div class="captured" id="capByYou" aria-label="Pieces you have captured"></div>
+            <div class="captured" id="capByAI" aria-label="Pieces the computer has captured"></div>
+          </div>
+
+          <div class="controls">
+            <button class="btn primary" id="btnNew" type="button">New game</button>
+            <button class="btn" id="btnUndo" type="button">Undo</button>
+            <button class="btn" id="btnHint" type="button" hidden>Hint — show me a good move</button>
+            <label class="diff">Difficulty
+              <select id="selDiff" aria-label="Difficulty">
+                <option value="easy">Easy</option>
+                <option value="medium" selected>Medium</option>
+                <option value="hard">Hard</option>
+              </select>
+            </label>
+            <span class="spacer"></span>
+            <button class="btn" id="btnSound" type="button" aria-pressed="true">Sound: On</button>
+            <button class="btn" id="btnHelp" type="button">How to play</button>
+            <button class="btn" id="btnRules" type="button">Rules</button>
+            <button class="btn" id="btnFeedback" type="button">★ Feedback</button>
+          </div>
+      </div>
     </div>
-    <div class="vs">vs</div>
-    <div class="side-card right" id="cardBlack">
-      <span class="dot black" aria-hidden="true"></span>
-      <span><span class="who">Computer · Black</span><br><span class="count" id="countBlack">12 pieces</span></span>
-    </div>
   </div>
-
-  <div class="modebar">
-    <span class="mode-label" id="modeLabel">Round type</span>
-    <div class="seg" role="group" aria-labelledby="modeLabel">
-      <button type="button" id="modeScored" aria-pressed="true">Scored game</button>
-      <button type="button" id="modePractice" aria-pressed="false">Practice round</button>
-    </div>
-    <span class="mode-note" id="modeNote">Counts toward Your Record below. Switching starts a fresh round.</span>
-  </div>
-
-  <div class="turn-banner" id="turnBanner">Your move — pick a red piece.</div>
-
-  <div class="coach" id="coachPanel" hidden>
-    <span class="coach-tag">Coach</span>
-    <span id="coachText">Practice is on: no score, no timer, and hints whenever you want them. Tap <strong>Hint</strong> below and the best move found will light up green — the piece to move and the square to land on.</span>
-  </div>
-
-  <div class="hint" id="newHint" hidden>
-    <span>New here? Tap <strong>How to play</strong> for a quick tutorial, or <strong>Rules</strong> for the full rulebook.</span>
-    <button type="button" id="hintDismiss" aria-label="Dismiss hint">✕</button>
-  </div>
-
-  <div class="board-frame">
-    <div class="board" id="board" role="grid" aria-label="Checkers board"></div>
-  </div>
-
-  <div class="captured-row">
-    <div class="captured" id="capByYou" aria-label="Pieces you have captured"></div>
-    <div class="captured" id="capByAI" aria-label="Pieces the computer has captured"></div>
-  </div>
-
-  <div class="result-banner" id="resultBanner"></div>
-
-  <div class="controls">
-    <button class="btn primary" id="btnNew" type="button">New game</button>
-    <button class="btn" id="btnUndo" type="button">Undo</button>
-    <button class="btn" id="btnHint" type="button" hidden>Hint — show me a good move</button>
-    <label class="diff">Difficulty
-      <select id="selDiff" aria-label="Difficulty">
-        <option value="easy">Easy</option>
-        <option value="medium" selected>Medium</option>
-        <option value="hard">Hard</option>
-      </select>
-    </label>
-    <span class="spacer"></span>
-    <button class="btn" id="btnSound" type="button" aria-pressed="true">Sound: On</button>
-    <button class="btn" id="btnHelp" type="button">How to play</button>
-    <button class="btn" id="btnRules" type="button">Rules</button>
-    <button class="btn" id="btnFeedback" type="button">★ Feedback</button>
-  </div>
-
   <section class="stats" aria-label="Your record">
     <h2>Your record (saved on this device)</h2>
     <p id="practiceNote" hidden style="margin:-4px 0 10px;color:var(--muted);font-size:.9rem">You're in a practice round — wins and losses here are <strong>not</strong> added to this record, and your streak is untouched.</p>
@@ -1015,8 +1096,8 @@ function updateModeUI(){
   document.getElementById('modeScored').setAttribute('aria-pressed', practiceMode?'false':'true');
   document.getElementById('modePractice').setAttribute('aria-pressed', practiceMode?'true':'false');
   document.getElementById('modeNote').textContent = practiceMode
-    ? 'Practice: no score, no timer, gentle computer, coach tips + hints on. Nothing here touches Your Record.'
-    : 'Counts toward Your Record below. Switching starts a fresh round.';
+    ? 'Practice: no score, gentle computer, hints on.'
+    : 'Counts toward Your Record.';
   document.getElementById('coachPanel').hidden=!practiceMode;
   document.getElementById('btnHint').hidden=!practiceMode;
   document.getElementById('practiceNote').hidden=!practiceMode;
