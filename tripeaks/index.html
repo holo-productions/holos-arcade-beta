@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- GATE-GUARD-2026-11-24 -->
+<script src="../shared/gate-guard.js"></script>
+<script>
+/* HOLO-SOUND-2026-11-23: hub Sound / Music / Vibration switches.
+   The hub stores the switches in localStorage (same origin) and
+   broadcasts changes by postMessage. This gate mutes WebAudio
+   output (master gain) and HTML audio elements to match, and
+   exposes window.holoSettings + window.holoBuzz(ms) for games
+   that want to check. Sound off = silent; Music off = looping /
+   data-music audio elements muted (WebAudio can't tell music
+   from effects, so it follows Sound). */
+(function () {
+  'use strict';
+  if (window.__holoSoundGate) return;
+  window.__holoSoundGate = true;
+  var settings = { sound: true, music: true, haptics: true };
+  function readLocal() {
+    try {
+      if (localStorage.getItem('holos-arcade-sound') === 'off') settings.sound = false;
+      if (localStorage.getItem('holos-arcade-music') === 'off') settings.music = false;
+      if (localStorage.getItem('holos-arcade-haptics') === 'off') settings.haptics = false;
+    } catch (e) {}
+  }
+  readLocal();
+  window.holoSettings = settings;
+  window.holoBuzz = function (ms) { try { if (settings.haptics && navigator.vibrate) navigator.vibrate(ms || 15); } catch (e) {} };
+  var gains = [];
+  function apply() {
+    gains.forEach(function (g) { try { g.gain.value = settings.sound ? 1 : 0; } catch (e) {} });
+    try {
+      document.querySelectorAll('audio,video').forEach(function (el) {
+        var isMusic = el.loop || (el.getAttribute && el.getAttribute('data-music') !== null);
+        el.muted = isMusic ? !settings.music : !settings.sound;
+      });
+    } catch (e) {}
+  }
+  try {
+    var OrigAC = window.AudioContext || window.webkitAudioContext;
+    if (OrigAC && !OrigAC.__holoGated) {
+      var GatedAC = function () {
+        var ctx = new OrigAC();
+        try {
+          var g = ctx.createGain(); g.connect(ctx.destination);
+          Object.defineProperty(ctx, 'destination', { get: function () { return g; } });
+          gains.push(g); apply();
+        } catch (e) {}
+        return ctx;
+      };
+      GatedAC.prototype = OrigAC.prototype; GatedAC.__holoGated = true;
+      window.AudioContext = GatedAC;
+      if (window.webkitAudioContext) window.webkitAudioContext = GatedAC;
+    }
+  } catch (e) {}
+  try {
+    var mp = window.HTMLMediaElement && HTMLMediaElement.prototype;
+    if (mp && !mp.__holoGated) {
+      var origPlay = mp.play;
+      mp.play = function () {
+        try {
+          var isMusic = this.loop || (this.getAttribute && this.getAttribute('data-music') !== null);
+          this.muted = isMusic ? !settings.music : !settings.sound;
+        } catch (e) {}
+        return origPlay.apply(this, arguments);
+      };
+      mp.__holoGated = true;
+    }
+  } catch (e) {}
+  try {
+    window.addEventListener('message', function (e) {
+      try {
+        if (e && e.data && e.data.type === 'holo-settings') {
+          if (e.data.sound !== undefined) settings.sound = !!e.data.sound;
+          if (e.data.music !== undefined) settings.music = !!e.data.music;
+          if (e.data.haptics !== undefined) settings.haptics = !!e.data.haptics;
+          apply();
+        }
+      } catch (err) {}
+    });
+    if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'holo-settings-request' }, '*');
+  } catch (e) {}
+  try { document.addEventListener('DOMContentLoaded', apply); } catch (e) {}
+})();
+</script>
+<script>
+/* HOLO-PRACTICE-2026-11-23: hub Practice support.
+   The hub opens this game with ?practice=1 (or sends a
+   {type:'holo-practice'} postMessage) for a warm-up round.
+   Practice NEVER saves: while practice is on, localStorage writes
+   are suppressed (scores, bests, streaks, progress, settings) —
+   except feedback reports, which always save. The game's own
+   Practice mode is switched on when it has one, and a
+   "Practice — scores don't count" badge shows. Normal play is
+   untouched. */
+(function () {
+  'use strict';
+  if (window.__holoPracticeGuard) return;
+  window.__holoPracticeGuard = true;
+  var practice = false;
+  try {
+    var v = new URLSearchParams(window.location.search).get('practice');
+    practice = (v === '1' || v === 'true');
+  } catch (e) {}
+  window.__holoPractice = practice;
+
+  /* Storage guard: installed always, active only in practice.
+     Patched on Storage.prototype (this frame only) so every
+     localStorage.setItem/removeItem/clear call is covered,
+     including game save helpers. */
+  try {
+    var LS = window.localStorage;
+    if (LS) {
+      var proto = Object.getPrototypeOf(LS);
+      if (proto && !proto.__holoPracticeGuarded) {
+        var origSet = proto.setItem;
+        var origRemove = proto.removeItem;
+        var origClear = proto.clear;
+        var allow = function (k) { return /feedback/i.test(String(k)); };
+        proto.setItem = function (k, val) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origSet.call(this, k, val);
+        };
+        proto.removeItem = function (k) {
+          if (window.__holoPractice && !allow(k)) return;
+          return origRemove.call(this, k);
+        };
+        proto.clear = function () {
+          if (window.__holoPractice) return;
+          return origClear.call(this);
+        };
+        proto.__holoPracticeGuarded = true;
+      }
+    }
+  } catch (e) {
+    /* Fallback: shadow the methods on this frame's storage object. */
+    try {
+      var LS2 = window.localStorage;
+      if (LS2 && !LS2.__holoPracticeGuarded) {
+        var oSet = LS2.setItem.bind(LS2);
+        var oRemove = LS2.removeItem.bind(LS2);
+        var oClear = LS2.clear.bind(LS2);
+        var allow2 = function (k) { return /feedback/i.test(String(k)); };
+        Object.defineProperty(LS2, 'setItem', { value: function (k, val) { if (window.__holoPractice && !allow2(k)) return; return oSet(k, val); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'removeItem', { value: function (k) { if (window.__holoPractice && !allow2(k)) return; return oRemove(k); }, configurable: true, writable: true });
+        Object.defineProperty(LS2, 'clear', { value: function () { if (window.__holoPractice) return; return oClear(); }, configurable: true, writable: true });
+        LS2.__holoPracticeGuarded = true;
+      }
+    } catch (e2) {}
+  }
+
+  function showBadge() {
+    try {
+      if (document.getElementById('holoPracticeBadge')) return;
+      var b = document.createElement('div');
+      b.id = 'holoPracticeBadge';
+      b.setAttribute('role', 'status');
+      b.textContent = 'Practice \u2014 scores don\u2019t count';
+      b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:2147483647;background:#0a0620;color:#ffe9a3;border:2px solid #ff3ec8;border-top:none;border-radius:0 0 12px 12px;padding:6px 14px;font:700 13px/1.4 system-ui,sans-serif;pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.45);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis';
+      (document.body || document.documentElement).appendChild(b);
+    } catch (e) {}
+  }
+  function hideBadge() {
+    try {
+      var b = document.getElementById('holoPracticeBadge');
+      if (b && b.parentNode) b.parentNode.removeChild(b);
+    } catch (e) {}
+  }
+
+  function isActive(el) {
+    try {
+      if (!el) return false;
+      if (el.getAttribute && (el.getAttribute('aria-pressed') === 'true' || el.getAttribute('aria-checked') === 'true')) return true;
+      var c = ' ' + (typeof el.className === 'string' ? el.className : '') + ' ';
+      if (/ (active|selected|is-on|current) /.test(c)) return true;
+      if (/practice\s*:\s*on/i.test(el.textContent || '')) return true;
+    } catch (e) {}
+    return false;
+  }
+  var nativeDone = false;
+  function tryNative() {
+    if (nativeDone || !window.__holoPractice) return;
+    var sels = ['[data-mode="practice"]', '#btnPractice', '#practiceBtn', '#practiceToggle', '#practiceToggleBtn', '#modePracticeBtn', '[data-play="practice"]', '[data-round="practice"]', '#practiceCard', '#practiceStartBtn', '#practiceCta', '#btnPracticeTop', '#btnPracticeMain', '#ovPractice'];
+    for (var i = 0; i < sels.length; i++) {
+      var el = null;
+      try { el = document.querySelector(sels[i]); } catch (e) {}
+      if (!el) continue;
+      if (isActive(el)) { nativeDone = true; return; }
+      if (el.disabled) continue;
+      var t = (el.textContent || '').trim();
+      if (/^(end|exit|stop|leave|quit)\b/i.test(t) || /practice again/i.test(t)) continue;
+      try { el.click(); } catch (e) {}
+      nativeDone = true;
+      return;
+    }
+  }
+  function scheduleNative() {
+    tryNative();
+    setTimeout(tryNative, 350);
+    setTimeout(tryNative, 1200);
+  }
+
+  function activate() {
+    window.__holoPractice = true;
+    practice = true;
+    showBadge();
+    scheduleNative();
+    try { window.dispatchEvent(new CustomEvent('holo-practice-on')); } catch (e) {}
+  }
+  function deactivate() {
+    window.__holoPractice = false;
+    practice = false;
+    hideBadge();
+  }
+
+  window.addEventListener('message', function (e) {
+    try {
+      if (!e || !e.data) return;
+      if (e.data.type === 'holo-practice') activate();
+      else if (e.data.type === 'holo-practice-off') deactivate();
+    } catch (err) {}
+  });
+
+  if (practice) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', function () { showBadge(); scheduleNative(); });
+    } else {
+      showBadge();
+      scheduleNative();
+    }
+  }
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>TriPeaks Trail</title>
+<style>
+:root{--bg:#fdfcf7;--panel:#fff;--ink:#171a18;--muted:#5b6560;--line:#e7e2d6;--accent:#0e7569;--accent-ink:#fff;--amber:#e19a12;--danger:#d64545;--shadow:0 10px 30px rgba(23,26,24,.10)}
+@media (prefers-color-scheme: dark){:root{--bg:#111412;--panel:#1a1e1c;--ink:#f2efe8;--muted:#a8b0ab;--line:#2a2f2c;--accent:#17b39e;--accent-ink:#08110f;--shadow:0 10px 30px rgba(0,0,0,.4)}}
+*{box-sizing:border-box} html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
+button{font-family:inherit;cursor:pointer;min-height:44px}
+.wrap{max-width:860px;margin:0 auto;padding:16px 14px 28px}
+header.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.title h1{margin:0;font-size:30px;line-height:1;font-weight:900;letter-spacing:-.02em}
+.title p{margin:6px 0 0;color:var(--muted);font-size:14px;max-width:52ch}
+.top-actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1.5px solid var(--line);background:var(--panel);color:var(--ink);border-radius:10px;padding:10px 14px;font-weight:800;font-size:14px;box-shadow:var(--shadow)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.amber{background:var(--amber);border-color:var(--amber);color:#1a1405}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.bar .lbl{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.pill{border:1.5px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:8px 14px;font-weight:800;font-size:13px}
+.pill[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.pill.practice[aria-pressed="true"]{background:var(--amber);border-color:var(--amber);color:#1a1405}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-weight:700;font-size:14px}
+.stat b{font-size:18px}
+.practice-banner{display:none;background:#fff7e0;border:1.5px solid var(--amber);color:#7a5200;border-radius:10px;padding:9px 11px;font-size:13px;font-weight:700;margin:8px 0}
+@media (prefers-color-scheme: dark){.practice-banner{background:#2a2110;color:#f5c86b}}
+.practice-banner.show{display:block}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:14px}
+.msg{min-height:24px;font-weight:800;text-align:center;margin:10px 0 0}
+canvas{display:block;margin:0 auto;max-width:100%;touch-action:manipulation}
+.modal-back{position:fixed;inset:0;background:rgba(10,10,16,.62);display:none;align-items:flex-end;justify-content:center;z-index:50}
+.modal-back.open{display:flex}
+.modal{background:var(--panel);color:var(--ink);width:100%;max-width:620px;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:22px 20px 26px}
+@media(min-width:640px){.modal-back{align-items:center;padding:20px}.modal{border-radius:18px}}
+.modal h2{margin:0 0 6px;font-size:24px;font-weight:900}
+.modal p,.modal li{font-size:14.5px;line-height:1.6}
+.stars{display:flex;gap:6px;margin:8px 0}
+.stars button{width:48px;height:48px;border-radius:10px;border:1.5px solid var(--line);background:var(--panel);font-size:24px}
+.stars button[aria-pressed="true"]{background:var(--amber);border-color:var(--amber)}
+textarea{width:100%;min-height:88px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);font-family:inherit;font-size:14.5px;padding:10px 12px}
+.fb-tags{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.fb-tags button{border:1.5px solid var(--line);background:var(--panel);color:var(--ink);border-radius:9px;font-weight:800;padding:8px 12px}
+.fb-tags button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+footer{margin-top:22px;text-align:center;color:var(--muted);font-size:12.5px;font-weight:600}
+.controls{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:12px}
+.board{position:relative;width:100%;max-width:640px;margin:0 auto;height:330px}
+@media(max-width:560px){.board{height:290px}}
+.card{position:absolute;width:9%;min-width:30px;aspect-ratio:0.72;border-radius:7px;border:1.5px solid #b9b2a0;background:#fff;color:#171a18;font-weight:900;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:clamp(11px,2.6vw,17px);box-shadow:0 2px 6px rgba(0,0,0,.18);padding:0;min-height:44px}
+.card.red{color:#c0392b}
+.card.down{background:repeating-linear-gradient(45deg,#0e7569,#0e7569 5px,#0a5a51 5px,#0a5a51 10px);color:transparent;border-color:#0a5a51}
+.card.free{outline:3px solid var(--amber);cursor:pointer}
+.card.hint{outline:3px solid #ffb020;box-shadow:0 0 0 4px rgba(255,176,32,.45),0 0 18px rgba(255,176,32,.85);animation:hintPulse 1s ease-in-out infinite}
+@keyframes hintPulse{50%{box-shadow:0 0 0 7px rgba(255,176,32,.65),0 0 28px rgba(255,176,32,.95)}}
+.piles{display:flex;gap:14px;justify-content:center;align-items:center;margin-top:8px;flex-wrap:wrap}
+.pile{width:64px;height:90px;border-radius:8px;border:1.5px solid #b9b2a0;background:#fff;color:#171a18;font-weight:900;font-size:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+.pile.red{color:#c0392b}
+.pile.stock{background:repeating-linear-gradient(45deg,#0e7569,#0e7569 5px,#0a5a51 5px,#0a5a51 10px);color:#fff}
+.pile.empty{background:var(--panel);color:var(--muted);border-style:dashed}
+.pilelbl{font-size:11px;font-weight:800;text-align:center;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:4px}
+/* vtut visual steps */
+.vtut-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0 14px}
+@media (max-width:360px){.vtut-grid{grid-template-columns:1fr}}
+.vtut-card{position:relative;border-radius:14px;padding:12px 10px 10px;text-align:center;background:rgba(0,0,0,.05);border:1px solid rgba(0,0,0,.12)}
+.vtut-num{position:absolute;top:6px;left:6px;width:20px;height:20px;border-radius:50%;background:#ff5fa2;color:#fff;font-size:12px;font-weight:800;line-height:20px}
+.vtut-pic{height:52px;display:flex;align-items:center;justify-content:center;margin-bottom:6px}
+.vtut-pic svg{width:44px;height:44px}
+.vtut-card b{display:block;font-size:.92rem;margin-bottom:2px}
+.vtut-card p{margin:0;font-size:.85rem;line-height:1.35;opacity:.92}
+@media (prefers-color-scheme: dark){.vtut-card{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18)}}
+
+/* ================= GAME-THEME-2026-11-22 =================
+   Holo 2026-11-22 21:18: games themed too - shared Arcade
+   theme layer on every standalone game. Unique per game
+   (own colours, art and board untouched) inside the Arcade
+   theme family: navy cabinet frame, pixel gradient title,
+   cyan accents, 3-tier chrome buttons, console-framed stage.
+   CSS only - no JS or gameplay changes. */
+:root{--ha-navy:#0a0620;--ha-pink:#ff3ec8;--ha-violet:#8b5cff;--ha-blue:#3b82f6;--ha-cyan:#38e1ff;--ha-gold:#ffb020;--ha-grad:linear-gradient(92deg,#ff3ec8 0%,#ff7ad9 22%,#8b5cff 52%,#3b82f6 82%,#38e1ff 100%);--ha-pixel:"Press Start 2P","Courier New",monospace}
+html{background:#0a0620}
+h1{font-family:var(--ha-pixel);font-size:clamp(15px,4.5vw,24px);line-height:1.7;letter-spacing:0;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(2px 2px 0 rgba(139,92,255,.45))}
+canvas{outline:3px solid var(--ha-violet);box-shadow:0 0 0 3px #0a0620,0 0 26px rgba(139,92,255,.4);border-radius:10px}
+#btnStart,#startBtn,#playBtn,#btnPlay,#newBtn,#newGameBtn,#btnNew,#againBtn,#btnAgain,#btnPlayAgain,#fbSave,#btnSaveFeedback{background:linear-gradient(92deg,#ffb020 0%,#ffd43b 50%,#ffb020 100%);color:#140b33;border:3px solid #fff;border-radius:12px;font-family:var(--ha-pixel);font-size:11px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #b45309,0 0 18px rgba(255,176,32,.5);cursor:pointer}
+#btnRules,#rulesBtn,#btnFeedback,#feedbackBtn,#btnFeedbackFooter,#btnTutorial,#tutorialBtn,#howBtn,#btnHow,#ovHow,#btnPractice,#practiceBtn{background:var(--ha-grad);color:#fff;border:none;border-radius:10px;font-family:var(--ha-pixel);font-size:10px;line-height:1.6;min-height:44px;box-shadow:0 4px 0 #4c1d95,0 8px 20px rgba(255,62,200,.3);cursor:pointer}
+.vtut-card{border:2px solid rgba(139,92,255,.55);background:linear-gradient(180deg,#1e1247,#140b33);color:#e9e4ff;box-shadow:0 8px 22px rgba(0,0,0,.4)}
+.vtut-num{background:var(--ha-grad)}
+a{color:var(--ha-cyan)}
+
+/* TUT-POPUP-2026-11-22 (Holo 22:24): How to play popup sized for
+   the device + pixel title header bar. CSS only. */
+.modal:has(.vtut-grid),.sheet:has(.vtut-grid),.card:has(.vtut-grid),.box:has(.vtut-grid),.panel:has(.vtut-grid),.tut-card,.tutorial-backdrop{max-width:min(92vw,560px);max-height:88dvh;overflow-y:auto;box-sizing:border-box}
+.vtut-grid{grid-template-columns:1fr}
+@media (min-width:521px){.vtut-grid{grid-template-columns:1fr 1fr}}
+.modal:has(.vtut-grid) :is(h2,h3),.sheet:has(.vtut-grid) :is(h2,h3),.card:has(.vtut-grid) :is(h2,h3),.box:has(.vtut-grid) :is(h2,h3),.panel:has(.vtut-grid) :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;color:#fff;background:#0a0620;border:2px solid rgba(139,92,255,.65);border-radius:10px;padding:10px 12px;margin:0 0 12px}
+.modal:has(.vtut-grid) :is(h2,h3)::before,.sheet:has(.vtut-grid) :is(h2,h3)::before,.card:has(.vtut-grid) :is(h2,h3)::before,.box:has(.vtut-grid) :is(h2,h3)::before,.panel:has(.vtut-grid) :is(h2,h3)::before{content:"TriPeaks Trail — ";background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.tut-card .tut-head{background:#0a0620}
+.tut-card .tut-head :is(h2,h3){font-family:var(--ha-pixel);font-size:12px;line-height:1.8;background:var(--ha-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+/* INSERT-COIN-2026-11-22 (Holo 23:13): old-school title-screen
+   blink line on game start/title areas. Same blink as the 404
+   page .coin. CSS + one tiny guarded script; no gameplay change. */
+@keyframes haCoinBlink{50%{opacity:.25}}
+.insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
+@media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+<div class="title"><h1>TriPeaks Trail</h1><p>Clear all three peaks! Play cards one above or below the waste pile and ride the streak.</p></div>
+<div class="top-actions">
+<button class="btn" id="btnHow" type="button">How to play</button>
+<button class="btn" id="btnRules" type="button">Rules</button>
+<button class="btn" id="btnFeedback" type="button">Tell us what you think!</button>
+</div>
+</header>
+<div class="bar" role="group" aria-label="Difficulty"><span class="lbl">Difficulty</span>
+<button class="pill" type="button" data-diff="easy" aria-pressed="false">Easy</button>
+<button class="pill" type="button" data-diff="normal" aria-pressed="true">Normal</button>
+<button class="pill" type="button" data-diff="hard" aria-pressed="false">Hard</button>
+<button class="pill practice" type="button" id="btnPractice" aria-pressed="false">Practice mode</button>
+</div>
+<div class="practice-banner" id="practiceBanner">Practice is on — scores in this round are never saved to your best.</div>
+<div class="stats">
+<span class="stat">Score <b id="statScore">0</b></span>
+<span class="stat">Best <b id="statBest">0</b></span>
+<span class="stat">Level <b id="statLevel">1</b></span>
+</div>
+<div class="stage" id="stage"><div class="board" id="board"></div>
+<div class="piles">
+<div><button class="pile stock" id="stockBtn" type="button" aria-label="Draw from stock"></button><div class="pilelbl">Stock <span id="stockN"></span></div></div>
+<div><div class="pile" id="wastePile"></div><div class="pilelbl">Waste</div></div>
+<div class="stat">Streak <b id="streakN">0</b></div>
+<div class="stat">Left <b id="leftN">28</b></div>
+</div>
+<!-- TRIPEAKS-TRAIL-HINT-FIX-2026-11-27 -->
+<p class="msg" id="msg" role="status"></p>
+<div class="controls"><button class="btn primary" id="btnNew" type="button">New game</button><button class="btn" id="btnHint" type="button">Hint</button></div></div>
+<footer>Holo's Arcade</footer>
+</div>
+<div class="modal-back" id="howModal"><div class="modal"><h2>How to play</h2><div class="vtut-grid">
+  <div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#f472b6" stroke-width="3"><circle cx="24" cy="24" r="16"/><circle cx="24" cy="24" r="9"/><circle cx="24" cy="24" r="3" fill="#f472b6"/></svg></div><b>Clear the peaks</b><p>Clear all three peaks to win.</p></div>
+  <div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#7dd3fc" stroke-width="3"><rect x="10" y="8" width="22" height="32" rx="4"/><path d="M38 14v22a4 4 0 0 1-4 4h-4"/></svg></div><b>One up or down</b><p>Tap a face-up card one higher or lower than the waste card.</p></div>
+  <div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#a78bfa" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 24h26M28 14l10 10-10 10"/></svg></div><b>Kings wrap</b><p>Kings and Aces wrap around.</p></div>
+  <div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#facc15" stroke="#eab308" stroke-width="2" stroke-linejoin="round"><path d="M27 4L10 28h11l-3 16 18-25H24z"/></svg></div><b>Chain streaks</b><p>Each card played becomes the new waste card — chains build your streak bonus.</p></div>
+  <div class="vtut-card"><span class="vtut-num">5</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#7dd3fc" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="18" r="7"/><path d="M24 25v13M14 38h20"/></svg></div><b>Draw stock</b><p>Stuck? Tap the stock for a new waste card — your streak resets.</p></div>
+  <div class="vtut-card"><span class="vtut-num">6</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#a78bfa" stroke-width="3"><path d="M4 24S12 10 24 10s20 14 20 14-8 14-20 14S4 24 4 24z"/><circle cx="24" cy="24" r="6"/></svg></div><b>Uncover cards</b><p>Cards flip face-up when both cards covering them are gone.</p></div>
+  <div class="vtut-card"><span class="vtut-num">7</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#34d399" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><circle cx="24" cy="24" r="17"/><path d="M16 24l6 6 10-12"/></svg></div><b>Recycle stock</b><p>Recycle the stock: Easy twice, Normal once, Hard never.</p></div>
+</div><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-close="howModal" type="button">Got it</button></div></div></div>
+<div class="modal-back" id="rulesModal"><div class="modal"><h2>Rules</h2><ul><li>Play a card one rank above or below the waste card (A–K wraps).</li><li>Face-down cards flip when both covering cards are removed.</li><li>Each play scores 10 + 5 per streak step. Clearing a peak top scores +100.</li><li>Drawing from stock resets the streak.</li><li>Clear all 28 peak cards to win. Practice mode never saves to your best.</li></ul><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-close="rulesModal" type="button">Close</button></div></div></div>
+<div class="modal-back" id="fbModal"><div class="modal"><h2>Tell us what you think!</h2>
+<p>Tap the stars, add a note if you like. Saved in this browser on this device only — nothing is sent anywhere.</p>
+<div class="stars" id="fbStars"><button type="button" data-star="1">★</button><button type="button" data-star="2">★</button><button type="button" data-star="3">★</button><button type="button" data-star="4">★</button><button type="button" data-star="5">★</button></div>
+<div class="fb-tags"><button type="button" data-tag="Bug" aria-pressed="false">Bug</button><button type="button" data-tag="Suggestion" aria-pressed="false">Suggestion</button><button type="button" data-tag="Other" aria-pressed="false">Other</button></div>
+<textarea id="fbText" placeholder="Fun bits, broken bits, ideas — anything goes!"></textarea>
+<p style="font-size:12.5px;color:var(--muted)">No personal info needed. Be kind 💜</p>
+<p id="fbDone" style="display:none;font-weight:800">Thanks! Saved ✓</p>
+<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn" data-close="fbModal" type="button">Close</button><button class="btn primary" id="fbSave" type="button">Save feedback</button></div>
+</div></div>
+<script>
+var SLUG="tripeaks-trail", startTime=Date.now(), curScore=0, curLevel=1;
+function $(id){return document.getElementById(id)}
+function lsGet(k,d){try{var v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+var difficulty=lsGet(SLUG+"_diff","normal"); if(["easy","normal","hard"].indexOf(difficulty)<0) difficulty="normal";
+var practice=lsGet(SLUG+"_practice",false)===true;
+var best=lsGet(SLUG+"_best",0)||0;
+function paintChrome(){
+ document.querySelectorAll("[data-diff]").forEach(function(b){b.setAttribute("aria-pressed", b.getAttribute("data-diff")===difficulty?"true":"false")});
+ $("btnPractice").setAttribute("aria-pressed", practice?"true":"false");
+ $("practiceBanner").classList.toggle("show", practice);
+ $("statBest").textContent=best; $("statScore").textContent=curScore; $("statLevel").textContent=curLevel;
+}
+function setScore(s){curScore=s; if(!practice&&s>best){best=s; lsSet(SLUG+"_best",best)} paintChrome()}
+function addScore(n){setScore(curScore+n)}
+function setLevel(n){curLevel=n; paintChrome()}
+function say(t){$("msg").textContent=t}
+document.querySelectorAll("[data-diff]").forEach(function(b){b.addEventListener("click",function(){difficulty=b.getAttribute("data-diff"); lsSet(SLUG+"_diff",difficulty); paintChrome(); if(window.onDiff) onDiff()})});
+$("btnPractice").addEventListener("click",function(){practice=!practice; lsSet(SLUG+"_practice",practice); paintChrome(); say(practice?"Practice on — best scores are safe.":"Practice off — scores count again.")});
+$("btnHow").addEventListener("click",function(){$("howModal").classList.add("open")});
+$("btnRules").addEventListener("click",function(){$("rulesModal").classList.add("open")});
+$("btnFeedback").addEventListener("click",function(){$("fbModal").classList.add("open")});
+document.querySelectorAll("[data-close]").forEach(function(b){b.addEventListener("click",function(){$(b.getAttribute("data-close")).classList.remove("open")}) });
+var fbRating=0, fbTag="Other";
+document.querySelectorAll("[data-star]").forEach(function(b){b.addEventListener("click",function(){fbRating=+b.getAttribute("data-star"); document.querySelectorAll("[data-star]").forEach(function(x){x.setAttribute("aria-pressed", +x.getAttribute("data-star")<=fbRating?"true":"false")})})});
+document.querySelectorAll("[data-tag]").forEach(function(b){b.addEventListener("click",function(){fbTag=b.getAttribute("data-tag"); document.querySelectorAll("[data-tag]").forEach(function(x){x.setAttribute("aria-pressed", x===b?"true":"false")})})});
+$("fbSave").addEventListener("click",function(){
+ var arr=lsGet("holos-arcade-feedback",[]); if(!Array.isArray(arr)) arr=[];
+ arr.push({game:SLUG, rating:fbRating, text:$("fbText").value||"", tag:fbTag, mode:practice?"practice":"scored", level:curLevel, difficulty:difficulty, score:curScore, device:(navigator.userAgent||"").slice(0,120), playTime:Math.round((Date.now()-startTime)/1000), timestamp:Date.now()});
+ lsSet("holos-arcade-feedback",arr); $("fbDone").style.display="block"; setTimeout(function(){$("fbModal").classList.remove("open")},900);
+});
+paintChrome();
+var SUITS=["♠","♥","♦","♣"], RANKS=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+function makeDeck(){var d=[];for(var s=0;s<4;s++)for(var r=0;r<13;r++)d.push({r:r,s:s});for(var i=d.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=d[i];d[i]=d[j];d[j]=t}return d}
+function cardTxt(c){return RANKS[c.r]+SUITS[c.s]}
+function isRed(c){return c.s===1||c.s===2}
+var cells=[], stock=[], waste=null, streak=0, redeals=0, over=false;
+function buildLayout(){
+ cells=[];
+ var i;
+ for(i=0;i<10;i++)cells.push({x:i*10+0.5,row:3,coveredBy:[],gone:false,up:true});
+ for(i=0;i<9;i++)cells.push({x:i*10+5.5,row:2,coveredBy:[i,i+1],gone:false,up:false});
+ var uCov=[[10,11],[11,12],[13,14],[14,15],[16,17],[17,18]];
+ for(i=0;i<6;i++){var ux=[5.5,15.5,35.5,45.5,65.5,75.5][i];cells.push({x:ux,row:1,coveredBy:uCov[i],gone:false,up:false})}
+ var tCov=[[19,20],[21,22],[23,24]];
+ for(i=0;i<3;i++){var tx=[10.5,40.5,70.5][i];cells.push({x:tx,row:0,coveredBy:tCov[i],gone:false,up:false})}
+}
+function free(i){var c=cells[i];if(c.gone||!c.up)return false;return c.coveredBy.every(function(k){return cells[k].gone})}
+function refreshUp(){cells.forEach(function(c){if(!c.gone&&!c.up&&c.coveredBy.every(function(k){return cells[k].gone}))c.up=true})}
+function playable(c){if(!waste)return false;var d=Math.abs(c.r-waste.r);return d===1||d===12}
+function maxRedeals(){return difficulty==="easy"?2:(difficulty==="normal"?1:0)}
+function render(){
+ var b=$("board");b.innerHTML="";
+ cells.forEach(function(c,i){
+  if(c.gone)return;
+  var el=document.createElement("button");el.type="button";
+  el.className="card"+(c.up?(isRed(c.card)?" red":""):" down")+(free(i)?" free":"");
+  el.style.left=c.x+"%"; el.style.top=(c.row*72)+"px"; el.style.zIndex=10-c.row;
+  el.textContent=c.up?cardTxt(c.card):"";
+  el.setAttribute("aria-label", c.up?cardTxt(c.card):"Face down card");
+  el.setAttribute("data-cell",i);
+  el.addEventListener("click",function(){playCard(i)});
+  b.appendChild(el);
+ });
+ var wp=$("wastePile"); wp.className="pile"+(waste&&isRed(waste)?" red":"")+(waste?"":" empty");
+ wp.textContent=waste?cardTxt(waste):"—";
+ $("stockN").textContent="("+stock.length+")";
+ $("stockBtn").textContent=stock.length?"🃏":"↻";
+ $("streakN").textContent=streak;
+ $("leftN").textContent=cells.filter(function(c){return !c.gone}).length;
+}
+function checkEnd(){
+ var left=cells.filter(function(c){return !c.gone}).length;
+ if(left===0){over=true;addScore(250);say("You cleared all three peaks! 🎉 Score: "+curScore);return}
+ var anyPlay=cells.some(function(c,i){return free(i)&&playable(c.card)});
+ if(!anyPlay&&stock.length===0&&redeals>=maxRedeals()){over=true;say("No moves left — "+left+" cards remain. Score: "+curScore+". Tap New game to try again.")}
+}
+function playCard(i){
+ if(over)return; var c=cells[i];
+ if(!free(i)){say("That card is still covered.");return}
+ if(!playable(c.card)){say("Needs to be one above or below "+cardTxt(waste)+".");return}
+ c.gone=true; waste=c.card; streak++;
+ var pts=10+streak*5; addScore(pts);
+ if(c.row===0){addScore(100);say("Peak cleared! +100 bonus 🏔️")}
+ else say("Played "+cardTxt(c.card)+" — streak "+streak+" (+"+pts+")");
+ refreshUp(); render(); checkEnd();
+}
+function drawStock(){
+ if(over)return;
+ if(stock.length===0){
+  if(redeals<maxRedeals()){redeals++; stock=makeDeck().slice(0,5); say("Stock recycled ("+redeals+"/"+maxRedeals()+") — 5 bonus cards. Streak reset."); streak=0; render(); return}
+  say("Stock is empty."); return;
+ }
+ waste=stock.pop(); streak=0; say("New waste card: "+cardTxt(waste)); render(); checkEnd();
+}
+function newGame(){
+ var deck=makeDeck(); buildLayout();
+ cells.forEach(function(c){c.card=deck.pop()});
+ waste=deck.pop(); stock=deck; streak=0; redeals=0; over=false;
+ setScore(0); setLevel(1); refreshUp(); render();
+ say("Tap a glowing card that is one above or below "+cardTxt(waste)+".");
+}
+$("stockBtn").addEventListener("click",drawStock);
+$("btnNew").addEventListener("click",newGame);
+$("btnHint").addEventListener("click",function(){
+ document.querySelectorAll("#board .card.hint").forEach(function(el){el.classList.remove("hint")});
+ var idx=-1; cells.forEach(function(c,i){if(idx<0&&free(i)&&playable(c.card))idx=i});
+ if(idx>=0){var hEl=document.querySelector('#board .card[data-cell="'+idx+'"]'); if(hEl)hEl.classList.add("hint"); say("Hint: play the "+cardTxt(cells[idx].card)+".");}
+ else if(stock.length)say("Hint: no plays — draw from the stock.");
+ else say("Hint: no moves left. Start a new game!");
+});
+window.onDiff=function(){newGame()};
+newGame();
+</script>
+
+<script>
+/* INSERT-COIN-2026-11-22: place the blinking line under the title
+   on games with a start button; remove it once play starts. */
+(function(){try{
+  if(document.querySelector('.insert-coin'))return;
+  var ids=['btnStart','startBtn','playBtn','btnPlay','newBtn','newGameBtn','btnNew'];
+  var start=null,i,b;
+  for(i=0;i<ids.length;i++){start=document.getElementById(ids[i]);if(start)break;}
+  if(!start){var btns=document.querySelectorAll('button');for(i=0;i<btns.length;i++){b=btns[i];if(/^(\u25b6\s*)?(start game|start|play|new game|begin)$/i.test((b.textContent||'').trim())){start=b;break;}}}
+  if(!start)return;
+  var h=document.querySelector('h1')||document.querySelector('h2');if(!h||!h.parentNode)return;
+  var p=document.createElement('p');p.className='insert-coin';p.setAttribute('aria-hidden','true');p.textContent='INSERT COIN TO CONTINUE';
+  h.parentNode.insertBefore(p,h.nextSibling);
+  start.addEventListener('click',function(){if(p.parentNode)p.parentNode.removeChild(p);});
+}catch(e){}})();
+</script>
+<script>
+/* BACK-TO-HUB-2026-11-23: every game gets a way back to the Arcade hub
+   when opened directly (dead-end fix). Hidden inside the hub iframe,
+   where the hub itself provides navigation. */
+(function(){try{
+  if(window.self!==window.top)return;
+  if(document.querySelector('a[href*="games-hub"]'))return;
+  var a=document.createElement('a');a.href='../games-hub/';a.textContent='\u2190 Back to the Arcade';
+  a.style.cssText='position:fixed;left:10px;bottom:10px;z-index:9990;background:rgba(20,16,60,.88);color:#fff;padding:7px 14px;border-radius:999px;font:600 13px system-ui,sans-serif;text-decoration:none;border:1px solid rgba(255,255,255,.4);box-shadow:0 2px 10px rgba(0,0,0,.35)';
+  document.body.appendChild(a);
+}catch(e){}})();
+</script>
+</body>
+</html>
