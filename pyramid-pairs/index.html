@@ -362,7 +362,7 @@ a{color:var(--ha-cyan)}
 <div class="stage" id="stage"><div class="board" id="board"></div>
 <div class="piles">
 <div><button class="pile stock" id="stockBtn" type="button" aria-label="Draw from stock"></button><div class="pilelbl">Stock <span id="stockN"></span></div></div>
-<div><button class="pile" id="wasteBtn" type="button" aria-label="Waste card"></button><div class="pilelbl">Waste</div></div>
+<div><button class="pile" id="wasteBtn" type="button" aria-label="Waste card"></button><div class="pilelbl">Waste <span id="wasteN"></span></div></div>
 <div class="stat">Left <b id="leftN">28</b></div>
 <div class="stat">Passes <b id="passN">0</b></div>
 </div>
@@ -371,7 +371,7 @@ a{color:var(--ha-cyan)}
 <footer>Holo's Arcade</footer>
 </div>
 <div class="modal-back" id="howModal"><div class="modal"><h2>How to play</h2><div class="vtut-grid">  <div class="vtut-card"><span class="vtut-num">1</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#7dd3fc" stroke-width="3"><rect x="10" y="8" width="22" height="32" rx="4"/><path d="M38 14v22a4 4 0 0 1-4 4h-4"/></svg></div><b>Pair to 13</b><p>Pair free cards that add up to 13.</p></div>  <div class="vtut-card"><span class="vtut-num">2</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="#fbbf24" stroke="#f59e0b" stroke-width="2" stroke-linejoin="round"><path d="M24 6l5.5 11.5L42 19l-9.5 8.5L35 40 24 33.5 13 40l2.5-12.5L6 19l12.5-1.5z"/></svg></div><b>Kings go solo</b><p>A King is 13 and removes on its own.</p></div>  <div class="vtut-card"><span class="vtut-num">3</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#a78bfa" stroke-width="3"><path d="M4 24S12 10 24 10s20 14 20 14-8 14-20 14S4 24 4 24z"/><circle cx="24" cy="24" r="6"/></svg></div><b>Free cards only</b><p>Only uncovered cards can be played.</p></div>  <div class="vtut-card"><span class="vtut-num">4</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#7dd3fc" stroke-width="3" stroke-linecap="round"><circle cx="24" cy="18" r="7"/><path d="M24 25v13M14 38h20"/></svg></div><b>Use the stock</b><p>Tap the stock to flip a waste card to pair.</p></div>  <div class="vtut-card"><span class="vtut-num">5</span><div class="vtut-pic"><svg viewBox="0 0 48 48" fill="none" stroke="#fbbf24" stroke-width="3" stroke-linecap="round"><path d="M14 8h20v10a10 10 0 0 1-20 0zM14 12H8a6 6 0 0 0 6 6M34 12h6a6 6 0 0 1-6 6M24 28v6M16 40h16M20 34h8v6h-8z"/></svg></div><b>Clear the pyramid</b><p>Remove the whole pyramid to win.</p></div></div><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-close="howModal" type="button">Got it</button></div></div></div>
-<div class="modal-back" id="rulesModal"><div class="modal"><h2>Rules</h2><ul><li>Pairs must total exactly 13. A King is worth 13 and removes alone.</li><li>A pyramid card is free only when both cards covering it are gone.</li><li>The waste card can pair with any free pyramid card.</li><li>Each pair scores 25; a King scores 15; clearing the pyramid scores +200.</li><li>Practice mode never saves to your best.</li></ul><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-close="rulesModal" type="button">Close</button></div></div></div>
+<div class="modal-back" id="rulesModal"><div class="modal"><h2>Rules</h2><ul><li>Pairs must total exactly 13. A King is worth 13 and removes alone.</li><li>A pyramid card is free only when both cards covering it are gone.</li><li>The waste card can pair with any free pyramid card. Waste cards pile up — pairing the top card reveals the one below, and a pass reshuffles the whole pile back into the stock.</li><li>Each pair scores 25; a King scores 15; clearing the pyramid scores +200.</li><li>Difficulty changes the pyramid: Easy is 5 rows, Normal 6 rows, Hard 7 rows — fewer rows means fewer cards to clear and a bigger stock. Easy and Normal always open with a pair to play.</li><li>Practice mode never saves to your best.</li></ul><div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn primary" data-close="rulesModal" type="button">Close</button></div></div></div>
 <div class="modal-back" id="fbModal"><div class="modal"><h2>Tell us what you think!</h2>
 <p>Tap the stars, add a note if you like. Saved in this browser on this device only — nothing is sent anywhere.</p>
 <div class="stars" id="fbStars"><button type="button" data-star="1">★</button><button type="button" data-star="2">★</button><button type="button" data-star="3">★</button><button type="button" data-star="4">★</button><button type="button" data-star="5">★</button></div>
@@ -389,13 +389,41 @@ function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 var difficulty=lsGet(SLUG+"_diff","normal"); if(["easy","normal","hard"].indexOf(difficulty)<0) difficulty="normal";
 var practice=lsGet(SLUG+"_practice",false)===true;
 var best=lsGet(SLUG+"_best",0)||0;
+/* PYRAMID-PAIRS-DIFFICULTY-SCORES-FIX-2026-11-27 (scores): the game saved
+   its best ONLY to "pyramid-pairs_best", a key the hub never reads —
+   the hub's best system reads "holoArcade_v1_best_<game>" (JSON
+   {mode: score}, max per mode) via bestOf(), and Pyramid Pairs has no
+   hub scores side-panel entry, so a finished game's score was invisible
+   in the hub. The best is now ALSO written to the hub's canonical key
+   (per difficulty, merged with existing modes) so the hub reads it.
+   The game's own "pyramid-pairs_best" key is kept for the in-game Best
+   stat. Uses the hub's account-scoped key helper when the game runs
+   inside the hub iframe, else the plain key. */
+function hubBestKey(){
+ try{
+  if(window.parent && window.parent!==window && typeof window.parent.holoHubPrefixedKey==="function")
+   return window.parent.holoHubPrefixedKey("holoArcade_v1_best_","pyramid-pairs");
+ }catch(e){}
+ return "holoArcade_v1_best_pyramid-pairs";
+}
+function syncHubBest(){
+ try{
+  if(best<=0) return;
+  var k=hubBestKey(), cur={};
+  try{cur=JSON.parse(localStorage.getItem(k)||"{}")||{}}catch(e){cur={}}
+  if(typeof cur!=="object"||cur===null||Array.isArray(cur)) cur={};
+  var d=difficulty||"normal";
+  var prev=0; try{prev=parseInt(cur[d],10)||0}catch(e){prev=0}
+  if(best>prev){cur[d]=best; try{localStorage.setItem(k,JSON.stringify(cur))}catch(e){}}
+ }catch(e){}
+}
 function paintChrome(){
  document.querySelectorAll("[data-diff]").forEach(function(b){b.setAttribute("aria-pressed", b.getAttribute("data-diff")===difficulty?"true":"false")});
  $("btnPractice").setAttribute("aria-pressed", practice?"true":"false");
  $("practiceBanner").classList.toggle("show", practice);
  $("statBest").textContent=best; $("statScore").textContent=curScore; $("statLevel").textContent=curLevel;
 }
-function setScore(s){curScore=s; if(!practice&&s>best){best=s; lsSet(SLUG+"_best",best)} paintChrome()}
+function setScore(s){curScore=s; if(!practice&&s>best){best=s; lsSet(SLUG+"_best",best); syncHubBest()} paintChrome()}
 function addScore(n){setScore(curScore+n)}
 function setLevel(n){curLevel=n; paintChrome()}
 function say(t){$("msg").textContent=t}
@@ -414,16 +442,34 @@ $("fbSave").addEventListener("click",function(){
  lsSet("holos-arcade-feedback",arr); $("fbDone").style.display="block"; setTimeout(function(){$("fbModal").classList.remove("open")},900);
 });
 paintChrome();
+if(best>0) syncHubBest(); /* migrate a best earned before this fix into the hub key */
 var SUITS=["♠","♥","♦","♣"], RANKS=["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
 function val(c){return c.r+1}
 function makeDeck(){var d=[];for(var s=0;s<4;s++)for(var r=0;r<13;r++)d.push({r:r,s:s});for(var i=d.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=d[i];d[i]=d[j];d[j]=t}return d}
 function cardTxt(c){return RANKS[c.r]+SUITS[c.s]}
 function isRed(c){return c.s===1||c.s===2}
-var cells=[], stock=[], waste=null, sel=-2, passes=0, over=false;
+var cells=[], stock=[], waste=null, wastePile=[], sel=-2, passes=0, over=false;
+/* Waste is a real pile: drawing from the stock pushes the old waste
+   card underneath (it is NOT lost), pairing the top waste card reveals
+   the one below it, and a pass reshuffles the WHOLE pile back into the
+   stock. The live game kept a single waste card and threw the old one
+   away on every draw, and a "pass" returned just that one card — so
+   most stock cards were seen once and lost, which is a big reason the
+   game felt unwinnable. */
+function consumeWaste(){ waste = wastePile.length ? wastePile.pop() : null; }
+/* PYRAMID-PAIRS-DIFFICULTY-SCORES-FIX-2026-11-27 (difficulty): the live
+   game dealt the SAME 28-card pyramid on every level and only changed
+   maxPasses (3/2/1) — and each "pass" recycled just the single waste
+   card, so Easy/Normal/Hard felt identical (MamaBear: "same hardness
+   on all levels", Easy too hard). Difficulty now sets the pyramid size:
+   Easy 5 rows / 15 cards, Normal 6 rows / 21 cards, Hard 7 rows /
+   28 cards. Fewer rows = fewer cards to clear + a bigger stock
+   (52 - pyramid cards). Passes stay 3/2/1. */
+function pyrRows(){return difficulty==="easy"?5:(difficulty==="normal"?6:7)}
 function maxPasses(){return difficulty==="easy"?3:(difficulty==="normal"?2:1)}
 function buildLayout(){
  cells=[];
- for(var row=0;row<7;row++){
+ for(var row=0;row<pyrRows();row++){
   for(var col=0;col<=row;col++){
    var x=50-(row*6)+col*12;
    cells.push({row:row,col:col,x:x,gone:false,coveredBy:[]});
@@ -431,8 +477,35 @@ function buildLayout(){
  }
  function at(r,c){var n=0;for(var rr=0;rr<r;rr++)n+=rr+1;return n+c}
  cells.forEach(function(cell){
-  if(cell.row<6){cell.coveredBy=[at(cell.row+1,cell.col), at(cell.row+1,cell.col+1)]}
+  if(cell.row<pyrRows()-1){cell.coveredBy=[at(cell.row+1,cell.col), at(cell.row+1,cell.col+1)]}
  });
+}
+/* Opening-move guarantee (Easy + Normal only): redeal until the bottom
+   row — the only free cards at the start — holds a pair adding to 13
+   or a King, so the game never opens unwinnable. Hard keeps the pure
+   random deal. (Live probe: ~10% of deals had NO opening move.) */
+function hasOpeningMove(){
+ var n=pyrRows(), start=cells.length-n;
+ for(var i=start;i<cells.length;i++){
+  if(val(cells[i].card)===13) return true;
+  for(var j=i+1;j<cells.length;j++){
+   if(val(cells[i].card)+val(cells[j].card)===13) return true;
+  }
+ }
+ return false;
+}
+function dealCards(){
+ var deck=makeDeck(); buildLayout();
+ cells.forEach(function(c){c.card=deck.pop()});
+ stock=deck;
+ if(difficulty!=="hard"){
+  var tries=0;
+  while(!hasOpeningMove() && tries<60){
+   tries++; deck=makeDeck(); buildLayout();
+   cells.forEach(function(c){c.card=deck.pop()});
+   stock=deck;
+  }
+ }
 }
 function free(i){var c=cells[i];return !c.gone&&c.coveredBy.every(function(k){return cells[k].gone})}
 function render(){
@@ -448,6 +521,7 @@ function render(){
  });
  var wb=$("wasteBtn"); wb.className="pile"+(waste&&isRed(waste)?" red":"")+(waste?"":" empty")+(sel===-1?" sel":"");
  wb.textContent=waste?cardTxt(waste):"—";
+ $("wasteN").textContent=(waste||wastePile.length)?"("+(wastePile.length+(waste?1:0))+")":"";
  $("stockN").textContent="("+stock.length+")";
  $("stockBtn").textContent=stock.length?"🃏":"↻";
  $("leftN").textContent=cells.filter(function(c){return !c.gone}).length;
@@ -464,22 +538,28 @@ function tapCard(i){
  if(val(c.card)===13){c.gone=true;addScore(15);say("King removed solo! (+15)");clearSel();render();checkEnd();return}
  if(sel===-2){sel=i;render();say("Selected "+cardTxt(c.card)+" — now tap its pair (needs "+(13-val(c.card))+").");return}
  if(sel===i){clearSel();render();return}
- if(sel===-1){var w=waste; tryPair(w,c.card,function(){c.gone=true;waste=null}); return}
+ if(sel===-1){var w=waste; tryPair(w,c.card,function(){c.gone=true;consumeWaste()}); return}
  var other=sel; tryPair(cells[other].card,c.card,function(){cells[other].gone=true;c.gone=true});
 }
 function tapWaste(){
  if(over||!waste)return;
- if(val(waste)===13){say("King removed solo! (+15)");addScore(15);waste=null;clearSel();render();checkEnd();return}
+ if(val(waste)===13){say("King removed solo! (+15)");addScore(15);consumeWaste();clearSel();render();checkEnd();return}
  if(sel===-2){sel=-1;render();say("Selected waste "+cardTxt(waste)+" — tap a pyramid card worth "+(13-val(waste))+".");return}
  if(sel===-1){clearSel();render();return}
- var other=sel; tryPair(cells[other].card,waste,function(){cells[other].gone=true;waste=null});
+ var other=sel; tryPair(cells[other].card,waste,function(){cells[other].gone=true;consumeWaste()});
 }
 function drawStock(){
  if(over)return;
  if(stock.length===0){
-  if(passes<maxPasses()&&waste){passes++;stock=[waste];waste=null;say("Pass "+passes+" — stock reshuffled from waste.");render();return}
+  if(passes<maxPasses()&&(waste||wastePile.length)){
+   passes++;
+   var all=wastePile.slice(); if(waste) all.push(waste);
+   stock=all.reverse(); wastePile=[]; waste=null;
+   say("Pass "+passes+" — stock reshuffled from waste.");render();return
+  }
   say("No stock left.");return;
  }
+ if(waste) wastePile.push(waste);
  waste=stock.pop(); clearSel(); say("Waste: "+cardTxt(waste)); render(); checkEnd();
 }
 function checkEnd(){
@@ -489,12 +569,12 @@ function checkEnd(){
  var move=freeCards.some(function(c){return val(c.card)===13});
  if(!move)for(var a=0;a<freeCards.length&&!move;a++)for(var b2=a+1;b2<freeCards.length;b2++)if(val(freeCards[a].card)+val(freeCards[b2].card)===13)move=true;
  if(!move&&waste){if(val(waste)===13)move=true; else move=freeCards.some(function(c){return val(c.card)+val(waste)===13})}
- if(!move&&stock.length===0&&passes>=maxPasses()){over=true;say("No pairs left — "+left+" cards remain. Score: "+curScore+". Tap New game to retry.")}
+ var canPass=passes<maxPasses()&&(waste||wastePile.length);
+ if(!move&&stock.length===0&&!canPass){over=true;say("No pairs left — "+left+" cards remain. Score: "+curScore+". Tap New game to retry.")}
 }
 function newGame(){
- var deck=makeDeck(); buildLayout();
- cells.forEach(function(c){c.card=deck.pop()});
- stock=deck; waste=null; sel=-2; passes=0; over=false;
+ dealCards();
+ waste=null; wastePile=[]; sel=-2; passes=0; over=false;
  setScore(0); setLevel(1); render();
  say("Tap two free cards that add to 13 — Kings go solo!");
 }
