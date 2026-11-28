@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- BATTLESHIP-STEP1-LAYOUT-FIX-2026-11-27 — see the CSS block + the init for the full change list. Base: live battleship/index.html md5 d2a31849. -->
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -670,6 +671,207 @@ a{color:var(--ha-cyan)}
 @keyframes haCoinBlink{50%{opacity:.25}}
 .insert-coin{font-family:var(--ha-pixel,"Press Start 2P","Courier New",monospace);font-size:10px;line-height:1.8;color:var(--ha-gold,#ffb020);text-align:center;letter-spacing:1px;margin:8px 0 4px;animation:haCoinBlink 1.6s steps(2) infinite;text-shadow:0 0 12px rgba(255,176,32,.55)}
 @media (prefers-reduced-motion: reduce){.insert-coin{animation:none}}
+
+/* ======================================================================
+   BATTLESHIP-STEP1-LAYOUT-FIX-2026-11-27
+   Holo 2026-11-27 23:14 "Battleship - has step 1 twice" + "put just the
+   grid in the gameplay box and the info along the side panels"
+   Holo 2026-11-27 23:18 (refined): side panels hold shots, hits, accuracy,
+   ships sunk + CAPTAIN'S LOG (new); your fleet KEEPS its size and stays
+   TOP RIGHT; enemy waters grid AS LARGE AS POSSIBLE within the gameplay box
+   Holo 2026-11-27 23:19: enemy moves on your fleet are hard to tell from
+   the grey ship spots — hits/misses now carry a SHAPE as well as a colour
+   Holo 2026-11-27 23:20: J column (the LAST column, A-J) was cut off —
+   the grid must FIT: full A-J grid + your fleet + side info, nothing cut
+   off, desktop + phone, no scroll in gameplay.
+   What changed here (layout only — no functionality, no duel wiring):
+   - a .bs-stage flex row: left rail | middle gameplay box | right rail.
+     The middle holds ONLY the boards (enemy waters / your fleet) + the
+     result. The rails hold the info (see below).
+   - LEFT rail: placePanel (ships + Rotate/Random/Clear) in placement;
+     fleetPanel (your fleet + enemy fleet status lists) in battle;
+     recordsPanel (your records + Reset records) when the game is done.
+   - RIGHT rail: the Turn/Difficulty pills, the message bar, the friend
+     strip, the battle stats (Shots/Hits/Accuracy/Ships sunk) and the
+     CAPTAIN'S LOG — a visible scrolling list of the most recent events
+     (the log itself already existed as a collapsed <details> below the
+     board; it is now a panel in the right rail, always visible in
+     battle + done, fed by the same logLine()).
+   - YOUR FLEET (the miniature) is UNCHANGED: same 140px (100px phone)
+     sizing, still top-right inside the enemy panel, still showing the
+     opponent's moves on your board ("N hits on you").
+   - ENEMY WATERS GRID: as large as possible within the gameplay box.
+     The J-column cutoff fix: the enemy board is now a flex item that
+     SHRINKS (flex:1 1 0; min-width:0) instead of flex:none, so board +
+     miniature can never overflow the panel and cut off column J. The
+     dvh cap keeps the board inside the vertical budget (no scroll).
+   - MINI-CELL READABILITY: the miniature's enemy moves now carry a
+     SHAPE as well as a colour (the tour text already promised this):
+     ship = grey cell + white dot; enemy hit = BRIGHT red cell + a bold
+     white X; enemy miss = pale-blue cell + a white dot; sunk ship =
+     dark red cell + a gold X. The classes were already set by
+     renderMini(); only the ::after markers were missing.
+   - The main (enemy waters) board already had distinct markers
+     (hit = red + X, miss = pale + bullet, ship = grey + white dot),
+     so it is unchanged — verified, not reworked.
+   ====================================================================== */
+
+/* --- the stage: left rail | middle gameplay box | right rail --- */
+.bs-stage{display:flex;gap:14px;align-items:flex-start}
+.bs-side{flex:0 0 190px;min-width:0;display:flex;flex-direction:column;gap:12px}
+.bs-mid{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:12px}
+.bs-mid .boards{display:block}
+.bs-mid #enemyPanel,.bs-mid #playerPanel{max-width:none!important;margin:0!important}
+.bs-side .panel{margin:0}
+.bs-side h3{margin:0 0 8px;font-size:1rem}
+.bs-side #placePanel p{display:none} /* the placement tip lives in How to; the rail must stay short enough to fit */
+/* The old desktop placement layout made .wrap a 2-column grid
+   (1fr + 300px) with the tray in column 2 — the stage would be squeezed
+   into column 1 (720px) and column 2 left empty. The stage is now the
+   whole width, so the wrap stays a plain block in placement. */
+body[data-phase="placement"] .wrap{display:block!important}
+/* Desktop placement, in the narrow left rail: the tray chips stack in
+   one column (names readable) and the four buttons sit in a 2x2 grid
+   whose tracks are minmax(0,1fr) — the old 1fr tracks expanded to the
+   buttons' nowrap min-content and spilled into the middle, where the
+   board panel covered them (Random was unclickable). Buttons wrap text
+   and use tighter padding so they fit the rail. */
+@media (min-width:861px){
+  body[data-phase="placement"] .bs-side #placePanel .ship-tray{display:flex;flex-direction:column}
+  body[data-phase="placement"] .bs-side #placePanel .btn-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  body[data-phase="placement"] .bs-side #placePanel .btn-row .btn{flex:none;white-space:normal;padding:8px 4px;font-size:.85rem;min-height:44px}
+}
+
+/* --- phase visibility (the stage replaces the old per-panel hiding) --- */
+body[data-phase="options"] .bs-stage{display:none!important}
+body[data-phase="placement"] .bs-stage,
+body[data-phase="battle"] .bs-stage,
+body[data-phase="done"] .bs-stage{display:flex!important}
+body[data-phase="placement"] #enemyPanel{display:none!important}
+body[data-phase="placement"] #playerPanel{display:block!important}
+body[data-phase="battle"] #playerPanel{display:none!important}
+body[data-phase="battle"] #enemyPanel{display:block!important}
+body[data-phase="done"] #enemyPanel,
+body[data-phase="done"] #playerPanel{display:none!important}
+body[data-phase="placement"] #placePanel{display:block!important}
+body[data-phase="battle"] #placePanel,
+body[data-phase="done"] #placePanel{display:none!important}
+body[data-phase="placement"] #fleetPanel{display:none!important} /* in placement the tray IS the ships */
+body[data-phase="battle"] #fleetPanel{display:block!important}
+body[data-phase="done"] #fleetPanel{display:none!important}
+body[data-phase="placement"] #recordsPanel,
+body[data-phase="battle"] #recordsPanel{display:none!important}
+body[data-phase="done"] #recordsPanel{display:block!important}
+body[data-phase="placement"] #battleStatsPanel{display:none!important}
+body[data-phase="battle"] #battleStatsPanel,
+body[data-phase="done"] #battleStatsPanel{display:block!important}
+body[data-phase="done"] .bs-side .battle-stats{display:grid!important} /* the old done rule hid the final numbers; Holo wants them in the side panel */
+body[data-phase="placement"] #logDetails{display:none!important}
+body[data-phase="battle"] #logDetails,
+body[data-phase="done"] #logDetails{display:block!important}
+body[data-phase="battle"] #battlePanel{display:none!important} /* in battle the panel only holds the result, which shows in done; hiding it removes dead space below the board */
+body[data-phase="done"] #battlePanel{display:block!important}
+
+/* --- the rails: the info, moved out of the gameplay box --- */
+.bs-side .record{display:flex!important;flex-wrap:wrap;gap:8px} /* was retired chrome (display:none); now the Turn/Difficulty pills in the right rail */
+.bs-side .record .pill{flex:1 1 100%}
+.bs-side .msgbar{margin:0}
+.bs-side #friendBar{margin:0}
+.bs-side .fleet{display:flex!important;flex-direction:column;gap:6px} /* was retired chrome (display:none); now the fleet status lists in the left rail */
+.bs-side .fleet li{font-size:.92rem}
+.bs-side .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bs-side .stats .stat{padding:8px 6px}
+.bs-side .stats .stat b{font-size:1.25rem}
+.bs-side .battle-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.bs-side .battle-stats .bstat{padding:8px 6px;min-width:0;overflow:hidden}
+.bs-side .battle-stats .bstat b{font-size:1.25rem;white-space:nowrap}
+.bs-side .battle-stats .bstat span{overflow-wrap:break-word}
+body[data-phase="battle"] .bs-side .battle-stats .bstat b,
+body[data-phase="done"] .bs-side .battle-stats .bstat b{font-size:.85rem} /* "0 / 5" must fit one line in a ~40px column; at 1.25rem it wrapped to two lines and grew the panel 29px (H1 vertical regression) */
+body[data-phase="battle"] .bs-side .battle-stats .bstat,
+body[data-phase="done"] .bs-side .battle-stats .bstat{padding:4px 2px} /* the live 4px 4px padding left only ~26px for the label, so SHOTS/SUNK broke mid-word ("SHO/TS"); 2px sides give ~30px */
+body[data-phase="battle"] .bs-side .battle-stats .bstat span,
+body[data-phase="done"] .bs-side .battle-stats .bstat span{font-size:.5rem;letter-spacing:.02em} /* "SHOTS" fits one line in ~30px at .5rem; the labels are shortened to ACC / SUNK in the HTML */
+body[data-phase="battle"] .bs-side .battle-stats,
+body[data-phase="done"] .bs-side .battle-stats{grid-template-columns:repeat(4,minmax(0,1fr))!important} /* minmax(0,1fr): the 1fr tracks' auto minimum is the "SHIPS SUNK" label, which pushed the 4th stat 37px past the rail (H1 iframe overflow); 0 lets the columns shrink and the labels wrap */
+.bs-side #practiceTools{margin-top:10px}
+.bs-side #practiceTools .btn-row{flex-direction:column}
+.bs-side #practiceTools .btn{width:100%}
+
+/* --- Captain's log: a visible scrolling list in the right rail --- */
+.bs-log-panel .log{max-height:clamp(64px,calc(100dvh - 445px),150px);overflow:auto;margin:0} /* scales with viewport height: 150px on a tall desktop, ~108px in the 553px hub iframe (saves the 27px the right rail overflowed by) */
+.bs-log-panel h3{color:var(--brass)}
+
+/* --- board sizing: as large as possible WITHIN the gameplay box, and
+   always fitting (the J-column cutoff fix) --- */
+.bs-mid .board-row{display:flex;gap:12px;align-items:flex-start;justify-content:center}
+.bs-mid .mini-panel{flex:0 0 140px} /* your fleet: SAME sizing as live, still top-right */
+body[data-phase="battle"] .bs-mid #enemyBoard{width:auto!important;flex:1 1 0!important;min-width:0;max-width:calc(100dvh - 220px)}
+body[data-phase="placement"] .bs-mid #playerBoard{width:100%!important;max-width:calc(100dvh - 220px);margin-inline:auto}
+body[data-phase="placement"] .bs-mid #playerPanel{max-width:none!important}
+
+/* --- mini-cell readability (Holo 23:19): a SHAPE as well as a colour ---
+   ship = grey + white dot · enemy hit = BRIGHT red + bold white X ·
+   enemy miss = pale blue + white dot · sunk = dark red + gold X.
+   The classes are set by renderMini(); the ::after markers are new.
+   Order matters: hit/sunk come after ship (same specificity, later wins),
+   mirroring the main board (.cell.ship.hit::after). --- */
+.mini-cell{position:relative;display:flex;align-items:center;justify-content:center;font-size:11px;line-height:1;font-weight:800;color:#fff}
+.mini-cell.ship::after{content:"";width:36%;height:36%;border-radius:50%;background:rgba(255,255,255,.85)}
+.mini-cell.miss{background:rgba(180,220,255,.45)}
+.mini-cell.miss::after{content:"•";font-size:1.3em;color:rgba(255,255,255,.95)}
+.mini-cell.hit{background:#e62e2e;border-color:#8f0f1f}
+.mini-cell.hit::after{content:"✕";font-size:.95em;color:#fff}
+.mini-cell.ship.hit::after{content:"✕"}
+.mini-cell.sunk{background:#8f0f1f;border-color:#450a16}
+.mini-cell.sunk::after{content:"✕";font-size:.95em;color:#ffd166}
+
+/* --- duel embed (hub match view): hide the rails, the hub shows its own info --- */
+.bs-duel-hide-panels .bs-side{display:none!important}
+
+/* --- phone: the stage stacks, right rail (turn/stats/log) first, then
+   the grid, then the left rail (tray/fleet/records) — the TTT order.
+   Everything is capped so the full A-J grid + your fleet + the info fit
+   with no scroll in gameplay. --- */
+@media (max-width:860px){
+  .bs-stage{flex-direction:column;gap:10px}
+  .bs-side{flex:1 1 auto;width:100%}
+  .bs-side.bs-right{order:1}
+  .bs-mid{order:2;width:100%}
+  .bs-side.bs-left{order:3}
+  .bs-side .record{display:none!important} /* turn + difficulty already ride the message bar on phone */
+  .bs-side .msgbar .sub{display:none}
+  .bs-side .battle-stats{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .bs-side .battle-stats .bstat{padding:6px 2px}
+  .bs-side .battle-stats .bstat b{font-size:1.05rem}
+  .bs-side .battle-stats .bstat span{font-size:.68rem}
+  .bs-log-panel .log{max-height:64px}
+  .bs-side .fleet{flex-direction:row!important;flex-wrap:wrap} /* phone: the fleet lists wrap into a compact row of pills (the desktop column made the phone battle page 1106px tall); saves ~300px */
+  .bs-side .fleet li{font-size:.75rem;padding:4px 7px;gap:5px} /* compact enough that 3 pills fit per row in the 366px phone rail (2 per row left the panel 294px tall, 74px over) */
+  .bs-side .fleet li .pips{letter-spacing:1px;font-size:.6rem}
+  #fleetPanel{padding:10px}
+  #fleetPanel h3{margin-bottom:6px;font-size:1rem}
+  body[data-phase="done"] #logDetails{display:none!important} /* on phone, done shows the result + records; the log is a tap away in battle */
+  .bs-mid .mini-panel{flex:0 0 100px} /* your fleet: SAME phone sizing as live */
+  body[data-phase="battle"] .bs-mid #enemyBoard{max-width:calc(100dvh - 300px)}
+  body[data-phase="placement"] .bs-mid #playerBoard{max-width:calc(100dvh - 360px)}
+  .bs-side #placePanel .ship-tray{flex-direction:row;flex-wrap:wrap}
+  .bs-side #placePanel .ship-tray .chip{flex:1 1 30%}
+  .bs-side #placePanel .btn-row{flex-wrap:nowrap}
+  .bs-side #placePanel .btn{flex:1 1 0;padding:8px 4px;font-size:.85rem}
+  .mini-cell{font-size:8px}
+}
+
+/* --- short phone viewport (the 644px hub iframe): the stacked battle page
+   is ~800px, so the fleet lists + a shorter log are tucked away here so the
+   board + your fleet + shots/hits/accuracy/sunk + the log fit with no scroll.
+   Standalone phone (844px) is taller than 700px, so this never applies there. --- */
+@media (max-width:860px) and (max-height:700px){
+  body[data-phase="battle"] #fleetPanel{display:none!important}
+  .bs-log-panel .log{max-height:40px}
+  .bs-side .battle-stats .bstat{padding:4px 2px}
+}
+
 </style>
 <style id="pop26-css">
 /* POPUP26-2026-11-23 (Holo overnight 1/7): theme the 26 non-vtut
@@ -714,10 +916,7 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
 
   <div class="topbar">
     <h1 class="title">Battleship <span class="wave" aria-hidden="true">≋</span></h1>
-    <div class="record" aria-label="Match record">
-      <div class="pill"><span>Turn</span><span id="turnLabel">Placement</span></div>
-      <div class="pill"><span>Difficulty</span><span id="diffLabel">Captain</span></div>
-    </div>
+
     <div class="top-actions">
       <button class="ghost-btn" id="howBtnTop" type="button" aria-label="How to play">❓</button>
       <button class="ghost-btn" id="soundBtnTop" type="button" aria-label="Toggle sound">🔊</button>
@@ -779,19 +978,52 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
     <button class="hint-x" id="hintClose" type="button" aria-label="Dismiss hint">✕</button>
   </div>
 
-  <div class="msgbar" role="status" aria-live="polite">
-    <div class="main" id="message">Place your fleet, Captain.</div>
-    <div class="sub" id="subMessage">Pick a ship, then tap your waters to place it. Rotate any time.</div>
-  </div>
 
-  <!-- BATTLESHIP-DUEL-2026-11-26 (BS-13): friend-match strip, filled by
-       bsUpdateFriendBar(). Hidden whenever no match is bound. -->
-  <div id="friendBar" style="display:none" aria-live="polite"></div>
+
+
 
   <div class="practice-banner" id="practiceBanner" hidden>
     <span>🎯 <strong>Practice round</strong> — take your time. The enemy holds fire, hints are on, and this game won't count toward your records or win rate.</span>
   </div>
 
+  <!-- BATTLESHIP-STEP1-LAYOUT-FIX-2026-11-27: the stage — left rail | middle gameplay box | right rail.
+       The middle holds ONLY the boards (enemy waters / your fleet) + the result.
+       The rails hold the info (shots, hits, accuracy, ships sunk, Captain's log,
+       ships + Rotate/Random/Clear, fleet status, records). -->
+  <div class="bs-stage" id="bsStage">
+    <aside class="bs-side bs-left" id="bsSideL" aria-label="Battle info">
+  <section class="panel" id="placePanel" aria-label="Place your ships">
+      <h2>Place your ships</h2>
+      <div class="ship-tray" id="shipTray"></div>
+      <div class="btn-row">
+        <button class="btn" id="rotateBtn" type="button">↻ Rotate</button>
+        <button class="btn" id="randomBtn" type="button">🎲 Random</button>
+        <button class="btn" id="clearBtn" type="button">Clear</button>
+        <button class="btn sonar" id="startBtn" type="button" disabled>Start →</button>
+      </div>
+      <p style="margin:10px 0 0;color:var(--muted);font-size:.9rem">Tip: tap a ship you've already placed to pick it back up and move it. Press <strong>R</strong> to rotate on a keyboard.</p>
+    </section>
+      <section class="panel" id="fleetPanel" aria-label="Fleet status">
+        <h3>Your fleet</h3>
+        <ul class="fleet" id="playerFleet" aria-label="Your fleet status"></ul>
+        <h3>Enemy fleet</h3>
+        <ul class="fleet" id="enemyFleet" aria-label="Enemy fleet status"></ul>
+      </section>
+      <section class="panel" id="recordsPanel" aria-label="Your records">
+        <h3>Your records</h3>
+    <div class="stats" aria-label="Your records">
+        <div class="stat"><b id="stGames">0</b><span>Games played</span></div>
+        <div class="stat"><b id="stWins">0</b><span>Wins</span></div>
+        <div class="stat"><b id="stWinRate">—</b><span>Win rate</span></div>
+        <div class="stat"><b id="stFewest">—</b><span>Fewest shots</span></div>
+        <div class="stat"><b id="stBestAcc">—</b><span>Best accuracy</span></div>
+      </div>
+    <div class="btn-row" style="margin-top:12px">
+        <button class="ghost-btn" id="resetBtn" type="button">Reset records</button>
+      </div>
+      </section>
+    </aside>
+    <div class="bs-mid" id="bsMid">
   <div class="boards">
     <section class="board-panel" id="enemyPanel" aria-label="Enemy waters">
       <div class="board-head">
@@ -808,7 +1040,6 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
           <div class="mini-board" id="miniBoard" aria-label="Your fleet, small"></div>
         </div>
       </div>
-      <ul class="fleet" id="enemyFleet" aria-label="Enemy fleet status"></ul>
     </section>
 
     <section class="board-panel" id="playerPanel" aria-label="Your waters">
@@ -817,21 +1048,53 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
         <span class="tag" id="playerTag">Placing ships</span>
       </div>
       <div class="board" id="playerBoard" role="grid" aria-label="Your board"></div>
-      <ul class="fleet" id="playerFleet" aria-label="Your fleet status"></ul>
     </section>
   </div>
-
-  <section class="panel" id="placePanel" aria-label="Place your ships">
-    <h2>Place your ships</h2>
-    <div class="ship-tray" id="shipTray"></div>
-    <div class="btn-row">
-      <button class="btn" id="rotateBtn" type="button">↻ Rotate</button>
-      <button class="btn" id="randomBtn" type="button">🎲 Random</button>
-      <button class="btn" id="clearBtn" type="button">Clear</button>
-      <button class="btn sonar" id="startBtn" type="button" disabled>Start →</button>
+      <section class="panel" id="battlePanel" aria-label="Battle" hidden>
+        <h2>Battle stations</h2>
+    <div class="result" id="resultBox">
+          <h2 id="resultTitle">Victory!</h2>
+          <p id="resultText"></p>
+          <div class="btn-row" style="justify-content:center">
+            <button class="btn brass" id="rematchBtn" type="button" style="flex:0 1 auto;padding:0 12px">↻ INSERT COIN TO CONTINUE</button>
+          </div>
+        </div>
+      </section>
     </div>
-    <p style="margin:10px 0 0;color:var(--muted);font-size:.9rem">Tip: tap a ship you've already placed to pick it back up and move it. Press <strong>R</strong> to rotate on a keyboard.</p>
-  </section>
+    <aside class="bs-side bs-right" id="bsSideR" aria-label="Battle status">
+  <div class="record" aria-label="Match record">
+        <div class="pill"><span>Turn</span><span id="turnLabel">Placement</span></div>
+        <div class="pill"><span>Difficulty</span><span id="diffLabel">Captain</span></div>
+      </div>
+    <div class="msgbar" role="status" aria-live="polite">
+        <div class="main" id="message">Place your fleet, Captain.</div>
+        <div class="sub" id="subMessage">Pick a ship, then tap your waters to place it. Rotate any time.</div>
+      </div>
+    <!-- BATTLESHIP-DUEL-2026-11-26 (BS-13): friend-match strip, filled by
+           bsUpdateFriendBar(). Hidden whenever no match is bound. -->
+      <div id="friendBar" style="display:none" aria-live="polite"></div>
+      <div class="panel" id="battleStatsPanel" aria-label="Battle stats">
+    <div id="practiceTools" hidden style="margin-bottom:12px">
+          <div class="btn-row">
+            <button class="btn brass" id="hintBtn" type="button">💡 Show me a good target</button>
+            <button class="btn" id="revealBtn" type="button">Peek at enemy fleet</button>
+          </div>
+          <p style="margin:8px 0 0;color:var(--muted);font-size:.9rem">Practice only: tap <strong>Show me a good target</strong> for a suggested square (gold outline), or peek to learn how fleets hide. Peeking is just for learning — no penalty.</p>
+          <p id="peekNote" style="margin:6px 0 0;font-weight:700" hidden>👀 Peeking — enemy ships are showing faintly. Tap Peek again to hide them.</p>
+        </div>
+    <div class="battle-stats">
+          <div class="bstat"><b id="bShots">0</b><span>Shots</span></div>
+          <div class="bstat"><b id="bHits">0</b><span>Hits</span></div>
+          <div class="bstat"><b id="bAcc">—</b><span>Acc</span></div>
+          <div class="bstat"><b id="bSunk">0 / 5</b><span>Sunk</span></div>
+        </div>
+      </div>
+      <section class="panel bs-log-panel" id="logDetails" aria-label="Captain's log">
+        <h3 id="logSummary">Captain's log</h3>
+        <ul class="log" id="log"></ul>
+      </section>
+    </aside>
+  </div>
 
   <!-- BATTLESHIP-WALKTHROUGH-2026-11-25 (Holo 22:50): when the LAST ship is
        placed, offer Replace ships (resets ALL placement, start over) OR
@@ -853,49 +1116,13 @@ dialog.pop26-shell::backdrop{background:rgba(10,6,32,.72)}
     </div>
   </div>
 
-  <section class="panel" id="battlePanel" aria-label="Battle" hidden>
-    <h2>Battle stations</h2>
-    <div id="practiceTools" hidden style="margin-bottom:12px">
-      <div class="btn-row">
-        <button class="btn brass" id="hintBtn" type="button">💡 Show me a good target</button>
-        <button class="btn" id="revealBtn" type="button">Peek at enemy fleet</button>
-      </div>
-      <p style="margin:8px 0 0;color:var(--muted);font-size:.9rem">Practice only: tap <strong>Show me a good target</strong> for a suggested square (gold outline), or peek to learn how fleets hide. Peeking is just for learning — no penalty.</p>
-      <p id="peekNote" style="margin:6px 0 0;font-weight:700" hidden>👀 Peeking — enemy ships are showing faintly. Tap Peek again to hide them.</p>
-    </div>
-    <div class="battle-stats">
-      <div class="bstat"><b id="bShots">0</b><span>Shots</span></div>
-      <div class="bstat"><b id="bHits">0</b><span>Hits</span></div>
-      <div class="bstat"><b id="bAcc">—</b><span>Accuracy</span></div>
-      <div class="bstat"><b id="bSunk">0 / 5</b><span>Ships sunk</span></div>
-    </div>
-    <div class="result" id="resultBox">
-      <h2 id="resultTitle">Victory!</h2>
-      <p id="resultText"></p>
-      <div class="btn-row" style="justify-content:center">
-        <button class="btn brass" id="rematchBtn" type="button" style="flex:0 1 auto;padding:0 12px">↻ INSERT COIN TO CONTINUE</button>
-      </div>
-    </div>
-  </section>
 
-  <!-- Captain's log: a collapsed details in battle (the battle screen must
-       fit the window); expands on tap to read the diary. -->
-  <details class="panel log-details" id="logDetails">
-    <summary id="logSummary">Captain's log</summary>
-    <ul class="log" id="log"></ul>
-  </details>
 
-  <div class="stats" aria-label="Your records">
-    <div class="stat"><b id="stGames">0</b><span>Games played</span></div>
-    <div class="stat"><b id="stWins">0</b><span>Wins</span></div>
-    <div class="stat"><b id="stWinRate">—</b><span>Win rate</span></div>
-    <div class="stat"><b id="stFewest">—</b><span>Fewest shots</span></div>
-    <div class="stat"><b id="stBestAcc">—</b><span>Best accuracy</span></div>
-  </div>
 
-  <div class="btn-row" style="margin-top:12px">
-    <button class="ghost-btn" id="resetBtn" type="button">Reset records</button>
-  </div>
+
+
+
+
 
   <footer>
     <p>Single player vs the computer — no account, no sign-up. Your records are saved in this browser on this device only.<br />
@@ -1389,6 +1616,12 @@ function buildMiniBoard(){
     el.appendChild(c); miniCellEls.push(c);
   }
 }
+/* BATTLESHIP-STEP1-LAYOUT-FIX-2026-11-27 (Holo 23:19): the mini-cell classes set below (ship /
+   hit / miss / sunk / last) now carry ::after markers in the CSS, so
+   the enemy's moves on your fleet read at miniature size — a hit is
+   a bright-red cell with a bold X, a miss a pale-blue cell with a
+   dot, a sunk ship dark red with a gold X, a ship grey with a white
+   dot. No class change here; the markers are the new CSS. */
 function renderMini(){
   miniCellEls.forEach(function(el, i){
     var sh = shipAt(G.player, i);
@@ -2651,9 +2884,31 @@ try{ if(window.self !== window.top) document.body.classList.add('embedded'); }ca
 var anchor = document.createElement("span"); anchor.id = "statsBarAnchor";
 var statsEl = document.querySelector(".stats"); statsEl.parentNode.insertBefore(anchor, statsEl); anchor.appendChild(statsEl);
 
+/* BATTLESHIP-STEP1-LAYOUT-FIX-2026-11-27 (Holo 2026-11-27 23:14 "ONLY ONE START", re-affirmed
+   17:36: settings live ONLY in the pop-up inside the gameplay box,
+   never in a game's own walkthrough steps): the hub's game-start
+   pop-up already collected the opponent/difficulty (it writes
+   rff-battleship-settings-v1, which this file reads on load) and the
+   player hit START there — so when the hub opens this game with
+   hubstart=1, skip this file's own 3-step walk-through (Step 1
+   opponent, Step 2 setup, Step 3 ready) and go straight to
+   placement. The hub ALREADY passes hubstart=1 (lazyFrame/startGame
+   on a menu-initiated START, and handIntoBattleship funnels through
+   it), so NO hub change is needed. Direct opens (no hubstart) still
+   land on Step 1, and New game still returns to the walk. Duel entry
+   is untouched — bsBoot opens the match (placement/battle) itself. */
+var __bsHubStart = false;
+try{ __bsHubStart = new URLSearchParams(window.location.search).get("hubstart") === "1"; }catch(e){}
 buildMiniBoard();
-newGame("options");
-showOptStep(0);
+/* Practice on a hubstart skip: the walk-through's practice toggle is
+   hidden, so the practice guard's auto-click cannot reach it — set
+   practiceMode directly (mirroring the Monster Match hubstart skip)
+   and mark the toggle aria-checked so the guard's isActive() sees it
+   as already on and does not click it back off. Setting .checked
+   directly does not fire a change event, so no placement restart. */
+if(window.__holoPractice){ practiceMode = true; try{ var __bsPt = $("practiceToggle"); if(__bsPt){ __bsPt.checked = true; __bsPt.setAttribute("aria-checked","true"); } }catch(e){} }
+if(__bsHubStart){ newGame("placement"); }
+else { newGame("options"); showOptStep(0); }
 /* BATTLESHIP-DUEL-2026-11-26 (BS-12, BS-8): side-panel hide for the
    hub's match-view embed, then the ready handshake + match restore. */
 bsPanelsHide();
